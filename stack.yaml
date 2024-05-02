@@ -1,0 +1,56 @@
+resolver: lts-20.26
+
+packages:
+- .
+- enlil-auth
+- enlil-auth/example
+- enlil-utils
+- unison/codebase2/codebase
+- unison/codebase2/codebase-sqlite
+- unison/codebase2/codebase-sqlite-hashing-v2
+- unison/codebase2/codebase-sync
+- unison/codebase2/core
+- unison/codebase2/util-serialization
+- unison/codebase2/util-term
+- unison/lib/orphans/network-uri-orphans-sqlite
+- unison/lib/orphans/unison-core-orphans-sqlite
+- unison/lib/orphans/unison-hash-orphans-aeson
+- unison/lib/orphans/unison-hash-orphans-sqlite
+- unison/lib/orphans/uuid-orphans-sqlite
+- unison/lib/unison-hash
+- unison/lib/unison-hashing
+- unison/lib/unison-prelude
+- unison/lib/unison-pretty-printer
+- unison/lib/unison-sqlite
+- unison/lib/unison-util-base32hex
+- unison/lib/unison-util-bytes
+- unison/lib/unison-util-cache
+- unison/lib/unison-util-file-embed
+- unison/lib/unison-util-nametree
+- unison/lib/unison-util-relation
+- unison/lib/unison-util-rope
+- unison/parser-typechecker
+- unison/unison-core
+- unison/unison-hashing-v2
+- unison/unison-share-api
+- unison/unison-share-projects-api
+- unison/unison-syntax
+- unison/yaks/easytest
+
+extra-deps:
+# wrong version in snapshot
+- resource-pool-0.3.1.0 # vs 0.2.3.2
+
+- fuzzyfind-3.0.1
+- guid-0.1.0@sha256:a7c975be473f6f142d5cc1b39bc807a99043d20b1bb0873fdfe7a3ce84d2faf1,1078
+- lock-file-0.7.0.0@sha256:3ad84b5e454145e1d928063b56abb96db24a99a21b493989520e58fa0ab37b00,4484
+- monad-validate-1.2.0.1
+- raven-haskell-0.1.4.1@sha256:0d27e37968327faba577558a2ee4465ebfd3b6929b09cf4881dfa62a6873c85a,1393
+- recover-rtti-0.4.2@sha256:c179a303921126d8d782264e14f386c96e54a270df74be002e4c4ec3c8c7aebd,4529
+- strings-1.1@sha256:0285dec4c8ab262359342b3e5ef1eb567074669461b9b38404f1cb870c881c5c,1617
+- hasql-interpolate-0.2.1.0
+
+ghc-options:
+ # All packages
+ "$locals": -Wall -Wno-name-shadowing -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info
+ statistics: -fsimpl-tick-factor=10000 # statistics fails on GHC 9 without this, https://github.com/haskell/statistics/issues/173

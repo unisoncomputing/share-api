@@ -1,0 +1,19 @@
+{
+  "body": {
+    "author": "read-maintainer",
+    "createdAt": "<TIMESTAMP>",
+    "description": "My description",
+    "id": "T-<UUID>",
+    "numComments": 0,
+    "number": 2,
+    "projectRef": "@test/privatetestproject",
+    "status": "open",
+    "title": "Ticket 2",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

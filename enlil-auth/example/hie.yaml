@@ -1,0 +1,7 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "test-auth-app:lib"
+
+    - path: "./app"
+      component: "test-auth-app:test-auth-app-exe"

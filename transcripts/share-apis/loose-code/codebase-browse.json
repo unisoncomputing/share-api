@@ -1,0 +1,132 @@
+{
+  "body": {
+    "namespaceListingChildren": [
+      {
+        "contents": {
+          "termHash": "#jaobcd5ha2rldc8459micbk0c83fn38mspdr50ip7gf1ge3ak24451gnajka474biu727du2n9fglk854gt1a1lshrbfkig5u6aejs0",
+          "termName": "/+%",
+          "termTag": "Plain",
+          "termType": [
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "a"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "b"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "##Nat",
+                "tag": "HashQualifier"
+              },
+              "segment": "##Nat"
+            }
+          ]
+        },
+        "tag": "TermObject"
+      },
+      {
+        "contents": {
+          "typeHash": "#6kbe32g06n",
+          "typeName": "Thing",
+          "typeTag": "Data"
+        },
+        "tag": "TypeObject"
+      },
+      {
+        "contents": {
+          "namespaceHash": "#k1o4gge5lob8i4ua6carftammdrq88augmov8h6e6kb4thr5e807gh19vhfacqo91uddt8s98s83ra27apjbocmo391fiircqatlt98",
+          "namespaceName": "Thing",
+          "namespaceSize": 2
+        },
+        "tag": "Subnamespace"
+      },
+      {
+        "contents": {
+          "namespaceHash": "#1h1k33aq3evri8h1pbil2ipeq7tah7dundnp1188pl2sb2a3nkn6dhbtt5dpmvf4nrhgldpddtr07erfosegootd8ushnt3cchc1bf0",
+          "namespaceName": "apples",
+          "namespaceSize": 2
+        },
+        "tag": "Subnamespace"
+      },
+      {
+        "contents": {
+          "namespaceHash": "#ea8ceck7abmqk7vhtttpq2ra150l3n9eg3je6offjkk85gif04kgrri3l6j51vam5nfvcv8dcu0qjmt6gk452v5hgla5f09cgadgbn8",
+          "namespaceName": "oranges",
+          "namespaceSize": 1
+        },
+        "tag": "Subnamespace"
+      },
+      {
+        "contents": {
+          "termHash": "#7dbqdsimkpthr1a36irpnicf5vf4kujeg0vfvgfgi857qnab1q9tai0o0du09b4uqgh5qae5ma6le79077arrl0bi0rrej7cq63tm18",
+          "termName": "readme",
+          "termTag": "Doc",
+          "termType": [
+            {
+              "annotation": {
+                "contents": "#ej86si0ur1",
+                "tag": "HashQualifier"
+              },
+              "segment": "#ej86si0ur1"
+            }
+          ]
+        },
+        "tag": "TermObject"
+      },
+      {
+        "contents": {
+          "termHash": "#v1b6qqrncoug00008ouve8gdnf8mtrvv3mrr34jct7h2elm5g56s4d8shkirh49r0i3h7aeebiua9icas6ptp1ap82g4q7n3gvq5l18",
+          "termName": "referencesExternal",
+          "termTag": "Plain",
+          "termType": [
+            {
+              "annotation": {
+                "contents": "##Nat",
+                "tag": "HashQualifier"
+              },
+              "segment": "##Nat"
+            }
+          ]
+        },
+        "tag": "TermObject"
+      }
+    ],
+    "namespaceListingFQN": "public.names",
+    "namespaceListingHash": "#77bp25t820hpn7t6andan3evac2o5gon8ulggl3kq2galktlbo10jkpub3rli3teop6h5ikgjhuirk87hf58g7cir4pk0ra6a9r5rro"
+  },
+  "status": 200
+}

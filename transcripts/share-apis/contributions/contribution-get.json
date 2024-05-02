@@ -1,0 +1,21 @@
+{
+  "body": {
+    "author": "transcripts",
+    "createdAt": "<TIMESTAMP>",
+    "description": "Updated description",
+    "id": "C-<UUID>",
+    "numComments": 0,
+    "number": 3,
+    "projectRef": "@test/publictestproject",
+    "sourceBranchRef": "@transcripts/contribution",
+    "status": "closed",
+    "targetBranchRef": "main",
+    "title": "Updated Title",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

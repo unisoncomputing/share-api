@@ -1,0 +1,31 @@
+{
+  "body": {
+    "createdAt": "<TIMESTAMP>",
+    "defaultBranch": null,
+    "isFaved": false,
+    "latestRelease": null,
+    "numActiveContributions": 0,
+    "numClosedContributions": 0,
+    "numClosedTickets": 0,
+    "numDraftContributions": 0,
+    "numFavs": 0,
+    "numMergedContributions": 0,
+    "numOpenTickets": 0,
+    "owner": {
+      "handle": "@transcripts",
+      "name": "Transcript User",
+      "type": "user"
+    },
+    "releaseDownloads": [],
+    "slug": "containers",
+    "summary": "This is my project",
+    "tags": [],
+    "updatedAt": "<TIMESTAMP>",
+    "visibility": "private"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

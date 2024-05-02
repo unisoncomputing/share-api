@@ -1,0 +1,58 @@
+{
+  "body": {
+    "cursor": "<CURSOR>",
+    "items": [
+      {
+        "actor": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
+        "kind": "statusChange",
+        "newStatus": "in_review",
+        "oldStatus": null,
+        "timestamp": "<TIMESTAMP>"
+      },
+      {
+        "actor": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
+        "content": "This is an updated comment",
+        "editedAt": "<TIMESTAMP>",
+        "id": "CMT-<UUID>",
+        "kind": "comment",
+        "revision": 2,
+        "timestamp": "<TIMESTAMP>"
+      },
+      {
+        "deletedAt": "<TIMESTAMP>",
+        "id": "CMT-<UUID>",
+        "kind": "comment",
+        "timestamp": "<TIMESTAMP>"
+      },
+      {
+        "actor": {
+          "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+          "handle": "transcripts",
+          "name": "Transcript User",
+          "userId": "U-<UUID>"
+        },
+        "content": "This is a new comment",
+        "editedAt": null,
+        "id": "CMT-<UUID>",
+        "kind": "comment",
+        "revision": 0,
+        "timestamp": "<TIMESTAMP>"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

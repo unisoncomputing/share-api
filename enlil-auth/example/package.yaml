@@ -1,0 +1,100 @@
+name:                test-auth-app
+version:             0.1.0.0
+github:              "unisoncomputing/share"
+author:              "unison.cloud"
+maintainer:          "unison.cloud"
+copyright:           "2024 Unison Computing"
+
+extra-source-files:
+- README.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/githubuser/test-auth-app#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- enlil-auth
+- enlil-utils
+- hedis
+- network-uri
+- servant
+- servant-auth-server
+- servant-server
+- text
+- time
+- unliftio
+- warp
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
+
+
+default-extensions:
+  - ApplicativeDo
+  - BangPatterns
+  - BlockArguments
+  - DeriveFunctor
+  - DeriveGeneric
+  - DeriveFoldable
+  - DeriveTraversable
+  - DerivingStrategies
+  - DerivingVia
+  - DoAndIfThenElse
+  - FlexibleContexts
+  - FlexibleInstances
+  - GeneralizedNewtypeDeriving
+  - LambdaCase
+  - MultiParamTypeClasses
+  - NamedFieldPuns
+  - OverloadedStrings
+  - PatternSynonyms
+  - RankNTypes
+  - ScopedTypeVariables
+  - TupleSections
+  - TypeApplications
+  - ViewPatterns
+  - QuasiQuotes
+  - BlockArguments
+  - QuasiQuotes
+  - ImportQualifiedPost
+
+
+library:
+  source-dirs: src
+
+executables:
+  test-auth-app-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - test-auth-app
+
+tests:
+  test-auth-app-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - test-auth-app

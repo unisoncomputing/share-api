@@ -1,0 +1,21 @@
+{
+  "body": {
+    "author": "transcripts",
+    "createdAt": "<TIMESTAMP>",
+    "description": "My description",
+    "id": "C-<UUID>",
+    "numComments": 0,
+    "number": 1,
+    "projectRef": "@transcripts/namespace-diff",
+    "sourceBranchRef": "diff-end",
+    "status": "in_review",
+    "targetBranchRef": "diff-start",
+    "title": "My contribution",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

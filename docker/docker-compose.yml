@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15.4
+    container_name: postgres
+    restart: always
+    healthcheck:
+      # Ensure the database is up, and the tables are initialized
+      test: ["CMD", "psql", "-U", "postgres", "-c", "SELECT from users;"]
+      interval: 3s
+      timeout: 10s
+      retries: 5
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: sekrit
+    volumes:
+      - ../sql:/docker-entrypoint-initdb.d
+      # # Optionally persist the data between container invocations
+      # - postgresVolume:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf #  -c log_statement=all
+
+
+  redis:
+    image: redis:6.2.6
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    ports:
+     - "6379:6379"
+
+  share:
+    image: share-api
+    container_name: share-api
+    depends_on:
+      - redis
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5424/health"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "5424:5424"
+      - "5425:5425"
+      - "5426:5426"
+
+    environment:
+      # Placeholder values for development
+      - ENLIL_API_ORIGIN=http://enlil
+      - ENLIL_SERVER_PORT=5424
+      - ENLIL_ADMIN_PORT=5425
+      - ENLIL_CLIENT_HOSTNAME=0.0.0.0
+      - ENLIL_CLIENT_PORT=5426
+      - ENLIL_REDIS=redis://redis:6379
+      - ENLIL_POSTGRES=postgresql://postgres:sekrit@postgres:5432
+      - ENLIL_HMAC_KEY=test-key-test-key-test-key-test-key-
+      - ENLIL_DEPLOYMENT=local
+      - ENLIL_IP=enlil
+      - ENLIL_AWS_CREDENTIAL_URL=invalid
+      - AWS_REGION=invalid
+      - ENLIL_POSTGRES_CONN_TTL=30
+      - ENLIL_POSTGRES_CONN_MAX=10
+      - ENLIL_SHARE_UI_ORIGIN=http://localhost:1234
+      - ENLIL_CLOUD_UI_ORIGIN=http://localhost:5678
+      - ENLIL_HOMEPAGE_ORIGIN=http://localhost:1111
+      - ENLIL_CLOUD_HOMEPAGE_ORIGIN=http://localhost:2222
+      - ENLIL_LOG_LEVEL=DEBUG
+      - ENLIL_COMMIT=dev
+      - ENLIL_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST=1
+      - ENLIL_MAX_PARALLELISM_PER_UPLOAD_REQUEST=5
+      - ENLIL_ZENDESK_API_USER=invaliduser@example.com
+      - ENLIL_ZENDESK_API_TOKEN=bad-password
+      - ENLIL_GITHUB_CLIENTID=invalid
+      - ENLIL_GITHUB_CLIENT_SECRET=invalid
+      - AWS_ACCESS_KEY_ID=invalid
+      - AWS_SECRET_ACCESS_KEY=invalid
+
+    links:
+      - redis
+      - postgres
+
+# volumes:
+#   postgresVolume:

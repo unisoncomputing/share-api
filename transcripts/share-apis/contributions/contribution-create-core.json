@@ -1,0 +1,21 @@
+{
+  "body": {
+    "author": "test",
+    "createdAt": "<TIMESTAMP>",
+    "description": "My description",
+    "id": "C-<UUID>",
+    "numComments": 0,
+    "number": 5,
+    "projectRef": "@test/publictestproject",
+    "sourceBranchRef": "feature",
+    "status": "draft",
+    "targetBranchRef": "main",
+    "title": "My contribution",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

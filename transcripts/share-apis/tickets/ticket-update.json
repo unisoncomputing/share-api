@@ -1,0 +1,19 @@
+{
+  "body": {
+    "author": "test",
+    "createdAt": "<TIMESTAMP>",
+    "description": "Updated description",
+    "id": "T-<UUID>",
+    "numComments": 2,
+    "number": 1,
+    "projectRef": "@test/publictestproject",
+    "status": "closed",
+    "title": "Updated Title",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

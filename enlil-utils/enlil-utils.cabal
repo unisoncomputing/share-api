@@ -1,0 +1,95 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           enlil-utils
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/unisoncomputing/enlil#readme>
+homepage:       https://github.com/unisoncomputing/enlil#readme
+bug-reports:    https://github.com/unisoncomputing/enlil/issues
+author:         Unison Computing
+maintainer:     unison.cloud
+copyright:      2024 Unison Computing
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/unisoncomputing/enlil
+
+library
+  exposed-modules:
+      Enlil.Utils.Binary
+      Enlil.Utils.Deployment
+      Enlil.Utils.IDs
+      Enlil.Utils.SecureTokens
+      Enlil.Utils.Servant.Cookies
+      Enlil.Utils.Show
+      Enlil.Utils.URI
+  other-modules:
+      Paths_enlil_utils
+  hs-source-dirs:
+      src
+  default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      DeriveFunctor
+      DeriveGeneric
+      DeriveFoldable
+      DeriveTraversable
+      DerivingStrategies
+      DerivingVia
+      DoAndIfThenElse
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      ScopedTypeVariables
+      TupleSections
+      TypeApplications
+      ViewPatterns
+      QuasiQuotes
+      BlockArguments
+      QuasiQuotes
+      ImportQualifiedPost
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
+  build-depends:
+      MonadRandom
+    , aeson
+    , base >=4.7 && <5
+    , binary
+    , binary-instances
+    , bytestring
+    , case-insensitive
+    , containers
+    , cookie
+    , cryptonite
+    , hasql
+    , hasql-interpolate
+    , http-api-data
+    , http-types
+    , jose
+    , lens
+    , memory
+    , network-uri
+    , random
+    , servant-auth
+    , servant-server
+    , text
+    , time
+    , unliftio
+    , uuid
+    , witch
+    , witherable
+  default-language: Haskell2010

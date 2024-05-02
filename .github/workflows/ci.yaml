@@ -1,0 +1,255 @@
+name: Build and Test
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  # Build on every pull request (and new PR commit)
+  pull_request:
+  # Build on new pushes to main (E.g. Merge commits)
+  # Without the branch filter, each commit on a branch with a PR is triggered twice.
+  # See: https://github.community/t/how-to-trigger-an-action-on-push-or-pull-request-but-not-both/16662
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  ormolu_version: 0.5.2.0
+  is_published_build: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
+  exe_cache_prefix: share-ci-exe-${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')) && 'published') || 'unpublished' }}
+  share_local_bin: share-api
+
+
+jobs:
+  ormolu:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Don't need to format the unison submodule
+          submodules: false
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v41
+        with:
+          # globs copied from default settings for run-ormolu
+          files: |
+            **/*.hs
+            **/*.hs-boot
+          separator: "\n"
+      - uses: haskell-actions/run-ormolu@v15
+        with:
+          version: ${{ env.ormolu_version }}
+          mode: inplace
+          pattern: ${{ steps.changed-files.outputs.all_changed_files }}
+      - name: apply formatting changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        # Only try to commit formatting changes if we're running within the repo containing the PR,
+        # and not on a protected branch.
+        # The job doesn't have permission to push back to contributor forks on contributor PRs.
+        if: |
+          always()
+            && !github.ref_protected
+            && github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name
+        with:
+          commit_message: automatically run ormolu
+  build-exe:
+    name: Build share-api executable
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: restore stack caches
+        id: restore-stack-caches
+        uses: unisonweb/actions/stack/cache/restore@main
+        with:
+          cache-prefix: ${{env.exe_cache_prefix}}
+
+      - name: install stack
+        uses: unisonweb/actions/stack/install@main
+
+      - name: build
+        run: |
+          set -e
+          stack build \
+            --local-bin-path ${{env.share_local_bin}} \
+            --copy-bins \
+            ${{ (env.is_published_build && '--ghc-options -O2') || '--fast' }}
+
+      - name: Save exes for docker build
+        uses: actions/upload-artifact@v2
+        with:
+          name: share-api-exe
+          path: ${{env.share_local_bin}}
+
+      - name: save stack caches
+        if: |
+          !cancelled()
+            && steps.restore-stack-caches.outputs.cache-hit != 'true'
+        uses: unisonweb/actions/stack/cache/save@main
+        with:
+          cache-prefix: ${{env.exe_cache_prefix}}
+
+  # A separate job for docker build because it requires elevated github token permissions.
+  docker-build:
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
+    env:
+      container_registry: ghcr.io
+      docker_image_name: ${{ github.repository }}
+    needs: [build-exe]
+    runs-on: ubuntu-latest
+    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
+    permissions:
+      contents: read
+      # Allow uploading the docker image to the container registry
+      packages: write
+      # Allow creating and updating the artifact attestation
+      attestations: write
+      # Required to get user information for building attestations
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Don't need unison submodule for docker image build
+          submodules: false
+
+      # Downloads the artifact that contains the share-api-exe from the previous job.
+      - uses: actions/download-artifact@v2
+        with:
+          name: share-api-exe
+          path: ./docker/tmp/
+
+      # Configure Docker's builder,
+      # This seems necessary to support docker cache layers.
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v2
+
+
+      # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
+      - name: Log in to the Container registry
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20
+        with:
+          registry: ${{ env.container_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.container_registry }}/${{ env.docker_image_name }}
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=sha,format=long
+
+      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
+      # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see "[Usage](https://github.com/docker/build-push-action#usage)" in the README of the `docker/build-push-action` repository.
+      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/
+          push: ${{ env.is_published_build }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Use github actions cache for docker image layers
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            ENLIL_COMMIT=${{ github.sha }}
+          # Save image locally for use in tests even if we don't push it.
+          outputs: type=docker,dest=/tmp/share-docker-image.tar # export docker image
+
+      - name: Save docker image for transcript tests
+        uses: actions/upload-artifact@v2
+        with:
+          name: share-docker-image
+          path: /tmp/share-docker-image.tar
+
+      # NOTE: disabled until repo goes public
+      # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built. It increases supply chain security for people who consume the image. For more information, see "[AUTOTITLE](/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)."
+      # - name: Generate artifact attestation
+      #   uses: actions/attest-build-provenance@v1
+      #   with:
+      #     subject-name: ${{ env.container_registry }}/${{ env.docker_image_name}}
+      #     subject-digest: ${{ steps.push.outputs.digest }}
+      #     push-to-registry: true
+
+  # A separate job for docker build because it requires elevated github token permissions.
+  transcript-tests:
+    needs: [build-exe, docker-build]
+    runs-on: ubuntu-latest
+
+    steps:
+      # TODO: Maybe make a custom image with docker-compose and zsh pre-installed
+      # so we don't need to install it every time.
+      - name: Install zsh
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install zsh -y
+
+      - uses: actions/checkout@v4
+        with:
+          # Don't need unison submodules for transcript tests
+          submodules: false
+
+      # Configure Docker's builder,
+      # This seems necessary to support docker cache layers.
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: share-docker-image
+          path: /tmp
+
+      # Load this before using docker and it'll cache images we use in the docker-compose
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
+        with:
+          key: docker-${{ runner.os }} }}
+
+      - name: Load image from last step
+        run: |
+          set -e
+          docker load --input /tmp/share-docker-image.tar
+          # retag the latest image so it can be used in the transcript tests
+          docker tag ghcr.io/unisoncomputing/share-api:sha-${{ github.sha }} share-api
+          docker image ls -a
+
+      - name: Run transcript tests
+        # If it takes longer than this, it's probably stalled out.
+        timeout-minutes: 10
+        run: |
+          set -e
+
+          # Install ucm
+          mkdir ucm
+          curl -L https://github.com/unisonweb/unison/releases/download/release%2F0.5.19/ucm-linux.tar.gz | tar -xz -C ucm
+          export PATH=$PWD/ucm:$PATH
+
+          # Clean up old postgres data if it exists.
+          docker volume rm docker_postgresVolume 2>/dev/null || true
+
+          # Start enlil and it's dependencies in the background
+          docker compose -f docker/docker-compose.yml up --wait
+          
+          # Run the transcript tests
+          zsh ./transcripts/run-transcripts.zsh
+
+          # Track all files so they'll show in the diff
+          git add ./transcripts
+          # Fail if there are any uncommited transcript changes
+          git diff --cached --ignore-cr-at-eol --exit-code ./transcripts

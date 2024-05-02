@@ -1,0 +1,36 @@
+{
+  "body": {
+    "cursor": "<CURSOR>",
+    "items": [
+      {
+        "author": "transcripts",
+        "createdAt": "<TIMESTAMP>",
+        "description": "My description",
+        "id": "T-<UUID>",
+        "numComments": 0,
+        "number": 3,
+        "projectRef": "@test/publictestproject",
+        "status": "open",
+        "title": "My Ticket",
+        "updatedAt": "<TIMESTAMP>"
+      },
+      {
+        "author": "test",
+        "createdAt": "<TIMESTAMP>",
+        "description": "I want the code to solve all my problems but it does not. Please fix.\n\n## Things I need:\n\n* It should tie my *shoes*\n* It should make me _coffee_\n* It should do my taxes\n",
+        "id": "T-<UUID>",
+        "numComments": 2,
+        "number": 1,
+        "projectRef": "@test/publictestproject",
+        "status": "open",
+        "title": "Bug Report",
+        "updatedAt": "<TIMESTAMP>"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

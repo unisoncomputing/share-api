@@ -1,0 +1,10 @@
+{
+  "body": {
+    "missingDefinitions": [
+      "public.names.externalName"
+    ],
+    "termDefinitions": {},
+    "typeDefinitions": {}
+  },
+  "status": 200
+}

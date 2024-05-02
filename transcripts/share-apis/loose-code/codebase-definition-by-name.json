@@ -1,0 +1,138 @@
+{
+  "body": {
+    "missingDefinitions": [],
+    "termDefinitions": {
+      "#g4jit20l7qu6uv4aqfbv6dkjscvemhq8vltaa9t0vkq0itqg0g25sh18bdtjh2a0ki76eu1pdb3t365ei8pomg6mrk5njdlmdd1g9bo": {
+        "bestTermName": "compoundTerm",
+        "defnTermTag": "Plain",
+        "signature": [
+          {
+            "annotation": {
+              "contents": "##Nat",
+              "tag": "TypeReference"
+            },
+            "segment": "Nat"
+          }
+        ],
+        "termDefinition": {
+          "contents": [
+            {
+              "annotation": {
+                "contents": "public.names.apples.compoundTerm",
+                "tag": "HashQualifier"
+              },
+              "segment": "public.names.apples.compoundTerm"
+            },
+            {
+              "annotation": {
+                "tag": "TypeAscriptionColon"
+              },
+              "segment": " :"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "##Nat",
+                "tag": "TypeReference"
+              },
+              "segment": "Nat"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": {
+                "contents": "public.names.apples.compoundTerm",
+                "tag": "HashQualifier"
+              },
+              "segment": "public.names.apples.compoundTerm"
+            },
+            {
+              "annotation": {
+                "tag": "BindingEquals"
+              },
+              "segment": " ="
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": null,
+              "segment": "  "
+            },
+            {
+              "annotation": {
+                "tag": "UseKeyword"
+              },
+              "segment": "use "
+            },
+            {
+              "annotation": {
+                "tag": "UsePrefix"
+              },
+              "segment": "Nat"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "UseSuffix"
+              },
+              "segment": "+"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": null,
+              "segment": "  "
+            },
+            {
+              "annotation": {
+                "tag": "NumericLiteral"
+              },
+              "segment": "1"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "##Nat.+",
+                "tag": "TermReference"
+              },
+              "segment": "+"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "#dcgdua2lj6upd1ah5v0qp09gjsej0d77d87fu6qn8e2qrssnlnmuinoio46hiu53magr7qn8vnqke8ndt0v76700o5u8gcvo7st28jg",
+                "tag": "TermReference"
+              },
+              "segment": "two"
+            }
+          ],
+          "tag": "UserObject"
+        },
+        "termDocs": [],
+        "termNames": [
+          "public.names.apples.compoundTerm"
+        ]
+      }
+    },
+    "typeDefinitions": {}
+  },
+  "status": 200
+}

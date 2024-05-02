@@ -1,0 +1,54 @@
+{
+  "body": [
+    [
+      {
+        "result": {
+          "segments": [
+            {
+              "contents": "names.",
+              "tag": "Gap"
+            },
+            {
+              "contents": "oranges",
+              "tag": "Match"
+            },
+            {
+              "contents": ".",
+              "tag": "Match"
+            },
+            {
+              "contents": "tw",
+              "tag": "Match"
+            },
+            {
+              "contents": "o",
+              "tag": "Gap"
+            }
+          ]
+        },
+        "score": 0
+      },
+      {
+        "contents": {
+          "bestFoundTermName": "two",
+          "namedTerm": {
+            "termHash": "#dcgdua2lj6upd1ah5v0qp09gjsej0d77d87fu6qn8e2qrssnlnmuinoio46hiu53magr7qn8vnqke8ndt0v76700o5u8gcvo7st28jg",
+            "termName": "names.oranges.two",
+            "termTag": "Plain",
+            "termType": [
+              {
+                "annotation": {
+                  "contents": "##Nat",
+                  "tag": "TypeReference"
+                },
+                "segment": "Nat"
+              }
+            ]
+          }
+        },
+        "tag": "FoundTermResult"
+      }
+    ]
+  ],
+  "status": 200
+}

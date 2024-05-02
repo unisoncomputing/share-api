@@ -1,0 +1,31 @@
+{
+  "body": {
+    "createdAt": "<TIMESTAMP>",
+    "defaultBranch": "main",
+    "isFaved": true,
+    "latestRelease": "4.5.6",
+    "numActiveContributions": 2,
+    "numClosedContributions": 0,
+    "numClosedTickets": 1,
+    "numDraftContributions": 0,
+    "numFavs": 1,
+    "numMergedContributions": 0,
+    "numOpenTickets": 1,
+    "owner": {
+      "handle": "@test",
+      "name": null,
+      "type": "user"
+    },
+    "releaseDownloads": [],
+    "slug": "publictestproject",
+    "summary": "test project summary",
+    "tags": [],
+    "updatedAt": "<TIMESTAMP>",
+    "visibility": "public"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

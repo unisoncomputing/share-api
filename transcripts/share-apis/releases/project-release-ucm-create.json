@@ -1,0 +1,18 @@
+{
+  "body": {
+    "payload": {
+      "branch-head": "eyJhbGciOiJIUzI1NiJ9.eyJoIjoic2c2MGJ2am85MWZzb283cGtoOWdlamJuMHFnYzk1dnJhODdhcDZsNWQzNXJpMGxrYXVkbDdiczEyZDcxc2YzZmg2cDIzdGVlbXVvcjdtazFpOW41NjdtNTBpYmFrY2doamVjNWFqZyIsInQiOiJoaiIsInUiOiJVLWQzMmY0ZGRmLTI0MjMtNGYxMC1hNGRlLTQ2NTkzOTk1MTM1NCJ9.Cy7vswarIBxyh-HzT7bckfZu6CVzTCm2F3kMLBiHf0s",
+      "branch-id": "R-<UUID>",
+      "branch-name": "releases/4.5.6",
+      "project-id": "P-<UUID>",
+      "project-name": "@test/publictestproject",
+      "squashed-branch-head": "eyJhbGciOiJIUzI1NiJ9.eyJoIjoic2c2MGJ2am85MWZzb283cGtoOWdlamJuMHFnYzk1dnJhODdhcDZsNWQzNXJpMGxrYXVkbDdiczEyZDcxc2YzZmg2cDIzdGVlbXVvcjdtazFpOW41NjdtNTBpYmFrY2doamVjNWFqZyIsInQiOiJoaiIsInUiOiJVLWQzMmY0ZGRmLTI0MjMtNGYxMC1hNGRlLTQ2NTkzOTk1MTM1NCJ9.Cy7vswarIBxyh-HzT7bckfZu6CVzTCm2F3kMLBiHf0s"
+    },
+    "type": "success"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

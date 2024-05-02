@@ -1,0 +1,24 @@
+{
+  "body": {
+    "comment": {
+      "actor": {
+        "avatarUrl": null,
+        "handle": "test",
+        "name": null,
+        "userId": "U-<UUID>"
+      },
+      "content": "This is a revised comment",
+      "editedAt": "<TIMESTAMP>",
+      "id": "CMT-<UUID>",
+      "kind": "comment",
+      "revision": 1,
+      "timestamp": "<TIMESTAMP>"
+    },
+    "kind": "conflict"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

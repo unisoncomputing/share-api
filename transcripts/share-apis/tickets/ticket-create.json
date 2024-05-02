@@ -1,0 +1,19 @@
+{
+  "body": {
+    "author": "transcripts",
+    "createdAt": "<TIMESTAMP>",
+    "description": "My description",
+    "id": "T-<UUID>",
+    "numComments": 0,
+    "number": 3,
+    "projectRef": "@test/publictestproject",
+    "status": "open",
+    "title": "My Ticket",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

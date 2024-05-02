@@ -1,0 +1,75 @@
+{
+  "body": {
+    "missingDefinitions": [],
+    "termDefinitions": {},
+    "typeDefinitions": {
+      "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0": {
+        "bestTypeName": "Thing",
+        "defnTypeTag": "Data",
+        "typeDefinition": {
+          "contents": [
+            {
+              "annotation": {
+                "tag": "DataTypeModifier"
+              },
+              "segment": "structural"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "DataTypeKeyword"
+              },
+              "segment": "type"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "public.names.Thing",
+                "tag": "HashQualifier"
+              },
+              "segment": "public.names.Thing"
+            },
+            {
+              "annotation": {
+                "tag": "DelimiterChar"
+              },
+              "segment": " = "
+            },
+            {
+              "annotation": {
+                "contents": "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0#d0",
+                "tag": "TermReference"
+              },
+              "segment": "This"
+            },
+            {
+              "annotation": {
+                "tag": "DelimiterChar"
+              },
+              "segment": " | "
+            },
+            {
+              "annotation": {
+                "contents": "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0#d1",
+                "tag": "TermReference"
+              },
+              "segment": "That"
+            }
+          ],
+          "tag": "UserObject"
+        },
+        "typeDocs": [],
+        "typeNames": [
+          "public.names.Thing"
+        ]
+      }
+    }
+  },
+  "status": 200
+}

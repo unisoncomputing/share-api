@@ -1,0 +1,27 @@
+{
+  "body": {
+    "branchRef": "main",
+    "causalHash": "#sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg",
+    "contributions": [],
+    "createdAt": "<TIMESTAMP>",
+    "project": {
+      "createdAt": "<TIMESTAMP>",
+      "owner": {
+        "handle": "@test",
+        "name": null,
+        "type": "user"
+      },
+      "slug": "publictestproject",
+      "summary": "test project summary",
+      "tags": [],
+      "updatedAt": "<TIMESTAMP>",
+      "visibility": "public"
+    },
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+.stack-work
+docker/tmp
+*.hie
+*.uc
+.unison
+.unisonHistory
+/docker/secrets
+/secrets
+/codebases
+*.hie
+.DS_Store
+.envrc
+.direnv
+# Stack profiling
+*.prof
+*.prof.html
+prelude.output.md

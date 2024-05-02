@@ -1,0 +1,21 @@
+{
+  "body": {
+    "author": "transcripts",
+    "createdAt": "<TIMESTAMP>",
+    "description": "description",
+    "id": "C-<UUID>",
+    "numComments": 0,
+    "number": 1,
+    "projectRef": "@transcripts/bca-updates",
+    "sourceBranchRef": "feature-one",
+    "status": "in_review",
+    "targetBranchRef": "main",
+    "title": "Feature One",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

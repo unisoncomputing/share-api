@@ -1,0 +1,8 @@
+{
+  "body": "Permission Denied: Not permitted to create an ticket in this project",
+  "status": [
+    {
+      "status_code": 403
+    }
+  ]
+}

@@ -1,0 +1,181 @@
+name:                enlil
+version:             0.1.0.0
+github:              "unisoncomputing/share"
+author:              "Unison Computing"
+maintainer:          "unison.cloud"
+copyright:           "2024 Unison Computing"
+
+extra-source-files:
+- README.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/githubuser/enlil#readme>
+
+ghc-options:
+- -Wall
+- -Werror
+- -Wno-name-shadowing
+- -Wno-type-defaults
+- -Wno-missing-pattern-synonym-signatures
+- -fprint-expanded-synonyms
+- -fwrite-ide-info
+- -O2
+- -funbox-strict-fields
+
+dependencies:
+- MonadRandom
+- aeson
+- async
+- base >= 4.7 && < 5
+- base64-bytestring
+- bifunctors
+- binary
+- binary-instances
+- bytestring
+- bytes
+- case-insensitive
+- clock
+- connection
+- containers
+- cookie
+- cryptonite
+- data-default
+- either
+- extra
+- enlil-utils
+- fast-logger
+- filepath
+- free
+- fuzzyfind
+- generic-lens
+- hedis
+- here
+- http-api-data
+- http-client
+- http-client-tls
+- http-media
+- http-types
+- jose
+- lens
+- megaparsec
+- memory
+- mmorph
+- monad-validate
+- mtl
+- network
+- network-simple
+- network-uri
+- nonempty-containers
+- parallel
+- pem
+- hasql
+- hasql-pool
+- hasql-interpolate
+- prometheus-client
+- prometheus-metrics-ghc
+- random
+- raven-haskell
+- safe
+- semialign
+- servant
+- servant-auth
+- servant-client
+- servant-server
+- stm
+- stm-chans
+- stm-conduit
+- text
+- these
+- time
+- tls
+- transformers
+- unison-codebase
+- unison-codebase-sqlite
+- unison-codebase-sqlite-hashing-v2
+- unison-core
+- unison-core1
+- unison-hash
+- enlil-auth
+- unison-hashing-v2
+- unison-codebase-sqlite-hashing-v2
+- unison-parser-typechecker
+- unison-prelude
+- unison-pretty-printer
+- unison-share-api
+- unison-share-projects-api
+- unison-sqlite
+- unison-syntax
+- unison-util-base32hex
+- unison-util-cache
+- unison-util-serialization
+- unison-util-relation
+- unliftio
+- unordered-containers
+- uuid
+- vault
+- vector
+- wai
+- wai-cors
+- wai-extra
+- wai-middleware-prometheus
+- warp
+- witch
+- witherable
+- x509
+- x509-store
+
+default-extensions:
+  - ApplicativeDo
+  - BangPatterns
+  - BlockArguments
+  - DeriveFunctor
+  - DeriveGeneric
+  - DeriveFoldable
+  - DeriveTraversable
+  - DerivingStrategies
+  - DerivingVia
+  - DuplicateRecordFields
+  - DoAndIfThenElse
+  - FlexibleContexts
+  - FlexibleInstances
+  - GeneralizedNewtypeDeriving
+  - LambdaCase
+  - MultiParamTypeClasses
+  - NamedFieldPuns
+  - OverloadedStrings
+  - PatternSynonyms
+  - RankNTypes
+  - ScopedTypeVariables
+  - TupleSections
+  - TypeApplications
+  - ViewPatterns
+  - QuasiQuotes
+  - BlockArguments
+  - QuasiQuotes
+  - ImportQualifiedPost
+
+library:
+  source-dirs: src
+  when:
+    - condition: false
+      other-modules: Paths_enlil
+
+executables:
+  enlil-exe:
+    when:
+      - condition: false
+        other-modules: Paths_enlil
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - '"-with-rtsopts=-N -A32m -qn2 -T"'
+    dependencies:
+    - enlil

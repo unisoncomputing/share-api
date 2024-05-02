@@ -1,0 +1,423 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           enlil
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/enlil#readme>
+homepage:       https://github.com/unisoncomputing/share#readme
+bug-reports:    https://github.com/unisoncomputing/share/issues
+author:         Unison Computing
+maintainer:     unison.cloud
+copyright:      2024 Unison Computing
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/unisoncomputing/share
+
+library
+  exposed-modules:
+      Enlil
+      Enlil.App
+      Enlil.Backend
+      Enlil.Branch
+      Enlil.Codebase
+      Enlil.Codebase.Types
+      Enlil.Contribution
+      Enlil.Env
+      Enlil.Github
+      Enlil.IDs
+      Enlil.Metrics
+      Enlil.Monitoring
+      Enlil.NamespaceDiffs
+      Enlil.Postgres
+      Enlil.Postgres.Admin
+      Enlil.Postgres.Authorization.Queries
+      Enlil.Postgres.Causal.Conversions
+      Enlil.Postgres.Causal.Queries
+      Enlil.Postgres.Causal.Types
+      Enlil.Postgres.Comments.Queries
+      Enlil.Postgres.Contributions.Queries
+      Enlil.Postgres.Definitions.Queries
+      Enlil.Postgres.Definitions.Types
+      Enlil.Postgres.Hashes.Queries
+      Enlil.Postgres.IDs
+      Enlil.Postgres.LooseCode.Queries
+      Enlil.Postgres.Metrics.Queries
+      Enlil.Postgres.NameLookups.Conversions
+      Enlil.Postgres.NameLookups.Ops
+      Enlil.Postgres.NameLookups.Queries
+      Enlil.Postgres.NameLookups.Types
+      Enlil.Postgres.NamespaceDiffs
+      Enlil.Postgres.Ops
+      Enlil.Postgres.Orphans
+      Enlil.Postgres.Patches.Queries
+      Enlil.Postgres.Patches.Types
+      Enlil.Postgres.Projects.Queries
+      Enlil.Postgres.Queries
+      Enlil.Postgres.Refs.Types
+      Enlil.Postgres.Serialization
+      Enlil.Postgres.Sync.Conversions
+      Enlil.Postgres.Sync.Queries
+      Enlil.Postgres.Sync.Types
+      Enlil.Postgres.Tickets.Queries
+      Enlil.Postgres.Users.Queries
+      Enlil.Prelude
+      Enlil.Prelude.Orphans
+      Enlil.Project
+      Enlil.Redis
+      Enlil.Release
+      Enlil.Ticket
+      Enlil.User
+      Enlil.UserProfile
+      Enlil.Utils.API
+      Enlil.Utils.Caching
+      Enlil.Utils.Logging
+      Enlil.Utils.Logging.Types
+      Enlil.Utils.Postgres
+      Enlil.Utils.Servant
+      Enlil.Utils.Servant.Client
+      Enlil.Utils.Servant.PathInfo
+      Enlil.Utils.Servant.RawRequest
+      Enlil.Utils.Unison
+      Enlil.Web.Admin.API
+      Enlil.Web.Admin.Impl
+      Enlil.Web.Admin.Types
+      Enlil.Web.API
+      Enlil.Web.App
+      Enlil.Web.Authentication
+      Enlil.Web.Authentication.AccessToken
+      Enlil.Web.Authentication.HashJWT
+      Enlil.Web.Authentication.JWT
+      Enlil.Web.Authentication.Types
+      Enlil.Web.Authorization
+      Enlil.Web.Authorization.Types
+      Enlil.Web.Errors
+      Enlil.Web.Impl
+      Enlil.Web.Local.API
+      Enlil.Web.Local.Impl
+      Enlil.Web.OAuth.Clients
+      Enlil.Web.OAuth.Impl
+      Enlil.Web.Share.API
+      Enlil.Web.Share.Branches.API
+      Enlil.Web.Share.Branches.Impl
+      Enlil.Web.Share.Branches.Types
+      Enlil.Web.Share.CodeBrowsing.API
+      Enlil.Web.Share.Comments
+      Enlil.Web.Share.Comments.API
+      Enlil.Web.Share.Comments.Impl
+      Enlil.Web.Share.Comments.Types
+      Enlil.Web.Share.Contributions.API
+      Enlil.Web.Share.Contributions.Impl
+      Enlil.Web.Share.Contributions.MergeDetection
+      Enlil.Web.Share.Contributions.Types
+      Enlil.Web.Share.Diffs.Impl
+      Enlil.Web.Share.Diffs.Types
+      Enlil.Web.Share.Impl
+      Enlil.Web.Share.Projects.API
+      Enlil.Web.Share.Projects.Impl
+      Enlil.Web.Share.Projects.Types
+      Enlil.Web.Share.Releases.API
+      Enlil.Web.Share.Releases.Impl
+      Enlil.Web.Share.Releases.Types
+      Enlil.Web.Share.Tickets.API
+      Enlil.Web.Share.Tickets.Impl
+      Enlil.Web.Share.Tickets.Types
+      Enlil.Web.Share.Types
+      Enlil.Web.Support.API
+      Enlil.Web.Support.Impl
+      Enlil.Web.Support.Types
+      Enlil.Web.Support.Zendesk
+      Enlil.Web.Types
+      Enlil.Web.UCM.Projects.Impl
+      Enlil.Web.UCM.Sync.HashJWT
+      Enlil.Web.UCM.Sync.Impl
+      Enlil.Web.UCM.Sync.Types
+      Unison.PrettyPrintEnvDecl.Postgres
+      Unison.Server.NameSearch.Postgres
+      Unison.Server.Share.Definitions
+      Unison.Server.Share.DefinitionSummary
+      Unison.Server.Share.Docs
+      Unison.Server.Share.FuzzyFind
+      Unison.Server.Share.NamespaceDetails
+      Unison.Server.Share.NamespaceListing
+      Unison.Server.Share.RenderDoc
+  hs-source-dirs:
+      src
+  default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      DeriveFunctor
+      DeriveGeneric
+      DeriveFoldable
+      DeriveTraversable
+      DerivingStrategies
+      DerivingVia
+      DuplicateRecordFields
+      DoAndIfThenElse
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      ScopedTypeVariables
+      TupleSections
+      TypeApplications
+      ViewPatterns
+      QuasiQuotes
+      BlockArguments
+      QuasiQuotes
+      ImportQualifiedPost
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
+  build-depends:
+      MonadRandom
+    , aeson
+    , async
+    , base >=4.7 && <5
+    , base64-bytestring
+    , bifunctors
+    , binary
+    , binary-instances
+    , bytes
+    , bytestring
+    , case-insensitive
+    , clock
+    , connection
+    , containers
+    , cookie
+    , cryptonite
+    , data-default
+    , either
+    , enlil-auth
+    , enlil-utils
+    , extra
+    , fast-logger
+    , filepath
+    , free
+    , fuzzyfind
+    , generic-lens
+    , hasql
+    , hasql-interpolate
+    , hasql-pool
+    , hedis
+    , here
+    , http-api-data
+    , http-client
+    , http-client-tls
+    , http-media
+    , http-types
+    , jose
+    , lens
+    , megaparsec
+    , memory
+    , mmorph
+    , monad-validate
+    , mtl
+    , network
+    , network-simple
+    , network-uri
+    , nonempty-containers
+    , parallel
+    , pem
+    , prometheus-client
+    , prometheus-metrics-ghc
+    , random
+    , raven-haskell
+    , safe
+    , semialign
+    , servant
+    , servant-auth
+    , servant-client
+    , servant-server
+    , stm
+    , stm-chans
+    , stm-conduit
+    , text
+    , these
+    , time
+    , tls
+    , transformers
+    , unison-codebase
+    , unison-codebase-sqlite
+    , unison-codebase-sqlite-hashing-v2
+    , unison-core
+    , unison-core1
+    , unison-hash
+    , unison-hashing-v2
+    , unison-parser-typechecker
+    , unison-prelude
+    , unison-pretty-printer
+    , unison-share-api
+    , unison-share-projects-api
+    , unison-sqlite
+    , unison-syntax
+    , unison-util-base32hex
+    , unison-util-cache
+    , unison-util-relation
+    , unison-util-serialization
+    , unliftio
+    , unordered-containers
+    , uuid
+    , vault
+    , vector
+    , wai
+    , wai-cors
+    , wai-extra
+    , wai-middleware-prometheus
+    , warp
+    , witch
+    , witherable
+    , x509
+    , x509-store
+  default-language: Haskell2010
+
+executable enlil-exe
+  main-is: Main.hs
+  other-modules:
+      Env
+  hs-source-dirs:
+      app
+  default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      DeriveFunctor
+      DeriveGeneric
+      DeriveFoldable
+      DeriveTraversable
+      DerivingStrategies
+      DerivingVia
+      DuplicateRecordFields
+      DoAndIfThenElse
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      ScopedTypeVariables
+      TupleSections
+      TypeApplications
+      ViewPatterns
+      QuasiQuotes
+      BlockArguments
+      QuasiQuotes
+      ImportQualifiedPost
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
+  build-depends:
+      MonadRandom
+    , aeson
+    , async
+    , base >=4.7 && <5
+    , base64-bytestring
+    , bifunctors
+    , binary
+    , binary-instances
+    , bytes
+    , bytestring
+    , case-insensitive
+    , clock
+    , connection
+    , containers
+    , cookie
+    , cryptonite
+    , data-default
+    , either
+    , enlil
+    , enlil-auth
+    , enlil-utils
+    , extra
+    , fast-logger
+    , filepath
+    , free
+    , fuzzyfind
+    , generic-lens
+    , hasql
+    , hasql-interpolate
+    , hasql-pool
+    , hedis
+    , here
+    , http-api-data
+    , http-client
+    , http-client-tls
+    , http-media
+    , http-types
+    , jose
+    , lens
+    , megaparsec
+    , memory
+    , mmorph
+    , monad-validate
+    , mtl
+    , network
+    , network-simple
+    , network-uri
+    , nonempty-containers
+    , parallel
+    , pem
+    , prometheus-client
+    , prometheus-metrics-ghc
+    , random
+    , raven-haskell
+    , safe
+    , semialign
+    , servant
+    , servant-auth
+    , servant-client
+    , servant-server
+    , stm
+    , stm-chans
+    , stm-conduit
+    , text
+    , these
+    , time
+    , tls
+    , transformers
+    , unison-codebase
+    , unison-codebase-sqlite
+    , unison-codebase-sqlite-hashing-v2
+    , unison-core
+    , unison-core1
+    , unison-hash
+    , unison-hashing-v2
+    , unison-parser-typechecker
+    , unison-prelude
+    , unison-pretty-printer
+    , unison-share-api
+    , unison-share-projects-api
+    , unison-sqlite
+    , unison-syntax
+    , unison-util-base32hex
+    , unison-util-cache
+    , unison-util-relation
+    , unison-util-serialization
+    , unliftio
+    , unordered-containers
+    , uuid
+    , vault
+    , vector
+    , wai
+    , wai-cors
+    , wai-extra
+    , wai-middleware-prometheus
+    , warp
+    , witch
+    , witherable
+    , x509
+    , x509-store
+  default-language: Haskell2010
