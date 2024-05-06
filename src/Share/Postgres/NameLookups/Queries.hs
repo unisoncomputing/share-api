@@ -11,6 +11,10 @@ module Share.Postgres.NameLookups.Queries
     fuzzySearchTypes,
     FuzzySearchScore,
 
+    -- * Cursors
+    termsWithinNamespace,
+    typesWithinNamespace,
+
     -- * Name lookup management
     listNameLookupMounts,
     checkBranchHashNameLookupExists,
@@ -22,12 +26,16 @@ import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
 import Data.List.NonEmpty qualified as NEL
 import Data.Text qualified as Text
+import Share.Postgres
 import Share.Postgres qualified as PG
+import Share.Postgres.Cursors (PGCursor)
+import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
-import U.Codebase.Referent (ConstructorType)
+import U.Codebase.Reference (Reference)
+import U.Codebase.Referent (ConstructorType, Referent)
 import Unison.Util.Monoid qualified as Monoid
 
 -- | Get the list of term names and suffixifications for a given Referent within a given namespace.
@@ -453,3 +461,25 @@ toNamespacePrefix = \case
 -- "foo.bar."
 toReversedNamePrefix :: ReversedName -> Text
 toReversedNamePrefix suffix = Text.intercalate "." (into @[Text] suffix) <> "."
+
+termsWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (NamedRef Referent))
+termsWithinNamespace !_nlReceipt bhId = do
+  Cursors.newRowCursor @(NamedRef Referent)
+    "termsForSearchSyncCursor"
+    [sql|
+        SELECT reversed_name, referent_builtin, referent_component_hash.base32, referent_component_index, referent_constructor_index
+        FROM scoped_term_name_lookup
+        JOIN component_hashes referent_component_hash ON component_hashes.id = referent_component_hash_id
+        WHERE root_branch_hash_id = #{bhId}
+    |]
+
+typesWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (NamedRef Reference))
+typesWithinNamespace !_nlReceipt bhId = do
+  Cursors.newRowCursor @(NamedRef Reference)
+    "typesForSearchSyncCursor"
+    [sql|
+        SELECT reversed_name, reference_builtin, reference_component_hash.base32, reference_component_index
+        FROM scoped_type_name_lookup
+        JOIN component_hashes reference_component_hash ON component_hashes.id = reference_component_hash_id
+        WHERE root_branch_hash_id = #{bhId}
+    |]
