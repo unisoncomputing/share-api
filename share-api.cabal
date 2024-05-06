@@ -27,6 +27,10 @@ library
       Share
       Share.App
       Share.Backend
+      Share.BackgroundJobs
+      Share.BackgroundJobs.Errors
+      Share.BackgroundJobs.Monad
+      Share.BackgroundJobs.Workers
       Share.Branch
       Share.Codebase
       Share.Codebase.Types
@@ -218,6 +222,7 @@ library
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory
@@ -357,6 +362,7 @@ executable share-api
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory

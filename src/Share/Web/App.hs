@@ -81,7 +81,7 @@ freshRequestCtx = do
 -- | Get the tags associated with the current request.
 getTags :: (MonadReader (Env RequestCtx) m, MonadIO m) => m (Map Text Text)
 getTags = do
-  RequestCtx {reqTagsVar, localTags} <- asks requestCtx
+  RequestCtx {reqTagsVar, localTags} <- asks ctx
   reqTags <- liftIO $ readTVarIO reqTagsVar
   -- local tags take precedence over request tags
   pure $ localTags <> reqTags
@@ -89,7 +89,7 @@ getTags = do
 -- | Add a tag to the current request. This tag will be used in logging and error reports
 addRequestTag :: (MonadReader (Env RequestCtx) m, MonadIO m) => Text -> Text -> m ()
 addRequestTag k v = do
-  RequestCtx {reqTagsVar} <- asks requestCtx
+  RequestCtx {reqTagsVar} <- asks ctx
   atomically $ modifyTVar' reqTagsVar (Map.insert k v)
 
 addServerTag :: HasServer api '[] => Proxy api -> Text -> Text -> ServerT api WebApp -> ServerT api WebApp
@@ -113,11 +113,11 @@ withLocalTag k v action = do
   localRequestCtx (\ctx -> ctx {localTags = Map.insert k v $ localTags ctx}) action
 
 localRequestCtx :: (MonadReader (Env RequestCtx) m) => (RequestCtx -> RequestCtx) -> m a -> m a
-localRequestCtx f = local \env -> env {requestCtx = f (requestCtx env)}
+localRequestCtx f = local \env -> env {ctx = f (ctx env)}
 
 shouldUseCaching :: (MonadReader (Env RequestCtx) m) => m Bool
 shouldUseCaching =
-  asks (useCaching . requestCtx)
+  asks (useCaching . ctx)
 
 -- | Construct a full URI to a path within share, with provided query params.
 sharePathQ :: [Text] -> Map Text Text -> AppM reqCtx URI
