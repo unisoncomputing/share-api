@@ -8,6 +8,10 @@ module Share.Github where
 
 import Control.Monad.Reader
 import Data.Aeson
+import Network.HTTP.Types (Status (..))
+import Network.URI (URIAuth (URIAuth))
+import Servant
+import Servant.Client
 import Share.Env qualified as Env
 import Share.OAuth.Types (OAuth2State)
 import Share.OAuth.Types qualified as OAuth2
@@ -18,10 +22,6 @@ import Share.Utils.Show
 import Share.Utils.URI (URIParam (URIParam))
 import Share.Web.App
 import Share.Web.Errors
-import Network.HTTP.Types (Status (..))
-import Network.URI (URIAuth (URIAuth))
-import Servant
-import Servant.Client
 
 data GithubError
   = GithubClientError ClientError
@@ -56,16 +56,16 @@ instance FromJSON GithubUser where
   parseJSON = withObject "GithubUser" $ \u ->
     GithubUser
       <$> u
-        .: "login"
+      .: "login"
       <*> u
-        .: "id"
+      .: "id"
       <*> u
-        .: "avatar_url"
+      .: "avatar_url"
       -- We don't use this email because it's the "publicly visible" email, instead we fetch
       -- the primary email using the emails API.
       -- <*> u .: "email"
       <*> u
-        .:? "name"
+      .:? "name"
 
 data GithubEmail = GithubEmail
   { github_email_email :: Text,
@@ -78,11 +78,11 @@ instance FromJSON GithubEmail where
   parseJSON = withObject "GithubEmail" $ \u ->
     GithubEmail
       <$> u
-        .: "email"
+      .: "email"
       <*> u
-        .: "primary"
+      .: "primary"
       <*> u
-        .: "verified"
+      .: "verified"
 
 type GithubTokenApi =
   "login"
@@ -210,7 +210,7 @@ githubOauthApi = Proxy
 githubAuthenticationURI :: OAuth2State -> WebApp URI
 githubAuthenticationURI oauth2State = do
   oauthClientId <- asks Env.githubClientID
-  redirectUri <- enlilPath ["oauth", "redirect"]
+  redirectUri <- sharePath ["oauth", "redirect"]
   let ghAuth = Just (URIAuth "" "github.com" "")
       ghLink = linkURI (uri oauthClientId redirectUri)
    in return $

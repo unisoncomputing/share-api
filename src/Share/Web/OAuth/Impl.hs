@@ -18,7 +18,8 @@ import Control.Monad
 import Control.Monad.Reader
 import Data.Map qualified as Map
 import Data.Set qualified as Set
-import Share.App (enlilAud, enlilIssuer)
+import Servant
+import Share.App (shareAud, shareIssuer)
 import Share.Env qualified as Env
 import Share.Github qualified as Github
 import Share.IDs (PendingSessionId, fromId)
@@ -49,7 +50,6 @@ import Share.Web.App
 import Share.Web.Authentication.AccessToken qualified as AccessToken
 import Share.Web.Errors
 import Share.Web.OAuth.Clients (validateOAuthClientForTokenExchange, validateOAuthClientRedirectURI)
-import Servant
 import Web.Cookie as Cookie (SetCookie (..))
 
 -- | The URL used to kick off a login using Share for oauth2 clients like the Cloud app or UCM.
@@ -76,7 +76,7 @@ authorizationEndpoint ResponseTypeCode oauthClientId redirectURI scopes state pk
     Just {} -> do
       -- We're already logged in, no need to go through Github, we can redirect directly to
       -- the redirect receiver.
-      redirectReceiverUri <- enlilPathQ ["oauth", "redirect"] (Map.fromList [])
+      redirectReceiverUri <- sharePathQ ["oauth", "redirect"] (Map.fromList [])
       redirectTo redirectReceiverUri
         & setPendingSessionCookie cookieSettings (pendingId pSesh)
         & pure
@@ -156,7 +156,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
   when (Q.isNew newOrPreExistingUser) do
     Metrics.tickUserSignup
   Env.Env {cookieSettings} <- ask
-  iss <- enlilIssuer
+  iss <- shareIssuer
   -- If this was an oauth request we redirect back to the client, otherwise we just create a
   -- session and send the user to the homepage.
   case loginRequest of
@@ -167,7 +167,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
         guardM . lift $ isTrustedURI uri
         pure uri
       landingPageURI <- whenNothing mayReturnToURI $ mkLoginLandingPageURI newOrPreExistingUser
-      aud <- enlilAud
+      aud <- shareAud
       session <- Session.createSession iss aud uid
       setSessionCookie session >>= \case
         Nothing -> respondError $ InternalServerError "session-create-failure" ("Failed to create session" :: Text)

@@ -167,7 +167,7 @@ library:
       other-modules: Paths_share_api
 
 executables:
-  share-api-exe:
+  share-api:
     when:
       - condition: false
         other-modules: Paths_share-api

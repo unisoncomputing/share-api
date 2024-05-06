@@ -9,11 +9,11 @@ import Crypto.JWT qualified as JWT
 import Crypto.Random.Types qualified as Cryptonite
 import Data.Set qualified as Set
 import Database.Redis qualified as R
+import Servant
 import Share.Env (Env (..))
 import Share.Env qualified as Env
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Servant
 
 newtype AppM reqCtx a = AppM {unAppM :: ReaderT (Env reqCtx) IO a}
   deriving newtype (Functor, Applicative, Monad, MonadReader (Env reqCtx), MonadRandom, MonadIO, MonadUnliftIO)
@@ -45,10 +45,10 @@ instance R.RedisCtx (AppM reqCtx) (Either R.Reply) where
     R.liftRedis $ R.returnDecode r
 
 -- | JWT Issuer, currently just root URI
-enlilIssuer :: AppM reqCtx URI
-enlilIssuer = do
+shareIssuer :: AppM reqCtx URI
+shareIssuer = do
   asks Env.apiOrigin
 
 -- | JWT Audience, currently the same as the issuer.
-enlilAud :: AppM reqCtx (Set URI)
-enlilAud = Set.singleton <$> enlilIssuer
+shareAud :: AppM reqCtx (Set URI)
+shareAud = Set.singleton <$> shareIssuer

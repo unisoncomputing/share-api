@@ -1,7 +1,5 @@
 # Unison Share
 
-Note: Originally this project was named `Enlil`, there are many references to `Enlil` in the codebase and documentation, you may mentally substitute `Share` into those spots instead.
-
 * [Setup](#setup)
     * [MacOS](#macos)
     * [Nix](#nix)

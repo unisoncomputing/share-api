@@ -26,11 +26,11 @@ import Control.Lens hiding (from)
 import Data.List.Extra qualified as List
 import Data.List.NonEmpty.Extra qualified as NonEmpty
 import Data.Text qualified as Text
+import Hasql.Decoders qualified as Decoders
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (BranchHashId, ComponentHashId)
 import Share.Postgres.Refs.Types
 import Share.Prelude
-import Hasql.Decoders qualified as Decoders
 import U.Codebase.Referent (ConstructorType)
 import Unison.Name (Name)
 import Unison.Name qualified as Name
@@ -104,7 +104,7 @@ instance From ReversedPath [Text]
 
 instance From [Text] ReversedPath
 
--- | TODO: Can probably remove this and just use Path since enlil is high enough in the
+-- | TODO: Can probably remove this and just use Path since share is high enough in the
 -- package hierarchy
 newtype PathSegments = PathSegments [Text]
   deriving stock (Eq, Ord, Show)

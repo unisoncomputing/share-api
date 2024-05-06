@@ -7,7 +7,8 @@ module Share.Web.Local.Impl where
 import Control.Monad.Random (randomIO)
 import Control.Monad.Reader
 import Data.Set qualified as Set
-import Share.App (enlilAud, enlilIssuer)
+import Servant
+import Share.App (shareAud, shareIssuer)
 import Share.Env
 import Share.Env qualified as Env
 import Share.IDs
@@ -30,7 +31,6 @@ import Share.Web.Authentication.AccessToken qualified as AccessToken
 import Share.Web.Errors
 import Share.Web.Errors qualified as Errors
 import Share.Web.Local.API
-import Servant
 
 -- | Login to the specified user without checking credentials.
 -- Only available when running locally.
@@ -42,8 +42,8 @@ localLoginEndpoint userHandle = do
       Nothing -> Errors.respondError $ Errors.EntityMissing (ErrorID "no-user-for-handle") "No user for this handle"
       Just u -> pure u
 
-  iss <- enlilIssuer
-  aud <- enlilAud
+  iss <- shareIssuer
+  aud <- shareAud
   session <- liftIO $ Session.createSession iss aud user_id
   setSessionCookie session >>= \case
     Nothing -> Errors.respondError $ Errors.InternalServerError "local:failed-create-session" ("Failed to create session" :: Text)
@@ -70,7 +70,7 @@ localAccessTokenEndpoint userHandle = do
       Nothing -> Errors.respondError $ Errors.EntityMissing (ErrorID "no-user-for-handle") "No user for this handle"
       Just u -> pure u
   sessionID <- randomIO
-  aud <- enlilAud
+  aud <- shareAud
   AccessToken (JWTParam accessToken) <- AccessToken.createAccessToken aud user_id sessionID (Scopes $ Set.fromList [Scopes.OpenId])
   pure (JWT.signedJWTToText $ accessToken)
 

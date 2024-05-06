@@ -24,7 +24,7 @@ onLocal = deployment == Local
 
 deployment :: Deployment
 deployment =
-  case (unsafePerformIO (lookupEnv "ENLIL_DEPLOYMENT")) of
+  case (unsafePerformIO (lookupEnv "SHARE_DEPLOYMENT")) of
     Just "local" -> Local
     Just "staging" -> Staging
     Just "production" -> Production

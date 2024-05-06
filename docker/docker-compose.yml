@@ -52,7 +52,7 @@ services:
 
     environment:
       # Placeholder values for development
-      - SHARE_API_ORIGIN=http://share
+      - SHARE_API_ORIGIN=http://share-api
       - SHARE_SERVER_PORT=5424
       - SHARE_ADMIN_PORT=5425
       - SHARE_CLIENT_HOSTNAME=0.0.0.0
@@ -61,7 +61,7 @@ services:
       - SHARE_POSTGRES=postgresql://postgres:sekrit@postgres:5432
       - SHARE_HMAC_KEY=test-key-test-key-test-key-test-key-
       - SHARE_DEPLOYMENT=local
-      - SHARE_IP=share
+      - SHARE_IP=share-api
       - SHARE_AWS_CREDENTIAL_URL=invalid
       - AWS_REGION=invalid
       - SHARE_POSTGRES_CONN_TTL=30

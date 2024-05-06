@@ -11,6 +11,8 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time
+import Network.URI (URI)
+import Servant.Auth.JWT
 import Share.App
 import Share.IDs (SessionId, UserId (..))
 import Share.JWT (JWTParam (..))
@@ -25,8 +27,6 @@ import Share.Web.Authentication.JWT qualified as AuthJWT
 import Share.Web.Authentication.JWT qualified as JWT
 import Share.Web.Authentication.Types
 import Share.Web.Errors
-import Network.URI (URI)
-import Servant.Auth.JWT
 
 -- Once we have an easy way to refresh these (e.g. private key stored on the client)
 -- we should drop this down to 30 minutes or less.
@@ -87,7 +87,7 @@ userForAccessToken token = do
 
 createAccessToken :: Set URI -> UserId -> SessionId -> Scopes -> WebApp AccessToken
 createAccessToken aud userID sessionID scope = do
-  standardClaims <- JWT.enlilStandardClaims aud userID accessTokenTTL sessionID
+  standardClaims <- JWT.shareStandardClaims aud userID accessTokenTTL sessionID
   let accessTokenClaims = AccessTokenClaims {scope, standardClaims}
   signedJWT <- AuthJWT.signJWT accessTokenClaims
   pure (AccessToken (JWTParam signedJWT))

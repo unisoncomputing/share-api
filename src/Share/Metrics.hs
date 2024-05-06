@@ -33,7 +33,7 @@ import System.Clock qualified as Clock
 import UnliftIO qualified
 
 service :: Text
-service = "enlil"
+service = "share-api"
 
 deployment :: Text
 deployment = tShow Deployment.deployment
@@ -271,7 +271,7 @@ numUsersWithTickets =
 -- | Adds one to the user-signup counter
 tickUserSignup :: MonadIO m => m ()
 tickUserSignup = liftIO do
-  Prom.withLabel userSignupsCounter (tShow Deployment.deployment, "enlil") Prom.incCounter
+  Prom.withLabel userSignupsCounter (tShow Deployment.deployment, "share-api") Prom.incCounter
 
 -- | Runs the provided action at most once every interval, will return previous results until
 -- it's time to run again.

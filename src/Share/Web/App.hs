@@ -11,8 +11,8 @@ module Share.Web.App
     addServerTag,
     getTags,
     shouldUseCaching,
-    enlilPath,
-    enlilPathQ,
+    sharePath,
+    sharePathQ,
     shareUIPath,
     shareUIPathQ,
     isTrustedURI,
@@ -21,6 +21,8 @@ where
 
 import Control.Monad.Reader
 import Data.Map qualified as Map
+import Network.URI
+import Servant
 import Share.App
 import Share.Env
 import Share.Env qualified as Env
@@ -28,8 +30,6 @@ import Share.IDs (RequestId, UserId)
 import Share.Prelude
 import Share.Utils.Logging
 import Share.Utils.URI (setPathAndQueryParams)
-import Network.URI
-import Servant
 import UnliftIO.STM
 
 type WebApp = AppM RequestCtx
@@ -119,15 +119,15 @@ shouldUseCaching :: (MonadReader (Env RequestCtx) m) => m Bool
 shouldUseCaching =
   asks (useCaching . requestCtx)
 
--- | Construct a full URI to a path within enlil, with provided query params.
-enlilPathQ :: [Text] -> Map Text Text -> AppM reqCtx URI
-enlilPathQ pathSegments queryParams = do
+-- | Construct a full URI to a path within share, with provided query params.
+sharePathQ :: [Text] -> Map Text Text -> AppM reqCtx URI
+sharePathQ pathSegments queryParams = do
   uri <- asks Env.apiOrigin
   pure . setPathAndQueryParams pathSegments queryParams $ uri
 
--- | Construct a full URI to a path within enlil.
-enlilPath :: [Text] -> AppM reqCtx URI
-enlilPath path = enlilPathQ path mempty
+-- | Construct a full URI to a path within share.
+sharePath :: [Text] -> AppM reqCtx URI
+sharePath path = sharePathQ path mempty
 
 -- | Check if a URI is a the Share UI, the Cloud UI, the main website, or the
 -- Cloud website. This is useful for preventing attackers from generating

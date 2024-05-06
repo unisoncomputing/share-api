@@ -1,22 +1,22 @@
 cradle:
   stack:
     - path: "./src"
-      component: "enlil:lib"
+      component: "share-api:lib"
 
     - path: "./app/Main.hs"
-      component: "enlil:exe:enlil-exe"
+      component: "share-api:exe:share-api"
 
     - path: "./app/Env.hs"
-      component: "enlil:exe:enlil-exe"
+      component: "share-api:exe:share-api"
 
-    - path: "./enlil-auth/src"
-      component: "enlil-auth:lib"
+    - path: "./share-auth/src"
+      component: "share-auth:lib"
 
-    - path: "./enlil-auth/src"
-      component: "enlil-auth:lib"
+    - path: "./share-auth/src"
+      component: "share-auth:lib"
 
-    - path: "./enlil-utils/src"
-      component: "enlil-utils:lib"
+    - path: "./share-utils/src"
+      component: "share-utils:lib"
 
     - path: "unison/codebase2/codebase/./"
       component: "unison-codebase:lib"

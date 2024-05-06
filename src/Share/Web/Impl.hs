@@ -3,6 +3,7 @@
 module Share.Web.Impl (server) where
 
 import Data.Set qualified as Set
+import Servant
 import Share.App
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
@@ -23,14 +24,13 @@ import Share.Web.Support.Impl qualified as Support
 import Share.Web.Types
 import Share.Web.UCM.Projects.Impl qualified as UCMProjects
 import Share.Web.UCM.Sync.Impl qualified as Sync
-import Servant
 
 discoveryEndpoint :: WebApp DiscoveryDocument
 discoveryEndpoint = do
-  issuer <- URIParam <$> enlilIssuer
-  authorizationE <- URIParam <$> enlilPath ["oauth", "authorize"]
-  tokenE <- URIParam <$> enlilPath ["oauth", "token"]
-  userInfoE <- URIParam <$> enlilPath ["user-info"]
+  issuer <- URIParam <$> shareIssuer
+  authorizationE <- URIParam <$> sharePath ["oauth", "authorize"]
+  tokenE <- URIParam <$> sharePath ["oauth", "token"]
+  userInfoE <- URIParam <$> sharePath ["user-info"]
   let responseTypesSupported = Set.singleton ResponseTypeCode
   pure $ DiscoveryDocument {..}
 

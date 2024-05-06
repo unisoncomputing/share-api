@@ -35,42 +35,42 @@ import Unison.Runtime.Interface as RT
 
 withEnv :: (Env () -> IO a) -> IO a
 withEnv action = do
-  apiOrigin <- fromEnv "ENLIL_API_ORIGIN" (pure . maybeToEither "Invalid ENLIL_API_ORIGIN" . parseURI)
-  serverPort <- fromEnv "ENLIL_SERVER_PORT" readPort
+  apiOrigin <- fromEnv "SHARE_API_ORIGIN" (pure . maybeToEither "Invalid SHARE_API_ORIGIN" . parseURI)
+  serverPort <- fromEnv "SHARE_SERVER_PORT" readPort
   shouldCheckForMigration <-
-    lookupEnv "ENLIL_MIGRATE_ON_STARTUP" <&> \case
+    lookupEnv "SHARE_MIGRATE_ON_STARTUP" <&> \case
       Nothing -> False
       Just val -> case map Char.toLower val of
         'f' : _ -> False
         '0' : _ -> False
         [] -> False
         _ -> True
-  postgresConfig <- fromEnv "ENLIL_POSTGRES" (pure . Right . Text.pack)
-  postgresConnMax <- fromEnv "ENLIL_POSTGRES_CONN_MAX" (pure . maybeToEither "Invalid ENLIL_POSTGRES_CONN_MAX" . readMaybe)
-  githubClientID <- fromEnv "ENLIL_GITHUB_CLIENTID" (pure . Right . Text.pack)
-  githubClientSecret <- fromEnv "ENLIL_GITHUB_CLIENT_SECRET" (pure . Right . Text.pack)
-  hs256Key <- fromEnv "ENLIL_HMAC_KEY" (pure . Right . BS.pack)
-  zendeskAPIUser <- fromEnv "ENLIL_ZENDESK_API_USER" (pure . Right . BS.pack)
-  zendeskAPIToken <- fromEnv "ENLIL_ZENDESK_API_TOKEN" (pure . Right . BS.pack)
+  postgresConfig <- fromEnv "SHARE_POSTGRES" (pure . Right . Text.pack)
+  postgresConnMax <- fromEnv "SHARE_POSTGRES_CONN_MAX" (pure . maybeToEither "Invalid SHARE_POSTGRES_CONN_MAX" . readMaybe)
+  githubClientID <- fromEnv "SHARE_GITHUB_CLIENTID" (pure . Right . Text.pack)
+  githubClientSecret <- fromEnv "SHARE_GITHUB_CLIENT_SECRET" (pure . Right . Text.pack)
+  hs256Key <- fromEnv "SHARE_HMAC_KEY" (pure . Right . BS.pack)
+  zendeskAPIUser <- fromEnv "SHARE_ZENDESK_API_USER" (pure . Right . BS.pack)
+  zendeskAPIToken <- fromEnv "SHARE_ZENDESK_API_TOKEN" (pure . Right . BS.pack)
   let zendeskAuth = Servant.BasicAuthData zendeskAPIUser zendeskAPIToken
-  commitHash <- fromEnv "ENLIL_COMMIT" (pure . Right . Text.pack)
+  commitHash <- fromEnv "SHARE_COMMIT" (pure . Right . Text.pack)
   minLogSeverity <-
-    lookupEnv "ENLIL_LOG_LEVEL" >>= \case
+    lookupEnv "SHARE_LOG_LEVEL" >>= \case
       Nothing -> pure Logging.Info
       Just (map toUpper -> "DEBUG") -> pure Logging.Debug
       Just (map toUpper -> "INFO") -> pure Logging.Info
       Just (map toUpper -> "ERROR") -> pure Logging.Error
       Just (map toUpper -> "USERERROR") -> pure Logging.UserFault
       Just x -> putStrLn ("Unknown logging level: " <> x) >> exitWith (ExitFailure 1)
-  shareUiOrigin <- fromEnv "ENLIL_SHARE_UI_ORIGIN" (pure . maybeToEither "Invalid ENLIL_SHARE_UI_ORIGIN" . parseURI)
-  websiteOrigin <- fromEnv "ENLIL_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid ENLIL_HOMEPAGE_ORIGIN" . parseURI)
-  cloudUiOrigin <- fromEnv "ENLIL_CLOUD_UI_ORIGIN" (pure . maybeToEither "Invalid ENLIL_CLOUD_UI_ORIGIN" . parseURI)
-  maxParallelismPerDownloadRequest <- fromEnv "ENLIL_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" (pure . maybeToEither "Invalid ENLIL_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" . readMaybe)
-  maxParallelismPerUploadRequest <- fromEnv "ENLIL_MAX_PARALLELISM_PER_UPLOAD_REQUEST" (pure . maybeToEither "Invalid ENLIL_MAX_PARALLELISM_PER_UPLOAD_REQUEST" . readMaybe)
-  cloudWebsiteOrigin <- fromEnv "ENLIL_CLOUD_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid ENLIL_CLOUD_HOMEPAGE_ORIGIN" . parseURI)
+  shareUiOrigin <- fromEnv "SHARE_SHARE_UI_ORIGIN" (pure . maybeToEither "Invalid SHARE_SHARE_UI_ORIGIN" . parseURI)
+  websiteOrigin <- fromEnv "SHARE_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_HOMEPAGE_ORIGIN" . parseURI)
+  cloudUiOrigin <- fromEnv "SHARE_CLOUD_UI_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_UI_ORIGIN" . parseURI)
+  maxParallelismPerDownloadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" . readMaybe)
+  maxParallelismPerUploadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" . readMaybe)
+  cloudWebsiteOrigin <- fromEnv "SHARE_CLOUD_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_HOMEPAGE_ORIGIN" . parseURI)
 
   sentryService <-
-    lookupEnv "ENLIL_SENTRY_DSN" >>= \case
+    lookupEnv "SHARE_SENTRY_DSN" >>= \case
       Nothing -> do
         putStrLn "No Sentry configuration detected."
         Sentry.disabledRaven
@@ -80,7 +80,7 @@ withEnv action = do
         Sentry.initRaven dsn sentryTags Sentry.sendRecord Sentry.stderrFallback
 
   redisConfig <-
-    (fromEnv "ENLIL_REDIS" (pure . Redis.parseConnectInfo)) <&> \r ->
+    (fromEnv "SHARE_REDIS" (pure . Redis.parseConnectInfo)) <&> \r ->
       let tlsParams
             | Deployment.onLocal = Nothing
             | otherwise = Nothing
@@ -93,7 +93,7 @@ withEnv action = do
   pgConnectionPool <-
     Pool.acquire postgresConnMax Nothing (Text.encodeUtf8 postgresConfig)
   timeCache <- FL.newTimeCache FL.simpleTimeFormat -- E.g. 05/Sep/2023:13:23:56 -0700
-  sandboxedRuntime <- RT.startRuntime True RT.Persistent "enlil"
+  sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"
   let requestCtx = ()
   -- We use a zero-width-space to separate log-lines on ingestion, this allows us to use newlines for
   -- formatting, but without affecting log-grouping.
@@ -101,7 +101,7 @@ withEnv action = do
   FL.withFastLogger (FL.LogStderr FL.defaultBufSize) $ \logger -> do
     action $ Env {logger = (logger . (\msg -> zeroWidthSpace <> msg <> "\n")), ..}
   where
-    readPort p = pure $ maybeToRight "ENLIL_PORT was not a number" (readMaybe p)
+    readPort p = pure $ maybeToRight "SHARE_PORT was not a number" (readMaybe p)
 
 fromEnv :: String -> (String -> IO (Either String a)) -> IO a
 fromEnv var from = do

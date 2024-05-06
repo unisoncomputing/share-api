@@ -10,6 +10,8 @@ import Data.Either.Combinators qualified as Either
 import Data.Set qualified as Set
 import Data.Set.Lens (setOf)
 import Data.Time (NominalDiffTime, UTCTime, addUTCTime, getCurrentTime)
+import Network.URI (URI)
+import Network.URI qualified as URI
 import Share.App
 import Share.Env qualified as Env
 import Share.IDs (JTI (..), SessionId (..), UserId (..))
@@ -19,8 +21,6 @@ import Share.Prelude
 import Share.Web.App
 import Share.Web.Authentication.Types
 import Share.Web.Errors
-import Network.URI (URI)
-import Network.URI qualified as URI
 
 -- | Helper for working with standard claim sets more easily/without a bunch of Maybes.
 data StandardClaims = StandardClaims
@@ -66,10 +66,10 @@ decodeStandardClaims claims = do
   let additionalClaims = claims ^. JWT.unregisteredClaims
   pure (standardClaims, additionalClaims)
 
-enlilStandardClaims :: Set URI -> UserId -> NominalDiffTime -> SessionId -> AppM reqCtx StandardClaims
-enlilStandardClaims aud sub ttl (SessionId sessionIdUUID) = do
+shareStandardClaims :: Set URI -> UserId -> NominalDiffTime -> SessionId -> AppM reqCtx StandardClaims
+shareStandardClaims aud sub ttl (SessionId sessionIdUUID) = do
   let jti = IDs.toText $ JTI sessionIdUUID
-  iss <- enlilIssuer
+  iss <- shareIssuer
   iat <- liftIO getCurrentTime
   let exp = addUTCTime ttl iat
   pure (StandardClaims {..})

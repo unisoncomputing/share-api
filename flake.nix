@@ -1,5 +1,5 @@
 {
-  description = "Nix support for developing enlil";
+  description = "Nix support for developing share";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,7 +17,7 @@
             (with pkgs.darwin.apple_sdk.frameworks; [ Cocoa ]);
 
 
-          enlil-env = pkgs.mkShell {
+          share-env = pkgs.mkShell {
             packages = let exports = self.packages."${system}";
             in with pkgs;
             [
@@ -53,7 +53,7 @@
 
           pkgs = pkgs;
 
-          devShells.default = enlil-env;
+          devShells.default = share-env;
 
           packages = {
             ormolu = pkgs.ormolu;
