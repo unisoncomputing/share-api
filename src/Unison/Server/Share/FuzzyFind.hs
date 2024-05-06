@@ -19,16 +19,16 @@ import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Ord qualified as Ord
 import Data.Text qualified as Text
-import Enlil.Backend qualified as Backend
-import Enlil.Codebase qualified as Codebase
-import Enlil.Codebase.Types (CodebaseM)
-import Enlil.Postgres.Causal.Queries qualified as CausalQ
-import Enlil.Postgres.IDs (BranchHashId, CausalId)
-import Enlil.Postgres.NameLookups.Ops qualified as NameLookupOps
-import Enlil.Postgres.NameLookups.Queries qualified as Q
-import Enlil.Postgres.NameLookups.Types (NamedRef (..), NamesPerspective (..), PathSegments (..))
-import Enlil.Postgres.NameLookups.Types qualified as NameLookups
-import Enlil.Prelude
+import Share.Backend qualified as Backend
+import Share.Codebase qualified as Codebase
+import Share.Codebase.Types (CodebaseM)
+import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.IDs (BranchHashId, CausalId)
+import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Queries qualified as Q
+import Share.Postgres.NameLookups.Types (NamedRef (..), NamesPerspective (..), PathSegments (..))
+import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.Prelude
 import Servant
   ( QueryParam,
     (:>),

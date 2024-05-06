@@ -8,16 +8,16 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Time (DiffTime)
 import Database.Redis qualified as R
-import Enlil.JWT qualified as JWT
-import Enlil.OAuth.API (ServiceProviderAPI)
-import Enlil.OAuth.IdentityProvider.Share qualified as Share
-import Enlil.OAuth.Scopes (Scopes (..))
-import Enlil.OAuth.Scopes qualified as Scopes
-import Enlil.OAuth.ServiceProvider (ServiceProviderConfig (..), SessionCallbackData)
-import Enlil.OAuth.ServiceProvider qualified as Auth
-import Enlil.OAuth.Session (AuthCheckCtx, AuthenticatedUserId, MaybeAuthenticatedUserId, addAuthCheckCtx)
-import Enlil.OAuth.Types (OAuthClientId (..), OAuthClientSecret (OAuthClientSecret), RedirectReceiverErr, UserId)
-import Enlil.Utils.Servant.Cookies qualified as Cookies
+import Share.JWT qualified as JWT
+import Share.OAuth.API (ServiceProviderAPI)
+import Share.OAuth.IdentityProvider.Share qualified as Share
+import Share.OAuth.Scopes (Scopes (..))
+import Share.OAuth.Scopes qualified as Scopes
+import Share.OAuth.ServiceProvider (ServiceProviderConfig (..), SessionCallbackData)
+import Share.OAuth.ServiceProvider qualified as Auth
+import Share.OAuth.Session (AuthCheckCtx, AuthenticatedUserId, MaybeAuthenticatedUserId, addAuthCheckCtx)
+import Share.OAuth.Types (OAuthClientId (..), OAuthClientSecret (OAuthClientSecret), RedirectReceiverErr, UserId)
+import Share.Utils.Servant.Cookies qualified as Cookies
 import GHC.Stack (HasCallStack)
 import Network.URI qualified as URI
 import Network.Wai.Handler.Warp qualified as Warp

@@ -15,13 +15,13 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Database.Redis qualified as Redis
-import Enlil.Env
-import Enlil.JWT qualified as JWT
-import Enlil.Prelude
-import Enlil.Utils.Deployment qualified as Deployment
-import Enlil.Utils.Logging qualified as Logging
-import Enlil.Utils.Servant.Cookies qualified as Cookies
-import Enlil.Web.Authentication (cookieSessionTTL)
+import Share.Env
+import Share.JWT qualified as JWT
+import Share.Prelude
+import Share.Utils.Deployment qualified as Deployment
+import Share.Utils.Logging qualified as Logging
+import Share.Utils.Servant.Cookies qualified as Cookies
+import Share.Web.Authentication (cookieSessionTTL)
 import Hasql.Pool qualified as Pool
 import Network.URI (parseURI)
 import Servant.API qualified as Servant

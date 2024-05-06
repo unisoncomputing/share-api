@@ -19,16 +19,16 @@ module Unison.Server.Share.DefinitionSummary
 where
 
 import Data.Aeson
-import Enlil.Backend qualified as Backend
-import Enlil.Codebase qualified as Codebase
-import Enlil.Codebase.Types (CodebaseM)
-import Enlil.Postgres (QueryM (unrecoverableError))
-import Enlil.Postgres.Hashes.Queries qualified as HashQ
-import Enlil.Postgres.IDs (CausalId)
-import Enlil.Postgres.NameLookups.Ops qualified as NLOps
-import Enlil.Postgres.NameLookups.Types (PathSegments (..))
-import Enlil.Utils.Logging qualified as Logging
-import Enlil.Web.Errors (ToServerError (..))
+import Share.Backend qualified as Backend
+import Share.Codebase qualified as Codebase
+import Share.Codebase.Types (CodebaseM)
+import Share.Postgres (QueryM (unrecoverableError))
+import Share.Postgres.Hashes.Queries qualified as HashQ
+import Share.Postgres.IDs (CausalId)
+import Share.Postgres.NameLookups.Ops qualified as NLOps
+import Share.Postgres.NameLookups.Types (PathSegments (..))
+import Share.Utils.Logging qualified as Logging
+import Share.Web.Errors (ToServerError (..))
 import Servant (Capture, QueryParam, (:>))
 import Servant.Server (err500)
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))

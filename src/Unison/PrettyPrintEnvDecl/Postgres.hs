@@ -3,13 +3,13 @@ module Unison.PrettyPrintEnvDecl.Postgres (ppedForReferences) where
 import Control.Lens
 import Data.Map qualified as Map
 import Data.Set qualified as Set
-import Enlil.Postgres qualified as PG
-import Enlil.Postgres.NameLookups.Conversions qualified as CV
-import Enlil.Postgres.NameLookups.Ops qualified as NameLookupOps
-import Enlil.Postgres.NameLookups.Types (NamesPerspective)
-import Enlil.Postgres.NameLookups.Types qualified as NameLookups
-import Enlil.Postgres.Refs.Types
-import Enlil.Prelude
+import Share.Postgres qualified as PG
+import Share.Postgres.NameLookups.Conversions qualified as CV
+import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Types (NamesPerspective)
+import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.Postgres.Refs.Types
+import Share.Prelude
 import Unison.HashQualified' qualified as HQ'
 import Unison.LabeledDependency (LabeledDependency)
 import Unison.Name (Name)

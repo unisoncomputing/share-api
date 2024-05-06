@@ -24,13 +24,13 @@ source-repository head
 
 library
   exposed-modules:
-      Enlil.Utils.Binary
-      Enlil.Utils.Deployment
-      Enlil.Utils.IDs
-      Enlil.Utils.SecureTokens
-      Enlil.Utils.Servant.Cookies
-      Enlil.Utils.Show
-      Enlil.Utils.URI
+      Share.Utils.Binary
+      Share.Utils.Deployment
+      Share.Utils.IDs
+      Share.Utils.SecureTokens
+      Share.Utils.Servant.Cookies
+      Share.Utils.Show
+      Share.Utils.URI
   other-modules:
       Paths_enlil_utils
   hs-source-dirs:

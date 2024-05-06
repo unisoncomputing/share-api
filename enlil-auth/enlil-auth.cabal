@@ -24,17 +24,17 @@ source-repository head
 
 library
   exposed-modules:
-      Enlil.JWT
-      Enlil.OAuth.API
-      Enlil.OAuth.Errors
-      Enlil.OAuth.IdentityProvider.Share
-      Enlil.OAuth.IdentityProvider.Types
-      Enlil.OAuth.PKCE
-      Enlil.OAuth.Redis
-      Enlil.OAuth.Scopes
-      Enlil.OAuth.ServiceProvider
-      Enlil.OAuth.Session
-      Enlil.OAuth.Types
+      Share.JWT
+      Share.OAuth.API
+      Share.OAuth.Errors
+      Share.OAuth.IdentityProvider.Share
+      Share.OAuth.IdentityProvider.Types
+      Share.OAuth.PKCE
+      Share.OAuth.Redis
+      Share.OAuth.Scopes
+      Share.OAuth.ServiceProvider
+      Share.OAuth.Session
+      Share.OAuth.Types
   other-modules:
       Paths_enlil_auth
   hs-source-dirs:

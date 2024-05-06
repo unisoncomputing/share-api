@@ -11,14 +11,14 @@ import Data.Either (partitionEithers)
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Set qualified as Set
-import Enlil.Backend qualified as Backend
-import Enlil.Codebase (CodebaseRuntime)
-import Enlil.Codebase qualified as Codebase
-import Enlil.Postgres qualified as PG
-import Enlil.Postgres.Causal.Queries qualified as CausalQ
-import Enlil.Postgres.IDs (CausalId)
-import Enlil.Postgres.NameLookups.Ops qualified as NameLookupOps
-import Enlil.Prelude
+import Share.Backend qualified as Backend
+import Share.Codebase (CodebaseRuntime)
+import Share.Codebase qualified as Codebase
+import Share.Postgres qualified as PG
+import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.IDs (CausalId)
+import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Prelude
 import Unison.Codebase.Path (Path)
 import Unison.ConstructorReference qualified as ConstructorReference
 import Unison.Debug qualified as Debug

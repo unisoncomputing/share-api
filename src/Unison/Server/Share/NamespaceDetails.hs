@@ -2,10 +2,10 @@ module Unison.Server.Share.NamespaceDetails (namespaceDetails) where
 
 import Control.Monad.Except
 import Data.Set qualified as Set
-import Enlil.Codebase qualified as Codebase
-import Enlil.Codebase.Types (CodebaseM, CodebaseRuntime)
-import Enlil.Postgres.IDs (CausalId)
-import Enlil.Prelude
+import Share.Codebase qualified as Codebase
+import Share.Codebase.Types (CodebaseM, CodebaseRuntime)
+import Share.Postgres.IDs (CausalId)
+import Share.Prelude
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.HashTags (CausalHash)
 import Unison.Codebase.Path qualified as Path

@@ -7,11 +7,11 @@ module Unison.Server.Share.NamespaceListing (serve, NamespaceListingAPI, Namespa
 
 import Control.Monad.Except
 import Data.Aeson
-import Enlil.Backend qualified as Backend
-import Enlil.Codebase (CodebaseM)
-import Enlil.Codebase qualified as Codebase
-import Enlil.Postgres.IDs (CausalId)
-import Enlil.Prelude
+import Share.Backend qualified as Backend
+import Share.Codebase (CodebaseM)
+import Share.Codebase qualified as Codebase
+import Share.Postgres.IDs (CausalId)
+import Share.Prelude
 import Servant
   ( QueryParam,
     (:>),

@@ -3,10 +3,10 @@
 module Unison.Server.Share.Docs (docsForDefinitionName) where
 
 import Control.Lens qualified as Cons
-import Enlil.Codebase qualified as Codebase
-import Enlil.Postgres qualified as PG
-import Enlil.Prelude
-import Enlil.Web.Errors (SomeServerError)
+import Share.Codebase qualified as Codebase
+import Share.Postgres qualified as PG
+import Share.Prelude
+import Share.Web.Errors (SomeServerError)
 import Unison.HashQualified' qualified as HQ'
 import Unison.Name (Name)
 import Unison.NamesWithHistory (SearchType (ExactName))
