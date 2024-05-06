@@ -14,6 +14,8 @@ import Data.UUID qualified as UUID
 import GHC.TypeLits qualified as TypeError
 import Hasql.Interpolate qualified as Interp
 import Unison.Server.Orphans ()
+import Unison.ShortHash (ShortHash)
+import Unison.ShortHash qualified as SH
 import Witch
 
 instance {-# OVERLAPPING #-} TypeError.TypeError ('TypeError.Text "A String will be encoded as char[], Did you mean to use Text instead?") => Interp.EncodeValue String where
@@ -36,3 +38,6 @@ instance Semialign f => Semialign (Cofree f) where
 
 instance From UUID Text where
   from = UUID.toText
+
+instance From ShortHash Text where
+  from = SH.toText
