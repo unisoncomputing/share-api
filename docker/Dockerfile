@@ -9,7 +9,7 @@ ENV LANG=C.UTF-8
 COPY share-entrypoint.sh /usr/local/bin/share-entrypoint
 RUN chmod 555 /usr/local/bin/share-entrypoint
 
-COPY tmp/share-exe /usr/local/bin/share
+COPY tmp/share-api /usr/local/bin/share
 RUN chmod 555 /usr/local/bin/share
 
 ENTRYPOINT /usr/local/bin/share-entrypoint
