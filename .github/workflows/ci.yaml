@@ -215,10 +215,10 @@ jobs:
           path: /tmp
 
       # Load this before using docker and it'll cache images we use in the docker-compose
-      # - name: Cache Docker images.
-      #   uses: ScribeMD/docker-cache@fb28c93772363301b8d0a6072ce850224b73f74e # v0.5.0
-      #   with:
-      #     key: docker-${{ runner.os }} }}
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@fb28c93772363301b8d0a6072ce850224b73f74e # v0.5.0
+        with:
+          key: docker-${{ runner.os }} }}
 
       - name: Load image from last step
         run: |
