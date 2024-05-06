@@ -4,11 +4,11 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           enlil
+name:           share-api
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/enlil#readme>
-homepage:       https://github.com/unisoncomputing/share#readme
-bug-reports:    https://github.com/unisoncomputing/share/issues
+description:    Please see the README on GitHub at <https://github.com/githubuser/share-api#readme>
+homepage:       https://github.com/unisoncomputing/share-api#readme
+bug-reports:    https://github.com/unisoncomputing/share-api/issues
 author:         Unison Computing
 maintainer:     unison.cloud
 copyright:      2024 Unison Computing
@@ -20,7 +20,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/unisoncomputing/share
+  location: https://github.com/unisoncomputing/share-api
 
 library
   exposed-modules:
@@ -200,8 +200,6 @@ library
     , cryptonite
     , data-default
     , either
-    , enlil-auth
-    , enlil-utils
     , extra
     , fast-logger
     , filepath
@@ -241,6 +239,8 @@ library
     , servant-auth
     , servant-client
     , servant-server
+    , share-auth
+    , share-utils
     , stm
     , stm-chans
     , stm-conduit
@@ -283,10 +283,11 @@ library
     , x509-store
   default-language: Haskell2010
 
-executable enlil-exe
+executable share-api-exe
   main-is: Main.hs
   other-modules:
       Env
+      Paths_share_api
   hs-source-dirs:
       app
   default-extensions:
@@ -338,9 +339,6 @@ executable enlil-exe
     , cryptonite
     , data-default
     , either
-    , enlil
-    , enlil-auth
-    , enlil-utils
     , extra
     , fast-logger
     , filepath
@@ -380,6 +378,9 @@ executable enlil-exe
     , servant-auth
     , servant-client
     , servant-server
+    , share-api
+    , share-auth
+    , share-utils
     , stm
     , stm-chans
     , stm-conduit

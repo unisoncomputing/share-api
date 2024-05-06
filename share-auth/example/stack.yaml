@@ -3,7 +3,7 @@ resolver: lts-20.26
 packages:
 - .
 - ../
-- ../../enlil-utils
+- ../../share-utils
 
 extra-deps:
 - hasql-interpolate-0.1.0.4

@@ -7,8 +7,8 @@ cabal-version: 1.12
 name:           test-auth-app
 version:        0.1.0.0
 description:    Please see the README on GitHub at <https://github.com/githubuser/test-auth-app#readme>
-homepage:       https://github.com/unisoncomputing/share#readme
-bug-reports:    https://github.com/unisoncomputing/share/issues
+homepage:       https://github.com/unisoncomputing/share-api#readme
+bug-reports:    https://github.com/unisoncomputing/share-api/issues
 author:         unison.cloud
 maintainer:     unison.cloud
 copyright:      2024 Unison Computing
@@ -20,7 +20,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/unisoncomputing/share
+  location: https://github.com/unisoncomputing/share-api
 
 library
   exposed-modules:
@@ -61,13 +61,13 @@ library
   build-depends:
       base >=4.7 && <5
     , containers
-    , enlil-auth
-    , enlil-utils
     , hedis
     , network-uri
     , servant
     , servant-auth-server
     , servant-server
+    , share-auth
+    , share-utils
     , text
     , time
     , unliftio
@@ -112,13 +112,13 @@ executable test-auth-app-exe
   build-depends:
       base >=4.7 && <5
     , containers
-    , enlil-auth
-    , enlil-utils
     , hedis
     , network-uri
     , servant
     , servant-auth-server
     , servant-server
+    , share-auth
+    , share-utils
     , test-auth-app
     , text
     , time
@@ -165,13 +165,13 @@ test-suite test-auth-app-test
   build-depends:
       base >=4.7 && <5
     , containers
-    , enlil-auth
-    , enlil-utils
     , hedis
     , network-uri
     , servant
     , servant-auth-server
     , servant-server
+    , share-auth
+    , share-utils
     , test-auth-app
     , text
     , time

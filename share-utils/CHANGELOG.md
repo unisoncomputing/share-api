@@ -1,4 +1,4 @@
-# Changelog for `enlil-auth`
+# Changelog for `share-auth`
 
 All notable changes to this project will be documented in this file.
 

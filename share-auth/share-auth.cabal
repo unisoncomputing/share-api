@@ -4,11 +4,11 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           enlil-auth
+name:           share-auth
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/unisoncomputing/enlil#readme>
-homepage:       https://github.com/unisoncomputing/enlil#readme
-bug-reports:    https://github.com/unisoncomputing/enlil/issues
+description:    Please see the README on GitHub at <https://github.com/unisoncomputing/share-api#readme>
+homepage:       https://github.com/unisoncomputing/share-api#readme
+bug-reports:    https://github.com/unisoncomputing/share-api/issues
 author:         Unison Computing
 maintainer:     unison.cloud
 copyright:      2024 Unison Computing
@@ -20,7 +20,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/unisoncomputing/enlil
+  location: https://github.com/unisoncomputing/share-api
 
 library
   exposed-modules:
@@ -36,7 +36,7 @@ library
       Share.OAuth.Session
       Share.OAuth.Types
   other-modules:
-      Paths_enlil_auth
+      Paths_share_auth
   hs-source-dirs:
       src
   default-extensions:
@@ -79,7 +79,6 @@ library
     , containers
     , cookie
     , cryptonite
-    , enlil-utils
     , hasql
     , hasql-interpolate
     , hedis
@@ -100,6 +99,7 @@ library
     , servant-client
     , servant-client-core
     , servant-server
+    , share-utils
     , text
     , time
     , transformers

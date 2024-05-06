@@ -109,7 +109,7 @@ main = do
     cookieSettings :: Cookies.CookieSettings
     cookieSettings = Cookies.defaultCookieSettings onLocal cookieDefaultTTL
     jwtSettings :: JWT.JWTSettings
-    jwtSettings = JWT.defaultJWTSettings hs256Key acceptedAudiences enlilIssuer
+    jwtSettings = JWT.defaultJWTSettings hs256Key acceptedAudiences issuer
     spConfig :: ServiceProviderConfig
     spConfig =
       ServiceProviderConfig
@@ -128,4 +128,4 @@ main = do
     api = unsafeURI "http://cloud:3030"
     serviceAudience = api
     acceptedAudiences = Set.singleton serviceAudience
-    enlilIssuer = unsafeURI "http://localhost:5424"
+    issuer = unsafeURI "http://localhost:5424"

@@ -1,7 +1,7 @@
-name:                enlil-utils
+name:                test-auth-app
 version:             0.1.0.0
-github:              "unisoncomputing/enlil"
-author:              "Unison Computing"
+github:              "unisoncomputing/share-api"
+author:              "unison.cloud"
 maintainer:          "unison.cloud"
 copyright:           "2024 Unison Computing"
 
@@ -15,18 +15,34 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/unisoncomputing/enlil#readme>
+description:         Please see the README on GitHub at <https://github.com/githubuser/test-auth-app#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- share-auth
+- share-utils
+- hedis
+- network-uri
+- servant
+- servant-auth-server
+- servant-server
+- text
+- time
+- unliftio
+- warp
 
 ghc-options:
 - -Wall
-- -Werror
-- -Wno-name-shadowing
-- -Wno-type-defaults
-- -Wno-missing-pattern-synonym-signatures
-- -fprint-expanded-synonyms
-- -fwrite-ide-info
-- -O2
-- -funbox-strict-fields
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
+
 
 default-extensions:
   - ApplicativeDo
@@ -57,34 +73,28 @@ default-extensions:
   - QuasiQuotes
   - ImportQualifiedPost
 
-dependencies:
-- base >= 4.7 && < 5
-- MonadRandom
-- aeson
-- binary
-- bytestring
-- containers
-- cookie
-- cryptonite
-- http-api-data
-- http-types
-- jose
-- memory
-- network-uri
-- random
-- servant-auth
-- servant-server
-- text
-- time
-- uuid
-- witherable
-- lens
-- binary-instances
-- case-insensitive
-- hasql
-- hasql-interpolate
-- unliftio
-- witch
 
 library:
   source-dirs: src
+
+executables:
+  test-auth-app-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - test-auth-app
+
+tests:
+  test-auth-app-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - test-auth-app
