@@ -283,7 +283,7 @@ library
     , x509-store
   default-language: Haskell2010
 
-executable share-api-exe
+executable share-api
   main-is: Main.hs
   other-modules:
       Env
