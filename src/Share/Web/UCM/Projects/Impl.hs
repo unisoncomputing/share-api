@@ -7,6 +7,7 @@ module Share.Web.UCM.Projects.Impl (server, createProjectRelease, getBestNameLoo
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
 import Data.List.Extra qualified as List
+import Servant
 import Share.Branch
 import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
@@ -38,7 +39,6 @@ import Share.Web.Errors qualified as Errors
 import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.Sync.Impl qualified as SyncQ
-import Servant
 import Unison.Share.API.Projects qualified as UCMProjects
 import UnliftIO qualified
 import UnliftIO.Concurrent qualified as UnliftIO

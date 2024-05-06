@@ -53,8 +53,8 @@ newRowCursor namePrefix query = do
   pure $ PGCursor cursorName id
 
 -- | Fetch UP TO the next N results from the cursor. If there are no more rows, returns Nothing.
-fetchN :: PGCursor r -> Int32 -> Transaction e (Maybe (NonEmpty r))
-fetchN (PGCursor cursorName f) n = do
+fetchN :: Int32 -> PGCursor r -> Transaction e (Maybe (NonEmpty r))
+fetchN n (PGCursor cursorName f) = do
   rows <-
     queryListRows
       [sql| FETCH FORWARD #{n} FROM #{cursorName}

@@ -19,6 +19,8 @@ module Unison.Server.Share.DefinitionSummary
 where
 
 import Data.Aeson
+import Servant (Capture, QueryParam, (:>))
+import Servant.Server (err500)
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseM)
@@ -29,8 +31,6 @@ import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (PathSegments (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (ToServerError (..))
-import Servant (Capture, QueryParam, (:>))
-import Servant.Server (err500)
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.ShortCausalHash (ShortCausalHash)
@@ -100,6 +100,14 @@ instance ToJSON TermSummary where
         "tag" .= tag
       ]
 
+instance FromJSON TermSummary where
+  parseJSON = withObject "TermSummary" $ \o -> do
+    displayName <- o .: "displayName"
+    hash <- o .: "hash"
+    summary <- o .: "summary"
+    tag <- o .: "tag"
+    pure $ TermSummary {..}
+
 serveTermSummary ::
   Referent ->
   Maybe Name ->
@@ -165,6 +173,14 @@ instance ToJSON TypeSummary where
         "summary" .= summary,
         "tag" .= tag
       ]
+
+instance FromJSON TypeSummary where
+  parseJSON = withObject "TypeSummary" $ \o -> do
+    displayName <- o .: "displayName"
+    hash <- o .: "hash"
+    summary <- o .: "summary"
+    tag <- o .: "tag"
+    pure $ TypeSummary {..}
 
 serveTypeSummary ::
   Reference ->

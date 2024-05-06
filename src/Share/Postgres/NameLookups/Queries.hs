@@ -36,6 +36,7 @@ import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, refe
 import Share.Prelude
 import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType, Referent)
+import Unison.Name (Name)
 import Unison.Util.Monoid qualified as Monoid
 
 -- | Get the list of term names and suffixifications for a given Referent within a given namespace.
@@ -462,7 +463,7 @@ toNamespacePrefix = \case
 toReversedNamePrefix :: ReversedName -> Text
 toReversedNamePrefix suffix = Text.intercalate "." (into @[Text] suffix) <> "."
 
-termsWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (NamedRef Referent))
+termsWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (Name, Referent))
 termsWithinNamespace !_nlReceipt bhId = do
   Cursors.newRowCursor @(NamedRef Referent)
     "termsForSearchSyncCursor"
@@ -472,8 +473,9 @@ termsWithinNamespace !_nlReceipt bhId = do
         JOIN component_hashes referent_component_hash ON component_hashes.id = referent_component_hash_id
         WHERE root_branch_hash_id = #{bhId}
     |]
+    <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
 
-typesWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (NamedRef Reference))
+typesWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (Name, Reference))
 typesWithinNamespace !_nlReceipt bhId = do
   Cursors.newRowCursor @(NamedRef Reference)
     "typesForSearchSyncCursor"
@@ -483,3 +485,4 @@ typesWithinNamespace !_nlReceipt bhId = do
         JOIN component_hashes reference_component_hash ON component_hashes.id = reference_component_hash_id
         WHERE root_branch_hash_id = #{bhId}
     |]
+    <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))

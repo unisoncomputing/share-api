@@ -129,14 +129,8 @@ instance ToJSON DefinitionDocument where
         "metadata" .= payload
       ]
 
--- [{ "documentName": "@unison/base data.List.map #abcdef"
--- , "releaseVersion": "1.0.0"
--- , "tokens": ["Remote:1", "Optional:1", "map:name", "List.map:name", "data.List.map:name"]
--- , "metadata": {
---     "project": "base"
---   , "branchRef": "releases/1.2.3"
---   , "definitionKind": "data|ability|term (or constructors)"
---   , "definitionName": "data.Optional.map"
---   , "definitionTypeSignature": "(a -> b) -> Optional a -> Optional b"
---   }
--- }]
+data SearchDefinition = SearchDefinition
+  { fqn :: Name,
+    hash :: ShortHash
+  }
+  deriving (Show)
