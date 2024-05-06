@@ -166,7 +166,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            ENLIL_COMMIT=${{ github.sha }}
+            SHARE_COMMIT=${{ github.sha }}
           # Save image locally for use in tests even if we don't push it.
           outputs: type=docker,dest=/tmp/share-docker-image.tar # export docker image
 
@@ -243,7 +243,7 @@ jobs:
           # Clean up old postgres data if it exists.
           docker volume rm docker_postgresVolume 2>/dev/null || true
 
-          # Start enlil and it's dependencies in the background
+          # Start share and it's dependencies in the background
           docker compose -f docker/docker-compose.yml up --wait
           
           # Run the transcript tests
