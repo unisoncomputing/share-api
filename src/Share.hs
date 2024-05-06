@@ -35,6 +35,7 @@ import Network.Wai.Middleware.Routed (routedMiddleware)
 import Servant
 import Share.App
 import Share.BackgroundJobs qualified as BackgroundJobs
+import Share.BackgroundJobs.Monad (runBackground)
 import Share.Env qualified as Env
 import Share.IDs (RequestId, UserId)
 import Share.IDs qualified as IDs
@@ -64,7 +65,7 @@ startApp :: Env.Env () -> IO ()
 startApp env = do
   app <- mkShareServer env
   Ki.scoped \scope -> do
-    Ki.fork_ scope $ runAppM env $ BackgroundJobs.worker scope
+    runBackground env "background-jobs" $ BackgroundJobs.startWorkers scope
     run (Env.serverPort env) app
 
 newtype UncaughtException err = UncaughtException err

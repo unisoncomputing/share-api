@@ -30,6 +30,8 @@ library
       Share.BackgroundJobs
       Share.BackgroundJobs.Errors
       Share.BackgroundJobs.Monad
+      Share.BackgroundJobs.Search.DefinitionSync
+      Share.BackgroundJobs.Search.DefinitionSync.Types
       Share.BackgroundJobs.Workers
       Share.Branch
       Share.Codebase
@@ -68,6 +70,7 @@ library
       Share.Postgres.Projects.Queries
       Share.Postgres.Queries
       Share.Postgres.Refs.Types
+      Share.Postgres.Search.DefinitionSync
       Share.Postgres.Serialization
       Share.Postgres.Sync.Conversions
       Share.Postgres.Sync.Queries
