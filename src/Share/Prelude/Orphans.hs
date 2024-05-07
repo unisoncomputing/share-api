@@ -7,10 +7,14 @@ module Share.Prelude.Orphans () where
 
 import Control.Comonad.Cofree (Cofree (..))
 import Data.Align (Semialign (..))
+import Data.Text (Text)
 import Data.These (These (..))
+import Data.UUID (UUID)
+import Data.UUID qualified as UUID
 import GHC.TypeLits qualified as TypeError
 import Hasql.Interpolate qualified as Interp
 import Unison.Server.Orphans ()
+import Witch
 
 instance {-# OVERLAPPING #-} TypeError.TypeError ('TypeError.Text "A String will be encoded as char[], Did you mean to use Text instead?") => Interp.EncodeValue String where
   encodeValue = error "unpossible"
@@ -29,3 +33,6 @@ instance Semialign f => Semialign (Cofree f) where
         This x -> This <$> x
         That y -> That <$> y
         These x y -> align x y
+
+instance From UUID Text where
+  from = UUID.toText

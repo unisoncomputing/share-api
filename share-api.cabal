@@ -45,6 +45,7 @@ library
       Share.Postgres.Causal.Types
       Share.Postgres.Comments.Queries
       Share.Postgres.Contributions.Queries
+      Share.Postgres.Cursors
       Share.Postgres.Definitions.Queries
       Share.Postgres.Definitions.Types
       Share.Postgres.Hashes.Queries
