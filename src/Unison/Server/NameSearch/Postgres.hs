@@ -6,12 +6,12 @@ where
 
 import Control.Lens
 import Data.Set qualified as Set
-import Enlil.Codebase qualified as Codebase
-import Enlil.Postgres qualified as PG
-import Enlil.Postgres.NameLookups.Conversions qualified as CV
-import Enlil.Postgres.NameLookups.Ops as NLOps
-import Enlil.Postgres.NameLookups.Types
-import Enlil.Prelude
+import Share.Codebase qualified as Codebase
+import Share.Postgres qualified as PG
+import Share.Postgres.NameLookups.Conversions qualified as CV
+import Share.Postgres.NameLookups.Ops as NLOps
+import Share.Postgres.NameLookups.Types
+import Share.Prelude
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified' qualified as HQ'
 import Unison.Name (Name)

@@ -2,9 +2,9 @@ resolver: lts-20.26
 
 packages:
 - .
-- enlil-auth
-- enlil-auth/example
-- enlil-utils
+- share-auth
+- share-auth/example
+- share-utils
 - unison/codebase2/codebase
 - unison/codebase2/codebase-sqlite
 - unison/codebase2/codebase-sqlite-hashing-v2

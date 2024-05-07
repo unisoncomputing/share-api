@@ -1,0 +1,101 @@
+name:                share-auth
+version:             0.1.0.0
+github:              "unisoncomputing/share-api"
+author:              "Unison Computing"
+maintainer:          "unison.cloud"
+copyright:           "2024 Unison Computing"
+
+extra-source-files:
+- README.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/unisoncomputing/share-api#readme>
+
+ghc-options:
+- -Wall
+- -Werror
+- -Wno-name-shadowing
+- -Wno-type-defaults
+- -Wno-missing-pattern-synonym-signatures
+- -fprint-expanded-synonyms
+- -fwrite-ide-info
+- -O2
+- -funbox-strict-fields
+
+default-extensions:
+  - ApplicativeDo
+  - BangPatterns
+  - BlockArguments
+  - DeriveFunctor
+  - DeriveGeneric
+  - DeriveFoldable
+  - DeriveTraversable
+  - DerivingStrategies
+  - DerivingVia
+  - DoAndIfThenElse
+  - FlexibleContexts
+  - FlexibleInstances
+  - GeneralizedNewtypeDeriving
+  - LambdaCase
+  - MultiParamTypeClasses
+  - NamedFieldPuns
+  - OverloadedStrings
+  - PatternSynonyms
+  - RankNTypes
+  - ScopedTypeVariables
+  - TupleSections
+  - TypeApplications
+  - ViewPatterns
+  - QuasiQuotes
+  - BlockArguments
+  - QuasiQuotes
+  - ImportQualifiedPost
+
+dependencies:
+- base >= 4.7 && < 5
+- MonadRandom
+- mtl
+- transformers
+- aeson
+- binary
+- binary-instances
+- bytestring
+- case-insensitive
+- containers
+- cookie
+- cryptonite
+- share-utils
+- hasql
+- hasql-interpolate
+- hedis
+- http-api-data
+- http-media
+- http-types
+- http-client
+- http-client-tls
+- jose
+- lens
+- lens-aeson
+- memory
+- network-uri
+- random
+- servant-auth
+- servant-auth-server
+- servant-server
+- servant-client
+- servant-client-core
+- text
+- time
+- unliftio
+- uuid
+- wai
+- witherable
+
+library:
+  source-dirs: src

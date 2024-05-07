@@ -1,6 +1,6 @@
 module Main where
 
-import Enlil
+import Share
 import Env (withEnv)
 
 main :: IO ()

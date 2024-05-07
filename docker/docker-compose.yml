@@ -52,32 +52,32 @@ services:
 
     environment:
       # Placeholder values for development
-      - ENLIL_API_ORIGIN=http://enlil
-      - ENLIL_SERVER_PORT=5424
-      - ENLIL_ADMIN_PORT=5425
-      - ENLIL_CLIENT_HOSTNAME=0.0.0.0
-      - ENLIL_CLIENT_PORT=5426
-      - ENLIL_REDIS=redis://redis:6379
-      - ENLIL_POSTGRES=postgresql://postgres:sekrit@postgres:5432
-      - ENLIL_HMAC_KEY=test-key-test-key-test-key-test-key-
-      - ENLIL_DEPLOYMENT=local
-      - ENLIL_IP=enlil
-      - ENLIL_AWS_CREDENTIAL_URL=invalid
+      - SHARE_API_ORIGIN=http://share-api
+      - SHARE_SERVER_PORT=5424
+      - SHARE_ADMIN_PORT=5425
+      - SHARE_CLIENT_HOSTNAME=0.0.0.0
+      - SHARE_CLIENT_PORT=5426
+      - SHARE_REDIS=redis://redis:6379
+      - SHARE_POSTGRES=postgresql://postgres:sekrit@postgres:5432
+      - SHARE_HMAC_KEY=test-key-test-key-test-key-test-key-
+      - SHARE_DEPLOYMENT=local
+      - SHARE_IP=share-api
+      - SHARE_AWS_CREDENTIAL_URL=invalid
       - AWS_REGION=invalid
-      - ENLIL_POSTGRES_CONN_TTL=30
-      - ENLIL_POSTGRES_CONN_MAX=10
-      - ENLIL_SHARE_UI_ORIGIN=http://localhost:1234
-      - ENLIL_CLOUD_UI_ORIGIN=http://localhost:5678
-      - ENLIL_HOMEPAGE_ORIGIN=http://localhost:1111
-      - ENLIL_CLOUD_HOMEPAGE_ORIGIN=http://localhost:2222
-      - ENLIL_LOG_LEVEL=DEBUG
-      - ENLIL_COMMIT=dev
-      - ENLIL_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST=1
-      - ENLIL_MAX_PARALLELISM_PER_UPLOAD_REQUEST=5
-      - ENLIL_ZENDESK_API_USER=invaliduser@example.com
-      - ENLIL_ZENDESK_API_TOKEN=bad-password
-      - ENLIL_GITHUB_CLIENTID=invalid
-      - ENLIL_GITHUB_CLIENT_SECRET=invalid
+      - SHARE_POSTGRES_CONN_TTL=30
+      - SHARE_POSTGRES_CONN_MAX=10
+      - SHARE_SHARE_UI_ORIGIN=http://localhost:1234
+      - SHARE_CLOUD_UI_ORIGIN=http://localhost:5678
+      - SHARE_HOMEPAGE_ORIGIN=http://localhost:1111
+      - SHARE_CLOUD_HOMEPAGE_ORIGIN=http://localhost:2222
+      - SHARE_LOG_LEVEL=DEBUG
+      - SHARE_COMMIT=dev
+      - SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST=1
+      - SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST=5
+      - SHARE_ZENDESK_API_USER=invaliduser@example.com
+      - SHARE_ZENDESK_API_TOKEN=bad-password
+      - SHARE_GITHUB_CLIENTID=invalid
+      - SHARE_GITHUB_CLIENT_SECRET=invalid
       - AWS_ACCESS_KEY_ID=invalid
       - AWS_SECRET_ACCESS_KEY=invalid
 

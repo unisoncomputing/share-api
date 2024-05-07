@@ -1,6 +1,6 @@
-name:                enlil
+name:                share-api
 version:             0.1.0.0
-github:              "unisoncomputing/share"
+github:              "unisoncomputing/share-api"
 author:              "Unison Computing"
 maintainer:          "unison.cloud"
 copyright:           "2024 Unison Computing"
@@ -15,7 +15,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/enlil#readme>
+description:         Please see the README on GitHub at <https://github.com/githubuser/share-api#readme>
 
 ghc-options:
 - -Wall
@@ -48,7 +48,7 @@ dependencies:
 - data-default
 - either
 - extra
-- enlil-utils
+- share-utils
 - fast-logger
 - filepath
 - free
@@ -101,7 +101,7 @@ dependencies:
 - unison-core
 - unison-core1
 - unison-hash
-- enlil-auth
+- share-auth
 - unison-hashing-v2
 - unison-codebase-sqlite-hashing-v2
 - unison-parser-typechecker
@@ -164,13 +164,13 @@ library:
   source-dirs: src
   when:
     - condition: false
-      other-modules: Paths_enlil
+      other-modules: Paths_share_api
 
 executables:
-  enlil-exe:
+  share-api:
     when:
       - condition: false
-        other-modules: Paths_enlil
+        other-modules: Paths_share-api
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -178,4 +178,4 @@ executables:
     - -rtsopts
     - '"-with-rtsopts=-N -A32m -qn2 -T"'
     dependencies:
-    - enlil
+    - share-api

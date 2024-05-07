@@ -1,0 +1,424 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           share-api
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/share-api#readme>
+homepage:       https://github.com/unisoncomputing/share-api#readme
+bug-reports:    https://github.com/unisoncomputing/share-api/issues
+author:         Unison Computing
+maintainer:     unison.cloud
+copyright:      2024 Unison Computing
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/unisoncomputing/share-api
+
+library
+  exposed-modules:
+      Share
+      Share.App
+      Share.Backend
+      Share.Branch
+      Share.Codebase
+      Share.Codebase.Types
+      Share.Contribution
+      Share.Env
+      Share.Github
+      Share.IDs
+      Share.Metrics
+      Share.Monitoring
+      Share.NamespaceDiffs
+      Share.Postgres
+      Share.Postgres.Admin
+      Share.Postgres.Authorization.Queries
+      Share.Postgres.Causal.Conversions
+      Share.Postgres.Causal.Queries
+      Share.Postgres.Causal.Types
+      Share.Postgres.Comments.Queries
+      Share.Postgres.Contributions.Queries
+      Share.Postgres.Definitions.Queries
+      Share.Postgres.Definitions.Types
+      Share.Postgres.Hashes.Queries
+      Share.Postgres.IDs
+      Share.Postgres.LooseCode.Queries
+      Share.Postgres.Metrics.Queries
+      Share.Postgres.NameLookups.Conversions
+      Share.Postgres.NameLookups.Ops
+      Share.Postgres.NameLookups.Queries
+      Share.Postgres.NameLookups.Types
+      Share.Postgres.NamespaceDiffs
+      Share.Postgres.Ops
+      Share.Postgres.Orphans
+      Share.Postgres.Patches.Queries
+      Share.Postgres.Patches.Types
+      Share.Postgres.Projects.Queries
+      Share.Postgres.Queries
+      Share.Postgres.Refs.Types
+      Share.Postgres.Serialization
+      Share.Postgres.Sync.Conversions
+      Share.Postgres.Sync.Queries
+      Share.Postgres.Sync.Types
+      Share.Postgres.Tickets.Queries
+      Share.Postgres.Users.Queries
+      Share.Prelude
+      Share.Prelude.Orphans
+      Share.Project
+      Share.Redis
+      Share.Release
+      Share.Ticket
+      Share.User
+      Share.UserProfile
+      Share.Utils.API
+      Share.Utils.Caching
+      Share.Utils.Logging
+      Share.Utils.Logging.Types
+      Share.Utils.Postgres
+      Share.Utils.Servant
+      Share.Utils.Servant.Client
+      Share.Utils.Servant.PathInfo
+      Share.Utils.Servant.RawRequest
+      Share.Utils.Unison
+      Share.Web.Admin.API
+      Share.Web.Admin.Impl
+      Share.Web.Admin.Types
+      Share.Web.API
+      Share.Web.App
+      Share.Web.Authentication
+      Share.Web.Authentication.AccessToken
+      Share.Web.Authentication.HashJWT
+      Share.Web.Authentication.JWT
+      Share.Web.Authentication.Types
+      Share.Web.Authorization
+      Share.Web.Authorization.Types
+      Share.Web.Errors
+      Share.Web.Impl
+      Share.Web.Local.API
+      Share.Web.Local.Impl
+      Share.Web.OAuth.Clients
+      Share.Web.OAuth.Impl
+      Share.Web.Share.API
+      Share.Web.Share.Branches.API
+      Share.Web.Share.Branches.Impl
+      Share.Web.Share.Branches.Types
+      Share.Web.Share.CodeBrowsing.API
+      Share.Web.Share.Comments
+      Share.Web.Share.Comments.API
+      Share.Web.Share.Comments.Impl
+      Share.Web.Share.Comments.Types
+      Share.Web.Share.Contributions.API
+      Share.Web.Share.Contributions.Impl
+      Share.Web.Share.Contributions.MergeDetection
+      Share.Web.Share.Contributions.Types
+      Share.Web.Share.Diffs.Impl
+      Share.Web.Share.Diffs.Types
+      Share.Web.Share.Impl
+      Share.Web.Share.Projects.API
+      Share.Web.Share.Projects.Impl
+      Share.Web.Share.Projects.Types
+      Share.Web.Share.Releases.API
+      Share.Web.Share.Releases.Impl
+      Share.Web.Share.Releases.Types
+      Share.Web.Share.Tickets.API
+      Share.Web.Share.Tickets.Impl
+      Share.Web.Share.Tickets.Types
+      Share.Web.Share.Types
+      Share.Web.Support.API
+      Share.Web.Support.Impl
+      Share.Web.Support.Types
+      Share.Web.Support.Zendesk
+      Share.Web.Types
+      Share.Web.UCM.Projects.Impl
+      Share.Web.UCM.Sync.HashJWT
+      Share.Web.UCM.Sync.Impl
+      Share.Web.UCM.Sync.Types
+      Unison.PrettyPrintEnvDecl.Postgres
+      Unison.Server.NameSearch.Postgres
+      Unison.Server.Share.Definitions
+      Unison.Server.Share.DefinitionSummary
+      Unison.Server.Share.Docs
+      Unison.Server.Share.FuzzyFind
+      Unison.Server.Share.NamespaceDetails
+      Unison.Server.Share.NamespaceListing
+      Unison.Server.Share.RenderDoc
+  hs-source-dirs:
+      src
+  default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      DeriveFunctor
+      DeriveGeneric
+      DeriveFoldable
+      DeriveTraversable
+      DerivingStrategies
+      DerivingVia
+      DuplicateRecordFields
+      DoAndIfThenElse
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      ScopedTypeVariables
+      TupleSections
+      TypeApplications
+      ViewPatterns
+      QuasiQuotes
+      BlockArguments
+      QuasiQuotes
+      ImportQualifiedPost
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
+  build-depends:
+      MonadRandom
+    , aeson
+    , async
+    , base >=4.7 && <5
+    , base64-bytestring
+    , bifunctors
+    , binary
+    , binary-instances
+    , bytes
+    , bytestring
+    , case-insensitive
+    , clock
+    , connection
+    , containers
+    , cookie
+    , cryptonite
+    , data-default
+    , either
+    , extra
+    , fast-logger
+    , filepath
+    , free
+    , fuzzyfind
+    , generic-lens
+    , hasql
+    , hasql-interpolate
+    , hasql-pool
+    , hedis
+    , here
+    , http-api-data
+    , http-client
+    , http-client-tls
+    , http-media
+    , http-types
+    , jose
+    , lens
+    , megaparsec
+    , memory
+    , mmorph
+    , monad-validate
+    , mtl
+    , network
+    , network-simple
+    , network-uri
+    , nonempty-containers
+    , parallel
+    , pem
+    , prometheus-client
+    , prometheus-metrics-ghc
+    , random
+    , raven-haskell
+    , safe
+    , semialign
+    , servant
+    , servant-auth
+    , servant-client
+    , servant-server
+    , share-auth
+    , share-utils
+    , stm
+    , stm-chans
+    , stm-conduit
+    , text
+    , these
+    , time
+    , tls
+    , transformers
+    , unison-codebase
+    , unison-codebase-sqlite
+    , unison-codebase-sqlite-hashing-v2
+    , unison-core
+    , unison-core1
+    , unison-hash
+    , unison-hashing-v2
+    , unison-parser-typechecker
+    , unison-prelude
+    , unison-pretty-printer
+    , unison-share-api
+    , unison-share-projects-api
+    , unison-sqlite
+    , unison-syntax
+    , unison-util-base32hex
+    , unison-util-cache
+    , unison-util-relation
+    , unison-util-serialization
+    , unliftio
+    , unordered-containers
+    , uuid
+    , vault
+    , vector
+    , wai
+    , wai-cors
+    , wai-extra
+    , wai-middleware-prometheus
+    , warp
+    , witch
+    , witherable
+    , x509
+    , x509-store
+  default-language: Haskell2010
+
+executable share-api
+  main-is: Main.hs
+  other-modules:
+      Env
+      Paths_share_api
+  hs-source-dirs:
+      app
+  default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      DeriveFunctor
+      DeriveGeneric
+      DeriveFoldable
+      DeriveTraversable
+      DerivingStrategies
+      DerivingVia
+      DuplicateRecordFields
+      DoAndIfThenElse
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      ScopedTypeVariables
+      TupleSections
+      TypeApplications
+      ViewPatterns
+      QuasiQuotes
+      BlockArguments
+      QuasiQuotes
+      ImportQualifiedPost
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
+  build-depends:
+      MonadRandom
+    , aeson
+    , async
+    , base >=4.7 && <5
+    , base64-bytestring
+    , bifunctors
+    , binary
+    , binary-instances
+    , bytes
+    , bytestring
+    , case-insensitive
+    , clock
+    , connection
+    , containers
+    , cookie
+    , cryptonite
+    , data-default
+    , either
+    , extra
+    , fast-logger
+    , filepath
+    , free
+    , fuzzyfind
+    , generic-lens
+    , hasql
+    , hasql-interpolate
+    , hasql-pool
+    , hedis
+    , here
+    , http-api-data
+    , http-client
+    , http-client-tls
+    , http-media
+    , http-types
+    , jose
+    , lens
+    , megaparsec
+    , memory
+    , mmorph
+    , monad-validate
+    , mtl
+    , network
+    , network-simple
+    , network-uri
+    , nonempty-containers
+    , parallel
+    , pem
+    , prometheus-client
+    , prometheus-metrics-ghc
+    , random
+    , raven-haskell
+    , safe
+    , semialign
+    , servant
+    , servant-auth
+    , servant-client
+    , servant-server
+    , share-api
+    , share-auth
+    , share-utils
+    , stm
+    , stm-chans
+    , stm-conduit
+    , text
+    , these
+    , time
+    , tls
+    , transformers
+    , unison-codebase
+    , unison-codebase-sqlite
+    , unison-codebase-sqlite-hashing-v2
+    , unison-core
+    , unison-core1
+    , unison-hash
+    , unison-hashing-v2
+    , unison-parser-typechecker
+    , unison-prelude
+    , unison-pretty-printer
+    , unison-share-api
+    , unison-share-projects-api
+    , unison-sqlite
+    , unison-syntax
+    , unison-util-base32hex
+    , unison-util-cache
+    , unison-util-relation
+    , unison-util-serialization
+    , unliftio
+    , unordered-containers
+    , uuid
+    , vault
+    , vector
+    , wai
+    , wai-cors
+    , wai-extra
+    , wai-middleware-prometheus
+    , warp
+    , witch
+    , witherable
+    , x509
+    , x509-store
+  default-language: Haskell2010

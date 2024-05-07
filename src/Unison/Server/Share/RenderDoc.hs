@@ -12,14 +12,14 @@ module Unison.Server.Share.RenderDoc where
 
 import Control.Monad.Except
 import Data.Set qualified as Set
-import Enlil.Backend qualified as Backend
-import Enlil.Codebase.Types (CodebaseM, CodebaseRuntime)
-import Enlil.Postgres.Causal.Queries qualified as CausalQ
-import Enlil.Postgres.Causal.Queries qualified as HashQ
-import Enlil.Postgres.IDs (CausalId)
-import Enlil.Postgres.NameLookups.Ops qualified as NLOps
-import Enlil.Postgres.NameLookups.Types (PathSegments (..))
-import Enlil.Prelude
+import Share.Backend qualified as Backend
+import Share.Codebase.Types (CodebaseM, CodebaseRuntime)
+import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.Causal.Queries qualified as HashQ
+import Share.Postgres.IDs (CausalId)
+import Share.Postgres.NameLookups.Ops qualified as NLOps
+import Share.Postgres.NameLookups.Types (PathSegments (..))
+import Share.Prelude
 import U.Codebase.Causal qualified as V2Causal
 import Unison.Codebase.Path qualified as Path
 import Unison.LabeledDependency qualified as LD
