@@ -119,7 +119,8 @@ The transcript runner isn't perfectly deterministic yet, but is close enough to 
 
 ### Running Transcripts
 
-Transcripts are NOT run automatically in CI yet (but hopefully will be eventually).
+Transcript tests are a series of scripts which interact with Share via its APIs and ucm integrations to produce output files which
+describe Share's behaviour. They're run on pull requests to ensure that any changes in behaviour are expected.
 
 To run transcripts, first start the server with `make serve`, then in a separate terminal run `./transcripts/run-transcripts.zsh`.
 
