@@ -4,6 +4,7 @@
     * [MacOS](#macos)
     * [Nix](#nix)
 * [Running Locally](#running-locally)
+* [Self Hosting](#self-hosting)
 * [Updating unison dependencies](#updating-unison-dependencies)
 * [Postgres](#postgres)
     * [Managing Postgres Migrations](#managing-postgres-migrations)
@@ -64,6 +65,14 @@ Start the server and its dependencies with `make serve`.
 You may wish to run `make fixtures` to fill some in some data for local testing.
 
 See `./docker/docker-compose.yml` to see how the postgres and redis services are configured.
+
+
+## Self Hosting
+
+The Docker Compose configuration located in `./docker/docker-compose.yml` is a great place to start for learning how Share's infrastructure is set up.
+It details Share's required environment variables and shows how it expects to be connected to Postgres and Redis.
+
+If you have any questions about self hosting, feel free to ask in our [Discord server](https://unison-lang.org/discord).
 
 ## Updating unison dependencies
 
