@@ -11,26 +11,28 @@
 module Unison.Server.Share.DefinitionSummary
   ( TermSummaryAPI,
     serveTermSummary,
+    termSummaryForReferent,
     TermSummary (..),
     TypeSummaryAPI,
     serveTypeSummary,
+    typeSummaryForReference,
     TypeSummary (..),
   )
 where
 
 import Data.Aeson
+import Servant (Capture, QueryParam, (:>))
+import Servant.Server (err500)
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseM)
 import Share.Postgres (QueryM (unrecoverableError))
 import Share.Postgres.Hashes.Queries qualified as HashQ
-import Share.Postgres.IDs (CausalId)
+import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (PathSegments (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (ToServerError (..))
-import Servant (Capture, QueryParam, (:>))
-import Servant.Server (err500)
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.ShortCausalHash (ShortCausalHash)
@@ -108,12 +110,22 @@ serveTermSummary ::
   Maybe Width ->
   CodebaseM e TermSummary
 serveTermSummary referent mayName rootCausalId relativeTo mayWidth = do
+  rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
+  termSummaryForReferent referent mayName rootBranchHashId relativeTo mayWidth
+
+termSummaryForReferent ::
+  Referent ->
+  Maybe Name ->
+  BranchHashId ->
+  Maybe Path.Path ->
+  Maybe Width ->
+  CodebaseM e TermSummary
+termSummaryForReferent referent mayName rootBranchHashId relativeTo mayWidth = do
   let shortHash = Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   let relativeToPath = fromMaybe Path.empty relativeTo
   let termReference = Referent.toReference referent
   let v2Referent = Cv.referent1to2 referent
-  rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
   sig <- Codebase.loadTypeOfReferent v2Referent
   case sig of
     Nothing ->
@@ -169,11 +181,17 @@ instance ToJSON TypeSummary where
 serveTypeSummary ::
   Reference ->
   Maybe Name ->
-  CausalId ->
-  Maybe Path.Path ->
   Maybe Width ->
   CodebaseM e TypeSummary
-serveTypeSummary reference mayName _root _relativeTo mayWidth = do
+serveTypeSummary reference mayName mayWidth = do
+  typeSummaryForReference reference mayName mayWidth
+
+typeSummaryForReference ::
+  Reference ->
+  Maybe Name ->
+  Maybe Width ->
+  CodebaseM e TypeSummary
+typeSummaryForReference reference mayName mayWidth = do
   let shortHash = Reference.toShortHash reference
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   tag <- Backend.getTypeTag reference
