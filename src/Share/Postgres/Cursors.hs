@@ -1,8 +1,10 @@
+{-# LANGUAGE GADTs #-}
+
 -- | Helpers for streamable cursors
 module Share.Postgres.Cursors
-  ( newCursor,
-    fetchNRows,
-    fetchNCols,
+  ( newRowCursor,
+    newColCursor,
+    fetchN,
     PGCursor,
   )
 where
@@ -13,15 +15,31 @@ import Share.Postgres
 import Share.Prelude
 import System.Random (randomIO)
 
-data PGCursor result = PGCursor Text
+-- | A cursor that can be used to fetch rows from the database.
+-- Includes a mapper (CoYoneda) to allow the type to be a functor.
+data PGCursor result where
+  PGCursor ::
+    forall row result.
+    DecodeRow row {- decoder for original row -} =>
+    Text {- cursor name -} ->
+    (row -> result {- mapper for Functor instance -}) ->
+    PGCursor result
+
+instance Functor PGCursor where
+  fmap f (PGCursor name g) = PGCursor name (f . g)
+
+newColCursor :: DecodeField a => Text -> Sql -> Transaction e (PGCursor a)
+newColCursor namePrefix query = do
+  newRowCursor namePrefix query
+    <&> fmap fromOnly
 
 -- | Create a new cursor. The name is only for debugging purposes since it will be munged with
 -- a random UUID.
 --
--- This cursor will be closed when the transaction ends, and must not be used outside of the 
+-- This cursor will be closed when the transaction ends, and must not be used outside of the
 -- transaction in which it was created.
-newCursor :: Text -> Sql -> Transaction e (PGCursor r)
-newCursor namePrefix query = do
+newRowCursor :: DecodeRow r => Text -> Sql -> Transaction e (PGCursor r)
+newRowCursor namePrefix query = do
   uuid <- transactionUnsafeIO $ randomIO @UUID
   let cursorName = namePrefix <> "_" <> into @Text uuid
   execute_
@@ -32,22 +50,13 @@ newCursor namePrefix query = do
       WITHOUT HOLD
       FOR ^{query}
     |]
-  pure $ PGCursor cursorName
+  pure $ PGCursor cursorName id
 
--- | Fetch UP TO the next N rows from the cursor. If there are no more rows, returns Nothing.
-fetchNRows :: DecodeRow r => PGCursor r -> Int32 -> Transaction e (Maybe (NonEmpty r))
-fetchNRows (PGCursor cursorName) n = do
+-- | Fetch UP TO the next N results from the cursor. If there are no more rows, returns Nothing.
+fetchN :: PGCursor r -> Int32 -> Transaction e (Maybe (NonEmpty r))
+fetchN (PGCursor cursorName f) n = do
   rows <-
     queryListRows
       [sql| FETCH FORWARD #{n} FROM #{cursorName}
     |]
-  pure $ NEL.nonEmpty rows
-
--- | Fetch UP TO the next N single-column rows from the cursor. If there are no more rows, returns Nothing.
-fetchNCols :: DecodeField r => PGCursor r -> Int32 -> Transaction e (Maybe (NonEmpty r))
-fetchNCols (PGCursor cursorName) n = do
-  rows <-
-    queryListCol
-      [sql| FETCH FORWARD #{n} FROM #{cursorName}
-    |]
-  pure $ NEL.nonEmpty rows
+  pure $ NEL.nonEmpty (f <$> rows)
