@@ -4,6 +4,8 @@ module Share.BackgroundJobs.Search.DefinitionSync.Types
   ( TermOrTypeSummary (..),
     DefinitionDocument (..),
     DefnSearchToken (..),
+    Occurrence (..),
+    VarId (..),
   )
 where
 
@@ -48,11 +50,11 @@ newtype Occurrence = Occurrence Int
 newtype VarId = VarId Int
   deriving newtype (Show, Read, Eq, Ord, Num, ToJSON)
 
-data DefnSearchToken
+data DefnSearchToken r
   = -- Allows searching by literal name
     NameToken Name
-  | -- Also includes ability mentions
-    NameMentionToken Name Occurrence
+  | -- A mention of some external type or ability
+    NameMentionToken r Occurrence
   | -- Allows searching for type sigs with type variables
     TypeVarToken VarId Occurrence
   | -- Allows searching by component hash
@@ -75,14 +77,14 @@ data DefnSearchToken
 -- >>> hash = ComponentHash $ Hash.unsafeFromBase32HexText "abcd"
 -- >>> tokenToText (HashToken hash)
 -- "#abc0:hash"
-tokenToText :: DefnSearchToken -> Text
+tokenToText :: DefnSearchToken Name -> Text
 tokenToText = \case
   (NameToken n) -> Text.intercalate ":" [Name.toText n, "name"]
   (NameMentionToken n o) -> Text.intercalate ":" [Name.toText n, "mention", tShow o]
   (TypeVarToken v o) -> Text.intercalate ":" ["_", "var", tShow v, tShow o]
   (HashToken h) -> Text.intercalate ":" [into @Text $ PrefixedHash @"#" h, "hash"]
 
-tokenFromText :: Text -> Maybe DefnSearchToken
+tokenFromText :: Text -> Maybe (DefnSearchToken Name)
 tokenFromText t = case Text.splitOn ":" t of
   [name, "name"] -> NameToken <$> Name.parseText name
   [name, "mention", occ] -> NameMentionToken <$> (Name.parseText name) <*> readMaybe (Text.unpack occ)
@@ -98,15 +100,15 @@ data DefinitionDocument = DefinitionDocument
     releaseVersion :: ReleaseVersion,
     fqn :: Name,
     hash :: ShortHash,
-    tokens :: Set DefnSearchToken,
+    tokens :: Set (DefnSearchToken Name),
     payload :: TermOrTypeSummary
   }
   deriving (Show)
 
-instance ToJSON DefnSearchToken where
+instance ToJSON (DefnSearchToken Name) where
   toJSON = String . tokenToText
 
-instance FromJSON DefnSearchToken where
+instance FromJSON (DefnSearchToken Name) where
   parseJSON = withText "DefnSearchToken" $ \t ->
     maybe (fail $ "Invalid DefnSearchToken: " <> Text.unpack t) pure $ tokenFromText t
 

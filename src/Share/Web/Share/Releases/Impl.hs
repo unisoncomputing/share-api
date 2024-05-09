@@ -218,7 +218,7 @@ projectReleaseTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-type-summary" cacheParams releaseHead $ do
     Codebase.runCodebaseTransaction codebase $ do
-      serveTypeSummary ref mayName releaseHead relativeTo renderWidth
+      serveTypeSummary ref mayName renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
