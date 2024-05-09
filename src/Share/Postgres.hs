@@ -71,6 +71,13 @@ import Data.Map qualified as Map
 import Data.Maybe
 import Data.Text qualified as Text
 import Data.Void
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Interpolate qualified as Interp
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Hasql
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Hasql
 import Share.App
 import Share.Env qualified as Env
 import Share.Postgres.Orphans ()
@@ -79,13 +86,6 @@ import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
-import Hasql.Decoders qualified as Decoders
-import Hasql.Encoders qualified as Encoders
-import Hasql.Interpolate qualified as Interp
-import Hasql.Pool qualified as Pool
-import Hasql.Session qualified as Hasql
-import Hasql.Session qualified as Session
-import Hasql.Statement qualified as Hasql
 
 debug :: Bool
 debug = False

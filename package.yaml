@@ -62,6 +62,7 @@ dependencies:
 - http-media
 - http-types
 - jose
+- ki-unlifted
 - lens
 - megaparsec
 - memory

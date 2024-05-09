@@ -43,6 +43,9 @@ import Data.String (IsString)
 import Data.Text (pack)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import GHC.Stack qualified as GHC
+import Servant
+import Servant.Client
 import Share.Env qualified as Env
 import Share.Monitoring qualified as Monitoring
 import Share.OAuth.Errors (OAuth2Error (..), OAuth2ErrorCode (..), OAuth2ErrorRedirect (..))
@@ -51,9 +54,6 @@ import Share.Prelude
 import Share.Utils.Logging
 import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
-import GHC.Stack qualified as GHC
-import Servant
-import Servant.Client
 import Unison.Server.Backend qualified as Backend
 import Unison.Server.Errors qualified as Backend
 import Unison.Sync.Types qualified as Sync
@@ -128,7 +128,7 @@ reportError :: (HasCallStack, ToServerError e, Loggable e) => e -> WebApp ()
 reportError e = do
   let (ErrorID errID, serverErr) = toServerError e
   env <- ask
-  RequestCtx {pathInfo, rawURI} <- asks Env.requestCtx
+  RequestCtx {pathInfo, rawURI} <- asks Env.ctx
   reqTags <- getTags
   let errLog@LogMsg {msg} = withTag ("error-id", errID) $ toLog e
   -- We emit a separate log message for each error, but it's also
