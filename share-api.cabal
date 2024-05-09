@@ -27,6 +27,12 @@ library
       Share
       Share.App
       Share.Backend
+      Share.BackgroundJobs
+      Share.BackgroundJobs.Errors
+      Share.BackgroundJobs.Monad
+      Share.BackgroundJobs.Search.DefinitionSync
+      Share.BackgroundJobs.Search.DefinitionSync.Types
+      Share.BackgroundJobs.Workers
       Share.Branch
       Share.Codebase
       Share.Codebase.Types
@@ -45,6 +51,7 @@ library
       Share.Postgres.Causal.Types
       Share.Postgres.Comments.Queries
       Share.Postgres.Contributions.Queries
+      Share.Postgres.Cursors
       Share.Postgres.Definitions.Queries
       Share.Postgres.Definitions.Types
       Share.Postgres.Hashes.Queries
@@ -63,6 +70,7 @@ library
       Share.Postgres.Projects.Queries
       Share.Postgres.Queries
       Share.Postgres.Refs.Types
+      Share.Postgres.Search.DefinitionSync
       Share.Postgres.Serialization
       Share.Postgres.Sync.Conversions
       Share.Postgres.Sync.Queries
@@ -217,6 +225,7 @@ library
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory
@@ -356,6 +365,7 @@ executable share-api
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory

@@ -9,6 +9,8 @@ module Share.Postgres.NameLookups.Ops
     checkBranchHashNameLookupExists,
     deleteNameLookupsExceptFor,
     ensureNameLookupForBranchId,
+    Q.termsWithinNamespace,
+    Q.typesWithinNamespace,
   )
 where
 

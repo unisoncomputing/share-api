@@ -21,6 +21,7 @@ import Share.Github
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.OAuth.Types
+import Share.Postgres (QueryM (unrecoverableError))
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.LooseCode.Queries qualified as LCQ
@@ -33,11 +34,18 @@ import Share.Ticket qualified as Ticket
 import Share.User
 import Share.Utils.API
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
 import Share.Web.Share.Branches.Types (BranchKindFilter (..))
 import Share.Web.Share.Projects.Types (ContributionStats (..), DownloadStats (..), FavData, ProjectOwner, TicketStats (..))
 import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (..))
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
+
+expectUserByUserId :: PG.QueryM m => UserId -> m User
+expectUserByUserId uid = do
+  userByUserId uid >>= \case
+    Just user -> pure user
+    Nothing -> unrecoverableError $ EntityMissing (ErrorID "user:missing") ("User with id " <> IDs.toText uid <> " not found")
 
 userByUserId :: PG.QueryM m => UserId -> m (Maybe User)
 userByUserId uid = do
@@ -86,6 +94,11 @@ projectById projectId = do
         FROM projects p
         WHERE p.id = #{projectId}
       |]
+
+expectProjectById :: ProjectId -> PG.Transaction e Project
+expectProjectById projectId = do
+  mayResult <- projectById projectId
+  whenNothing mayResult $ unrecoverableError $ EntityMissing (ErrorID "project:missing") ("Project with id " <> IDs.toText projectId <> " not found")
 
 -- | returns (project, favData, projectOwner, default branch, latest release version)
 projectByIdWithMetadata :: Maybe UserId -> ProjectId -> PG.Transaction e (Maybe (Project, FavData, ProjectOwner, Maybe BranchName, Maybe ReleaseVersion))
@@ -490,7 +503,7 @@ updateProject projectId newSummary tagChanges newVisibility =
   -- This method is a bit naive, we just get the old project, update the fields accordingly,
   -- then save the entire project again.
   isJust <$> runMaybeT do
-    Project {..} <- MaybeT $ projectById projectId
+    Project {..} <- lift $ expectProjectById projectId
     let updatedSummary = fromNullableUpdate summary newSummary
     let updatedTags = Set.toList $ applySetUpdate tags tagChanges
     let updatedVisibility = fromMaybe visibility newVisibility
@@ -1085,6 +1098,11 @@ releaseById releaseId = do
         WHERE release.id = #{releaseId}
       |]
 
+expectReleaseById :: ReleaseId -> PG.Transaction e (Release CausalId UserId)
+expectReleaseById releaseId = do
+  mayRow <- releaseById releaseId
+  whenNothing mayRow $ unrecoverableError $ EntityMissing (ErrorID "release:missing") ("Release with id " <> IDs.toText releaseId <> " not found")
+
 releaseByProjectReleaseShortHand :: ProjectReleaseShortHand -> PG.Transaction e (Maybe (Release CausalId UserId))
 releaseByProjectReleaseShortHand ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion = ReleaseVersion {major, minor, patch}} = do
   PG.query1Row
@@ -1252,7 +1270,7 @@ data UpdateReleaseResult
 updateRelease :: UserId -> ReleaseId -> Maybe StatusUpdate -> PG.Transaction e UpdateReleaseResult
 updateRelease caller releaseId newStatus = do
   fromMaybe UpdateRelease'NotFound <$> runMaybeT do
-    Release {..} <- MaybeT $ releaseById releaseId
+    Release {..} <- lift $ expectReleaseById releaseId
     -- Can go from draft -> published -> deprecated
     -- or straight from draft -> deprecated
     -- but can't go from published -> draft or deprecated -> draft.

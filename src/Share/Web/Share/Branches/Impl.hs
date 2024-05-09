@@ -11,6 +11,7 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (UTCTime)
+import Servant
 import Share.Branch (Branch (..), branchCausals_)
 import Share.Codebase qualified as Codebase
 import Share.IDs (BranchId, BranchShortHand (..), ProjectBranchShortHand (..), ProjectShortHand (..), ProjectSlug (..), UserHandle, UserId)
@@ -38,7 +39,6 @@ import Share.Web.Share.Branches.Types qualified as API
 import Share.Web.Share.CodeBrowsing.API qualified as API
 import Share.Web.Share.Projects.Types (projectToAPI)
 import Share.Web.Share.Types
-import Servant
 import U.Codebase.HashTags (CausalHash)
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
@@ -64,7 +64,7 @@ getProjectBranch ::
 getProjectBranch projectBranchShortHand = do
   onNothingM missingBranch . PG.runTransaction . runMaybeT $ do
     branch@Branch {projectId} <- MaybeT $ Q.branchByProjectBranchShortHand projectBranchShortHand
-    project <- MaybeT $ Q.projectById projectId
+    project <- lift $ Q.expectProjectById projectId
     pure (project, branch)
   where
     missingBranch = respondError (EntityMissing (ErrorID "missing-project-branch") "Branch could not be found")

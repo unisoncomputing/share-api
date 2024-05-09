@@ -14,6 +14,7 @@ import Control.Monad.Except
 import Control.Monad.Trans.Maybe
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
+import Servant
 import Share.Codebase qualified as Codebase
 import Share.IDs
 import Share.IDs qualified as IDs
@@ -42,7 +43,6 @@ import Share.Web.Share.Releases.Types
 import Share.Web.Share.Releases.Types qualified as API
 import Share.Web.Share.Types
 import Share.Web.UCM.Sync.Impl qualified as SyncQ
-import Servant
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
@@ -97,7 +97,7 @@ getProjectRelease projectReleaseShortHand = do
   addRequestTag "release" (IDs.toText projectReleaseShortHand)
   onNothingM missingRelease . PG.runTransaction . runMaybeT $ do
     release@Release {projectId} <- MaybeT $ Q.releaseByProjectReleaseShortHand projectReleaseShortHand
-    project <- MaybeT $ Q.projectById projectId
+    project <- lift $ Q.expectProjectById projectId
     pure (project, release)
   where
     missingRelease = respondError (EntityMissing (ErrorID "missing-project-release") "Release could not be found")
@@ -285,9 +285,7 @@ getProjectReleaseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proj
         `whenNothingM` throwError (EntityMissing (ErrorID "missing-project-release") "Release could not be found")
     releaseWithHandle <- forOf releaseUsers_ release \uid -> do
       User.handle <$> Q.userByUserId uid `whenNothingM` throwError (EntityMissing (ErrorID "missing-user") "User could not be found")
-    project <-
-      Q.projectById projectId
-        `whenNothingM` throwError (EntityMissing (ErrorID "missing-project") "Project could not be found")
+    project <- Q.expectProjectById projectId
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandle
     pure (project, releaseWithCausalHashes)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReleaseGet callerUserId project release

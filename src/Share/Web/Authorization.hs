@@ -48,6 +48,7 @@ module Share.Web.Authorization
     readPath,
     writePath,
     adminOverride,
+    backgroundJobAuthZ,
     migrationOverride,
     userCreationOverride,
     Permission (..),
@@ -70,6 +71,8 @@ import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Data.Text.Encoding qualified as Text
 import Data.Time qualified as Time
+import Servant
+import Share.BackgroundJobs.Monad (Background)
 import Share.Branch
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
@@ -91,7 +94,6 @@ import Share.Web.Errors qualified as Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Contributions.Types (UpdateContributionRequest (..))
 import Share.Web.Share.Tickets.Types
-import Servant
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.NameSegment (NameSegment (..))
@@ -660,6 +662,9 @@ migrationOverride = AuthZReceipt Nothing
 -- Only use this during a user creation flow.
 userCreationOverride :: AuthZReceipt
 userCreationOverride = AuthZReceipt Nothing
+
+backgroundJobAuthZ :: Background AuthZReceipt
+backgroundJobAuthZ = pure $ AuthZReceipt Nothing
 
 permissionGuard :: WebApp (Either AuthZFailure a) -> WebApp a
 permissionGuard m =
