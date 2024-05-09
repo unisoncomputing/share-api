@@ -37,7 +37,6 @@ module Share.Postgres
     runSessionWithPool,
     tryRunSessionWithPool,
     unliftSession,
-    transactionUnsafeIO,
     defaultIsolationLevel,
 
     -- * query Helpers
@@ -71,6 +70,13 @@ import Data.Map qualified as Map
 import Data.Maybe
 import Data.Text qualified as Text
 import Data.Void
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Interpolate qualified as Interp
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Hasql
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Hasql
 import Share.App
 import Share.Env qualified as Env
 import Share.Postgres.Orphans ()
@@ -79,13 +85,6 @@ import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
-import Hasql.Decoders qualified as Decoders
-import Hasql.Encoders qualified as Encoders
-import Hasql.Interpolate qualified as Interp
-import Hasql.Pool qualified as Pool
-import Hasql.Session qualified as Hasql
-import Hasql.Session qualified as Session
-import Hasql.Statement qualified as Hasql
 
 debug :: Bool
 debug = False
@@ -143,9 +142,6 @@ data IsolationLevel
   | RepeatableRead
   | Serializable
   deriving stock (Show, Eq)
-
-transactionUnsafeIO :: IO a -> Transaction e a
-transactionUnsafeIO io = Transaction (Right <$> liftIO io)
 
 -- | Run a transaction in a session
 transaction :: forall e a. IsolationLevel -> Mode -> Transaction e a -> Session e a
@@ -296,6 +292,10 @@ runSessionOrRespondError t = tryRunSession t >>= either respondError pure
 class Monad m => QueryM m where
   statement :: q -> Hasql.Statement q r -> m r
 
+  -- | Allow running IO actions in a transaction. These actions may be run multiple times if
+  -- the transaction is retried.
+  transactionUnsafeIO :: IO a -> m a
+
   -- | Fail the transaction and whole request with an unrecoverable server error.
   unrecoverableError :: (HasCallStack, ToServerError e, Loggable e, Show e) => e -> m a
 
@@ -304,6 +304,8 @@ instance QueryM (Transaction e) where
     when debug $ transactionUnsafeIO $ BSC.putStrLn bs
     transactionStatement q s
 
+  transactionUnsafeIO io = Transaction (Right <$> liftIO io)
+
   unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
 
 instance QueryM (Session e) where
@@ -311,15 +313,21 @@ instance QueryM (Session e) where
     when debug $ liftIO $ BSC.putStrLn bs
     lift $ Session.statement q s
 
+  transactionUnsafeIO io = lift $ liftIO io
+
   unrecoverableError e = throwError (Unrecoverable (someServerError e))
 
 instance QueryM m => QueryM (ReaderT e m) where
   statement q s = lift $ statement q s
 
+  transactionUnsafeIO io = lift $ transactionUnsafeIO io
+
   unrecoverableError e = lift $ unrecoverableError e
 
 instance QueryM m => QueryM (MaybeT m) where
   statement q s = lift $ statement q s
+
+  transactionUnsafeIO io = lift $ transactionUnsafeIO io
 
   unrecoverableError e = lift $ unrecoverableError e
 
