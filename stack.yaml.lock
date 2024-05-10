@@ -10,14 +10,14 @@ packages:
       sha256: e2fc51ec2b5a126caab04688b40ec64fd6f7e3d9251e947a87c5ce3a6bc447bc
       size: 406
   original:
-    hackage: resource-pool-0.3.1.0
+    hackage: resource-pool-0.3.1.0@sha256:dbaadfcc3c1be5391336e2016b28bb2d0c534f245ba9f5af5ed1d5125afc8c1a,1280
 - completed:
     hackage: fuzzyfind-3.0.1@sha256:78f89c1d79adf0a15fa2e57c693d42b4765ccfbbe380d0c9d7da6bff9f124f85,1823
     pantry-tree:
       sha256: 46f001ec2725d3172161c993bc8fbcf0514e3ba736f868fe2c2655e1ff49dad1
       size: 542
   original:
-    hackage: fuzzyfind-3.0.1
+    hackage: fuzzyfind-3.0.1@sha256:78f89c1d79adf0a15fa2e57c693d42b4765ccfbbe380d0c9d7da6bff9f124f85,1823
 - completed:
     hackage: guid-0.1.0@sha256:a7c975be473f6f142d5cc1b39bc807a99043d20b1bb0873fdfe7a3ce84d2faf1,1078
     pantry-tree:
@@ -38,7 +38,7 @@ packages:
       sha256: 034ee4de9765e38b763f5d73b236cc112205728e680cefbfe12d2882accc3264
       size: 611
   original:
-    hackage: monad-validate-1.2.0.1
+    hackage: monad-validate-1.2.0.1@sha256:5a100da896f11ca4b7c123da85decbedeb46c37054a097f258ac911e715cb68d,2587
 - completed:
     hackage: raven-haskell-0.1.4.1@sha256:0d27e37968327faba577558a2ee4465ebfd3b6929b09cf4881dfa62a6873c85a,1393
     pantry-tree:
@@ -66,7 +66,14 @@ packages:
       sha256: 00de19fbc18c5fe3bd55f30775cd6b9dab855d82cc8d1c01930978986f71fdfa
       size: 1276
   original:
-    hackage: hasql-interpolate-0.2.1.0
+    hackage: hasql-interpolate-0.2.1.0@sha256:1cf2a01e83d155fabc6ae3e686c75dfe174cbc3addbe7c8ec55fe17368a3458c,3103
+- completed:
+    hackage: network-udp-0.0.0@sha256:408d2d4fa1a25e49e95752ee124cca641993404bb133ae10fb81daef22d876ae,1075
+    pantry-tree:
+      sha256: ee19a66c9d420861c5cc1dfad3210e2a53cdc6088ff3dd90b44f7961f5caebee
+      size: 284
+  original:
+    hackage: network-udp-0.0.0
 snapshots:
 - completed:
     sha256: 5a59b2a405b3aba3c00188453be172b85893cab8ebc352b1ef58b0eae5d248a2
