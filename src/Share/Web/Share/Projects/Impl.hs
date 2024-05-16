@@ -11,13 +11,20 @@ import Data.ByteString.Lazy qualified as BL
 import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import Servant
 import Share.Branch (Branch (..), defaultBranchShorthand)
+import Share.Branch qualified as Branch
+import Share.Codebase (CodebaseEnv)
+import Share.Codebase qualified as Codebase
+import Share.Codebase qualified as HashQ
+import Share.Codebase.Types (CodebaseEnv)
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
-import Share.Postgres.IDs (CausalId)
+import Share.Postgres.IDs (BranchHash, BranchHashId, CausalHash, CausalId)
+import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Queries qualified as Q
@@ -25,6 +32,7 @@ import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.Release (Release (..))
+import Share.Release qualified as Release
 import Share.User (User (..))
 import Share.Utils.API ((:++) (..))
 import Share.Utils.Caching (Cached)
@@ -43,7 +51,17 @@ import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.Impl (getProjectReleaseReadmeEndpoint, releasesServer)
 import Share.Web.Share.Tickets.Impl (ticketsByProjectServer)
 import Share.Web.Share.Types
-import Servant
+import Unison.Codebase.Path qualified as Path
+import Unison.Name (Name)
+import Unison.PrettyPrintEnvDecl qualified as PPED
+import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
+import Unison.Server.Backend.DefinitionDiff qualified as DefinitionDiff
+import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
+import Unison.Server.Orphans ()
+import Unison.Server.Share.Definitions qualified as Definitions
+import Unison.Server.Types (TermDefinition (..), TypeDefinition (..))
+import Unison.Syntax.Name qualified as Name
+import Unison.Util.Pretty (Width)
 
 data ProjectErrors
   = MaintainersAlreadyExist [UserId]
@@ -91,7 +109,10 @@ projectServer session handle =
                      :<|> releasesServer session handle slug
                      :<|> contributionsByProjectServer session handle slug
                      :<|> ticketsByProjectServer session handle slug
-                     :<|> diffNamespacesEndpoint session handle slug
+                     :<|> ( diffNamespacesEndpoint session handle slug
+                              :<|> diffTermsEndpoint session handle slug
+                              :<|> diffTypesEndpoint session handle slug
+                          )
                      :<|> createProjectEndpoint session handle slug
                      :<|> updateProjectEndpoint session handle slug
                      :<|> deleteProjectEndpoint session handle slug
@@ -142,8 +163,8 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
   project@Project {projectId} <- PG.runTransactionOrRespondError do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
-  oldCausalId <- resolveBranchOrRelease projectId oldShortHand
-  newCausalId <- resolveBranchOrRelease projectId newShortHand
+  (_, oldCausalId, _oldCausalHash, _oldBranchHash, _oldBranchId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
+  (_, newCausalId, newCausalHash, _newBranchHash, _newBranchId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
 
   let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.causalIdCacheKey oldCausalId, Caching.causalIdCacheKey newCausalId]
   Caching.cachedResponse authZReceipt "project-diff-namespaces" cacheKeys do
@@ -163,16 +184,115 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
         }
   where
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}
-    resolveBranchOrRelease :: IDs.ProjectId -> IDs.BranchOrReleaseShortHand -> WebApp CausalId
-    resolveBranchOrRelease projectId = \case
-      IDs.IsBranchShortHand branchShortHand -> do
-        PG.runTransactionOrRespondError $ do
-          Branch {causal = branchHead} <- Q.branchByProjectIdAndShortHand projectId branchShortHand `whenNothingM` throwError (EntityMissing (ErrorID "branch-not-found") ("Branch not found: " <> IDs.toText @IDs.BranchShortHand branchShortHand))
-          pure branchHead
-      IDs.IsReleaseShortHand releaseShortHand -> do
-        PG.runTransactionOrRespondError $ do
-          Release {squashedCausal = releaseHead} <- Q.releaseByProjectIdAndReleaseShortHand projectId releaseShortHand `whenNothingM` throwError (EntityMissing (ErrorID "release-not-found") ("Release not found: " <> IDs.toText @IDs.ReleaseShortHand releaseShortHand))
-          pure releaseHead
+
+diffTermsEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  IDs.BranchOrReleaseShortHand ->
+  IDs.BranchOrReleaseShortHand ->
+  Name ->
+  Name ->
+  WebApp ShareTermDiffResponse
+diffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTermName newTermName =
+  do
+    project <- PG.runTransactionOrRespondError do
+      Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+    oldTerm@(TermDefinition {termDefinition = oldDisplayObj}) <- getTermDefinition authZReceipt project oldShortHand oldTermName `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("Term not found: " <> IDs.toText oldShortHand <> ":" <> Name.toText oldTermName))
+    newTerm@(TermDefinition {termDefinition = newDisplayObj}) <- getTermDefinition authZReceipt project newShortHand newTermName `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("Term not found: " <> IDs.toText newShortHand <> ":" <> Name.toText newTermName))
+    let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects oldDisplayObj newDisplayObj
+    pure $
+      ShareTermDiffResponse
+        { project = projectShortHand,
+          oldBranch = oldShortHand,
+          newBranch = newShortHand,
+          oldTerm = oldTerm,
+          newTerm = newTerm,
+          diff = termDiffDisplayObject
+        }
+  where
+    renderWidth :: Width
+    renderWidth = 80
+    getTermDefinition :: AuthZ.AuthZReceipt -> Project -> IDs.BranchOrReleaseShortHand -> Name -> WebApp (Maybe TermDefinition)
+    getTermDefinition authZReceipt project shorthand name = do
+      (codebase, _causalId, _causalHash, _bh, bhId) <- namespaceHashForBranchOrRelease authZReceipt project shorthand
+      let perspective = Path.empty
+      (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) (Left bhId)
+      let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+      let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+      rt <- Codebase.codebaseRuntime codebase
+      Codebase.runCodebaseTransaction codebase do
+        Definitions.termDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
+
+    projectShortHand :: IDs.ProjectShortHand
+    projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}
+
+diffTypesEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  IDs.BranchOrReleaseShortHand ->
+  IDs.BranchOrReleaseShortHand ->
+  Name ->
+  Name ->
+  WebApp ShareTypeDiffResponse
+diffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTypeName newTypeName =
+  do
+    project <- PG.runTransactionOrRespondError do
+      Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+    sourceType@(TypeDefinition {typeDefinition = sourceDisplayObj}) <- getTypeDefinition authZReceipt project oldShortHand oldTypeName `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("Type not found: " <> IDs.toText oldShortHand <> ":" <> Name.toText oldTypeName))
+    newType@(TypeDefinition {typeDefinition = newDisplayObj}) <- getTypeDefinition authZReceipt project newShortHand newTypeName `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("Type not found: " <> IDs.toText newShortHand <> ":" <> Name.toText newTypeName))
+    let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects sourceDisplayObj newDisplayObj
+    pure $
+      ShareTypeDiffResponse
+        { project = projectShortHand,
+          oldBranch = oldShortHand,
+          newBranch = newShortHand,
+          oldType = sourceType,
+          newType = newType,
+          diff = typeDiffDisplayObject
+        }
+  where
+    renderWidth :: Width
+    renderWidth = 80
+    getTypeDefinition :: AuthZ.AuthZReceipt -> Project -> IDs.BranchOrReleaseShortHand -> Name -> WebApp (Maybe TypeDefinition)
+    getTypeDefinition authZReceipt project shorthand name = do
+      (codebase, _causalId, _causalHash, _bh, bhId) <- namespaceHashForBranchOrRelease authZReceipt project shorthand
+      let perspective = Path.empty
+      (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) (Left bhId)
+      let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+      let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+      rt <- Codebase.codebaseRuntime codebase
+      Codebase.runCodebaseTransaction codebase do
+        Definitions.typeDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
+
+    projectShortHand :: IDs.ProjectShortHand
+    projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}
+
+namespaceHashForBranchOrRelease :: AuthZ.AuthZReceipt -> Project -> IDs.BranchOrReleaseShortHand -> WebApp (CodebaseEnv, CausalId, CausalHash, BranchHash, BranchHashId)
+namespaceHashForBranchOrRelease authZReceipt Project {projectId, ownerUserId = projectOwnerUserId} = \case
+  IDs.IsBranchShortHand branchShortHand -> do
+    PG.runTransactionOrRespondError $ do
+      branch <- Q.branchByProjectIdAndShortHand projectId branchShortHand `whenNothingM` throwError (EntityMissing (ErrorID "branch-not-found") ("Branch not found: " <> IDs.toText @IDs.BranchShortHand branchShortHand))
+      let causalHash = Branch.causal branch
+      let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId (Branch.contributorId branch)
+      let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+      Codebase.codebaseMToTransaction codebase do
+        (branchHash, branchHashId) <- CausalQ.expectNamespaceHashByCausalHash causalHash
+        causalId <- HashQ.expectCausalIdByHash causalHash
+        pure (codebase, causalId, causalHash, branchHash, branchHashId)
+  IDs.IsReleaseShortHand releaseShortHand -> do
+    PG.runTransactionOrRespondError $ do
+      release <- Q.releaseByProjectIdAndReleaseShortHand projectId releaseShortHand `whenNothingM` throwError (EntityMissing (ErrorID "release-not-found") ("Release not found: " <> IDs.toText @IDs.ReleaseShortHand releaseShortHand))
+      let causalHash = Release.squashedCausal release
+      let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
+      let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+      Codebase.codebaseMToTransaction codebase do
+        (branchHash, branchHashId) <- CausalQ.expectNamespaceHashByCausalHash causalHash
+        causalId <- HashQ.expectCausalIdByHash causalHash
+        pure (codebase, causalId, causalHash, branchHash, branchHashId)
 
 createProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> CreateProjectRequest -> WebApp CreateProjectResponse
 createProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug req = do

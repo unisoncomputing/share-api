@@ -182,7 +182,8 @@ library
       ImportQualifiedPost
   ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
   build-depends:
-      MonadRandom
+      Diff
+    , MonadRandom
     , aeson
     , async
     , base >=4.7 && <5
@@ -321,7 +322,8 @@ executable share-api
       ImportQualifiedPost
   ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
   build-depends:
-      MonadRandom
+      Diff
+    , MonadRandom
     , aeson
     , async
     , base >=4.7 && <5

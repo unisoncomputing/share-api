@@ -46,6 +46,7 @@ dependencies:
 - cookie
 - cryptonite
 - data-default
+- Diff
 - either
 - extra
 - share-utils

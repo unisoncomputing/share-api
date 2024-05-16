@@ -3,6 +3,7 @@
 
 module Share.Web.Share.Projects.API where
 
+import Servant
 import Share.IDs
 import Share.OAuth.Session (MaybeAuthenticatedSession)
 import Share.Utils.Caching (Cached)
@@ -14,7 +15,7 @@ import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.API
 import Share.Web.Share.Tickets.API (TicketsByProjectAPI)
 import Share.Web.Share.Types
-import Servant
+import Unison.Name (Name)
 
 type ProjectsAPI =
   ( ListProjectsForUserEndpoint
@@ -27,7 +28,12 @@ type ProjectResourceAPI =
       :<|> ("releases" :> ProjectReleasesAPI)
       :<|> ("contributions" :> ContributionsByProjectAPI)
       :<|> ("tickets" :> TicketsByProjectAPI)
-      :<|> ("diff" :> "namespaces" :> ProjectDiffNamespaceEndpoint)
+      :<|> ( "diff"
+               :> ( "namespaces" :> ProjectDiffNamespacesEndpoint
+                      :<|> "terms" :> ProjectDiffTermsEndpoint
+                      :<|> "types" :> ProjectDiffTypesEndpoint
+                  )
+           )
       :<|> CreateProjectEndpoint
       :<|> UpdateProjectEndpoint
       :<|> DeleteProjectEndpoint
@@ -37,10 +43,24 @@ type ProjectResourceAPI =
       :<|> "maintainers" :> MaintainersResourceAPI
   )
 
-type ProjectDiffNamespaceEndpoint =
+type ProjectDiffNamespacesEndpoint =
   RequiredQueryParam "old" BranchOrReleaseShortHand
     :> RequiredQueryParam "new" BranchOrReleaseShortHand
     :> Get '[JSON] (Cached JSON ShareNamespaceDiffResponse)
+
+type ProjectDiffTermsEndpoint =
+  RequiredQueryParam "oldBranchRef" BranchOrReleaseShortHand
+    :> RequiredQueryParam "newBranchRef" BranchOrReleaseShortHand
+    :> RequiredQueryParam "oldTerm" Name
+    :> RequiredQueryParam "newTerm" Name
+    :> Get '[JSON] ShareTermDiffResponse
+
+type ProjectDiffTypesEndpoint =
+  RequiredQueryParam "oldBranchRef" BranchOrReleaseShortHand
+    :> RequiredQueryParam "newBranchRef" BranchOrReleaseShortHand
+    :> RequiredQueryParam "oldType" Name
+    :> RequiredQueryParam "newType" Name
+    :> Get '[JSON] ShareTypeDiffResponse
 
 type CreateProjectEndpoint =
   ReqBody '[JSON] CreateProjectRequest

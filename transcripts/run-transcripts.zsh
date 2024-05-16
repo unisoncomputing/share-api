@@ -12,7 +12,8 @@ source "$(realpath "$(dirname "$0")")/transcript_helpers.sh"
 typeset -A transcripts
 transcripts=(
     users transcripts/share-apis/users/
-    namespace-diffs transcripts/share-apis/namespace-diffs/
+    contribution-diffs transcripts/share-apis/contribution-diffs/
+    definition-diffs transcripts/share-apis/definition-diffs/
     tickets transcripts/share-apis/tickets/
     contributions transcripts/share-apis/contributions/
     projects-flow transcripts/share-apis/projects-flow/

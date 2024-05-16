@@ -32,7 +32,6 @@ import U.Codebase.Referent (ConstructorType, Referent)
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Debug qualified as Debug
-import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment (NameSegment (..))
@@ -91,10 +90,10 @@ namesPerspectiveForRootAndPath rootBranchHashId namespace = do
 --
 -- A name root is either a project root or a dependency root.
 -- E.g. @.myproject.some.namespace -> .myproject@ or @.myproject.lib.base.List -> .myproject.lib.base@
-relocateToNameRoot :: PG.QueryM m => Path -> HQ.HashQualified Name -> BranchHashId -> m (NamesPerspective, HQ.HashQualified Name)
+relocateToNameRoot :: (PG.QueryM m, Traversable hq) => Path -> hq Name -> BranchHashId -> m (NamesPerspective, hq Name)
 relocateToNameRoot perspective query rootBh = do
   -- The namespace containing the name path
-  let nameLocation = case HQ.toName query of
+  let nameLocation = case getFirst query of
         Just name ->
           name
             & Name.segments
