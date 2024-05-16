@@ -18,7 +18,7 @@ on:
 env:
   ormolu_version: 0.5.2.0
   is_published_build: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
-  exe_cache_prefix: share-ci-exe-${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')) && 'published') || 'unpublished' }}
+  exe_cache_prefix: share-ci-exe
   share_local_bin: share-api
 
 
