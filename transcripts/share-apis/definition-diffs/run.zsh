@@ -6,7 +6,7 @@ source ../../transcript_helpers.sh
 # Reset DB to a known state
 pg_reset_fixtures
 
-UNISON_SHARE_HOST="http://localhost:5424" "$UCM_PATH" transcript prelude.md
+transcript_ucm transcript prelude.md
 
 # Diffing a user-defined term against a user-defined term.
 fetch "$transcript_user" GET standard-term-diff '/users/transcripts/projects/definition-diff/diff/terms?oldBranchRef=before&newBranchRef=after&oldTerm=beforeTerm&newTerm=afterTerm'
