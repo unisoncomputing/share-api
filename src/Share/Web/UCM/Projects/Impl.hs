@@ -7,6 +7,7 @@ module Share.Web.UCM.Projects.Impl (server, createProjectRelease, getBestNameLoo
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
 import Data.List.Extra qualified as List
+import Servant
 import Share.Branch
 import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
@@ -17,7 +18,7 @@ import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Hashes.Queries qualified as HashQ
-import Share.Postgres.IDs
+import Share.Postgres.IDs (CausalHash, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as Codebase
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
@@ -38,7 +39,7 @@ import Share.Web.Errors qualified as Errors
 import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.Sync.Impl qualified as SyncQ
-import Servant
+import Unison.Server.Orphans ()
 import Unison.Share.API.Projects qualified as UCMProjects
 import UnliftIO qualified
 import UnliftIO.Concurrent qualified as UnliftIO

@@ -3,38 +3,50 @@
 -- to ensure they're resilient to refactors and changes in the Backend API if they live here.
 --
 -- Perhaps we'll move them when the backing implementation switches to postgres.
-module Unison.Server.Share.Definitions (definitionForHQName) where
+module Unison.Server.Share.Definitions
+  ( definitionForHQName,
+    termDefinitionByName,
+    typeDefinitionByName,
+  )
+where
 
 import Control.Lens hiding ((??))
 import Control.Monad.Except
+import Data.Bifoldable (bifoldMap)
 import Data.Either (partitionEithers)
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Set qualified as Set
+import Data.Set.NonEmpty qualified as NESet
 import Share.Backend qualified as Backend
-import Share.Codebase (CodebaseRuntime)
+import Share.Codebase (CodebaseM, CodebaseRuntime)
 import Share.Codebase qualified as Codebase
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Prelude
+import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
 import Unison.ConstructorReference qualified as ConstructorReference
+import Unison.DataDeclaration qualified as DD
+import Unison.DataDeclaration.Dependencies qualified as DD
 import Unison.Debug qualified as Debug
 import Unison.HashQualified qualified as HQ
 import Unison.HashQualified' qualified as HQ'
 import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
+import Unison.Parser.Ann (Ann)
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
-import Unison.Reference (TermReference)
+import Unison.Reference (TermReference, TypeReference)
 import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as Referent
 import Unison.Server.Doc qualified as Doc
 import Unison.Server.NameSearch (NameSearch (..))
+import Unison.Server.NameSearch qualified as NS
 import Unison.Server.NameSearch qualified as NameSearch
 import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
 import Unison.Server.QueryResult (QueryResult (..))
@@ -43,6 +55,10 @@ import Unison.Server.Share.Docs qualified as Docs
 import Unison.Server.Types
 import Unison.Symbol (Symbol)
 import Unison.Syntax.HashQualified qualified as HQ (toText)
+import Unison.Term (Term)
+import Unison.Term qualified as Term
+import Unison.Type (Type)
+import Unison.Type qualified as Type
 import Unison.Util.List qualified as List
 import Unison.Util.Map qualified as Map
 import Unison.Util.Pretty (Width)
@@ -91,12 +107,12 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
   termAndTypePPED <- ppedBuilder drDeps
   let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
   typeDefinitions <-
-    ifor (Backend.typesToSyntax suffixifyBindings width termAndTypePPED types) \ref tp -> do
+    ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
       let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
       docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
       lift $ Backend.mkTypeDefinition termAndTypePPED width ref docs tp
   termDefinitions <-
-    ifor (Backend.termsToSyntax suffixifyBindings width termAndTypePPED terms) \reference trm -> do
+    ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
       let referent = Referent.Ref reference
       let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
       docs <- maybe (pure []) docResults (HQ.toName hqTermName)
@@ -156,6 +172,72 @@ mkDefinitionsForQuery nameSearch query = do
           SR.Tm' _ (Referent.Con r _) _ -> Just (r ^. ConstructorReference.reference_)
           SR.Tp' _ r _ -> Just r
           _ -> Nothing
+
+termDisplayObjectByName :: NameSearch (PG.Transaction e) -> Name -> CodebaseM e (Maybe (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann)))
+termDisplayObjectByName nameSearch name = runMaybeT do
+  refs <- lift . lift $ NameSearch.lookupRelativeHQRefs' (termSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
+  ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
+  case ref of
+    Referent.Ref r -> (r,) <$> lift (Backend.displayTerm r)
+    Referent.Con _ _ ->
+      -- TODO: Should we error here or some other sensible thing rather than returning no
+      -- result?
+      empty
+
+-- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
+-- share among all of them, it would be more efficient than generating a PPED per definition.
+termDefinitionByName ::
+  PPEDBuilder (Codebase.CodebaseM e) ->
+  NameSearch (PG.Transaction e) ->
+  Width ->
+  CodebaseRuntime ->
+  Name ->
+  Codebase.CodebaseM e (Maybe TermDefinition)
+termDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT $ do
+  (ref, displayObject) <- MaybeT $ termDisplayObjectByName nameSearch name
+  let deps = termDisplayObjectLabeledDependencies ref displayObject
+  pped <- lift $ ppedBuilder deps
+  let biasedPPED = PPED.biasTo [name] pped
+  docRefs <- lift $ Docs.docsForDefinitionName nameSearch name
+  renderedDocs <- lift $ renderDocRefs ppedBuilder width rt docRefs
+  let (_ref, syntaxDO) = Backend.termsToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
+  lift $ Backend.mkTermDefinition biasedPPED width ref renderedDocs (syntaxDO)
+
+termDisplayObjectLabeledDependencies :: TermReference -> DisplayObject (Type Symbol Ann) (Term Symbol Ann) -> (Set LD.LabeledDependency)
+termDisplayObjectLabeledDependencies termRef displayObject = do
+  displayObject
+    & bifoldMap (Type.labeledDependencies) (Term.labeledDependencies)
+    & Set.insert (LD.TermReference termRef)
+
+typeDisplayObjectByName :: NameSearch (PG.Transaction e) -> Name -> CodebaseM e (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann)))
+typeDisplayObjectByName nameSearch name = runMaybeT do
+  refs <- lift . lift $ NameSearch.lookupRelativeHQRefs' (typeSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
+  ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
+  fmap (ref,) . lift $ Backend.displayType ref
+
+-- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
+-- share among all of them, it would be more efficient than generating a PPED per definition.
+typeDefinitionByName ::
+  PPEDBuilder (Codebase.CodebaseM e) ->
+  NameSearch (PG.Transaction e) ->
+  Width ->
+  CodebaseRuntime ->
+  Name ->
+  Codebase.CodebaseM e (Maybe TypeDefinition)
+typeDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT $ do
+  (ref, displayObject) <- MaybeT $ typeDisplayObjectByName nameSearch name
+  let deps = typeDisplayObjectLabeledDependencies ref displayObject
+  pped <- lift $ ppedBuilder deps
+  let biasedPPED = PPED.biasTo [name] pped
+  docRefs <- lift $ Docs.docsForDefinitionName nameSearch name
+  renderedDocs <- lift $ renderDocRefs ppedBuilder width rt docRefs
+  let (_ref, syntaxDO) = Backend.typesToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
+  lift . lift $ Backend.mkTypeDefinition biasedPPED width ref renderedDocs syntaxDO
+
+typeDisplayObjectLabeledDependencies :: TypeReference -> DisplayObject () (DD.Decl Symbol Ann) -> Set LD.LabeledDependency
+typeDisplayObjectLabeledDependencies typeRef displayObject = do
+  displayObject
+    & foldMap (DD.labeledDeclDependenciesIncludingSelfAndFieldAccessors typeRef)
 
 hqNameQuery ::
   NameSearch (PG.Transaction e) ->

@@ -9,6 +9,7 @@ module Share.Prelude
     readMaybe,
     eitherToMaybe,
     maybeToEither,
+    getFirst,
     unifyEither,
     fromMaybeT,
     guardM,
@@ -80,10 +81,10 @@ import Data.Traversable as X
 import Data.Typeable (Typeable)
 import Data.Void as X
 import Data.Word as X (Word64)
-import Share.Prelude.Orphans ()
-import Share.Utils.Show (tShow)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
+import Share.Prelude.Orphans ()
+import Share.Utils.Show (tShow)
 import Text.Read (readMaybe)
 import Unison.Util.Monoid (foldMapM)
 import UnliftIO as X (Exception (..), MonadUnliftIO, bracket, bracket_, throwIO, try)
@@ -91,6 +92,9 @@ import Witch as X (From (..), TryFrom (..), into, tryInto)
 import Witch.Utility as X (as)
 import Witherable as X hiding (filter)
 import Prelude as X hiding (log)
+
+getFirst :: (Foldable f) => f a -> Maybe a
+getFirst = listToMaybe . toList
 
 -- | Throws an error with the provided message and applicable callstack.
 todo :: (HasCallStack) => String -> a
