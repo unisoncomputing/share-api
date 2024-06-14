@@ -7,16 +7,17 @@ module Share.Web.Share.Branches.Types where
 
 import Data.Aeson
 import Data.Time (UTCTime)
+import Servant (FromHttpApiData)
+import Servant.API (FromHttpApiData (..))
 import Share.Branch (Branch (..))
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Postgres.IDs
 import Share.Web.Share.Contributions.Types (ShareContribution)
 import Share.Web.Share.Projects.Types
-import Servant (FromHttpApiData)
-import Servant.API (FromHttpApiData (..))
+import Share.Web.Share.Types (UserDisplayInfo)
 
-branchToShareBranch :: BranchShortHand -> Branch CausalHash -> APIProject -> [ShareContribution] -> ShareBranch
+branchToShareBranch :: BranchShortHand -> Branch CausalHash -> APIProject -> [ShareContribution UserDisplayInfo] -> ShareBranch
 branchToShareBranch branchShortHand Branch {createdAt, updatedAt, causal} project contributions = do
   ShareBranch
     { branchShortHand,
@@ -33,7 +34,7 @@ data ShareBranch = ShareBranch
     updatedAt :: UTCTime,
     causalHash :: PrefixedHash "#" CausalHash,
     project :: APIProject,
-    contributions :: [ShareContribution]
+    contributions :: [ShareContribution UserDisplayInfo]
   }
 
 instance ToJSON ShareBranch where

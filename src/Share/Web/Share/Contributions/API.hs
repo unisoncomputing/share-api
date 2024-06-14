@@ -4,6 +4,7 @@
 module Share.Web.Share.Contributions.API where
 
 import Data.Time (UTCTime)
+import Servant
 import Share.Contribution (ContributionStatus)
 import Share.IDs
 import Share.Utils.API
@@ -12,7 +13,6 @@ import Share.Web.Share.Comments.API qualified as Comments
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse)
 import Share.Web.Share.Types (UserDisplayInfo)
-import Servant
 
 type ContributionsByUserAPI = ListContributionsByUserEndpoint
 
@@ -47,7 +47,7 @@ type ListContributionsByProjectEndpoint =
     :> QueryParam "status" ContributionStatus
     -- Filter the contributions by the kind of their source branch
     :> QueryParam "kind" ContributionKindFilter
-    :> Get '[JSON] (Paged ListContributionsCursor ShareContribution)
+    :> Get '[JSON] (Paged ListContributionsCursor (ShareContribution UserDisplayInfo))
 
 type ListContributionsByUserEndpoint =
   QueryParam "cursor" (Cursor ListContributionsCursor)
@@ -56,17 +56,17 @@ type ListContributionsByUserEndpoint =
     :> QueryParam "status" ContributionStatus
     -- Filter the contributions by the kind of their source branch
     :> QueryParam "kind" ContributionKindFilter
-    :> Get '[JSON] (Paged ListContributionsCursor ShareContribution)
+    :> Get '[JSON] (Paged ListContributionsCursor (ShareContribution UserDisplayInfo))
 
 type CreateContribution =
   ReqBody '[JSON] CreateContributionRequest
-    :> Post '[JSON] ShareContribution
+    :> Post '[JSON] (ShareContribution UserDisplayInfo)
 
-type GetContributionByNumber = Get '[JSON] ShareContribution
+type GetContributionByNumber = Get '[JSON] (ShareContribution UserDisplayInfo)
 
 type UpdateContributionByNumber =
   ReqBody '[JSON] UpdateContributionRequest
-    :> Patch '[JSON] ShareContribution
+    :> Patch '[JSON] (ShareContribution UserDisplayInfo)
 
 type MergeContribution =
   Post '[JSON] ()

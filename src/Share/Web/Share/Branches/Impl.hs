@@ -22,6 +22,7 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.Project qualified as Project
@@ -330,7 +331,9 @@ getProjectBranchDetailsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandl
     pure (project, projectOwner, projectBranchWithCausals)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
   PG.runTransaction $ do
-    branchContributions <- ContributionsQ.shareContributionsByBranchOf id projectBranchId
+    branchContributions <-
+      ContributionsQ.shareContributionsByBranchOf id projectBranchId
+        >>= UsersQ.userDisplayInfoOf (traversed . traversed)
     let shareProject = projectToAPI projectOwner project
     pure $ API.branchToShareBranch branchShortHand projectBranch shareProject branchContributions
 
@@ -400,6 +403,7 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
       branches
         & fmap (\(branch@(Branch {branchId}), contributorHandle) -> (branch, branchId, contributorHandle))
         & ContributionsQ.shareContributionsByBranchOf (traversed . _2)
+        >>= UsersQ.userDisplayInfoOf (traversed . _2 . traversed . traversed)
     CausalQ.expectCausalHashesByIdsOf (traversed . _1 . branchCausals_) branchesWithContributions
 
   let shareProject = projectToAPI projectOwner project
@@ -484,6 +488,7 @@ listBranchesByUserEndpoint (AuthN.MaybeAuthedUserID callerUserId) contributorHan
         & ContributionsQ.shareContributionsByBranchOf (traversed . _2)
     branchesWithContributions
       & CausalQ.expectCausalHashesByIdsOf (traversed . _1 . branchCausals_)
+      >>= UsersQ.userDisplayInfoOf (traversed . _2 . traversed . traversed)
 
   let shareBranches =
         expandedBranches

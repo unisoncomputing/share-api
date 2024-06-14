@@ -25,6 +25,7 @@ import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Time (UTCTime)
+import Safe (lastMay)
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -35,7 +36,6 @@ import Share.Utils.API
 import Share.Web.Errors
 import Share.Web.Share.Contributions.API (ContributionTimelineCursor, ListContributionsCursor)
 import Share.Web.Share.Contributions.Types
-import Safe (lastMay)
 
 createContribution ::
   -- | Author
@@ -108,7 +108,7 @@ contributionByProjectIdAndNumber projectId contributionNumber = do
 shareContributionByProjectIdAndNumber ::
   ProjectId ->
   ContributionNumber ->
-  PG.Transaction e (Maybe ShareContribution)
+  PG.Transaction e (Maybe (ShareContribution UserId))
 shareContributionByProjectIdAndNumber projectId contributionNumber = do
   PG.query1Row
     [PG.sql|
@@ -126,7 +126,7 @@ shareContributionByProjectIdAndNumber projectId contributionNumber = do
           target_branch_contributor.handle,
           contribution.created_at,
           contribution.updated_at,
-          author.handle,
+          contribution.author_id,
           (SELECT COUNT(*) FROM comments comment WHERE comment.contribution_id = contribution.id AND comment.deleted_at IS NULL) as num_comments
         FROM contributions AS contribution
              JOIN projects AS project ON project.id = contribution.project_id
@@ -135,7 +135,6 @@ shareContributionByProjectIdAndNumber projectId contributionNumber = do
              LEFT JOIN users AS source_branch_contributor ON source_branch_contributor.id = source_branch.contributor_id
              JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch
              LEFT JOIN users AS target_branch_contributor ON target_branch_contributor.id = target_branch.contributor_id
-             JOIN users AS author ON author.id = contribution.author_id
         WHERE contribution.project_id = #{projectId}
               AND contribution_number = #{contributionNumber}
       |]
@@ -149,7 +148,7 @@ listContributionsByProjectId ::
   Maybe UserId ->
   Maybe ContributionStatus ->
   Maybe ContributionKindFilter ->
-  PG.Transaction e (Maybe (Cursor ListContributionsCursor), [ShareContribution])
+  PG.Transaction e (Maybe (Cursor ListContributionsCursor), [ShareContribution UserId])
 listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter mayKindFilter = do
   let kindFilter = case mayKindFilter of
         Nothing -> "true"
@@ -164,7 +163,7 @@ listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFi
           (contribution.updated_at, contribution.id) < (#{beforeTime}, #{contributionId})
           |]
   addCursor
-    <$> PG.queryListRows @ShareContribution
+    <$> PG.queryListRows @(ShareContribution UserId)
       [PG.sql|
         SELECT
           contribution.id,
@@ -180,7 +179,7 @@ listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFi
           target_branch_contributor.handle,
           contribution.created_at,
           contribution.updated_at,
-          author.handle,
+          contribution.author_id,
           (SELECT COUNT(*) FROM comments comment WHERE comment.contribution_id = contribution.id AND comment.deleted_at IS NULL) as num_comments
         FROM contributions AS contribution
              JOIN projects AS project ON project.id = contribution.project_id
@@ -189,7 +188,6 @@ listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFi
              LEFT JOIN users AS source_branch_contributor ON source_branch_contributor.id = source_branch.contributor_id
              JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch
              LEFT JOIN users AS target_branch_contributor ON target_branch_contributor.id = target_branch.contributor_id
-             JOIN users AS author ON author.id = contribution.author_id
         WHERE
           ^{kindFilter}
           AND ^{cursorFilter}
@@ -200,7 +198,7 @@ listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFi
         LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareContribution] -> (Maybe (Cursor ListContributionsCursor), [ShareContribution])
+    addCursor :: [ShareContribution UserId] -> (Maybe (Cursor ListContributionsCursor), [ShareContribution UserId])
     addCursor xs =
       ( lastMay xs <&> \(ShareContribution {updatedAt, contributionId}) ->
           Cursor (updatedAt, contributionId),
@@ -285,7 +283,7 @@ listContributionsByUserId ::
   Maybe (Cursor (UTCTime, ContributionId)) ->
   Maybe ContributionStatus ->
   Maybe ContributionKindFilter ->
-  PG.Transaction e (Maybe (Cursor (UTCTime, ContributionId)), [ShareContribution])
+  PG.Transaction e (Maybe (Cursor (UTCTime, ContributionId)), [ShareContribution UserId])
 listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter mayKindFilter = do
   let kindFilter = case mayKindFilter of
         Nothing -> "true"
@@ -300,7 +298,7 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
           (contribution.updated_at, contribution.id) < (#{beforeTime}, #{contributionId})
           |]
   addCursor
-    <$> PG.queryListRows @ShareContribution
+    <$> PG.queryListRows @(ShareContribution UserId)
       [PG.sql|
       SELECT
         contribution.id,
@@ -316,7 +314,7 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
         target_branch_contributor.handle,
         contribution.created_at,
         contribution.updated_at,
-        author.handle
+        contribution.author_id,
         (SELECT COUNT(*) FROM comments comment WHERE comment.contribution_id = contribution.id AND comment.deleted_at IS NULL) as num_comments
       FROM contributions AS contribution
         JOIN projects AS project ON project.id = contribution.project_id
@@ -336,7 +334,7 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
       LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareContribution] -> (Maybe (Cursor ListContributionsCursor), [ShareContribution])
+    addCursor :: [ShareContribution UserId] -> (Maybe (Cursor ListContributionsCursor), [ShareContribution UserId])
     addCursor xs =
       ( lastMay xs <&> \(ShareContribution {updatedAt, contributionId}) ->
           Cursor (updatedAt, contributionId),
@@ -345,12 +343,12 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
 
 -- | Note: Doesn't perform auth checks, the assumption is that if you already have access to
 -- the branchId you have access to all associated contributions.
-shareContributionsByBranchOf :: Traversal s t BranchId [ShareContribution] -> s -> PG.Transaction e t
+shareContributionsByBranchOf :: Traversal s t BranchId [ShareContribution UserId] -> s -> PG.Transaction e t
 shareContributionsByBranchOf trav s =
   s
     & unsafePartsOf trav %%~ \branchIds -> do
       contributionsByBranch <-
-        ( PG.queryListRows @(PG.Only BranchId PG.:. ShareContribution)
+        ( PG.queryListRows @(PG.Only BranchId PG.:. ShareContribution UserId)
             [PG.sql|
           WITH source_branches(branch_id) AS (
             SELECT * FROM ^{PG.singleColumnTable branchIds}
@@ -370,7 +368,7 @@ shareContributionsByBranchOf trav s =
             target_branch_contributor.handle,
             contribution.created_at,
             contribution.updated_at,
-            author.handle,
+            contribution.author_id,
             (SELECT COUNT(*) FROM comments comment WHERE comment.contribution_id = contribution.id AND comment.deleted_at IS NULL) as num_comments
           FROM source_branches
             JOIN project_branches AS source_branch ON source_branch.id = source_branches.branch_id
@@ -380,9 +378,8 @@ shareContributionsByBranchOf trav s =
             LEFT JOIN users AS source_branch_contributor ON source_branch_contributor.id = source_branch.contributor_id
             JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch
             LEFT JOIN users AS target_branch_contributor ON target_branch_contributor.id = target_branch.contributor_id
-            JOIN users AS author ON author.id = contribution.author_id
       |]
-            <&> ( \(results :: [PG.Only BranchId PG.:. ShareContribution]) ->
+            <&> ( \(results :: [PG.Only BranchId PG.:. ShareContribution UserId]) ->
                     -- Group by the source branch Id.
                     results
                       & fmap

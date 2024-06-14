@@ -10,13 +10,15 @@ module Share.Web.Share.Tickets.Impl
   )
 where
 
+import Control.Lens
+import Servant
 import Share.IDs (ProjectSlug (..), UserHandle)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Tickets.Queries qualified as TicketsQ
-import Share.Postgres.Users.Queries (userDisplayInfoOf)
+import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project
 import Share.Ticket
@@ -33,7 +35,6 @@ import Share.Web.Share.Tickets.API
 import Share.Web.Share.Tickets.API qualified as API
 import Share.Web.Share.Tickets.Types
 import Share.Web.Share.Types (UserDisplayInfo)
-import Servant
 
 ticketsByProjectServer :: Maybe Session -> UserHandle -> ProjectSlug -> ServerT API.TicketsByProjectAPI WebApp
 ticketsByProjectServer session handle projectSlug =
@@ -78,7 +79,7 @@ listTicketsByProjectEndpoint ::
   Maybe Limit ->
   Maybe (IDs.PrefixedID "@" UserHandle) ->
   Maybe TicketStatus ->
-  WebApp (Paged ListTicketsCursor ShareTicket)
+  WebApp (Paged ListTicketsCursor (ShareTicket UserDisplayInfo))
 listTicketsByProjectEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) handle projectSlug cursor mayLimit authorFilter statusFilter = do
   (project@Project {projectId}, authorUserId) <- PG.runTransactionOrRespondError $ do
     project <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
@@ -86,7 +87,9 @@ listTicketsByProjectEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) handle pr
       User.user_id <$> Q.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     pure (project, authorFilterID)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketListByProject mayCallerUserId project
-  (nextCursor, tickets) <- PG.runTransaction $ TicketsQ.listTicketsByProjectId projectId limit cursor authorUserId statusFilter
+  (nextCursor, tickets) <- PG.runTransaction do
+    TicketsQ.listTicketsByProjectId projectId limit cursor authorUserId statusFilter
+      >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)
   pure $ Paged {items = tickets, cursor = nextCursor}
   where
     limit = fromMaybe 20 mayLimit
@@ -97,7 +100,7 @@ createTicketEndpoint ::
   UserHandle ->
   ProjectSlug ->
   CreateTicketRequest ->
-  WebApp ShareTicket
+  WebApp (ShareTicket UserDisplayInfo)
 createTicketEndpoint session userHandle projectSlug (CreateTicketRequest {title, description}) = do
   callerUserId <- AuthN.requireAuthenticatedUser session
   project@Project {projectId} <- PG.runTransactionOrRespondError $ do
@@ -107,6 +110,7 @@ createTicketEndpoint session userHandle projectSlug (CreateTicketRequest {title,
   PG.runTransactionOrRespondError $ do
     (_, ticketNumber) <- TicketsQ.createTicket callerUserId projectId title description Open
     TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (InternalServerError "create-ticket-error" internalServerError)
+      >>= UsersQ.userDisplayInfoOf traverse
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
 
@@ -115,11 +119,13 @@ getTicketByNumberEndpoint ::
   UserHandle ->
   ProjectSlug ->
   IDs.TicketNumber ->
-  WebApp ShareTicket
+  WebApp (ShareTicket UserDisplayInfo)
 getTicketByNumberEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug ticketNumber = do
   (project, shareTicket) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-    shareTicket <- TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (EntityMissing (ErrorID "ticket:missing") "Ticket not found")
+    shareTicket <-
+      TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (EntityMissing (ErrorID "ticket:missing") "Ticket not found")
+        >>= UsersQ.userDisplayInfoOf traversed
     pure (project, shareTicket)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketRead mayCallerUserId project
   pure shareTicket
@@ -132,7 +138,7 @@ updateTicketByNumberEndpoint ::
   ProjectSlug ->
   IDs.TicketNumber ->
   UpdateTicketRequest ->
-  WebApp ShareTicket
+  WebApp (ShareTicket UserDisplayInfo)
 updateTicketByNumberEndpoint session handle projectSlug ticketNumber updateRequest@UpdateTicketRequest {title, description, status} = do
   callerUserId <- AuthN.requireAuthenticatedUser session
   (ticket@Ticket {ticketId, projectId, number = ticketNumber}) <- PG.runTransactionOrRespondError $ do
@@ -143,6 +149,7 @@ updateTicketByNumberEndpoint session handle projectSlug ticketNumber updateReque
   PG.runTransactionOrRespondError $ do
     _ <- TicketsQ.updateTicket callerUserId ticketId title description status
     TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (EntityMissing (ErrorID "ticket:missing") "Ticket not found")
+      >>= UsersQ.userDisplayInfoOf traversed
   where
     projectShorthand = IDs.ProjectShortHand {userHandle = handle, projectSlug}
 
@@ -160,7 +167,7 @@ getTicketTimelineEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle p
     (nextCursor, shareTicketTimeline) <- TicketsQ.getPagedShareTicketTimelineByProjectIdAndNumber projectId ticketNumber (unCursor <$> mayCursor) limit
     shareTicketsTimelineWithUserInfo <-
       shareTicketTimeline
-        & userDisplayInfoOf (traverse . traverse)
+        & UsersQ.userDisplayInfoOf (traverse . traverse)
     pure (project, shareTicketsTimelineWithUserInfo, nextCursor)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketRead mayCallerUserId project
   pure $ Paged {items = shareTicketTimeline, cursor = Cursor <$> nextCursor}
@@ -174,11 +181,13 @@ listTicketsByUserEndpoint ::
   Maybe (Cursor ListTicketsCursor) ->
   Maybe Limit ->
   Maybe TicketStatus ->
-  WebApp (Paged ListTicketsCursor ShareTicket)
+  WebApp (Paged ListTicketsCursor (ShareTicket UserDisplayInfo))
 listTicketsByUserEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle mayCursor mayLimit statusFilter = do
   (tickets, nextCursor) <- PG.runTransactionOrRespondError $ do
     user <- Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
-    (nextCursor, tickets) <- TicketsQ.listTicketsByUserId mayCallerUserId (User.user_id user) limit mayCursor statusFilter
+    (nextCursor, tickets) <-
+      TicketsQ.listTicketsByUserId mayCallerUserId (User.user_id user) limit mayCursor statusFilter
+        >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)
     pure (tickets, nextCursor)
   pure $ Paged {items = tickets, cursor = nextCursor}
   where
