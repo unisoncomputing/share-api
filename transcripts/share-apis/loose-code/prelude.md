@@ -1,5 +1,6 @@
 ```ucm:hide
-.> builtins.mergeio
+.> project.create-empty transcripts
+transcripts/main> builtins.mergeio
 ```
 
 Set up some shared names so we can do interesting transcript tests
@@ -18,16 +19,16 @@ external.externalName = 99
 
 
 ```ucm
-.> add
+transcripts/main> add
 ```
 
 ```unison
 -- Helpful for testing proper query encoding/decoding for a name that must be
 -- uri encoded
-a /+% b = 10
+a names./+% b = 10
 ```
 
 ```ucm
-.names> add
-.> push.create transcripts.public
+transcripts/main> add
+transcripts/main> push
 ```

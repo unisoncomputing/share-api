@@ -36,21 +36,27 @@ ys = [!a, !b] :+ 3
 ```
 Push and pull it back.
 ```ucm
-.source> push.create transcripts.public.code
+proj/main> push @transcripts/proj/main
 
-  Uploaded 322 entities.
+  Uploaded 358 entities.
 
-  View it on Unison Share: https://share.unison-lang.org/@transcripts/p/code/latest/namespaces/public/code
+  I just created @transcripts/proj on http://localhost:5424
 
-.source> pull transcripts.public.code .pulled
+  View it here: @transcripts/proj/main on http://localhost:5424
 
-  Downloaded 0 entities.
+proj/main> branch.create-empty pulled
+
+  Done. I've created an empty branch proj/pulled.
+  
+  Tip: Use `merge /somebranch` to initialize this branch.
+
+proj/pulled> pull @transcripts/proj/main
 
   ✅
   
-  Successfully pulled into .pulled, which was empty.
+  Successfully pulled into proj/pulled, which was empty.
 
-.pulled> ls
+proj/pulled> ls
 
   1. A        (type)
   2. A/       (2 terms)
@@ -58,7 +64,7 @@ Push and pull it back.
   4. B/       (2 terms)
   5. a        ('Nat)
   6. b        ('Nat)
-  7. builtin/ (455 terms, 71 types)
+  7. builtin/ (469 terms, 74 types)
   8. xs       (['{g} Nat])
   9. ys       ([Nat])
 
@@ -69,102 +75,86 @@ newValue = 99
 
 Do a fast-forward push.
 ```ucm
-.source> add
+proj/main> add
 
   ⍟ I've added these definitions:
   
     newValue : Nat
 
-.source> push transcripts.public.code
+proj/main> push
 
   Uploaded 3 entities.
 
-  View it on Unison Share: https://share.unison-lang.org/@transcripts/p/code/latest/namespaces/public/code
+  View it here: @transcripts/proj/main on http://localhost:5424
 
 ```
 Do a non-fast-forward push.
-```ucm
-.> fork source source2
 
-  Done.
+```ucm
+proj/main> branch /diverge 
+
+  Done. I've created the diverge branch based off of main.
+  
+  Tip: To merge your work back into the main branch, first
+       `switch /main` then `merge /diverge`.
 
 ```
 ```unison
-source.ff1 = 100
-source2.ff2 = 200
+diverge = 100
 ```
 
 ```ucm
-.> add
+proj/main> add
 
   ⍟ I've added these definitions:
   
-    source.ff1  : Nat
-    source2.ff2 : Nat
+    diverge : Nat
 
-.source> push transcripts.public.code
+proj/main> push
 
   Uploaded 3 entities.
 
-  View it on Unison Share: https://share.unison-lang.org/@transcripts/p/code/latest/namespaces/public/code
-
-.source2> push transcripts.public.code
-
-  ❗️
-  
-  There are some changes at transcripts.public.code that aren't
-  in the history you pushed.
-  
-  If you're sure you got the right paths, try `pull` to merge
-  these changes locally, then `push` again.
+  View it here: @transcripts/proj/main on http://localhost:5424
 
 ```
-Pull and then try pushing again to resolve the issue.
-```ucm
-.source2> pull transcripts.public.code
-
-  Downloaded 0 entities.
-
-  Merging...
-
-  Applying changes from patch...
-
-.source2> push transcripts.public.code
-
-  Uploaded 5 entities.
-
-  View it on Unison Share: https://share.unison-lang.org/@transcripts/p/code/latest/namespaces/public/code
-
-```
-Create and pull some unrelated history.
 ```unison
-unrelated1.foo = 100
-unrelated2.foo = 200
+diverge = 200
 ```
 
 ```ucm
-.> add
+proj/diverge> add
 
   ⍟ I've added these definitions:
   
-    unrelated1.foo : Nat
-      (also named source.ff1 and source2.ff1)
-    unrelated2.foo : Nat
-      (also named source2.ff2)
+    diverge : Nat
 
-.> push.create transcripts.public.unrelated1 .unrelated1
+proj/diverge> push @transcripts/proj/main
 
-  Uploaded 2 entities.
+  @transcripts/proj/main on http://localhost:5424 has some
+  history that I don't know about.
 
-  View it on Unison Share: https://share.unison-lang.org/@transcripts/p/code/latest/namespaces/public/unrelated1
+```
+Pull to trigger local merge
 
-.> pull transcripts.public.unrelated1 .unrelated2
-
-  Downloaded 0 entities.
+```ucm
+proj/diverge> pull @transcripts/proj/main
 
   Merging...
 
-  Applying changes from patch...
+  I couldn't automatically merge remote @transcripts/proj/main
+  into proj/diverge. However, I've added the definitions that
+  need attention to the top of scratch.u.
 
 ```
-It looks like we don't have any guard against pulling an unrelated branch to a local location.
+```unison:added-by-ucm scratch.u
+-- proj/diverge
+diverge : Nat
+diverge = 200
+
+-- @transcripts/proj/main
+diverge : Nat
+diverge = 100
+
+
+```
+

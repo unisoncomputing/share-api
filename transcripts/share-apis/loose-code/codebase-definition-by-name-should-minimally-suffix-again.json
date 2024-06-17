@@ -1,83 +1,9 @@
 {
   "body": {
-    "missingDefinitions": [],
-    "termDefinitions": {
-      "#dcgdua2lj6upd1ah5v0qp09gjsej0d77d87fu6qn8e2qrssnlnmuinoio46hiu53magr7qn8vnqke8ndt0v76700o5u8gcvo7st28jg": {
-        "bestTermName": "two",
-        "defnTermTag": "Plain",
-        "signature": [
-          {
-            "annotation": {
-              "contents": "##Nat",
-              "tag": "TypeReference"
-            },
-            "segment": "Nat"
-          }
-        ],
-        "termDefinition": {
-          "contents": [
-            {
-              "annotation": {
-                "contents": "public.names.apples.two",
-                "tag": "HashQualifier"
-              },
-              "segment": "public.names.apples.two"
-            },
-            {
-              "annotation": {
-                "tag": "TypeAscriptionColon"
-              },
-              "segment": " :"
-            },
-            {
-              "annotation": null,
-              "segment": " "
-            },
-            {
-              "annotation": {
-                "contents": "##Nat",
-                "tag": "TypeReference"
-              },
-              "segment": "Nat"
-            },
-            {
-              "annotation": null,
-              "segment": "\n"
-            },
-            {
-              "annotation": {
-                "contents": "public.names.apples.two",
-                "tag": "HashQualifier"
-              },
-              "segment": "public.names.apples.two"
-            },
-            {
-              "annotation": {
-                "tag": "BindingEquals"
-              },
-              "segment": " ="
-            },
-            {
-              "annotation": null,
-              "segment": " "
-            },
-            {
-              "annotation": {
-                "tag": "NumericLiteral"
-              },
-              "segment": "2"
-            }
-          ],
-          "tag": "UserObject"
-        },
-        "termDocs": [],
-        "termNames": [
-          "public.names.apples.two",
-          "public.names.oranges.two",
-          "public.external.two"
-        ]
-      }
-    },
+    "missingDefinitions": [
+      "public.names.apples.two"
+    ],
+    "termDefinitions": {},
     "typeDefinitions": {}
   },
   "status": 200

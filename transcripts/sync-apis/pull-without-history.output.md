@@ -75,20 +75,24 @@ myproject/main> push
 
   I just created @transcripts/myproject on http://localhost:5424
 
-  View it on Unison Share: @transcripts/myproject/main on http://localhost:5424
+  View it here: @transcripts/myproject/main on http://localhost:5424
 
-  ☝️  The namespace .dest is empty.
+myproject/main> branch.create-empty dest
 
-.dest> pull.without-history @transcripts/myproject/main
+  Done. I've created an empty branch myproject/dest.
+  
+  Tip: Use `merge /somebranch` to initialize this branch.
+
+myproject/dest> pull.without-history @transcripts/myproject/main
 
   Downloaded 1 entities.
 
   ✅
   
-  Successfully updated the current namespace from
+  Successfully updated myproject/dest from
   @transcripts/myproject/main.
 
-.dest> history
+myproject/dest> history
 
   Note: The most recent namespace hash is immediately below this
         message.
