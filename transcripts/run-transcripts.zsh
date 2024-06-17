@@ -18,11 +18,11 @@ transcripts=(
     contributions transcripts/share-apis/contributions/
     projects-flow transcripts/share-apis/projects-flow/
     project-maintainers transcripts/share-apis/project-maintainers/
-    release transcripts/share-apis/releases
-    branche transcripts/share-apis/branches
-    branch-brows transcripts/share-apis/branch-browse
-    loose-code transcripts/share-apis/loose-code/
-    sync-apis transcripts/sync-apis
+    release transcripts/share-apis/releases/
+    branche transcripts/share-apis/branches/
+    branch-browse transcripts/share-apis/branch-browse/
+    code-browse transcripts/share-apis/code-browse/
+    sync-apis transcripts/sync-apis/
 )
 
 for transcript dir in "${(@kv)transcripts}"; do

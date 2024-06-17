@@ -4,7 +4,7 @@
     "termDefinitions": {},
     "typeDefinitions": {
       "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0": {
-        "bestTypeName": "#6kbe32g06n",
+        "bestTypeName": "Thing",
         "defnTypeTag": "Data",
         "typeDefinition": {
           "contents": [
@@ -30,10 +30,10 @@
             },
             {
               "annotation": {
-                "contents": "#6kbe32g06n",
+                "contents": "names.Thing",
                 "tag": "HashQualifier"
               },
-              "segment": "#6kbe32g06n"
+              "segment": "names.Thing"
             },
             {
               "annotation": {
@@ -43,10 +43,10 @@
             },
             {
               "annotation": {
-                "contents": "#6kbe32g06n#0",
-                "tag": "HashQualifier"
+                "contents": "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0#d0",
+                "tag": "TermReference"
               },
-              "segment": "#6kbe32g06n#0"
+              "segment": "This"
             },
             {
               "annotation": {
@@ -56,16 +56,18 @@
             },
             {
               "annotation": {
-                "contents": "#6kbe32g06n#1",
-                "tag": "HashQualifier"
+                "contents": "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0#d1",
+                "tag": "TermReference"
               },
-              "segment": "#6kbe32g06n#1"
+              "segment": "That"
             }
           ],
           "tag": "UserObject"
         },
         "typeDocs": [],
-        "typeNames": []
+        "typeNames": [
+          "names.Thing"
+        ]
       }
     }
   },

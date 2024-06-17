@@ -3,25 +3,25 @@
     "missingDefinitions": [],
     "termDefinitions": {
       "#dcgdua2lj6upd1ah5v0qp09gjsej0d77d87fu6qn8e2qrssnlnmuinoio46hiu53magr7qn8vnqke8ndt0v76700o5u8gcvo7st28jg": {
-        "bestTermName": "#dcgdua2lj6",
+        "bestTermName": "two",
         "defnTermTag": "Plain",
         "signature": [
           {
             "annotation": {
               "contents": "##Nat",
-              "tag": "HashQualifier"
+              "tag": "TypeReference"
             },
-            "segment": "##Nat"
+            "segment": "Nat"
           }
         ],
         "termDefinition": {
           "contents": [
             {
               "annotation": {
-                "contents": "#dcgdua2lj6",
+                "contents": "names.oranges.two",
                 "tag": "HashQualifier"
               },
-              "segment": "#dcgdua2lj6"
+              "segment": "names.oranges.two"
             },
             {
               "annotation": {
@@ -36,9 +36,9 @@
             {
               "annotation": {
                 "contents": "##Nat",
-                "tag": "HashQualifier"
+                "tag": "TypeReference"
               },
-              "segment": "##Nat"
+              "segment": "Nat"
             },
             {
               "annotation": null,
@@ -46,10 +46,10 @@
             },
             {
               "annotation": {
-                "contents": "#dcgdua2lj6",
+                "contents": "names.oranges.two",
                 "tag": "HashQualifier"
               },
-              "segment": "#dcgdua2lj6"
+              "segment": "names.oranges.two"
             },
             {
               "annotation": {
@@ -71,7 +71,11 @@
           "tag": "UserObject"
         },
         "termDocs": [],
-        "termNames": []
+        "termNames": [
+          "names.oranges.two",
+          "names.apples.two",
+          "external.two"
+        ]
       }
     },
     "typeDefinitions": {}

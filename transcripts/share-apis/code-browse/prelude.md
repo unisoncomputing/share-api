@@ -1,6 +1,6 @@
 ```ucm:hide
-.> project.create-empty transcripts
-transcripts/main> builtins.mergeio
+.> project.create-empty code-browse
+code-browse/main> builtins.mergeio
 ```
 
 Set up some shared names so we can do interesting transcript tests
@@ -19,7 +19,7 @@ external.externalName = 99
 
 
 ```ucm
-transcripts/main> add
+code-browse/main> add
 ```
 
 ```unison
@@ -29,6 +29,6 @@ a names./+% b = 10
 ```
 
 ```ucm
-transcripts/main> add
-transcripts/main> push
+code-browse/main> add
+code-browse/main> push
 ```
