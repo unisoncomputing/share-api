@@ -56,7 +56,7 @@ diverge = 100
 
 ```ucm
 proj/main> add
-proj/main> push
+proj/main> push @transcripts/proj/main
 ```
 
 ```unison:hide

@@ -70,6 +70,7 @@ import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Data.Text.Encoding qualified as Text
 import Data.Time qualified as Time
+import Servant
 import Share.Branch
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
@@ -91,7 +92,6 @@ import Share.Web.Errors qualified as Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Contributions.Types (UpdateContributionRequest (..))
 import Share.Web.Share.Tickets.Types
-import Servant
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.NameSegment.Internal (NameSegment (..))

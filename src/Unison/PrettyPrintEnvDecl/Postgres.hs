@@ -13,8 +13,6 @@ import Share.Prelude
 import Unison.HashQualified' qualified as HQ'
 import Unison.LabeledDependency (LabeledDependency)
 import Unison.Name (Name)
-import Unison.Name qualified as Name
-import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.Reference qualified as V1
@@ -31,11 +29,11 @@ ppedForReferences namesPerspective refs = do
     namesForReference :: Either (V1.Referent, PGReferent) (V1.Reference, PGReference) -> m ([(Name, Name, V1.Referent)], [(Name, Name, V1.Reference)])
     namesForReference = \case
       Left (ref, pgref) -> do
-        termNames <- fmap (bothMap $ Name.fromReverseSegments . fmap NameSegment . coerce @NameLookups.ReversedName @(NonEmpty Text)) <$> NameLookupOps.termNamesForRefWithinNamespace namesPerspective pgref Nothing
+        termNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.termNamesForRefWithinNamespace namesPerspective pgref Nothing
         let termNames' = termNames <&> \(fqn, suffixed) -> (fqn, suffixed, ref)
         pure $ (termNames', [])
       Right (ref, pgref) -> do
-        typeNames <- fmap (bothMap $ Name.fromReverseSegments . coerce) <$> NameLookupOps.typeNamesForRefWithinNamespace namesPerspective pgref Nothing
+        typeNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.typeNamesForRefWithinNamespace namesPerspective pgref Nothing
         let typeNames' = typeNames <&> \(fqn, suffixed) -> (fqn, suffixed, ref)
         pure $ ([], typeNames')
 

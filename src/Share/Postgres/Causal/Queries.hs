@@ -56,7 +56,7 @@ import Unison.Codebase.Path qualified as Path
 import Unison.Hash (Hash)
 import Unison.Hash32 (Hash32)
 import Unison.Hashing.V2 qualified as H
-import Unison.NameSegment.Internal (NameSegment (..))
+import Unison.NameSegment.Internal as NameSegment
 import Unison.Reference qualified as Reference
 import Unison.Util.Map qualified as Map
 
@@ -765,16 +765,16 @@ saveV2BranchShallow v2Branch = do
     expectV2BranchDependencies V2.Branch {terms, types, patches, children} = do
       terms' <-
         terms
-          & Map.bitraverse (pure . coerce @NameSegment @Text) (traverse (fmap mdValuesToMetadataSetFormat))
+          & Map.bitraverse (pure . NameSegment.toUnescapedText) (traverse (fmap mdValuesToMetadataSetFormat))
       types' <-
         types
-          & Map.bitraverse (pure . coerce @NameSegment @Text) (traverse (fmap mdValuesToMetadataSetFormat))
+          & Map.bitraverse (pure . NameSegment.toUnescapedText) (traverse (fmap mdValuesToMetadataSetFormat))
       let patches' =
             patches
-              & Map.bimap (coerce @NameSegment @Text) fst
+              & Map.bimap NameSegment.toUnescapedText fst
       let children' =
             children
-              & Map.bimap (coerce @NameSegment @Text) Causal.causalHash
+              & Map.bimap NameSegment.toUnescapedText Causal.causalHash
       let hashBranchFull :: BranchFull.Branch' Text Hash PatchHash CausalHash =
             BranchFull.Branch
               { terms = terms',

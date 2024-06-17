@@ -110,7 +110,7 @@ proj/main> add
   
     diverge : Nat
 
-proj/main> push
+proj/main> push @transcripts/proj/main
 
   Uploaded 3 entities.
 
@@ -144,6 +144,18 @@ proj/diverge> pull @transcripts/proj/main
   I couldn't automatically merge remote @transcripts/proj/main
   into proj/diverge. However, I've added the definitions that
   need attention to the top of scratch.u.
+  
+  When you're done, you can run
+  
+    merge.commit
+  
+  to merge your changes back into diverge and delete the
+  temporary branch. Or, if you decide to cancel the merge
+  instead, you can run
+  
+    delete.branch /merge-remote-main-into-diverge
+  
+  to delete the temporary branch and switch back to diverge.
 
 ```
 ```unison:added-by-ucm scratch.u
