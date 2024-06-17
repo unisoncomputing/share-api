@@ -74,7 +74,7 @@
       },
       {
         "contents": {
-          "bestFoundTermName": "Remote.at",
+          "bestFoundTermName": "at",
           "namedTerm": {
             "termHash": "#r7hq9rqc3hebqailf77f656vbgice0716c6f0j7bj06muhj5ac1pq103gdh5974f14fcbmvp44fai5in1ajp5j3ejckfp6bffd3fpoo#0",
             "termName": "Remote.at",
@@ -152,9 +152,9 @@
               {
                 "annotation": {
                   "contents": "##Nat",
-                  "tag": "TypeReference"
+                  "tag": "HashQualifier"
                 },
-                "segment": "Nat"
+                "segment": "##Nat"
               }
             ]
           }
@@ -253,9 +253,9 @@
               {
                 "annotation": {
                   "contents": "##Nat",
-                  "tag": "TypeReference"
+                  "tag": "HashQualifier"
                 },
-                "segment": "Nat"
+                "segment": "##Nat"
               }
             ]
           }

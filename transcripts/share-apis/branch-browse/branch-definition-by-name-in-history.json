@@ -9,9 +9,9 @@
           {
             "annotation": {
               "contents": "##Nat",
-              "tag": "TypeReference"
+              "tag": "HashQualifier"
             },
-            "segment": "Nat"
+            "segment": "##Nat"
           }
         ],
         "termDefinition": {
@@ -36,9 +36,9 @@
             {
               "annotation": {
                 "contents": "##Nat",
-                "tag": "TypeReference"
+                "tag": "HashQualifier"
               },
-              "segment": "Nat"
+              "segment": "##Nat"
             },
             {
               "annotation": null,

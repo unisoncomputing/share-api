@@ -11,7 +11,7 @@ tests=(
     # Find everything in the Remote namespace and the ability too
     branch-find "/users/transcripts/projects/branch-browse/branches/main/find?limit=9&renderWidth=100&query=Remote"
     branch-definition-by-name "/users/transcripts/projects/branch-browse/branches/main/definitions/by-name/other.remoteMap?renderWidth=100"
-    branch-definition-by-name-in-history "/users/transcripts/projects/branch-browse/branches/main/definitions/by-name/other.remoteMap?renderWidth=100&rootHash=61n6mn2ceb311k6v5b0muoarqivi7tdu44ma5d23g5egcdlo93f5v9trcpi2fd21hdkckcoho8i190qdq76jfvah9l29pb1i4bhtve0"
+    branch-definition-by-name-in-history "/users/transcripts/projects/branch-browse/branches/main/definitions/by-name/other.remoteMap?renderWidth=100&rootHash=1jqrcqkhnqpgrkrnsn64r4ivvkap5eq8dto4l6l6galhgjf2mcqf9moqdlm9oh0m4753vbl7j1aev97r5h8bf2tudeudilaalfghjlg"
 )
 
 cookie_jar="$(mktemp)"
