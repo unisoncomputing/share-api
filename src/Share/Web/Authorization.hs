@@ -94,7 +94,7 @@ import Share.Web.Share.Tickets.Types
 import Servant
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment.Internal (NameSegment (..))
 
 -- | Proof that an auth check has been run at some point.
 data AuthZReceipt = AuthZReceipt {getCacheability :: Maybe CachingToken}
@@ -271,7 +271,7 @@ writePath :: Path -> CodebasePermission
 writePath path = UserCodebaseWritePath (Path.toList path)
 
 isPublicPath :: [NameSegment] -> Bool
-isPublicPath ("public" : _) = True
+isPublicPath (NameSegment "public" : _) = True
 isPublicPath _ = False
 
 -- | Requests should only be cached if they're for a public endpoint.

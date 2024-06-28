@@ -29,6 +29,7 @@ import Data.Set.NonEmpty qualified as NESet
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as LT
 import Data.Text.Lazy.Encoding qualified as LT
+import Servant
 import Share.App
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
@@ -59,14 +60,13 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.Sync.Types (EntityBunch (..), EntityKind (..), entityKind)
-import Servant
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Codebase.Path qualified as Path
 import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
-import Unison.NameSegment qualified as UNameSegment
+import Unison.NameSegment.Internal qualified as UNameSegment
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.Share.API.Hash qualified as Hash
 import Unison.Sync.API qualified as Sync
@@ -326,7 +326,7 @@ needCausalHash h =
     Just newCausalHashId -> pure newCausalHashId
 
 -- FIXME document this
-tryRebuildPath :: HasCallStack => CausalId -> [NameSegment] -> History CausalId -> CausalId -> Codebase.CodebaseM e TryRebuildPathResult
+tryRebuildPath :: (HasCallStack) => CausalId -> [NameSegment] -> History CausalId -> CausalId -> Codebase.CodebaseM e TryRebuildPathResult
 tryRebuildPath startRootCausalId path expectedHistoryAtPathId newCausalId = do
   (rebuilds, creates, actualHistoryAtPathId) <- excavate startRootCausalId path
   if actualHistoryAtPathId /= expectedHistoryAtPathId
@@ -406,7 +406,7 @@ newtype Create = Create NameSegmentId
 --     if .foo         exists, 2 rebuild 2 create
 --     if .foo.bar     exists, 3 rebuild 1 create
 --     if .foo.bar.baz exists, 4 rebuild 0 create
-excavate :: HasCallStack => CausalId -> [NameSegment] -> CodebaseM e ([Rebuild], [Create], History CausalId)
+excavate :: (HasCallStack) => CausalId -> [NameSegment] -> CodebaseM e ([Rebuild], [Create], History CausalId)
 excavate rootCausalHashId = \path -> do
   pathIds <- lift $ Defn.ensureTextIds path
   loop [] (History rootCausalHashId) pathIds
@@ -420,7 +420,7 @@ excavate rootCausalHashId = \path -> do
     --   Arg 1: [ rebuild of ".", rebuild of ".foo" ]
     --   Arg 2: The causal of ".foo.bar"
     --   Arg 3: The remaining path ["baz"]
-    loop :: HasCallStack => [Rebuild] -> History CausalId -> [NameSegmentId] -> CodebaseM e ([Rebuild], [Create], History CausalId)
+    loop :: (HasCallStack) => [Rebuild] -> History CausalId -> [NameSegmentId] -> CodebaseM e ([Rebuild], [Create], History CausalId)
     loop rebuilds history remainingPath = case history of
       Prehistory -> pure (rebuilds, Create <$> remainingPath, Prehistory)
       History cId -> case remainingPath of
@@ -521,7 +521,7 @@ uploadEntitiesEndpoint callingUserId (UploadEntitiesRequest {repoInfo, entities}
 -- | Insert entities to the user's codebase (either temp storage or main), returning the hashes of any missing dependencies
 -- we still need from the client.
 insertEntitiesToCodebase ::
-  MonadLogger (AppM r) =>
+  (MonadLogger (AppM r)) =>
   CodebaseEnv ->
   NEMap Hash32 (Sync.Entity Text Hash32 Hash32) ->
   AppM r (Either Sync.EntityValidationError (Maybe (NESet Hash32)))
@@ -635,7 +635,7 @@ directlyImportDependencies EntityBunch {namespaces, causals} = do
         (hash, Sync.C (Sync.Causal {parents})) -> Set.insert hash parents
         _ -> mempty
 
-groupEntities :: Foldable f => f ((Hash32, Share.Entity text hash hash')) -> EntityBunch (Hash32, Share.Entity text hash hash')
+groupEntities :: (Foldable f) => f ((Hash32, Share.Entity text hash hash')) -> EntityBunch (Hash32, Share.Entity text hash hash')
 groupEntities = foldMap
   \(h, e) ->
     case entityKind e of

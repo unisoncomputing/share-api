@@ -9,6 +9,7 @@ import Share.Prelude
 import Share.Web.Errors (SomeServerError)
 import Unison.HashQualified' qualified as HQ'
 import Unison.Name (Name)
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.NamesWithHistory (SearchType (ExactName))
 import Unison.Reference (TermReference)
 import Unison.Referent qualified as V1Referent
@@ -29,7 +30,7 @@ docsForDefinitionName ::
   Name ->
   Codebase.CodebaseM e [TermReference]
 docsForDefinitionName (NameSearch {termSearch}) name = do
-  let potentialDocNames = [name, name Cons.:> "doc"]
+  let potentialDocNames = [name, name Cons.:> NameSegment "doc"]
   refs <-
     potentialDocNames & foldMapM \name ->
       lift $ lookupRelativeHQRefs' termSearch ExactName (HQ'.NameOnly name)

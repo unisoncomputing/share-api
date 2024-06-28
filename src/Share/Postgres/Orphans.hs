@@ -10,15 +10,15 @@ import Data.Bytes.Put (runPutS)
 import Data.Either.Extra qualified as Either
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
-import Share.Prelude
-import Share.Utils.Logging qualified as Logging
-import Share.Web.Errors (ErrorID (..), ToServerError (..))
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Hasql
 import Hasql.Session qualified as Hasql
 import Servant (err500)
 import Servant.API
+import Share.Prelude
+import Share.Utils.Logging qualified as Logging
+import Share.Web.Errors (ErrorID (..), ToServerError (..))
 import U.Codebase.HashTags (BranchHash (..), CausalHash (..), ComponentHash (..), PatchHash (..))
 import U.Codebase.Reference (Id' (Id), Reference' (..))
 import U.Codebase.Referent (ConstructorType (..), Referent' (..))
@@ -32,7 +32,7 @@ import Unison.Hash (Hash)
 import Unison.Hash qualified as Hash
 import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment.Internal (NameSegment (..))
 
 -- Orphans for 'Hash'
 instance Hasql.EncodeValue Hash where
@@ -57,7 +57,8 @@ instance Hasql.DecodeValue Hash32 where
     Hasql.decodeValue
       -- We can trust that encoded values are valid,
       -- and skipping validation is a significant performance improvement
-      <&> Hash32.unsafeFromBase32Hex . Base32Hex.UnsafeFromText
+      <&> Hash32.unsafeFromBase32Hex
+      . Base32Hex.UnsafeFromText
 
 instance FromHttpApiData Hash where
   parseUrlPiece txt =
@@ -140,7 +141,7 @@ instance Hasql.EncodeValue ConstructorType where
         EffectConstructor -> 1
 
 -- | Decode a single field as part of a Row
-decodeField :: Hasql.DecodeField a => Decoders.Row a
+decodeField :: (Hasql.DecodeField a) => Decoders.Row a
 decodeField = Decoders.column Hasql.decodeField
 
 instance Hasql.EncodeValue TempEntity where

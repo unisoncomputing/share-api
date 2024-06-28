@@ -56,7 +56,7 @@ import Unison.Codebase.Path qualified as Path
 import Unison.Hash (Hash)
 import Unison.Hash32 (Hash32)
 import Unison.Hashing.V2 qualified as H
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Reference qualified as Reference
 import Unison.Util.Map qualified as Map
 
@@ -95,12 +95,12 @@ loadPgCausalNamespace causalId = runMaybeT $ do
                       AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = ca.ancestor_id AND o.user_id = #{codebaseOwner})
             |]
 
-expectPgCausalNamespace :: HasCallStack => CausalId -> CodebaseM e (PgCausalNamespace (CodebaseM e))
+expectPgCausalNamespace :: (HasCallStack) => CausalId -> CodebaseM e (PgCausalNamespace (CodebaseM e))
 expectPgCausalNamespace causalId =
   loadPgCausalNamespace causalId
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal branch for causal: " <> tShow causalId)
 
-loadCausalNamespace :: forall m. QueryM m => CausalId -> m (Maybe (CausalNamespace m))
+loadCausalNamespace :: forall m. (QueryM m) => CausalId -> m (Maybe (CausalNamespace m))
 loadCausalNamespace causalId = runMaybeT $ do
   causalHash <- HashQ.expectCausalHashesByIdsOf id causalId
   branchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id causalId
@@ -141,7 +141,7 @@ expectNamespaceHashByCausalHash causalHash = do
                 AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causals.id AND o.user_id = #{codebaseOwner})
     |]
 
-expectNamespace :: forall m. QueryM m => BranchHashId -> m (Branch m)
+expectNamespace :: forall m. (QueryM m) => BranchHashId -> m (Branch m)
 expectNamespace branchHashId = do
   termsAndConstructors <- getTermsAndConstructors branchHashId <&> (traversed . traversed %~ loadTermMetadata)
   types <- getTypes branchHashId <&> (traversed . traversed %~ loadTypeMetadata)
@@ -224,7 +224,7 @@ expectNamespace branchHashId = do
           )
         <&> Map.fromList
 
-    getChildren :: QueryM m => BranchHashId -> m (Map NameSegment (CausalBranch m))
+    getChildren :: (QueryM m) => BranchHashId -> m (Map NameSegment (CausalBranch m))
     getChildren branchHashId = do
       childIds <-
         queryListRows
@@ -402,7 +402,7 @@ expectNamespaceIdForCausal c = do
 -- | Crawls the namespace tree to find the causal id mounted at a given path from the provided
 -- root causal.
 -- Returns Nothing if there's no causal at the provided path (or if the root causal doesn't exist)
-loadCausalIdAtPath :: HasCallStack => CausalId -> Path.Path -> CodebaseM e (Maybe CausalId)
+loadCausalIdAtPath :: (HasCallStack) => CausalId -> Path.Path -> CodebaseM e (Maybe CausalId)
 loadCausalIdAtPath rootCausalId path = runMaybeT $ do
   codebaseOwner <- asks Codebase.codebaseOwner
   let pathArray = Path.toList path
@@ -414,7 +414,7 @@ loadCausalIdAtPath rootCausalId path = runMaybeT $ do
         WHERE EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causal_id AND o.user_id = #{codebaseOwner})
     |]
 
-loadCausalNamespaceAtPath :: HasCallStack => CausalId -> Path.Path -> CodebaseM e (Maybe (CausalNamespace (CodebaseM e)))
+loadCausalNamespaceAtPath :: (HasCallStack) => CausalId -> Path.Path -> CodebaseM e (Maybe (CausalNamespace (CodebaseM e)))
 loadCausalNamespaceAtPath causalId path = do
   causalId <- loadCausalIdAtPath causalId path
   traverse expectCausalNamespace causalId
@@ -794,7 +794,7 @@ saveV2BranchShallow v2Branch = do
     mdValuesToMetadataSetFormat (V2.MdValues meta) = BranchFull.Inline meta
 
 -- | Get the namespace stats of a namespace.
-expectNamespaceStatsOf :: QueryM m => Traversal s t BranchHash NamespaceStats -> s -> m t
+expectNamespaceStatsOf :: (QueryM m) => Traversal s t BranchHash NamespaceStats -> s -> m t
 expectNamespaceStatsOf trav s =
   s
     & unsafePartsOf trav %%~ \branchHashes -> do
@@ -889,7 +889,7 @@ importAccessibleCausals causalHashes = do
   pure results
 
 -- | Find the best common ancestor between two causals for diffs or merges.
-bestCommonAncestor :: QueryM m => CausalId -> CausalId -> m (Maybe CausalId)
+bestCommonAncestor :: (QueryM m) => CausalId -> CausalId -> m (Maybe CausalId)
 bestCommonAncestor a b = do
   query1Col
     [sql| SELECT best_common_causal_ancestor(#{a}, #{b}) as causal_id
