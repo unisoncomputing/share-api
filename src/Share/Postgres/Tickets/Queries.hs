@@ -21,6 +21,7 @@ import Control.Lens
 import Control.Monad.Except
 import Data.List qualified as List
 import Data.Time (UTCTime)
+import Safe (lastMay)
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -30,7 +31,6 @@ import Share.Web.Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Tickets.API
 import Share.Web.Share.Tickets.Types
-import Safe (lastMay)
 
 createTicket ::
   -- | Author
@@ -91,9 +91,9 @@ ticketByProjectIdAndNumber projectId ticketNumber = do
 shareTicketByProjectIdAndNumber ::
   ProjectId ->
   TicketNumber ->
-  PG.Transaction e (Maybe ShareTicket)
+  PG.Transaction e (Maybe (ShareTicket UserId))
 shareTicketByProjectIdAndNumber projectId ticketNumber = do
-  PG.query1Row @ShareTicket
+  PG.query1Row @(ShareTicket UserId)
     [PG.sql|
         SELECT
           ticket.id,
@@ -105,12 +105,11 @@ shareTicketByProjectIdAndNumber projectId ticketNumber = do
           ticket.status,
           ticket.created_at,
           ticket.updated_at,
-          author.handle,
+          ticket.author_id,
           (SELECT COUNT(*) FROM comments comment WHERE comment.ticket_id = ticket.id AND comment.deleted_at IS NULL) as num_comments
         FROM tickets AS ticket
              JOIN projects AS project ON project.id = ticket.project_id
              JOIN users AS project_owner ON project_owner.id = project.owner_user_id
-             JOIN users AS author ON author.id = ticket.author_id
         WHERE ticket.project_id = #{projectId}
               AND ticket_number = #{ticketNumber}
       |]
@@ -123,7 +122,7 @@ listTicketsByProjectId ::
   Maybe (Cursor ListTicketsCursor) ->
   Maybe UserId ->
   Maybe TicketStatus ->
-  PG.Transaction e (Maybe (Cursor ListTicketsCursor), [ShareTicket])
+  PG.Transaction e (Maybe (Cursor ListTicketsCursor), [(ShareTicket UserId)])
 listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter = do
   let cursorFilter = case mayCursor of
         Nothing -> "true"
@@ -132,7 +131,7 @@ listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter =
           (ticket.updated_at, ticket.id) < (#{beforeTime}, #{ticketId})
           |]
   addCursor
-    <$> PG.queryListRows @ShareTicket
+    <$> PG.queryListRows @(ShareTicket UserId)
       [PG.sql|
         SELECT
           ticket.id,
@@ -144,12 +143,11 @@ listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter =
           ticket.status,
           ticket.created_at,
           ticket.updated_at,
-          author.handle,
+          ticket.author_id,
           (SELECT COUNT(*) FROM comments comment WHERE comment.ticket_id = ticket.id AND comment.deleted_at IS NULL) as num_comments
         FROM tickets AS ticket
              JOIN projects AS project ON project.id = ticket.project_id
              JOIN users AS project_owner ON project_owner.id = project.owner_user_id
-             JOIN users AS author ON author.id = ticket.author_id
         WHERE
           ^{cursorFilter}
           AND project.id = #{projectId}
@@ -159,7 +157,7 @@ listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter =
         LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareTicket] -> (Maybe (Cursor ListTicketsCursor), [ShareTicket])
+    addCursor :: [ShareTicket UserId] -> (Maybe (Cursor ListTicketsCursor), [ShareTicket UserId])
     addCursor xs =
       ( lastMay xs <&> \(ShareTicket {updatedAt, ticketId}) ->
           Cursor (updatedAt, ticketId),
@@ -289,7 +287,7 @@ listTicketsByUserId ::
   Limit ->
   Maybe (Cursor (UTCTime, TicketId)) ->
   Maybe TicketStatus ->
-  PG.Transaction e (Maybe (Cursor (UTCTime, TicketId)), [ShareTicket])
+  PG.Transaction e (Maybe (Cursor (UTCTime, TicketId)), [ShareTicket UserId])
 listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
   let cursorFilter = case mayCursor of
         Nothing -> "true"
@@ -298,7 +296,7 @@ listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
           (ticket.updated_at, ticket.id) < (#{beforeTime}, #{ticketId})
           |]
   addCursor
-    <$> PG.queryListRows @ShareTicket
+    <$> PG.queryListRows @(ShareTicket UserId)
       [PG.sql|
       SELECT
         ticket.id,
@@ -310,7 +308,7 @@ listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
         ticket.status,
         ticket.created_at,
         ticket.updated_at,
-        author.handle,
+        ticket.author_id,
         (SELECT COUNT(*) FROM comments comment WHERE comment.ticket_id = ticket.id AND comment.deleted_at IS NULL) as num_comments
       FROM tickets AS ticket
         JOIN projects AS project ON project.id = ticket.project_id
@@ -329,7 +327,7 @@ listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
       LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareTicket] -> (Maybe (Cursor ListTicketsCursor), [ShareTicket])
+    addCursor :: [ShareTicket UserId] -> (Maybe (Cursor ListTicketsCursor), [ShareTicket UserId])
     addCursor xs =
       ( lastMay xs <&> \(ShareTicket {updatedAt, ticketId}) ->
           Cursor (updatedAt, ticketId),

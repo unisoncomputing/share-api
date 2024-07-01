@@ -14,8 +14,9 @@ import Share.Prelude
 import Share.Ticket (TicketStatus)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Web.Share.Comments
+import Share.Web.Share.Types (UserDisplayInfo)
 
-data ShareTicket = ShareTicket
+data ShareTicket user = ShareTicket
   { ticketId :: TicketId,
     projectShortHand :: ProjectShortHand,
     number :: TicketNumber,
@@ -25,12 +26,12 @@ data ShareTicket = ShareTicket
     createdAt :: UTCTime,
     updatedAt :: UTCTime,
     -- This is optional so we can delete users without deleting ALL their tickets.
-    author :: Maybe UserHandle,
+    author :: Maybe user,
     numComments :: Int32
   }
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-instance PG.DecodeRow ShareTicket where
+instance PG.DecodeRow (ShareTicket UserId) where
   decodeRow = do
     ticketId <- PG.decodeField
     number <- PG.decodeField
@@ -46,7 +47,7 @@ instance PG.DecodeRow ShareTicket where
     numComments <- PG.decodeField @Int32
     pure ShareTicket {..}
 
-instance ToJSON ShareTicket where
+instance ToJSON (ShareTicket UserDisplayInfo) where
   toJSON ShareTicket {..} =
     object
       [ "id" .= ticketId,

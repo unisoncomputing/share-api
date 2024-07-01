@@ -3,7 +3,12 @@
     "cursor": "<CURSOR>",
     "items": [
       {
-        "author": "test",
+        "author": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "My description",
         "id": "C-<UUID>",
@@ -17,7 +22,12 @@
         "updatedAt": "<TIMESTAMP>"
       },
       {
-        "author": "test",
+        "author": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "My description",
         "id": "C-<UUID>",
@@ -31,7 +41,12 @@
         "updatedAt": "<TIMESTAMP>"
       },
       {
-        "author": "transcripts",
+        "author": {
+          "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+          "handle": "transcripts",
+          "name": "Transcript User",
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "My description",
         "id": "C-<UUID>",
@@ -45,7 +60,12 @@
         "updatedAt": "<TIMESTAMP>"
       },
       {
-        "author": "test",
+        "author": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "Adds pagination functionality to the user list page in the admin panel to improve performance and user experience.\n## Changes Made:\n\n* Implemented pagination using the Paginator type.\n* Updated the user list view to display a paginated list.\n* Added a new route for paginated user list.\n\n## Testing:\n\nI tested the pagination feature with a large dataset to ensure it functions correctly. I also tested edge cases and confirmed that the user list is now paginated as expected.\n",
         "id": "C-<UUID>",
@@ -59,7 +79,12 @@
         "updatedAt": "<TIMESTAMP>"
       },
       {
-        "author": "test",
+        "author": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "This contribution addresses an issue where users were unable to log in due to a validation error in the authentication process.\n\n## Changes made:\n\n* Modified the validation logic for the Auth type to properly authenticate users.\n* Added unit tests to ensure the authentication process works as expected.\n\n## Testing:\n\nI tested this change locally on my development environment and confirmed that users can now log in without any issues. All unit tests are passing.",
         "id": "C-<UUID>",

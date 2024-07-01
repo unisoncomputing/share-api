@@ -8,16 +8,17 @@ module Share.Web.Share.Contributions.Types where
 
 import Data.Aeson
 import Data.Time (UTCTime)
+import Servant (FromHttpApiData)
+import Servant.API (FromHttpApiData (..))
 import Share.Contribution (ContributionStatus)
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Web.Share.Comments (CommentEvent (..), commentEventTimestamp)
-import Servant (FromHttpApiData)
-import Servant.API (FromHttpApiData (..))
+import Share.Web.Share.Types (UserDisplayInfo)
 
-data ShareContribution = ShareContribution
+data ShareContribution user = ShareContribution
   { contributionId :: ContributionId,
     projectShortHand :: ProjectShortHand,
     number :: ContributionNumber,
@@ -29,12 +30,12 @@ data ShareContribution = ShareContribution
     createdAt :: UTCTime,
     updatedAt :: UTCTime,
     -- This is optional so we can delete users without deleting ALL their contributions.
-    author :: Maybe UserHandle,
+    author :: Maybe user,
     numComments :: Int32
   }
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-instance PG.DecodeRow ShareContribution where
+instance PG.DecodeRow (ShareContribution UserId) where
   decodeRow = do
     contributionId <- PG.decodeField
     number <- PG.decodeField
@@ -59,7 +60,7 @@ instance PG.DecodeRow ShareContribution where
     let targetBranchShortHand = BranchShortHand {branchName = targetBranchName, contributorHandle = targetBranchContributorHandle}
     pure ShareContribution {..}
 
-instance ToJSON ShareContribution where
+instance ToJSON (ShareContribution UserDisplayInfo) where
   toJSON ShareContribution {..} =
     object
       [ "id" .= contributionId,

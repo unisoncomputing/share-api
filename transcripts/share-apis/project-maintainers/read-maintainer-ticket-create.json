@@ -1,6 +1,11 @@
 {
   "body": {
-    "author": "read-maintainer",
+    "author": {
+      "avatarUrl": null,
+      "handle": "read-maintainer",
+      "name": null,
+      "userId": "U-<UUID>"
+    },
     "createdAt": "<TIMESTAMP>",
     "description": "My description",
     "id": "T-<UUID>",

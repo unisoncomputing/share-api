@@ -3,7 +3,12 @@
     "cursor": "<CURSOR>",
     "items": [
       {
-        "author": "test",
+        "author": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "I want the code to solve all my problems but it does not. Please fix.\n\n## Things I need:\n\n* It should tie my *shoes*\n* It should make me _coffee_\n* It should do my taxes\n",
         "id": "T-<UUID>",
@@ -15,7 +20,12 @@
         "updatedAt": "<TIMESTAMP>"
       },
       {
-        "author": "test",
+        "author": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "This ticket is closed",
         "id": "T-<UUID>",

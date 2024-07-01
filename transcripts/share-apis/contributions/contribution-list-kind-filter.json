@@ -3,7 +3,12 @@
     "cursor": "<CURSOR>",
     "items": [
       {
-        "author": "test",
+        "author": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
         "createdAt": "<TIMESTAMP>",
         "description": "My description",
         "id": "C-<UUID>",

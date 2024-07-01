@@ -4,13 +4,13 @@
 module Share.Web.Share.Tickets.API where
 
 import Data.Time (UTCTime)
+import Servant
 import Share.IDs
 import Share.Ticket
 import Share.Utils.API
 import Share.Web.Share.Comments.API qualified as Comments
 import Share.Web.Share.Tickets.Types
 import Share.Web.Share.Types (UserDisplayInfo)
-import Servant
 
 type TicketsByUserAPI = ListTicketsByUserEndpoint
 
@@ -38,24 +38,24 @@ type ListTicketsByProjectEndpoint =
     -- Only return contributions by this author
     :> QueryParam "author" (PrefixedID "@" UserHandle)
     :> QueryParam "status" TicketStatus
-    :> Get '[JSON] (Paged ListTicketsCursor ShareTicket)
+    :> Get '[JSON] (Paged ListTicketsCursor (ShareTicket UserDisplayInfo))
 
 type ListTicketsByUserEndpoint =
   QueryParam "cursor" (Cursor ListTicketsCursor)
     -- Return a maximimum of this many branches
     :> QueryParam "limit" Limit
     :> QueryParam "status" TicketStatus
-    :> Get '[JSON] (Paged ListTicketsCursor ShareTicket)
+    :> Get '[JSON] (Paged ListTicketsCursor (ShareTicket UserDisplayInfo))
 
 type CreateTicketEndpoint =
   ReqBody '[JSON] CreateTicketRequest
-    :> Post '[JSON] ShareTicket
+    :> Post '[JSON] (ShareTicket UserDisplayInfo)
 
-type GetTicketByNumber = Get '[JSON] ShareTicket
+type GetTicketByNumber = Get '[JSON] (ShareTicket UserDisplayInfo)
 
 type UpdateTicketByNumber =
   ReqBody '[JSON] UpdateTicketRequest
-    :> Patch '[JSON] ShareTicket
+    :> Patch '[JSON] (ShareTicket UserDisplayInfo)
 
 type TicketTimelineCursor = UTCTime
 

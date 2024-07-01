@@ -1,6 +1,11 @@
 {
   "body": {
-    "author": "test",
+    "author": {
+      "avatarUrl": null,
+      "handle": "test",
+      "name": null,
+      "userId": "U-<UUID>"
+    },
     "createdAt": "<TIMESTAMP>",
     "description": "Updated description",
     "id": "T-<UUID>",
