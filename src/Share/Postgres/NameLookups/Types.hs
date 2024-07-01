@@ -34,7 +34,7 @@ import Share.Prelude
 import U.Codebase.Referent (ConstructorType)
 import Unison.Name (Name)
 import Unison.Name qualified as Name
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment.Internal (NameSegment (..))
 
 -- | Proof that we've checked that a given name lookup exists before we try to use it.
 data NameLookupReceipt = UnsafeNameLookupReceipt
@@ -75,7 +75,7 @@ newtype ReversedName = ReversedName (NonEmpty Text)
 
 reversedNameToName :: ReversedName -> Name
 reversedNameToName (ReversedName revName) =
-  Name.fromReverseSegments (coerce @(NonEmpty Text) @(NonEmpty NameSegment) revName)
+  Name.fromReverseSegments (NameSegment <$> revName)
 
 instance From ReversedName Name where
   from = reversedNameToName
@@ -158,7 +158,7 @@ data NamedRef ref = NamedRef {reversedSegments :: ReversedName, ref :: ref}
 ref_ :: Lens (NamedRef ref) (NamedRef ref') ref ref'
 ref_ = lens ref (\namedRef ref -> namedRef {ref = ref})
 
-instance PG.DecodeRow ref => PG.DecodeRow (NamedRef ref) where
+instance (PG.DecodeRow ref) => PG.DecodeRow (NamedRef ref) where
   decodeRow = do
     reversedSegments <- PG.decodeField
     ref <- PG.decodeRow

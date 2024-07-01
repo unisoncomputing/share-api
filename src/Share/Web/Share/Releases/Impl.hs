@@ -14,6 +14,7 @@ import Control.Monad.Except
 import Control.Monad.Trans.Maybe
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
+import Servant
 import Share.Codebase qualified as Codebase
 import Share.IDs
 import Share.IDs qualified as IDs
@@ -42,11 +43,10 @@ import Share.Web.Share.Releases.Types
 import Share.Web.Share.Releases.Types qualified as API
 import Share.Web.Share.Types
 import Share.Web.UCM.Sync.Impl qualified as SyncQ
-import Servant
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
-import Unison.NameSegment (NameSegment (NameSegment))
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent

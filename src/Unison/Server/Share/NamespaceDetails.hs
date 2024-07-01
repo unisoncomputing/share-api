@@ -9,6 +9,7 @@ import Share.Prelude
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.HashTags (CausalHash)
 import Unison.Codebase.Path qualified as Path
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Server.Share.RenderDoc qualified as RenderDoc
 import Unison.Server.Types
   ( NamespaceDetails (..),
@@ -27,4 +28,4 @@ namespaceDetails runtime namespacePath rootCausalId mayWidth = runMaybeT $ do
   mayReadme <- lift $ RenderDoc.findAndRenderDoc readmeNames runtime namespacePath rootCausalId mayWidth
   pure $ NamespaceDetails namespacePath ("#" <> from @CausalHash @UnisonHash causalHashAtPath) mayReadme
   where
-    readmeNames = Set.fromList ["README", "Readme", "ReadMe", "readme"]
+    readmeNames = Set.fromList $ fmap NameSegment ["README", "Readme", "ReadMe", "readme"]

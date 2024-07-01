@@ -19,6 +19,8 @@ module Unison.Server.Share.DefinitionSummary
 where
 
 import Data.Aeson
+import Servant (Capture, QueryParam, (:>))
+import Servant.Server (err500)
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseM)
@@ -26,18 +28,16 @@ import Share.Postgres (QueryM (unrecoverableError))
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
-import Share.Postgres.NameLookups.Types (PathSegments (..))
+import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (ToServerError (..))
-import Servant (Capture, QueryParam, (:>))
-import Servant.Server (err500)
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.ShortCausalHash (ShortCausalHash)
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment.Internal qualified as NameSegment
 import Unison.Prelude
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Reference (Reference)
@@ -120,7 +120,7 @@ serveTermSummary referent mayName rootCausalId relativeTo mayWidth = do
       unrecoverableError (MissingSignatureForTerm termReference)
     Just typeSig -> do
       let deps = Type.labeledDependencies typeSig
-      namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (coerce . Path.toList $ relativeToPath)
+      namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
       pped <- PPEPostgres.ppedForReferences namesPerspective deps
       let formattedTermSig = Backend.formatSuffixedType pped width typeSig
       let summary = mkSummary termReference formattedTermSig

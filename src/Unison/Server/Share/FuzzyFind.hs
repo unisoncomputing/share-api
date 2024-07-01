@@ -19,6 +19,10 @@ import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Ord qualified as Ord
 import Data.Text qualified as Text
+import Servant
+  ( QueryParam,
+    (:>),
+  )
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseM)
@@ -29,15 +33,11 @@ import Share.Postgres.NameLookups.Queries qualified as Q
 import Share.Postgres.NameLookups.Types (NamedRef (..), NamesPerspective (..), PathSegments (..))
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Prelude
-import Servant
-  ( QueryParam,
-    (:>),
-  )
 import Unison.Codebase.Editor.DisplayObject
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.ShortCausalHash qualified as SCH
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
-import Unison.NameSegment
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PPED
 import Unison.Server.Backend (termEntryLabeledDependencies, typeEntryLabeledDependencies)

@@ -61,7 +61,7 @@ import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
 import Unison.Hashing.V2.Convert qualified as Hashing
 import Unison.Name qualified as Name
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Parser.Ann (Ann)
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
@@ -143,7 +143,7 @@ mkTermDefinition termPPED width r docs tm = do
           docs
 
 termListEntry ::
-  PG.QueryM m =>
+  (PG.QueryM m) =>
   Type Symbol Ann ->
   ExactName NameSegment V2Referent.Referent ->
   m (Backend.TermEntry Symbol Ann)
@@ -161,7 +161,7 @@ termListEntry typ (ExactName nameSegment ref) = do
       }
 
 typeListEntry ::
-  PG.QueryM m =>
+  (PG.QueryM m) =>
   ExactName NameSegment Reference ->
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
@@ -193,14 +193,14 @@ getTermTag r termType = do
     V2Referent.Con ref _ -> Just <$> Codebase.expectDeclKind ref
   pure $
     if
-        | isDoc -> Doc
-        | isTest -> Test
-        | Just CT.Effect <- constructorType -> Constructor Ability
-        | Just CT.Data <- constructorType -> Constructor Data
-        | otherwise -> Plain
+      | isDoc -> Doc
+      | isTest -> Test
+      | Just CT.Effect <- constructorType -> Constructor Ability
+      | Just CT.Data <- constructorType -> Constructor Data
+      | otherwise -> Plain
 
 getTypeTag ::
-  PG.QueryM m =>
+  (PG.QueryM m) =>
   Reference.TypeReference ->
   m TypeTag
 getTypeTag r = do

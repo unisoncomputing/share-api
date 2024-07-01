@@ -16,7 +16,8 @@ import U.Codebase.Sqlite.Patch.TypeEdit qualified as PatchFullTypeEdit
 import U.Codebase.TermEdit qualified as V2TermEdit
 import U.Codebase.TypeEdit qualified as V2TypeEdit
 import Unison.Hash (Hash)
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment (NameSegment)
+import Unison.NameSegment.Internal qualified as NameSegment
 import Unison.Util.Map qualified as Map
 
 branchV2ToBF ::
@@ -53,7 +54,7 @@ branchV2ToBF (V2.Branch {terms, types, patches, children}) = do
     convertChildren :: Map NameSegment (V2.CausalBranch m) -> Map Text (Hash, Hash)
     convertChildren =
       Map.bimap
-        (coerce @NameSegment @Text)
+        NameSegment.toUnescapedText
         ((unBranchHash . Causal.valueHash) &&& (unCausalHash . Causal.causalHash))
 
 patchV2ToPF :: V2.Patch -> PatchFull.Patch' Text Hash Hash

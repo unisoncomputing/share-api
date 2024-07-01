@@ -23,7 +23,7 @@ import Share.Prelude
 import U.Codebase.Causal qualified as V2Causal
 import Unison.Codebase.Path qualified as Path
 import Unison.LabeledDependency qualified as LD
-import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PostgresPPE
 import Unison.Server.Doc (Doc)
 import Unison.Server.Doc qualified as Doc
