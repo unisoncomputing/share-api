@@ -28,4 +28,4 @@ namespaceDetails runtime namespacePath rootCausalId mayWidth = runMaybeT $ do
   mayReadme <- lift $ RenderDoc.findAndRenderDoc readmeNames runtime namespacePath rootCausalId mayWidth
   pure $ NamespaceDetails namespacePath ("#" <> from @CausalHash @UnisonHash causalHashAtPath) mayReadme
   where
-    readmeNames = Set.fromList $ fmap NameSegment ["README", "Readme", "ReadMe", "readme"]
+    readmeNames = Set.fromList . fmap NameSegment $ ["README", "Readme", "ReadMe", "readme"]

@@ -1,7 +1,7 @@
 {
   "body": {
     "missingDefinitions": [
-      "public.names.externalName"
+      "names.externalName"
     ],
     "termDefinitions": {},
     "typeDefinitions": {}

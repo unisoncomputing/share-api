@@ -17,6 +17,7 @@ import Unison.HashQualified' qualified as HQ'
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment.Internal (NameSegment (..))
+import Unison.NameSegment.Internal qualified as NameSegment
 import Unison.NamesWithHistory (SearchType (..))
 import Unison.Reference qualified as V1
 import Unison.Reference qualified as V1Reference
@@ -123,4 +124,4 @@ nameSearchForPerspective namesPerspective =
 
     -- Fully qualify a name by prepending the current namespace perspective's path
     fullyQualifyName :: Name -> Name
-    fullyQualifyName name = fromMaybe name $ Path.maybePrefixName (Path.AbsolutePath' . Path.Absolute $ (Path.fromList . fmap NameSegment . coerce @PathSegments @[Text] $ pathToMountedNameLookup namesPerspective)) name
+    fullyQualifyName name = fromMaybe name $ Path.maybePrefixName (Path.AbsolutePath' $ Path.Absolute (Path.fromList . (fmap NameSegment.NameSegment) . into @[Text] $ pathToMountedNameLookup namesPerspective)) name

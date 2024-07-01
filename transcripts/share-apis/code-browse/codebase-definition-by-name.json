@@ -18,10 +18,10 @@
           "contents": [
             {
               "annotation": {
-                "contents": "public.names.apples.compoundTerm",
+                "contents": "names.apples.compoundTerm",
                 "tag": "HashQualifier"
               },
-              "segment": "public.names.apples.compoundTerm"
+              "segment": "names.apples.compoundTerm"
             },
             {
               "annotation": {
@@ -46,10 +46,10 @@
             },
             {
               "annotation": {
-                "contents": "public.names.apples.compoundTerm",
+                "contents": "names.apples.compoundTerm",
                 "tag": "HashQualifier"
               },
-              "segment": "public.names.apples.compoundTerm"
+              "segment": "names.apples.compoundTerm"
             },
             {
               "annotation": {
@@ -128,7 +128,7 @@
         },
         "termDocs": [],
         "termNames": [
-          "public.names.apples.compoundTerm"
+          "names.apples.compoundTerm"
         ]
       }
     },

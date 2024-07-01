@@ -64,10 +64,10 @@
             },
             {
               "annotation": {
-                "contents": "public.names./+%",
+                "contents": "names./+%",
                 "tag": "HashQualifier"
               },
-              "segment": "public.names./+%"
+              "segment": "names./+%"
             },
             {
               "annotation": {
@@ -148,10 +148,10 @@
             },
             {
               "annotation": {
-                "contents": "public.names./+%",
+                "contents": "names./+%",
                 "tag": "HashQualifier"
               },
-              "segment": "public.names./+%"
+              "segment": "names./+%"
             },
             {
               "annotation": null,
@@ -184,7 +184,7 @@
         },
         "termDocs": [],
         "termNames": [
-          "public.names./+%"
+          "names./+%"
         ]
       }
     },

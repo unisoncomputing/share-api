@@ -18,10 +18,10 @@
           "contents": [
             {
               "annotation": {
-                "contents": "public.names.referencesExternal",
+                "contents": "names.referencesExternal",
                 "tag": "HashQualifier"
               },
-              "segment": "public.names.referencesExternal"
+              "segment": "names.referencesExternal"
             },
             {
               "annotation": {
@@ -46,10 +46,10 @@
             },
             {
               "annotation": {
-                "contents": "public.names.referencesExternal",
+                "contents": "names.referencesExternal",
                 "tag": "HashQualifier"
               },
-              "segment": "public.names.referencesExternal"
+              "segment": "names.referencesExternal"
             },
             {
               "annotation": {
@@ -150,7 +150,7 @@
         },
         "termDocs": [],
         "termNames": [
-          "public.names.referencesExternal"
+          "names.referencesExternal"
         ]
       }
     },

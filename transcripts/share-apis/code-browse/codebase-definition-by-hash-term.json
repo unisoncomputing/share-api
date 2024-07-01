@@ -18,10 +18,10 @@
           "contents": [
             {
               "annotation": {
-                "contents": "public.external.two",
+                "contents": "external.two",
                 "tag": "HashQualifier"
               },
-              "segment": "public.external.two"
+              "segment": "external.two"
             },
             {
               "annotation": {
@@ -46,10 +46,10 @@
             },
             {
               "annotation": {
-                "contents": "public.external.two",
+                "contents": "external.two",
                 "tag": "HashQualifier"
               },
-              "segment": "public.external.two"
+              "segment": "external.two"
             },
             {
               "annotation": {
@@ -72,9 +72,9 @@
         },
         "termDocs": [],
         "termNames": [
-          "public.external.two",
-          "public.names.apples.two",
-          "public.names.oranges.two"
+          "external.two",
+          "names.apples.two",
+          "names.oranges.two"
         ]
       }
     },

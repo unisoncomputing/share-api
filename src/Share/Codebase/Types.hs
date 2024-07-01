@@ -16,13 +16,13 @@ import Share.Prelude
 import Unison.Codebase.CodeLookup qualified as CL
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.Runtime qualified as Rt
+import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Parser.Ann (Ann)
 import Unison.Reference qualified as Reference
 import Unison.Symbol (Symbol)
-import Unison.NameSegment.Internal (NameSegment (..))
 
 publicRoot :: Path.Path
-publicRoot = Path.singleton $ NameSegment "public"
+publicRoot = Path.singleton (NameSegment "public")
 
 -- | The scope of a given codebase transaction.
 data CodebaseEnv = CodebaseEnv

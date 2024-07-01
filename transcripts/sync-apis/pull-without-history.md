@@ -11,6 +11,7 @@ myproject/main> move.term x y
 myproject/main> move.term y z
 myproject/main> history
 myproject/main> push
-.dest> pull.without-history @transcripts/myproject/main
-.dest> history
+myproject/main> branch.create-empty dest
+myproject/dest> pull.without-history @transcripts/myproject/main
+myproject/dest> history
 ```

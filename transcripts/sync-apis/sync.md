@@ -1,5 +1,6 @@
 ```ucm:hide
-.source> builtins.merge
+.> project.create-empty proj
+proj/main> builtins.merge
 ```
 
 Create some types and values with deep-dependencies and cycles to ensure we have non-trivial components.
@@ -22,14 +23,15 @@ ys = [!a, !b] :+ 3
 
 
 ```ucm:hide
-.source> add
+proj/main> add
 ```
 
 Push and pull it back.
 ```ucm
-.source> push.create transcripts.public.code
-.source> pull transcripts.public.code .pulled
-.pulled> ls
+proj/main> push @transcripts/proj/main
+proj/main> branch.create-empty pulled
+proj/pulled> pull @transcripts/proj/main
+proj/pulled> ls
 ```
 
 ```unison:hide
@@ -38,41 +40,36 @@ newValue = 99
 
 Do a fast-forward push.
 ```ucm
-.source> add
-.source> push transcripts.public.code
+proj/main> add
+proj/main> push
 ```
 
 Do a non-fast-forward push.
+
 ```ucm
-.> fork source source2
+proj/main> branch /diverge 
 ```
 
 ```unison:hide
-source.ff1 = 100
-source2.ff2 = 200
+diverge = 100
+```
+
+```ucm
+proj/main> add
+proj/main> push @transcripts/proj/main
+```
+
+```unison:hide
+diverge = 200
 ```
 
 ```ucm:error
-.> add
-.source> push transcripts.public.code
-.source2> push transcripts.public.code
+proj/diverge> add
+proj/diverge> push @transcripts/proj/main
 ```
 
-Pull and then try pushing again to resolve the issue.
-```ucm
-.source2> pull transcripts.public.code
-.source2> push transcripts.public.code
-```
+Pull to trigger local merge
 
-Create and pull some unrelated history.
-```unison:hide
-unrelated1.foo = 100
-unrelated2.foo = 200
+```ucm:error
+proj/diverge> pull @transcripts/proj/main
 ```
-```ucm
-.> add
-.> push.create transcripts.public.unrelated1 .unrelated1
-.> pull transcripts.public.unrelated1 .unrelated2
-```
-
-It looks like we don't have any guard against pulling an unrelated branch to a local location.

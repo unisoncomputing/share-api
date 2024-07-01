@@ -35,7 +35,7 @@ branchV2ToBF (V2.Branch {terms, types, patches, children}) = do
   where
     convertTerms :: Map NameSegment (Map V2.Referent (m V2.MdValues)) -> m (Map Text (Map (BranchFull.Referent'' Text Hash) (BranchFull.MetadataSetFormat' Text Hash)))
     convertTerms m = do
-      Map.mapKeys (coerce @NameSegment @Text) m
+      Map.mapKeys NameSegment.toUnescapedText m
         & traversed . traversed
           %%~ \mdM -> do
             V2.MdValues md <- mdM

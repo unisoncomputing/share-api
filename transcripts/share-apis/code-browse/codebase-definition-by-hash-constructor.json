@@ -30,10 +30,10 @@
             },
             {
               "annotation": {
-                "contents": "public.names.Thing",
+                "contents": "names.Thing",
                 "tag": "HashQualifier"
               },
-              "segment": "public.names.Thing"
+              "segment": "names.Thing"
             },
             {
               "annotation": {
@@ -66,7 +66,7 @@
         },
         "typeDocs": [],
         "typeNames": [
-          "public.names.Thing"
+          "names.Thing"
         ]
       }
     }
