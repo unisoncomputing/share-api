@@ -75,6 +75,7 @@ AND table_name NOT LIKE 'debug_%'
 -- Ensure share user can access the public view.
 GRANT SELECT on public.cloud_subscribers TO PUBLIC;
 GRANT SELECT on public.users TO PUBLIC;
+GRANT REFERENCES on public.users TO PUBLIC;
 GRANT SELECT on public.tours TO PUBLIC;
 GRANT SELECT on public.cloud_users TO PUBLIC;
 GRANT SELECT on public.org_members TO PUBLIC;
