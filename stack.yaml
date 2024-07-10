@@ -26,7 +26,6 @@ packages:
 - unison/lib/unison-util-bytes
 - unison/lib/unison-util-cache
 - unison/lib/unison-util-file-embed
-- unison/lib/unison-util-nametree
 - unison/lib/unison-util-relation
 - unison/lib/unison-util-rope
 - unison/parser-typechecker
