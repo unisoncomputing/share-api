@@ -122,9 +122,6 @@ guardMaybe (Just a) = pure a
 guardMaybeM :: (Monad m, Alternative m) => m (Maybe b) -> m b
 guardMaybeM m = m >>= guardMaybe
 
-hoistMaybe :: (Monad m) => Maybe a -> MaybeT m a
-hoistMaybe = MaybeT . pure
-
 -- | Like 'fold' but for Alternative.
 altSum :: (Alternative f, Foldable t) => t (f a) -> f a
 altSum = foldl' (<|>) empty
@@ -198,7 +195,7 @@ wundefined :: (HasCallStack) => a
 wundefined = undefined
 
 -- | Map both sides of a bifunctor.
-bothMap :: Bifunctor f => (a -> b) -> f a a -> f b b
+bothMap :: (Bifunctor f) => (a -> b) -> f a a -> f b b
 bothMap f = bimap f f
 
 -- | Partition a list into two lists, based on a function that returns either a Left or a Right.

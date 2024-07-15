@@ -42,17 +42,17 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (NominalDiffTime, UTCTime, addUTCTime, getCurrentTime, nominalDay)
-import Share.JWT qualified as JWT
-import Share.OAuth.Types
-import Share.Utils.Binary
-import Share.Utils.IDs qualified as IDs
-import Share.Utils.Servant.Cookies qualified as Cookies
 import GHC.Generics (Generic)
 import Network.HTTP.Types qualified as Network
 import Network.URI
 import Network.Wai qualified as Wai
 import Servant
 import Servant.Server.Experimental.Auth qualified as ServantAuth
+import Share.JWT qualified
+import Share.OAuth.Types
+import Share.Utils.Binary
+import Share.Utils.IDs qualified as IDs
+import Share.Utils.Servant.Cookies qualified as Cookies
 import Web.Cookie (parseCookies)
 
 -- | Requires a valid session cookie to be present in the request and provides it as an
@@ -98,7 +98,7 @@ checkOptionalAuthenticatedSession ::
   Text ->
   SessionCheck ->
   Cookies.CookieSettings {- Not actually used yet, but will probably need it soon so this makes it future-compatible -} ->
-  JWT.JWTSettings ->
+  Share.JWT.JWTSettings ->
   ServantAuth.AuthHandler Wai.Request (Maybe Session)
 checkOptionalAuthenticatedSession sessionCookieName sessCheck _cookieSettings jwtSettings = ServantAuth.mkAuthHandler authHandler
   where
@@ -117,23 +117,23 @@ checkOptionalAuthenticatedSession sessionCookieName sessCheck _cookieSettings jw
             (mbearer, rest) = BS.splitAt (BS.length bearer) authHdr
         guard (mbearer == bearer)
         pure rest
-      signedJWT <- MaybeT . pure . eitherToMaybe $ JWT.textToSignedJWT (Text.decodeUtf8 tokenBytes)
-      MaybeT . liftIO . fmap eitherToMaybe $ JWT.verifyJWT jwtSettings signedJWT
+      signedJWT <- MaybeT . pure . eitherToMaybe $ Share.JWT.textToSignedJWT (Text.decodeUtf8 tokenBytes)
+      MaybeT . liftIO . fmap eitherToMaybe $ Share.JWT.verifyJWT jwtSettings signedJWT
     cookieSession :: Wai.Request -> MaybeT Handler Session
     cookieSession req = do
       jwtCookieBytes <- MaybeT . pure $ do
         cookies' <- lookup Network.hCookie $ Wai.requestHeaders req
         let cookies = parseCookies cookies'
         lookup (Text.encodeUtf8 sessionCookieName) cookies
-      signedJWT <- MaybeT . pure . eitherToMaybe $ JWT.textToSignedJWT (Text.decodeUtf8 jwtCookieBytes)
-      MaybeT . liftIO . fmap eitherToMaybe $ JWT.verifyJWT jwtSettings signedJWT
+      signedJWT <- MaybeT . pure . eitherToMaybe $ Share.JWT.textToSignedJWT (Text.decodeUtf8 jwtCookieBytes)
+      MaybeT . liftIO . fmap eitherToMaybe $ Share.JWT.verifyJWT jwtSettings signedJWT
 
     eitherToMaybe = \case
       Left _ -> Nothing
       Right a -> Just a
 
 -- | Make an auth handler using an additional session check function.
-checkRequiredAuthenticatedSession :: Text -> SessionCheck -> Cookies.CookieSettings -> JWT.JWTSettings -> ServantAuth.AuthHandler Wai.Request (Session)
+checkRequiredAuthenticatedSession :: Text -> SessionCheck -> Cookies.CookieSettings -> Share.JWT.JWTSettings -> ServantAuth.AuthHandler Wai.Request (Session)
 checkRequiredAuthenticatedSession sessionCookieName sessCheck cookieSettings jwtSettings =
   ServantAuth.mkAuthHandler $ \req -> do
     ServantAuth.unAuthHandler (checkOptionalAuthenticatedSession sessionCookieName sessCheck cookieSettings jwtSettings) req >>= \case
@@ -154,7 +154,7 @@ type AuthCheckCtx =
 -- level
 authCheckCtx ::
   Cookies.CookieSettings ->
-  JWT.JWTSettings ->
+  Share.JWT.JWTSettings ->
   Text ->
   Servant.Context AuthCheckCtx
 authCheckCtx cookieSettings jwtSettings sessionCookieName =
@@ -173,7 +173,7 @@ authCheckCtx cookieSettings jwtSettings sessionCookieName =
 
 addAuthCheckCtx ::
   Cookies.CookieSettings ->
-  JWT.JWTSettings ->
+  Share.JWT.JWTSettings ->
   Text ->
   Servant.Context (appCtx :: [Type]) ->
   Servant.Context (AuthCheckCtx .++ appCtx)
@@ -220,7 +220,7 @@ data Session = Session
   deriving stock (Show)
   deriving (Binary) via JSONBinary Session
 
-instance JWT.ToJWT Session where
+instance Share.JWT.ToJWT Session where
   encodeJWT (Session (SessionId sessionId) userID created expiry issuer aud) =
     JWT.emptyClaimsSet
       & JWT.claimSub ?~ (JWT.string # IDs.toText userID)
@@ -230,7 +230,7 @@ instance JWT.ToJWT Session where
       & JWT.claimIss ?~ (JWT.uri # issuer)
       & JWT.claimAud ?~ JWT.Audience (review JWT.uri <$> Set.toList aud)
 
-instance JWT.FromJWT Session where
+instance Share.JWT.FromJWT Session where
   decodeJWT claims = do
     sessionUserId <- maybeToEither "Missing sub claim" (claims ^? JWT.claimSub . _Just . JWT.string) >>= IDs.fromText
     sessionId <-
@@ -247,12 +247,12 @@ instance JWT.FromJWT Session where
       maybeToEither e = maybe (Left e) Right
 
 instance ToJSON Session where
-  toJSON s = toJSON $ JWT.encodeJWT s
+  toJSON s = toJSON $ Share.JWT.encodeJWT s
 
 instance FromJSON Session where
   parseJSON v = do
     claims <- parseJSON v
-    either (fail . Text.unpack) pure $ JWT.decodeJWT claims
+    either (fail . Text.unpack) pure $ Share.JWT.decodeJWT claims
 
 data PendingSession = PendingSession
   { pendingId :: PendingSessionId,
@@ -283,7 +283,7 @@ sessionTTL :: NominalDiffTime
 sessionTTL =
   (30 * nominalDay)
 
-createSession :: MonadIO m => URI -> Set URI -> UserId -> m Session
+createSession :: (MonadIO m) => URI -> Set URI -> UserId -> m Session
 createSession sessionIssuer sessionAudience sessionUserId = do
   sessionId <- randomIO
   sessionCreated <- liftIO getCurrentTime

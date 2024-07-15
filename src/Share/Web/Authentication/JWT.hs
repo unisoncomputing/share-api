@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 
 module Share.Web.Authentication.JWT where
 
@@ -16,6 +17,7 @@ import Share.App
 import Share.Env qualified as Env
 import Share.IDs (JTI (..), SessionId (..), UserId (..))
 import Share.IDs qualified as IDs
+import Share.JWT qualified
 import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Web.App
@@ -74,10 +76,10 @@ shareStandardClaims aud sub ttl (SessionId sessionIdUUID) = do
   let exp = addUTCTime ttl iat
   pure (StandardClaims {..})
 
-signJWT :: JWT.ToJWT a => a -> WebApp SignedJWT
+signJWT :: (JWT.ToJWT a) => a -> WebApp SignedJWT
 signJWT claims = do
   jSettings <- asks Env.jwtSettings
-  JWT.signJWT jSettings claims >>= \case
+  Share.JWT.signJWT jSettings claims >>= \case
     Left err -> respondError (InternalServerError "jwt:signing-error" err)
     Right a -> pure a
 
@@ -91,7 +93,7 @@ signJWT claims = do
 verifyJWT :: forall claims reqCtx. (JWT.FromJWT claims, Typeable claims) => SignedJWT -> (claims -> Maybe AuthenticationErr) -> AppM reqCtx (Either AuthenticationErr claims)
 verifyJWT signedJWT checks = do
   jwtS <- asks Env.jwtSettings
-  Either.mapLeft JWTErr <$> JWT.verifyJWT @claims jwtS signedJWT <&> \case
+  Either.mapLeft JWTErr <$> Share.JWT.verifyJWT @claims jwtS signedJWT <&> \case
     Left err -> Left err
     Right a -> case checks a of
       Nothing -> Right a

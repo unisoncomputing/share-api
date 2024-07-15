@@ -13,7 +13,7 @@ import Share.Postgres.NameLookups.Ops as NLOps
 import Share.Postgres.NameLookups.Types
 import Share.Prelude
 import Unison.Codebase.Path qualified as Path
-import Unison.HashQualified' qualified as HQ'
+import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment.Internal (NameSegment (..))

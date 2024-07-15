@@ -2,10 +2,8 @@
 
 module Share.App where
 
-import Control.Monad.Except
 import Control.Monad.Random.Strict
 import Control.Monad.Reader
-import Crypto.JWT qualified as JWT
 import Crypto.Random.Types qualified as Cryptonite
 import Data.Set qualified as Set
 import Database.Redis qualified as R
