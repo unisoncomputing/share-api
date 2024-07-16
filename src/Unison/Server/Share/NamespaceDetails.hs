@@ -1,6 +1,5 @@
 module Unison.Server.Share.NamespaceDetails (namespaceDetails) where
 
-import Control.Monad.Except
 import Data.Set qualified as Set
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseM, CodebaseRuntime)

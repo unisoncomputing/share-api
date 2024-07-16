@@ -20,7 +20,6 @@ module Share.Postgres.Contributions.Queries
 where
 
 import Control.Lens
-import Control.Monad.Except
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Set qualified as Set

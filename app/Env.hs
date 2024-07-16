@@ -32,6 +32,7 @@ import System.Log.Raven qualified as Sentry
 import System.Log.Raven.Transport.HttpConduit qualified as Sentry
 import System.Log.Raven.Types qualified as Sentry
 import Unison.Runtime.Interface as RT
+import Data.Time.Clock qualified as Time
 
 withEnv :: (Env () -> IO a) -> IO a
 withEnv action = do
@@ -90,8 +91,14 @@ withEnv action = do
   let cookieSettings = Cookies.defaultCookieSettings Deployment.onLocal (Just (realToFrac cookieSessionTTL))
   let sessionCookieKey = tShow Deployment.deployment <> "-share-session"
   redisConnection <- Redis.checkedConnect redisConfig
+  -- Set some very conservative defaults
+  let pgConnectionAcquisitionTimeout = Time.secondsToDiffTime 60 -- 1 minute
+  -- Helps prevent leaking connections if they somehow get forgotten about.
+  let pgConnectionMaxIdleTime = Time.secondsToDiffTime (60 * 5) -- 5 minutes
+  -- Limiting max lifetime helps cycle connections which may have accumulated memory cruft.
+  let pgConnectionMaxLifetime = Time.secondsToDiffTime (60 * 60) -- 1 hour
   pgConnectionPool <-
-    Pool.acquire postgresConnMax Nothing (Text.encodeUtf8 postgresConfig)
+    Pool.acquire postgresConnMax pgConnectionAcquisitionTimeout pgConnectionMaxLifetime pgConnectionMaxIdleTime  (Text.encodeUtf8 postgresConfig)
   timeCache <- FL.newTimeCache FL.simpleTimeFormat -- E.g. 05/Sep/2023:13:23:56 -0700
   sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"
   let requestCtx = ()

@@ -35,7 +35,6 @@ module Share.Backend
 where
 
 import Control.Lens hiding ((??))
-import Control.Monad.Except
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Share.Codebase (CodebaseM)

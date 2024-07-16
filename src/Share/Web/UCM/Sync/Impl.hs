@@ -14,21 +14,13 @@ where
 
 import Control.Lens
 import Control.Monad.Except (ExceptT (ExceptT), runExceptT)
-import Control.Monad.Validate (ValidateT)
-import Control.Monad.Validate qualified as Validate
 import Data.Foldable qualified as Foldable
-import Data.Generics.Product
 import Data.List.NonEmpty qualified as NEL
-import Data.List.NonEmpty qualified as NEList
 import Data.Map.NonEmpty (NEMap)
 import Data.Map.NonEmpty qualified as NEMap
-import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
-import Data.Text qualified as Text
-import Data.Text.Lazy qualified as LT
-import Data.Text.Lazy.Encoding qualified as LT
 import Servant
 import Share.App
 import Share.Codebase (CodebaseM)
@@ -40,11 +32,8 @@ import Share.IDs qualified as IDs
 import Share.OAuth.Session (Session (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
-import Share.Postgres.Causal.Types
-import Share.Postgres.Definitions.Queries qualified as Defn
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
-import Share.Postgres.LooseCode.Queries qualified as LCQ
 import Share.Postgres.Queries qualified as PGQ
 import Share.Postgres.Sync.Queries (entityLocations)
 import Share.Postgres.Sync.Queries qualified as SyncQ
@@ -61,7 +50,6 @@ import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.Sync.Types (EntityBunch (..), EntityKind (..), entityKind)
 import U.Codebase.Causal qualified as Causal
-import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Codebase.Path qualified as Path
 import Unison.Hash32 (Hash32)
@@ -70,12 +58,11 @@ import Unison.NameSegment.Internal qualified as UNameSegment
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.Share.API.Hash qualified as Hash
 import Unison.Sync.API qualified as Sync
-import Unison.Sync.Common (causalHashToHash32, hash32ToCausalHash)
+import Unison.Sync.Common (causalHashToHash32)
 import Unison.Sync.EntityValidation qualified as Sync
-import Unison.Sync.Types (DownloadEntitiesError (..), DownloadEntitiesRequest (..), DownloadEntitiesResponse (..),  GetCausalHashByPathRequest (..), GetCausalHashByPathResponse (..), NeedDependencies (..), RepoInfo (..), UpdatePathRequest (..), UpdatePathResponse, UploadEntitiesError (..), UploadEntitiesRequest (..), UploadEntitiesResponse (..), pathCodebasePath, pathRepoInfo)
+import Unison.Sync.Types (DownloadEntitiesError (..), DownloadEntitiesRequest (..), DownloadEntitiesResponse (..), GetCausalHashByPathRequest (..), GetCausalHashByPathResponse (..), NeedDependencies (..), RepoInfo (..), UploadEntitiesError (..), UploadEntitiesRequest (..), UploadEntitiesResponse (..))
 import Unison.Sync.Types qualified as Share
 import Unison.Sync.Types qualified as Sync
-import UnliftIO (MonadUnliftIO (withRunInIO))
 import UnliftIO qualified
 
 data RepoInfoKind

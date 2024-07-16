@@ -18,7 +18,6 @@ module Share.Postgres.Tickets.Queries
 where
 
 import Control.Lens
-import Control.Monad.Except
 import Data.List qualified as List
 import Data.Time (UTCTime)
 import Safe (lastMay)

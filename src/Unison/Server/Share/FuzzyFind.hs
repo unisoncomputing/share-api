@@ -11,7 +11,6 @@
 module Unison.Server.Share.FuzzyFind where
 
 import Control.Lens
-import Control.Monad.Except
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Char qualified as Char

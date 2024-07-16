@@ -11,7 +11,6 @@ module Unison.Server.Share.Definitions
 where
 
 import Control.Lens hiding ((??))
-import Control.Monad.Except
 import Data.Bifoldable (bifoldMap)
 import Data.Either (partitionEithers)
 import Data.List qualified as List

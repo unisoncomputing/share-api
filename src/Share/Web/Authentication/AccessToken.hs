@@ -5,7 +5,7 @@
 module Share.Web.Authentication.AccessToken where
 
 import Control.Lens hiding ((.=))
-import Crypto.JWT
+import Crypto.JWT qualified as Crypto.JWT
 import Data.Aeson qualified as Aeson
 import Data.Map qualified as Map
 import Data.Set qualified as Set
@@ -22,7 +22,7 @@ import Share.Postgres.Ops qualified as PGO
 import Share.Prelude
 import Share.User
 import Share.Web.App
-import Share.Web.Authentication.JWT (verifyJWT)
+import Share.Web.Authentication.JWT qualified as Auth.JWT
 import Share.Web.Authentication.JWT qualified as AuthJWT
 import Share.Web.Authentication.JWT qualified as JWT
 import Share.Web.Authentication.Types
@@ -46,7 +46,7 @@ instance ToJWT AccessTokenClaims where
     JWT.encodeStandardClaims standardClaims (Map.fromList [("scope", Aeson.toJSON scope)])
 
 instance FromJWT AccessTokenClaims where
-  decodeJWT :: ClaimsSet -> Either Text AccessTokenClaims
+  decodeJWT :: Crypto.JWT.ClaimsSet -> Either Text AccessTokenClaims
   decodeJWT claims = do
     (standardClaims, extra) <- JWT.decodeStandardClaims claims
     scope <- fromMaybe (Left "Invalid scope") (extra ^? ix "scope" . to (resultEither . Aeson.fromJSON))
@@ -59,7 +59,7 @@ instance FromJWT AccessTokenClaims where
 -- | A version of verifyAccessToken which returns an Either rather than throwing an exception.
 verifyAccessToken' :: Scopes -> AccessToken -> AppM reqCtx (Either AuthenticationErr AccessTokenClaims)
 verifyAccessToken' (Scopes requiredScopes) (AccessToken (JWTParam signed)) = do
-  verifyJWT signed extraClaimsChecks
+  Auth.JWT.verifyJWT signed extraClaimsChecks
   where
     extraClaimsChecks (AccessTokenClaims {scope = Scopes tokenScopes}) =
       let missingScopes = Set.difference requiredScopes tokenScopes
