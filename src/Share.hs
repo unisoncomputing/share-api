@@ -21,7 +21,21 @@ import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Data.Typeable qualified as Typeable
 import Data.UUID (UUID)
 import Data.Vault.Lazy as Vault
+import Ki.Unlifted qualified as Ki
+import Network.HTTP.Types (HeaderName, statusCode)
+import Network.HTTP.Types qualified as HTTP
+import Network.Wai
+import Network.Wai qualified as Wai
+import Network.Wai.Handler.Warp (run)
+import Network.Wai.Internal qualified as Wai
+import Network.Wai.Middleware.Cors
+import Network.Wai.Middleware.Gzip qualified as Gzip
+import Network.Wai.Middleware.RequestLogger (logStdoutDev)
+import Network.Wai.Middleware.Routed (routedMiddleware)
+import Servant
 import Share.App
+import Share.BackgroundJobs qualified as BackgroundJobs
+import Share.BackgroundJobs.Monad (runBackground)
 import Share.Env qualified as Env
 import Share.IDs (RequestId, UserId)
 import Share.IDs qualified as IDs
@@ -41,17 +55,6 @@ import Share.Web.App (WebApp, localRequestCtx)
 import Share.Web.App qualified as WebApp
 import Share.Web.Errors
 import Share.Web.Impl qualified as Web
-import Network.HTTP.Types (HeaderName, statusCode)
-import Network.HTTP.Types qualified as HTTP
-import Network.Wai
-import Network.Wai qualified as Wai
-import Network.Wai.Handler.Warp (run)
-import Network.Wai.Internal qualified as Wai
-import Network.Wai.Middleware.Cors
-import Network.Wai.Middleware.Gzip qualified as Gzip
-import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import Network.Wai.Middleware.Routed (routedMiddleware)
-import Servant
 import System.Log.FastLogger (FastLogger, FormattedTime, LogStr)
 import System.Log.Raven qualified as Sentry
 import System.Log.Raven.Types qualified as Sentry
@@ -60,8 +63,10 @@ import UnliftIO.STM qualified as STM
 
 startApp :: Env.Env () -> IO ()
 startApp env = do
-  app <- mkApp env
-  run (Env.serverPort env) app
+  app <- mkShareServer env
+  Ki.scoped \scope -> do
+    runBackground env "background-jobs" $ BackgroundJobs.startWorkers scope
+    run (Env.serverPort env) app
 
 newtype UncaughtException err = UncaughtException err
   deriving stock (Show)
@@ -99,13 +104,13 @@ toServantHandler env appM =
    in Handler . ExceptT $ do
         -- fresh request ctx for each request.
         reqCtx <- WebApp.freshRequestCtx
-        runReaderT (unAppM $ catchErrors appM) (env {Env.requestCtx = reqCtx})
+        runAppM (env {Env.ctx = reqCtx}) $ catchErrors appM
 
 -- | Uses context from the request to set up an appropriate RequestCtx
 type WrapperAPI = (RawRequest :> Header "X-NO-CACHE" Text :> Cookies.Cookie "NO-CACHE" Text :> Header "X-RequestID" RequestId :> MaybeAuthenticatedUserId :> Web.API)
 
-mkApp :: Env.Env () -> IO Application
-mkApp env = do
+mkShareServer :: Env.Env () -> IO Application
+mkShareServer env = do
   reqTagsKey <- Vault.newKey
   let reqLoggerMiddleware = mkReqLogger reqTagsKey (Env.timeCache env) (Env.logger env)
   metricsMiddleware <- serveMetricsMiddleware env
@@ -158,7 +163,7 @@ mkApp env = do
                     }
               )
               do
-                reqTagsVar <- asks (WebApp.reqTagsVar . Env.requestCtx)
+                reqTagsVar <- asks (WebApp.reqTagsVar . Env.ctx)
                 STM.atomically $ STM.modifyTVar' reqTagsVar (<> reqTags)
                 m
 

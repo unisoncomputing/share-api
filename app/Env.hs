@@ -101,7 +101,7 @@ withEnv action = do
     Pool.acquire postgresConnMax pgConnectionAcquisitionTimeout pgConnectionMaxLifetime pgConnectionMaxIdleTime  (Text.encodeUtf8 postgresConfig)
   timeCache <- FL.newTimeCache FL.simpleTimeFormat -- E.g. 05/Sep/2023:13:23:56 -0700
   sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"
-  let requestCtx = ()
+  let ctx = ()
   -- We use a zero-width-space to separate log-lines on ingestion, this allows us to use newlines for
   -- formatting, but without affecting log-grouping.
   let zeroWidthSpace = "\x200B"

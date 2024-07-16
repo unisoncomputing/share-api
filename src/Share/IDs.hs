@@ -54,6 +54,9 @@ import Data.Char qualified as Char
 import Data.List (intercalate)
 import Data.Text qualified as Text
 import Data.UUID (UUID)
+import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
+import Hasql.Interpolate qualified as Hasql
+import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Share.OAuth.Types
   ( JTI (..),
     PendingSessionId (..),
@@ -62,9 +65,6 @@ import Share.OAuth.Types
   )
 import Share.Prelude
 import Share.Utils.IDs (CaseInsensitiveID (..), IsID (..), PrefixedID (..), UsingID (..), fromId, fromUUID, idFrom)
-import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
-import Hasql.Interpolate qualified as Hasql
-import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Text.Megaparsec
   ( ErrorFancy (..),
     MonadParsec (eof, takeWhileP),
@@ -649,6 +649,11 @@ newtype CommentId = CommentId UUID
 newtype PrefixedHash (prefix :: Symbol) h = PrefixedHash h
   deriving newtype (Eq, Ord)
   deriving (Show)
+
+instance (From h Text, KnownSymbol prefix) => From (PrefixedHash prefix h) Text where
+  from (PrefixedHash h) =
+    let prefix = Text.pack $ symbolVal (Proxy @prefix)
+     in prefix <> into @Text h
 
 instance (KnownSymbol prefix, ToHttpApiData h) => ToHttpApiData (PrefixedHash prefix h) where
   toUrlPiece (PrefixedHash h) =

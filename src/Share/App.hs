@@ -1,6 +1,12 @@
 {-# LANGUAGE InstanceSigs #-}
 
-module Share.App where
+module Share.App
+  ( AppM,
+    runAppM,
+    shareIssuer,
+    shareAud,
+  )
+where
 
 import Control.Monad.Random.Strict
 import Control.Monad.Reader
@@ -13,10 +19,11 @@ import Share.Env qualified as Env
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 
-newtype AppM reqCtx a = AppM {unAppM :: ReaderT (Env reqCtx) IO a}
+newtype AppM reqCtx a = AppM {_unAppM :: ReaderT (Env reqCtx) IO a}
   deriving newtype (Functor, Applicative, Monad, MonadReader (Env reqCtx), MonadRandom, MonadIO, MonadUnliftIO)
 
-type CloudApp = AppM ()
+runAppM :: Env reqCtx -> AppM reqCtx a -> IO a
+runAppM env (AppM m) = runReaderT m env
 
 instance Logging.MonadLogger (AppM ()) where
   logMsg msg = do
@@ -29,9 +36,6 @@ instance Logging.MonadLogger (AppM ()) where
 instance Cryptonite.MonadRandom (AppM reqCtx) where
   getRandomBytes =
     liftIO . Cryptonite.getRandomBytes
-
-runAppM :: Env reqCtx -> AppM reqCtx a -> IO a
-runAppM env (AppM m) = runReaderT m env
 
 instance R.MonadRedis (AppM reqCtx) where
   liftRedis m = do

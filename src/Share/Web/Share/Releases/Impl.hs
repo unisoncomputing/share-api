@@ -97,7 +97,7 @@ getProjectRelease projectReleaseShortHand = do
   addRequestTag "release" (IDs.toText projectReleaseShortHand)
   onNothingM missingRelease . PG.runTransaction . runMaybeT $ do
     release@Release {projectId} <- MaybeT $ Q.releaseByProjectReleaseShortHand projectReleaseShortHand
-    project <- MaybeT $ Q.projectById projectId
+    project <- lift $ Q.expectProjectById projectId
     pure (project, release)
   where
     missingRelease = respondError (EntityMissing (ErrorID "missing-project-release") "Release could not be found")
@@ -218,7 +218,7 @@ projectReleaseTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-type-summary" cacheParams releaseHead $ do
     Codebase.runCodebaseTransaction codebase $ do
-      serveTypeSummary ref mayName releaseHead relativeTo renderWidth
+      serveTypeSummary ref mayName renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
@@ -285,9 +285,7 @@ getProjectReleaseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proj
         `whenNothingM` throwError (EntityMissing (ErrorID "missing-project-release") "Release could not be found")
     releaseWithHandle <- forOf releaseUsers_ release \uid -> do
       User.handle <$> Q.userByUserId uid `whenNothingM` throwError (EntityMissing (ErrorID "missing-user") "User could not be found")
-    project <-
-      Q.projectById projectId
-        `whenNothingM` throwError (EntityMissing (ErrorID "missing-project") "Project could not be found")
+    project <- Q.expectProjectById projectId
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandle
     pure (project, releaseWithCausalHashes)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReleaseGet callerUserId project release
