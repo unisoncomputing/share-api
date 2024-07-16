@@ -5,17 +5,16 @@
 
 module Unison.Server.Share.NamespaceListing (serve, NamespaceListingAPI, NamespaceListing (..), NamespaceObject (..), NamedNamespace (..), NamedPatch (..), KindExpression (..)) where
 
-import Control.Monad.Except
 import Data.Aeson
+import Servant
+  ( QueryParam,
+    (:>),
+  )
 import Share.Backend qualified as Backend
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
 import Share.Postgres.IDs (CausalId)
 import Share.Prelude
-import Servant
-  ( QueryParam,
-    (:>),
-  )
 import U.Codebase.Branch (NamespaceStats (..))
 import U.Codebase.Causal qualified as V2Causal
 import U.Codebase.HashTags (CausalHash (..))

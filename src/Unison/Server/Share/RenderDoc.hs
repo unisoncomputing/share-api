@@ -10,7 +10,6 @@
 -- | Helper for rendering docs within a given namespace
 module Unison.Server.Share.RenderDoc where
 
-import Control.Monad.Except
 import Data.Set qualified as Set
 import Share.Backend qualified as Backend
 import Share.Codebase.Types (CodebaseM, CodebaseRuntime)

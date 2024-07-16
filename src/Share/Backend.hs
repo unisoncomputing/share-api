@@ -35,7 +35,6 @@ module Share.Backend
 where
 
 import Control.Lens hiding ((??))
-import Control.Monad.Except
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Share.Codebase (CodebaseM)
@@ -76,7 +75,7 @@ import Unison.Server.Types
 import Unison.ShortHash qualified as SH
 import Unison.Symbol (Symbol)
 import Unison.Syntax.DeclPrinter qualified as DeclPrinter
-import Unison.Syntax.HashQualified' qualified as HQ' (toText)
+import Unison.Syntax.HashQualifiedPrime qualified as HQ' (toText)
 import Unison.Term qualified as Term
 import Unison.Term qualified as V1
 import Unison.Term qualified as V1Term

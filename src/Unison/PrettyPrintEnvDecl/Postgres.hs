@@ -10,7 +10,7 @@ import Share.Postgres.NameLookups.Types (NamesPerspective)
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Postgres.Refs.Types
 import Share.Prelude
-import Unison.HashQualified' qualified as HQ'
+import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency (LabeledDependency)
 import Unison.Name (Name)
 import Unison.PrettyPrintEnv qualified as PPE

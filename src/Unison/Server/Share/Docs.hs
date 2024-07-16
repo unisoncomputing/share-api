@@ -7,7 +7,7 @@ import Share.Codebase qualified as Codebase
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Web.Errors (SomeServerError)
-import Unison.HashQualified' qualified as HQ'
+import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.NamesWithHistory (SearchType (ExactName))

@@ -14,21 +14,13 @@ where
 
 import Control.Lens
 import Control.Monad.Except (ExceptT (ExceptT), runExceptT)
-import Control.Monad.Validate (ValidateT)
-import Control.Monad.Validate qualified as Validate
 import Data.Foldable qualified as Foldable
-import Data.Generics.Product
 import Data.List.NonEmpty qualified as NEL
-import Data.List.NonEmpty qualified as NEList
 import Data.Map.NonEmpty (NEMap)
 import Data.Map.NonEmpty qualified as NEMap
-import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
-import Data.Text qualified as Text
-import Data.Text.Lazy qualified as LT
-import Data.Text.Lazy.Encoding qualified as LT
 import Servant
 import Share.App
 import Share.Codebase (CodebaseM)
@@ -40,11 +32,8 @@ import Share.IDs qualified as IDs
 import Share.OAuth.Session (Session (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
-import Share.Postgres.Causal.Types
-import Share.Postgres.Definitions.Queries qualified as Defn
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
-import Share.Postgres.LooseCode.Queries qualified as LCQ
 import Share.Postgres.Queries qualified as PGQ
 import Share.Postgres.Sync.Queries (entityLocations)
 import Share.Postgres.Sync.Queries qualified as SyncQ
@@ -61,7 +50,6 @@ import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.Sync.Types (EntityBunch (..), EntityKind (..), entityKind)
 import U.Codebase.Causal qualified as Causal
-import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Codebase.Path qualified as Path
 import Unison.Hash32 (Hash32)
@@ -70,12 +58,11 @@ import Unison.NameSegment.Internal qualified as UNameSegment
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.Share.API.Hash qualified as Hash
 import Unison.Sync.API qualified as Sync
-import Unison.Sync.Common (causalHashToHash32, hash32ToCausalHash)
+import Unison.Sync.Common (causalHashToHash32)
 import Unison.Sync.EntityValidation qualified as Sync
-import Unison.Sync.Types (DownloadEntitiesError (..), DownloadEntitiesRequest (..), DownloadEntitiesResponse (..), FastForwardPathError, FastForwardPathRequest, FastForwardPathResponse, GetCausalHashByPathRequest (..), GetCausalHashByPathResponse (..), NeedDependencies (..), RepoInfo (..), UpdatePathRequest (..), UpdatePathResponse, UploadEntitiesError (..), UploadEntitiesRequest (..), UploadEntitiesResponse (..), pathCodebasePath, pathRepoInfo)
+import Unison.Sync.Types (DownloadEntitiesError (..), DownloadEntitiesRequest (..), DownloadEntitiesResponse (..), GetCausalHashByPathRequest (..), GetCausalHashByPathResponse (..), NeedDependencies (..), RepoInfo (..), UploadEntitiesError (..), UploadEntitiesRequest (..), UploadEntitiesResponse (..))
 import Unison.Sync.Types qualified as Share
 import Unison.Sync.Types qualified as Sync
-import UnliftIO (MonadUnliftIO (withRunInIO))
 import UnliftIO qualified
 
 data RepoInfoKind
@@ -83,21 +70,6 @@ data RepoInfoKind
   | RepoInfoProjectBranch ProjectBranchShortHand
   | RepoInfoProjectRelease ProjectReleaseShortHand
   deriving stock (Show)
-
-data UnexpectedHashMismatch = UnexpectedHashMismatch
-  { providedHash :: ComponentHash,
-    actualHash :: ComponentHash
-  }
-  deriving stock (Show)
-
-instance ToServerError UnexpectedHashMismatch where
-  toServerError UnexpectedHashMismatch {providedHash, actualHash} =
-    ( ErrorID "hash-validation:unexpected-hash-mismatch",
-      err400 {errBody = LT.encodeUtf8 . LT.fromStrict $ "Unexpected hash mismatch. provided: " <> tShow providedHash <> " actual: " <> tShow actualHash}
-    )
-
-instance Loggable UnexpectedHashMismatch where
-  toLog = withSeverity UserFault . showLog
 
 -- | Parse a `RepoInfo` into the correct codebase view, e.g.
 --
@@ -136,12 +108,12 @@ repoInfoKind (RepoInfo repoInfo) =
 server :: Maybe Session -> ServerT Sync.API WebApp
 server (Just Session {sessionUserId}) =
   getCausalHashByPathEndpoint (Just sessionUserId)
-    :<|> fastForwardPathEndpoint sessionUserId
-    :<|> updatePathEndpoint sessionUserId
     :<|> downloadEntitiesEndpoint (Just sessionUserId)
     :<|> uploadEntitiesEndpoint sessionUserId
 server _ =
-  getCausalHashByPathEndpoint Nothing :<|> err :<|> err :<|> downloadEntitiesEndpoint Nothing :<|> err
+  getCausalHashByPathEndpoint Nothing
+    :<|> downloadEntitiesEndpoint Nothing
+    :<|> err
   where
     err :: a -> WebApp b
     err _ = respondError AuthN.UnauthenticatedError
@@ -169,268 +141,6 @@ getCausalHashByPathEndpoint callerUserId (GetCausalHashByPathRequest sharePath) 
       Just causalAtPath -> do
         hashJwt <- lift $ HashJWT.signHashForUser callerUserId (causalHashToHash32 (Causal.causalHash causalAtPath))
         pure (GetCausalHashByPathSuccess $ Just hashJwt)
-
-fastForwardPathEndpoint :: UserId -> FastForwardPathRequest -> WebApp FastForwardPathResponse
-fastForwardPathEndpoint callerUserId Share.FastForwardPathRequest {expectedHash, hashes, path = sharePath} = do
-  signJWTForUser <- withRunInIO \runInIO -> do
-    let sign :: Maybe UserId -> Hash32 -> CodebaseM FastForwardPathError Hash.HashJWT
-        sign mayUser hash = liftIO . runInIO $ HashJWT.signHashForUser mayUser hash
-    pure sign
-  result <-
-    either Share.FastForwardPathFailure id <$> runExceptT do
-      let repoInfo = pathRepoInfo sharePath
-      addRequestTag "repo-info" (unRepoInfo repoInfo)
-      IDs.PrefixedID userHandle <- lift . parseParam @(IDs.PrefixedID "@" UserHandle) "path" $ unRepoInfo repoInfo
-      codebaseOwner@User {user_id = codebaseOwnerUserId} <- lift (PG.runTransaction $ PGQ.userByHandle userHandle) `whenNothingM` throwError Share.FastForwardPathError'UserNotFound
-      let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
-      codebase <-
-        lift (AuthZ.checkWriteUserCodebase callerUserId codebaseOwner authPath) >>= \case
-          Left {} -> throwError (Share.FastForwardPathError'NoWritePermission sharePath)
-          Right authZReceipt -> pure $ Codebase.codebaseEnv authZReceipt codebaseLoc
-      ExceptT $ Codebase.tryRunCodebaseTransaction codebase (doFastForward signJWTForUser)
-  pure result
-  where
-    localPath :: [Text]
-    localPath = pathCodebasePath sharePath
-    authPath :: Path.Path
-    authPath = Path.fromList (UNameSegment.NameSegment <$> localPath)
-    needShareCausalHash :: Hash32 -> ValidateT (NESet Hash32) (CodebaseM e) CausalId
-    needShareCausalHash = needCausalHash . hash32ToCausalHash
-    doFastForward ::
-      (Maybe UserId -> Hash32 -> CodebaseM FastForwardPathError Hash.HashJWT) ->
-      CodebaseM FastForwardPathError FastForwardPathResponse
-    doFastForward signJWTForUser = do
-      (existingRootCausalId, _hash) <- LCQ.loadLooseCodeRoot `whenNothingM` (throwError Share.FastForwardPathError'NoHistory)
-      -- check for missing hashes
-      (Validate.runValidateT ((,) <$> needShareCausalHash expectedHash <*> traverse needShareCausalHash hashes)) >>= \case
-        Left missingDependencies ->
-          (pure (Share.FastForwardPathFailure $ Share.FastForwardPathError'MissingDependencies Share.NeedDependencies {missingDependencies}))
-        Right (expectedCausalId, causalIds) -> do
-          -- all good
-          (verifyCausalParentage (expectedCausalId : NEList.toList causalIds)) >>= \case
-            Left (parentId, childId) -> do
-              parent <- causalHashToHash32 <$> CausalQ.expectCausalHashesByIdsOf id parentId
-              child <- causalHashToHash32 <$> CausalQ.expectCausalHashesByIdsOf id childId
-              pure . Share.FastForwardPathFailure $ Share.FastForwardPathError'InvalidParentage Share.InvalidParentage {parent, child}
-            Right () -> do
-              tryRebuildPath existingRootCausalId localPath (History expectedCausalId) (NEList.last causalIds) >>= \case
-                TryRebuildPathHashMismatch Prehistory -> pure . Share.FastForwardPathFailure $ Share.FastForwardPathError'NoHistory
-                TryRebuildPathHashMismatch (History (causalHashToHash32 -> actualHash)) ->
-                  (Share.FastForwardPathFailure . Share.FastForwardPathError'NotFastForward <$> signJWTForUser (Just callerUserId) actualHash)
-                TryRebuildPathSuccess newRootCausalId -> do
-                  let description = Just $ "Fast Forward at " <> Text.intercalate "." localPath
-                  Codebase.setLooseCodeRoot callerUserId description newRootCausalId
-                  pure Share.FastForwardPathSuccess
-
--- | parents come in to the left of children
-verifyCausalParentage :: [CausalId] -> Codebase.CodebaseM e (Either (CausalId, CausalId) ())
-verifyCausalParentage =
-  runExceptT . traverse_ go . pairs
-  where
-    go :: (CausalId, CausalId) -> ExceptT (CausalId, CausalId) (Codebase.CodebaseM e) ()
-    go pair@(ancestor, child) =
-      ExceptT do
-        success <-
-          PG.queryExpect1Col
-            [PG.sql|
-              SELECT EXISTS (
-                SELECT FROM causal_ancestors
-                WHERE ancestor_id = #{ancestor}
-                  AND causal_id = #{child}
-              )
-            |]
-        pure if success then Right () else Left pair
-
-    -- pairs [1,2,3] = [(1,2),(2,3)]
-    pairs :: [CausalId] -> [(CausalId, CausalId)]
-    pairs = \case
-      x : xs@(y : _) -> (x, y) : pairs xs
-      _ -> []
-
-updatePathEndpoint :: UserId -> UpdatePathRequest -> WebApp UpdatePathResponse
-updatePathEndpoint callerUserId (UpdatePathRequest {path = sharePath, expectedHash, newHash}) =
-  either id id <$> runExceptT do
-    let repoInfo = Share.pathRepoInfo sharePath
-        localPath = pathCodebasePath sharePath
-        authPath = Path.fromList (UNameSegment.NameSegment <$> localPath)
-    addRequestTag "repo-info" (unRepoInfo repoInfo)
-    IDs.PrefixedID userHandle <- lift . parseParam @(IDs.PrefixedID "@" UserHandle) "path" $ unRepoInfo repoInfo
-    codebaseOwner@User {user_id = codebaseOwnerUserId} <- lift (PG.runTransaction $ PGQ.userByHandle userHandle) `whenNothingM` throwError (Share.UpdatePathFailure $ Share.UpdatePathError'UserNotFound)
-    let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
-    response <-
-      lift $
-        AuthZ.checkWriteUserCodebase callerUserId codebaseOwner authPath >>= \case
-          Left {} -> pure (Share.UpdatePathFailure $ Share.UpdatePathError'NoWritePermission sharePath)
-          Right authZReceipt -> do
-            let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-            action <- Codebase.runCodebaseTransaction codebase $ do
-              (existingRootCausalId, _) <- LCQ.expectLooseCodeRoot
-              let expectedCausalHash = hash32ToCausalHash <$> expectedHash
-              convertOrElaborate (maybeToHistory expectedCausalHash) (hash32ToCausalHash newHash) >>= \case
-                Left missing -> pure . pure $ (Share.UpdatePathFailure $ Share.UpdatePathError'MissingDependencies (Share.NeedDependencies missing))
-                Right (expectedHistoryId, newHashId) -> do
-                  tryRebuildPath existingRootCausalId localPath expectedHistoryId newHashId >>= \case
-                    TryRebuildPathHashMismatch actualHash ->
-                      pure . pure $
-                        Share.UpdatePathFailure $
-                          Share.UpdatePathError'HashMismatch
-                            Share.HashMismatch
-                              { path = sharePath,
-                                expectedHash = expectedHash,
-                                actualHash = causalHashToHash32 <$> historyToMaybe actualHash
-                              }
-                    TryRebuildPathSuccess newRootCausalId -> do
-                      pure $ do
-                        let description = Just $ "Update Path at " <> Text.intercalate "." localPath
-                        -- Within a transaction, check if the root causal hash has changed while we were calculating the new one.
-                        -- If not, commit the change in Postgres, if yes, fail and tell the user that
-                        -- there's new code to pull.
-                        result <- Codebase.runCodebaseTransaction codebase $ do
-                          (preUpdateCHId, _) <- LCQ.expectLooseCodeRoot
-                          if preUpdateCHId == existingRootCausalId
-                            then do
-                              Codebase.setLooseCodeRoot callerUserId description newRootCausalId
-                              pure $ Right ()
-                            else Left <$> CausalQ.expectCausalHashesByIdsOf id preUpdateCHId
-                        case result of
-                          Right () -> do
-                            pure Share.UpdatePathSuccess
-                          Left actualHash ->
-                            pure
-                              . Share.UpdatePathFailure
-                              $ Share.UpdatePathError'HashMismatch
-                                Share.HashMismatch
-                                  { path = sharePath,
-                                    expectedHash = expectedHash,
-                                    actualHash = Just (causalHashToHash32 actualHash)
-                                  }
-            action
-    pure response
-  where
-    convertOrElaborate ::
-      History CausalHash ->
-      CausalHash ->
-      Codebase.CodebaseM e (Either (NESet Hash32) (History CausalId, CausalId))
-    convertOrElaborate expectedHistory newCausalHash = Validate.runValidateT do
-      (,) <$> traverse needCausalHash expectedHistory <*> needCausalHash newCausalHash
-
-needCausalHash :: CausalHash -> ValidateT (NESet Hash32) (Codebase.CodebaseM e) CausalId
-needCausalHash h =
-  lift (CausalQ.loadCausalIdByHash h) >>= \case
-    Nothing -> do
-      lift (SyncQ.elaborateHashes (NESet.singleton (causalHashToHash32 h))) >>= \case
-        (Just neededHashes, _) -> Validate.refute neededHashes
-        (Nothing, _) -> do
-          error "impossible: elaborateHashes returned an empty set, but we knew it should at least return `newCausalHash`"
-    -- Flushing may have made the hash available, so try one more time.
-    Just newCausalHashId -> pure newCausalHashId
-
--- FIXME document this
-tryRebuildPath :: (HasCallStack) => CausalId -> [NameSegment] -> History CausalId -> CausalId -> Codebase.CodebaseM e TryRebuildPathResult
-tryRebuildPath startRootCausalId path expectedHistoryAtPathId newCausalId = do
-  (rebuilds, creates, actualHistoryAtPathId) <- excavate startRootCausalId path
-  if actualHistoryAtPathId /= expectedHistoryAtPathId
-    then TryRebuildPathHashMismatch <$> CausalQ.expectCausalHashesByIdsOf traversed actualHistoryAtPathId
-    else do
-      -- share invariant: we have branch objects for all causals
-      namespaceHashId <- CausalQ.expectNamespaceIdForCausal newCausalId
-      createdHashes <- create creates (namespaceHashId, newCausalId)
-      (_newRootBranchObjectId, newRootCausalId) <- rebuild createdHashes rebuilds
-      pure $ TryRebuildPathSuccess newRootCausalId
-
-data TryRebuildPathResult
-  = TryRebuildPathHashMismatch (History CausalHash)
-  | -- The new root causal hash
-    TryRebuildPathSuccess CausalId
-
--- | create the branches for paths that didn't exist, and save them to the codebase
-create :: [Create] -> (BranchHashId, CausalId) -> CodebaseM e (BranchHashId, CausalId)
-create cs (ch, bh) = do
-  foldrM createNamespace (ch, bh) cs
-
--- | Create and save a new namespace with a single child pointing at the provided causal.
-createNamespace :: Create -> (BranchHashId, CausalId) -> CodebaseM e (BranchHashId, CausalId)
-createNamespace (Create ns) branchIds = do
-  saveNewCausalBranch
-    ((BranchFull.emptyBranch :: PgNamespace) & field @"children" .~ Map.singleton ns branchIds)
-    Set.empty
-
--- | rebuild the contents of this stack using the supplied Causal/Branch pair.
---
--- E.g. rebuild branchId [Rebuild chId branch "b", Rebuild chId2 branch2 "a"] will
--- set "a.b" = branchId and will rehash and save the "a" child to contain it.
-rebuild :: (BranchHashId, CausalId) -> [Rebuild] -> CodebaseM e (BranchHashId, CausalId)
-rebuild hashes = \case
-  [] -> pure hashes
-  Rebuild oldChId oldBranch ns : rest -> do
-    newBranchIds <- do
-      let newBranch =
-            oldBranch & field @"children" %~ Map.insert ns hashes
-      saveNewCausalBranch newBranch (Set.singleton oldChId)
-    rebuild newBranchIds rest
-
-saveNewCausalBranch :: PgNamespace -> Set CausalId -> CodebaseM e (BranchHashId, CausalId)
-saveNewCausalBranch branch ancestorIds = do
-  (branchHashId, _branchHash) <- CausalQ.savePgNamespace Nothing branch
-  (causalId, _causalHash) <- CausalQ.saveCausal Nothing branchHashId ancestorIds
-  pure (branchHashId, causalId)
-
-type NameSegment = Text
-
-type NameSegmentId = TextId
-
--- Information that's needed to rebuild a branch (because we are adding or updating a child).
-data Rebuild = Rebuild
-  { -- The branch's causal id and the branch itself.
-    causalId :: CausalId,
-    branch :: PgNamespace,
-    -- The name of the child that's being added or updated.
-    name :: NameSegmentId
-  }
-  deriving stock (Show)
-
--- Information that's needed to build a new branch with a single child.
-newtype Create = Create NameSegmentId
-  deriving stock (Show)
-
--- FIXME document this
--- include in docs this factoid: rebuilds in reverse order, creates in forward order
---
--- mention invariant that (length rebuilds + length creates = length path)
--- also mention this:
---
---   when check-and-setting path foo.bar.baz.qux,
---
---     if              exists, 0 rebuild 4 create
---     if .            exists, 1 rebuild 3 create
---     if .foo         exists, 2 rebuild 2 create
---     if .foo.bar     exists, 3 rebuild 1 create
---     if .foo.bar.baz exists, 4 rebuild 0 create
-excavate :: (HasCallStack) => CausalId -> [NameSegment] -> CodebaseM e ([Rebuild], [Create], History CausalId)
-excavate rootCausalHashId = \path -> do
-  pathIds <- lift $ Defn.ensureTextIds path
-  loop [] (History rootCausalHashId) pathIds
-  where
-    -- First argument: the rebuilds we've accumulated so far. (Loop doesn't inspect them, just cons-es).
-    -- Second argument: the causal at the current point in the path
-    -- Third argument: the remaining/unvisited segments of the path
-    --
-    -- For example, if we are "excavating" path ["foo", "bar", "baz"], we might end up with arguments
-    --
-    --   Arg 1: [ rebuild of ".", rebuild of ".foo" ]
-    --   Arg 2: The causal of ".foo.bar"
-    --   Arg 3: The remaining path ["baz"]
-    loop :: (HasCallStack) => [Rebuild] -> History CausalId -> [NameSegmentId] -> CodebaseM e ([Rebuild], [Create], History CausalId)
-    loop rebuilds history remainingPath = case history of
-      Prehistory -> pure (rebuilds, Create <$> remainingPath, Prehistory)
-      History cId -> case remainingPath of
-        [] -> do
-          pure (rebuilds, [], History cId)
-        nsId : rest -> do
-          namespace@BranchFull.Branch {children} <- CausalQ.expectPgCausalNamespace cId >>= value
-          let rebuilds' = Rebuild cId namespace nsId : rebuilds
-          let childChId = maybeToHistory (snd <$> Map.lookup nsId children)
-          loop rebuilds' childChId rest
 
 downloadEntitiesEndpoint :: Maybe UserId -> DownloadEntitiesRequest -> WebApp DownloadEntitiesResponse
 downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = hashJWTs} =
@@ -706,34 +416,6 @@ validateEntity checkIfComponentHashMismatchIsAllowed checkIfCausalHashMismatchIs
       -- Either way, it's exceptional and we should know about it.
       pure (Just err)
     Nothing -> pure Nothing
-
-------------------------------------------------------------------------------------------------------------------------
--- History type
---
--- There are a couple places where Maybes were nested, and some of them are semantically representing a causal history,
--- or lack thereof, hence this type.
---
--- Hopefully it makes code easier to read and reason about, especially in the presence of multiple layers of Maybe, but
--- if not ("wait, what's a History?"), it could be deleted and replaced with Maybe again.
-
--- | A @History a@ represents either the absence of any history, or a single @a@ that encapsulates its own history.
---
--- For example, a @History CausalHash@ can represent the history of a particular name in a namespace: either nothing's
--- ever had that name before, so there's no history ('Prehistory'), or there is some causal there ('History').
-data History a
-  = Prehistory
-  | History a
-  deriving stock (Eq, Foldable, Functor, Show, Traversable)
-
-maybeToHistory :: Maybe a -> History a
-maybeToHistory = \case
-  Nothing -> Prehistory
-  Just x -> History x
-
-historyToMaybe :: History a -> Maybe a
-historyToMaybe = \case
-  Prehistory -> Nothing
-  History x -> Just x
 
 -- | Get the actual codebase path from a Sync path, since the sync path has the user as the
 -- first segment.

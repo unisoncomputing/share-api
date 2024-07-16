@@ -11,7 +11,6 @@ module Unison.Server.Share.Definitions
 where
 
 import Control.Lens hiding ((??))
-import Control.Monad.Except
 import Data.Bifoldable (bifoldMap)
 import Data.Either (partitionEithers)
 import Data.List qualified as List
@@ -33,7 +32,7 @@ import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration.Dependencies qualified as DD
 import Unison.Debug qualified as Debug
 import Unison.HashQualified qualified as HQ
-import Unison.HashQualified' qualified as HQ'
+import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
 import Unison.Parser.Ann (Ann)

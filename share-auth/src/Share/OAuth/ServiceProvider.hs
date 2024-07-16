@@ -20,6 +20,7 @@ module Share.OAuth.ServiceProvider
 where
 
 import Control.Monad.Except
+import Control.Monad.Trans (MonadTrans (..))
 import Crypto.JWT (JWTError)
 import Data.Aeson (ToJSON (toJSON))
 import Data.Aeson qualified as Aeson
@@ -27,6 +28,7 @@ import Data.Function ((&))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Database.Redis qualified as Redis
+import Servant
 import Share.JWT (JWTParam (..))
 import Share.JWT qualified as JWT
 import Share.OAuth.API
@@ -40,7 +42,6 @@ import Share.OAuth.Types
 import Share.Utils.IDs
 import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Utils.URI (URIParam, setPathAndQueryParams, unpackURI)
-import Servant
 import UnliftIO
 import Web.Cookie (SetCookie (..))
 
@@ -188,7 +189,7 @@ type LocationHeader = Headers '[Header "Location" String] NoContent
 
 -- | Log out the user by telling the browser to clear the session cookies.
 -- Note that this doesn't invalidate the session itself, it just removes its cookie from the current browser.
-logoutEndpoint :: Redis.MonadRedis m => URI -> Cookies.CookieSettings -> Text -> ServerT LogoutEndpoint m
+logoutEndpoint :: (Redis.MonadRedis m) => URI -> Cookies.CookieSettings -> Text -> ServerT LogoutEndpoint m
 logoutEndpoint afterLogoutURI cookieSettings sessionCookieKey = do
   pure . clearSession $ redirectTo afterLogoutURI
   where
@@ -284,11 +285,11 @@ redirectReceiverEndpoint IdentityProviderConfig {exchangeCodeForToken} servicePr
         Just pSession -> pure $ pSession
 
     -- Clear the pending session
-    clearPendingSessionCookie :: AddHeader "Set-Cookie" SetCookie orig new => orig -> new
+    clearPendingSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => orig -> new
     clearPendingSessionCookie =
       addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings pendingSessionCookieKey)
 
-    clearSessionCookie :: AddHeader "Set-Cookie" SetCookie orig new => orig -> new
+    clearSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => orig -> new
     clearSessionCookie = addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings sessionCookieKey)
 
 -- | Decodes an Access Token into a session and verifies the following:

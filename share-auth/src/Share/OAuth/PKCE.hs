@@ -4,15 +4,15 @@
 -- Currently only supports the S256 method.
 module Share.OAuth.PKCE (generatePkce, verifyPkce) where
 
-import Control.Monad.Except
 import Crypto.Hash qualified as Crypto
 import Data.ByteArray.Encoding qualified as BE
 import Data.Text.Encoding qualified as Text
 import Share.OAuth.Types
 import Share.Utils.SecureTokens (newSecureToken)
+import UnliftIO (MonadIO)
 
 -- | Generate a PKCE verifier and challenge using the S256 method.
-generatePkce :: MonadIO m => m (PKCEVerifier, PKCEChallenge, PKCEChallengeMethod)
+generatePkce :: (MonadIO m) => m (PKCEVerifier, PKCEChallenge, PKCEChallengeMethod)
 generatePkce = do
   verifier <- newSecureToken
   let digest = Crypto.hashWith Crypto.SHA256 $ Text.encodeUtf8 verifier

@@ -13,6 +13,11 @@ where
 import Data.Function ((&))
 import Data.Maybe (fromJust)
 import Data.Text (Text)
+import Network.HTTP.Client.TLS qualified as HTTP
+import Network.URI qualified as URI
+import Servant
+import Servant.Client
+import Servant.Client.Core.Auth (AuthenticatedRequest (..))
 import Share.OAuth.API
 import Share.OAuth.IdentityProvider.Types (IdentityProviderConfig (..))
 import Share.OAuth.Scopes
@@ -20,15 +25,10 @@ import Share.OAuth.Session
 import Share.OAuth.Types
 import Share.Utils.Deployment (Deployment (..))
 import Share.Utils.URI (URIParam (..), addQueryParam)
-import Network.HTTP.Client.TLS qualified as HTTP
-import Network.URI qualified as URI
-import Servant
-import Servant.Client
-import Servant.Client.Core.Auth (AuthenticatedRequest (..))
 import UnliftIO
 import Web.Cookie (SetCookie)
 
-runClientEither :: MonadIO m => BaseUrl -> ClientM a -> m (Either ClientError a)
+runClientEither :: (MonadIO m) => BaseUrl -> ClientM a -> m (Either ClientError a)
 runClientEither baseURL m = do
   httpClient <- liftIO $ HTTP.getGlobalManager
   let env = mkClientEnv httpClient baseURL
@@ -104,7 +104,7 @@ mkShareIdentityProvider baseShareURL baseAuthorizationURI =
       ClientM (Headers '[Header "Cache-Control" String] TokenResponse)
     (_authorizationClient :<|> tokenClient) = client identityProviderAPI
 
-    exchangeCodeForToken :: MonadIO m => OAuthClientId -> OAuthClientSecret -> Code -> URI -> PKCEVerifier -> m (Either ClientError TokenResponse)
+    exchangeCodeForToken :: (MonadIO m) => OAuthClientId -> OAuthClientSecret -> Code -> URI -> PKCEVerifier -> m (Either ClientError TokenResponse)
     exchangeCodeForToken clientId clientSecret code redirectURI pkceVerifier = runClientEither baseShareURL $ do
       getResponse
         <$> tokenClient

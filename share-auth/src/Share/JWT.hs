@@ -18,10 +18,8 @@ where
 
 import Control.Lens
 import Control.Monad.Except
-import Crypto.JOSE as Jose
+import Crypto.JOSE qualified as Jose
 import Crypto.JOSE.JWK qualified as JWK
-import Crypto.JWT
-import Crypto.JWT as Jose
 import Crypto.JWT qualified as CryptoJWT
 import Crypto.JWT qualified as JWT
 import Data.Aeson (FromJSON (..), ToJSON (..))
@@ -35,10 +33,12 @@ import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Typeable (Typeable, typeRep)
-import Share.Utils.Servant.Cookies qualified as Cookies
-import Share.Utils.Show (Censored (..))
 import Servant
 import Servant.Auth.Server qualified as ServantAuth
+import Share.OAuth.Orphans ()
+import Share.Utils.Servant.Cookies qualified as Cookies
+import Share.Utils.Show (Censored (..))
+import UnliftIO (MonadIO (..))
 
 -- | @JWTSettings@ are used to generate and verify JWTs.
 data JWTSettings = JWTSettings
@@ -48,7 +48,7 @@ data JWTSettings = JWTSettings
     validationKeys :: IO Jose.JWKSet,
     -- | An @aud@ predicate. The @aud@ is a string or URI that identifies the
     -- intended recipient of the JWT.
-    audienceMatches :: Jose.StringOrURI -> Bool,
+    audienceMatches :: JWT.StringOrURI -> Bool,
     -- | The set of audiences the app accepts tokens for.
     acceptedAudiences :: Set URI,
     issuer :: URI
@@ -70,14 +70,14 @@ defaultJWTSettings hs256Key acceptedAudiences issuer =
     { jwk,
       validationKeys = pure $ Jose.JWKSet [jwk],
       audienceMatches = \s ->
-        (review stringOrUri s) `Set.member` (Set.map (show @URI) acceptedAudiences),
+        (review JWT.stringOrUri s) `Set.member` (Set.map (show @URI) acceptedAudiences),
       acceptedAudiences,
       issuer
     }
   where
     jwk = JWK.fromOctets hs256Key
 
-newtype JWTParam = JWTParam SignedJWT
+newtype JWTParam = JWTParam JWT.SignedJWT
   deriving (Show) via (Censored JWTParam)
 
 instance ToHttpApiData JWTParam where
@@ -102,18 +102,18 @@ instance Binary JWTParam where
           )
 
 -- | Encode a signed JWT as text.
-signedJWTToText :: SignedJWT -> Text
+signedJWTToText :: JWT.SignedJWT -> Text
 signedJWTToText =
-  TL.toStrict . TL.decodeUtf8 . encodeCompact
+  TL.toStrict . TL.decodeUtf8 . JWT.encodeCompact
 
-textToSignedJWT :: Text -> Either JWTError SignedJWT
-textToSignedJWT jwtText = decodeCompact (TL.encodeUtf8 . TL.fromStrict $ jwtText)
+textToSignedJWT :: Text -> Either JWT.JWTError JWT.SignedJWT
+textToSignedJWT jwtText = JWT.decodeCompact (TL.encodeUtf8 . TL.fromStrict $ jwtText)
 
 -- | Signs and encodes a JWT using the given 'JWTSettings'.
-signJWT :: (MonadIO m, ServantAuth.ToJWT v) => JWTSettings -> v -> m (Either JWTError SignedJWT)
+signJWT :: (MonadIO m, ServantAuth.ToJWT v) => JWTSettings -> v -> m (Either JWT.JWTError JWT.SignedJWT)
 signJWT JWTSettings {jwk} v = do
   let claimsSet = ServantAuth.encodeJWT v
-  liftIO $ runExceptT (signClaims jwk jwtHeader claimsSet)
+  liftIO $ runExceptT (JWT.signClaims jwk jwtHeader claimsSet)
 
 jwtHeader :: JWT.JWSHeader ()
 jwtHeader = JWT.newJWSHeader ((), jwtAlgorithm)
@@ -130,13 +130,13 @@ jwtAlgorithm = JWT.HS256
 -- * signature
 --
 -- Any other checks should be performed on the returned claims.
-verifyJWT :: forall claims m. (Typeable claims, MonadIO m, ServantAuth.FromJWT claims) => JWTSettings -> SignedJWT -> m (Either JWTError claims)
+verifyJWT :: forall claims m. (Typeable claims, MonadIO m, ServantAuth.FromJWT claims) => JWTSettings -> JWT.SignedJWT -> m (Either JWT.JWTError claims)
 verifyJWT JWTSettings {jwk, issuer, acceptedAudiences} signedJWT = do
-  result :: Either JWTError ClaimsSet <- liftIO . runExceptT $ JWT.verifyClaims validators jwk signedJWT
+  result :: Either JWT.JWTError JWT.ClaimsSet <- liftIO . runExceptT $ JWT.verifyClaims validators jwk signedJWT
   pure $ do
     claimsSet <- result
     case ServantAuth.decodeJWT claimsSet of
-      Left err -> Left . JWTClaimsSetDecodeError $ "Failed to decode " <> show (typeRep (Proxy @claims)) <> ": " <> Text.unpack err
+      Left err -> Left . JWT.JWTClaimsSetDecodeError $ "Failed to decode " <> show (typeRep (Proxy @claims)) <> ": " <> Text.unpack err
       Right claims -> Right claims
   where
     auds :: [CryptoJWT.StringOrURI]
@@ -154,7 +154,7 @@ verifyJWT JWTSettings {jwk, issuer, acceptedAudiences} signedJWT = do
              )
 
 -- | Create a signed session cookie using a ToJWT instance.
-createSignedCookie :: (MonadIO m, ServantAuth.ToJWT session) => JWTSettings -> Cookies.CookieSettings -> Text -> session -> m (Either JWTError Cookies.SetCookie)
+createSignedCookie :: (MonadIO m, ServantAuth.ToJWT session) => JWTSettings -> Cookies.CookieSettings -> Text -> session -> m (Either JWT.JWTError Cookies.SetCookie)
 createSignedCookie jwtSettings cookieSettings sessionName value = runExceptT do
   signedJWT <- ExceptT (signJWT jwtSettings value)
   pure $ Cookies.newSetCookie cookieSettings sessionName (signedJWTToText signedJWT)

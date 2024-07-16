@@ -41,7 +41,6 @@ dependencies:
 - bytes
 - case-insensitive
 - clock
-- connection
 - containers
 - cookie
 - cryptonite
