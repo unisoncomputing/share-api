@@ -3,12 +3,16 @@
 module Share.BackgroundJobs.Search.DefinitionSync (worker) where
 
 import Control.Lens
+import Control.Monad.Except
+import Data.Either (fromLeft)
 import Data.Generics.Product (HasField (..))
 import Data.Map qualified as Map
+import Data.Map.Monoidal.Strict (MonoidalMap)
+import Data.Map.Monoidal.Strict qualified as MonMap
 import Data.Set qualified as Set
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
-import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..), DefnSearchToken (..), Occurrence, TermOrTypeSummary (..), VarId)
+import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..), DefnSearchToken (..), Occurrence (Occurrence), TermOrTypeSummary (..), VarId)
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
@@ -38,8 +42,12 @@ import Unison.ShortHash (ShortHash)
 import Unison.Symbol (Symbol)
 import Unison.Type qualified as Type
 import Unison.Util.Monoid qualified as Monoid
+import Unison.Var qualified as Var
 import UnliftIO qualified
 import UnliftIO.Concurrent qualified as UnliftIO
+
+data DefnIndexingFailure
+  = NoTypeSigForTerm Name Referent
 
 -- | How often to poll for new releases to sync in seconds.
 pollingIntervalSeconds :: Int
@@ -82,73 +90,78 @@ syncRelease authZReceipt syncDD releaseId = fmap (fromMaybe ()) . runMaybeT $ do
       syncTypes syncDD projectShortHand releaseVersion typesCursor
 
 syncTerms ::
+  _ ->
   (DefinitionDocument -> CodebaseM e ()) ->
   BranchHashId ->
   ProjectShortHand ->
   ReleaseVersion ->
   Cursors.PGCursor (Name, Referent) ->
-  CodebaseM e ()
-syncTerms syncDD bhId projectShortHand releaseVersion termsCursor =
-  Cursors.fetchN defnBatchSize termsCursor >>= \case
-    Nothing -> pure ()
-    Just terms -> do
-      for terms \(fqn, ref) -> do
-        let sh = Referent.toShortHash ref
-        sig <- Codebase.loadTypeOfReferent ref
-        termSummary <- Summary.termSummaryForReferent ref sig (Just fqn) bhId Nothing Nothing
-        let dd =
-              DefinitionDocument
-                { projectShortHand,
-                  releaseVersion,
-                  fqn,
-                  hash = sh,
-                  tokens,
-                  payload = TermSummary termSummary
-                }
-        syncDD dd
-      pure ()
+  CodebaseM e [DefnIndexingFailure]
+syncTerms np syncDD bhId projectShortHand releaseVersion termsCursor =
+  Cursors.foldBatched termsCursor defnBatchSize \terms -> do
+    terms & foldMapM \(fqn, ref) -> fmap (either (pure @[]) (const [])) . runExceptT $ do
+      typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
+      termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
+      let sh = Referent.toShortHash ref
+      let refTokens = tokensForTerm fqn ref typ termSummary
+      ppedForReferences
+      let dd =
+            DefinitionDocument
+              { projectShortHand,
+                releaseVersion,
+                fqn,
+                hash = sh,
+                tokens,
+                payload = TermSummary termSummary
+              }
+      syncDD dd
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
-tokensForTerm :: Name -> ComponentHash -> (Type.Type Symbol Ann) -> CodebaseM e (Set (DefnSearchToken Name))
-tokensForTerm name sh sig = do
-  sigTokens <- typeSigTokens
-  let baseTokens = Set.fromList [NameToken name, HashToken sh]
-  pure $ baseTokens <> sigTokens
-  where
-    typeSigTokens :: CodebaseM e (Set (DefnSearchToken Name))
-    typeSigTokens = undefined
+tokensForTerm :: Name -> Referent -> Type.Type v a -> Summary.TermSummary -> Set (DefnSearchToken TypeReference)
+tokensForTerm name ref typ (Summary.TermSummary {tag}) = do
+  let sh = Referent.toShortHash ref
+      baseTokens = Set.fromList [NameToken name, HashToken sh]
+      tagTokens = Set.singleton $ TermTagToken tag
+   in baseTokens <> typeSigTokens typ <> tagTokens
 
-data TokenGenState = TokenGenState
-  { typeRefOccs :: Map TypeReference Occurrence,
-    varOccs :: Map VarId Occurrence,
-    nextVarId :: VarId
+data TokenGenEnv v = TokenGenEnv
+  { varIds :: Map v VarId
   }
   deriving stock (Show, Generic)
 
-typeSigRefTokens :: forall v ann. Type.Type v ann -> Set (DefnSearchToken TypeReference)
-typeSigRefTokens = flip evalStateT initState $ ABT.cata alg
+data TokenGenState v = TokenGenState
+  { nextVarId :: VarId
+  }
+  deriving stock (Show, Generic)
+
+type TokenGenM v = ReaderT (TokenGenEnv v) (State (TokenGenState v))
+
+-- | Compute var occurrence and type ref occurrence search tokens from a type signature.
+typeSigTokens :: forall v ann. (Var.Var v) => Type.Type v ann -> Set (DefnSearchToken TypeReference)
+typeSigTokens typ =
+  let occMap :: MonoidalMap (Either VarId TypeReference) Occurrence
+      occMap = flip evalState initState . runReaderT mempty $ ABT.cata alg typ
+   in MonMap.toList occMap & foldMap \case
+        (Left vId, occ) -> Set.singleton (TypeVarToken vId occ)
+        (Right typeRef, occ) -> Set.singleton (TypeMentionToken typeRef occ)
   where
-    initState = TokenGenState mempty mempty 0
+    initState = TokenGenState 0
     -- Cata algebra for collecting type reference tokens from a type signature.
     alg ::
       ann ->
-      ABT.ABT Type.F v (State TokenGenState (Set (DefnSearchToken TypeReference))) ->
-      State TokenGenState (Set (DefnSearchToken TypeReference))
+      ABT.ABT Type.F v (TokenGenM v (MonoidalMap (Either VarId TypeReference) Occurrence)) ->
+      TokenGenM v (MonoidalMap (Either VarId TypeReference) Occurrence)
     alg _ann = \case
       ABT.Var v -> do
-        -- TODO: Figure out how Abs handles var scoping with foralls and such so I can
-        -- make sure to handle these right.
-        _
+        vId <- varIdFor v
+        pure $ MonMap.singleton (Left vId) 1
       ABT.Cycle a -> a
-      ABT.Abs v r ->
-        -- TODO: Handle var scoping
-        _
+      ABT.Abs v r -> do
+        vId <- nextVarId
+        local (field @"varIds" . at v ?~ vId) r
       ABT.Tm tf -> case tf of
         Type.Ref typeRef -> do
-          -- Bump the occurrence count for this type reference returning the old count. Start
-          -- with 0 if unset.
-          occ <- nextTypeRefOcc typeRef
-          pure $ Set.singleton $ NameMentionToken typeRef occ
+          pure $ MonMap.singleton (Right typeRef) 1
         Type.Arrow a b -> do
           aTokens <- a
           bTokens <- b
@@ -167,10 +180,14 @@ typeSigRefTokens = flip evalStateT initState $ ABT.cata alg
         Type.Effects as -> Monoid.foldMapM id as
         Type.Forall a -> a
         Type.IntroOuter a -> a
-    nextTypeRefOcc :: TypeReference -> State TokenGenState Occurrence
-    nextTypeRefOcc typeRef = field @"typeRefOccs" . at typeRef . non 0 <<%= succ
-    nextVarId :: State TokenGenState VarId
+    nextVarId :: TokenGenM v VarId
     nextVarId = field @"nextVarId" <<%= succ
+    varIdFor :: v -> TokenGenM v VarId
+    varIdFor v = do
+      asks (Map.lookup v . varIds) >>= \case
+        Just vid -> pure vid
+        Nothing -> do
+          error "typeRefTokens: Found variable without corresponding Abs in type signature"
 
 syncTypes = undefined
 

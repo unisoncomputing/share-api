@@ -231,6 +231,7 @@ library
     , memory
     , mmorph
     , monad-validate
+    , monoidal-containers
     , mtl
     , network
     , network-simple
@@ -371,6 +372,7 @@ executable share-api
     , memory
     , mmorph
     , monad-validate
+    , monoidal-containers
     , mtl
     , network
     , network-simple

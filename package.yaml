@@ -68,6 +68,7 @@ dependencies:
 - memory
 - mmorph
 - monad-validate
+- monoidal-containers
 - mtl
 - network
 - network-simple

@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Share.BackgroundJobs.Search.DefinitionSync.Types
   ( TermOrTypeSummary (..),
@@ -10,6 +11,7 @@ module Share.BackgroundJobs.Search.DefinitionSync.Types
 where
 
 import Data.Aeson
+import Data.Monoid (Sum (..))
 import Data.Text qualified as Text
 import Share.IDs (PrefixedHash (..), ProjectShortHand, ReleaseVersion)
 import Share.IDs qualified as IDs
@@ -17,24 +19,39 @@ import Share.Prelude
 import U.Codebase.HashTags (ComponentHash)
 import Unison.Hash qualified as Hash
 import Unison.Name (Name)
-import Unison.Server.Share.DefinitionSummary (TermSummary, TypeSummary)
+import Unison.Server.Share.DefinitionSummary (TermSummary (..), TypeSummary (..))
+import Unison.Server.Types (TermTag, TypeTag)
 import Unison.ShortHash (ShortHash)
 import Unison.ShortHash qualified as SH
 import Unison.Syntax.Name qualified as Name
 
-data TermOrTypeSummary = TermSummary TermSummary | TypeSummary TypeSummary
+data TermOrTypeSummary = ToTTermSummary TermSummary | ToTTypeSummary TypeSummary
   deriving (Show)
 
 instance ToJSON TermOrTypeSummary where
-  toJSON (TermSummary ts) = object ["kind" .= ("term" :: Text), "payload" .= ts]
-  toJSON (TypeSummary ts) = object ["kind" .= ("type" :: Text), "payload" .= ts]
+  toJSON (ToTTermSummary ts) = object ["kind" .= ("term" :: Text), "payload" .= ts]
+  toJSON (ToTTypeSummary ts) = object ["kind" .= ("type" :: Text), "payload" .= ts]
 
 instance FromJSON TermOrTypeSummary where
   parseJSON = withObject "TermOrTypeSummary" $ \o -> do
     kind :: Text <- o .: "kind"
     case kind of
-      "term" -> TermSummary <$> o .: "payload"
-      "type" -> TypeSummary <$> o .: "payload"
+      "term" -> do
+        ts <- o .: "payload"
+        ts & withObject "TermSummary" \o -> do
+          displayName <- o .: "displayName"
+          hash <- o .: "hash"
+          summary <- o .: "summary"
+          tag <- o .: "tag"
+          pure $ ToTTermSummary $ TermSummary {..}
+      "type" -> do
+        ts <- o .: "payload"
+        ts & withObject "TypeSummary" \o -> do
+          displayName <- o .: "displayName"
+          hash <- o .: "hash"
+          summary <- o .: "summary"
+          tag <- o .: "tag"
+          pure $ ToTTypeSummary $ TypeSummary {..}
       _ -> fail $ "Invalid kind: " <> Text.unpack kind
 
 -- | The number of occurences of this token in the search query.
@@ -43,6 +60,8 @@ instance FromJSON TermOrTypeSummary where
 -- {NameMention "Text" (Occurrence 1), NameMention "Text" (Occurrence 2), NameMention "Text" (Occurrence 3)}
 newtype Occurrence = Occurrence Int
   deriving newtype (Show, Read, Eq, Ord, Num, ToJSON)
+  deriving (Semigroup) via Sum Int
+  deriving (Monoid) via Sum Int
 
 -- | An id for identifying unique type variables mentioned in a query.
 -- E.g. 'map : (a -> b) -> List a -> List b' would have two type var Ids, one for a, one
@@ -54,11 +73,15 @@ data DefnSearchToken r
   = -- Allows searching by literal name
     NameToken Name
   | -- A mention of some external type or ability
-    NameMentionToken r Occurrence
+    TypeMentionToken r Occurrence
   | -- Allows searching for type sigs with type variables
     TypeVarToken VarId Occurrence
   | -- Allows searching by component hash
-    HashToken ComponentHash
+    -- Note: not actually a _short_ hash, it's a full hash with the referent info tagged
+    -- on.
+    HashToken ShortHash
+  | TermTagToken TermTag
+  | TypeTagToken TypeTag
   deriving (Show, Eq, Ord)
 
 -- | Converts a DefnSearchToken to a prefix-searchable text string.
@@ -66,7 +89,7 @@ data DefnSearchToken r
 -- >>> tokenToText (NameToken (Name.unsafeParseText "List.map"))
 -- "List.map:name"
 --
--- >>> tokenToText (NameMentionToken (Name.unsafeParseText "List.map") (Occurrence 1))
+-- >>> tokenToText (TypeMentionToken (Name.unsafeParseText "List.map") (Occurrence 1))
 -- "List.map:mention:1"
 --
 -- >>> tokenToText (TypeVarToken (VarId 1) (Occurrence 1))
@@ -80,14 +103,14 @@ data DefnSearchToken r
 tokenToText :: DefnSearchToken Name -> Text
 tokenToText = \case
   (NameToken n) -> Text.intercalate ":" [Name.toText n, "name"]
-  (NameMentionToken n o) -> Text.intercalate ":" [Name.toText n, "mention", tShow o]
+  (TypeMentionToken n o) -> Text.intercalate ":" [Name.toText n, "mention", tShow o]
   (TypeVarToken v o) -> Text.intercalate ":" ["_", "var", tShow v, tShow o]
   (HashToken h) -> Text.intercalate ":" [into @Text $ PrefixedHash @"#" h, "hash"]
 
 tokenFromText :: Text -> Maybe (DefnSearchToken Name)
 tokenFromText t = case Text.splitOn ":" t of
   [name, "name"] -> NameToken <$> Name.parseText name
-  [name, "mention", occ] -> NameMentionToken <$> (Name.parseText name) <*> readMaybe (Text.unpack occ)
+  [name, "mention", occ] -> TypeMentionToken <$> (Name.parseText name) <*> readMaybe (Text.unpack occ)
   [_, "var", vid, occ] -> TypeVarToken <$> readMaybe (Text.unpack vid) <*> readMaybe (Text.unpack occ)
   [prefixedHash, "hash"] ->
     case Text.stripPrefix "#" prefixedHash of
