@@ -19,6 +19,7 @@ import Share.Prelude
 import U.Codebase.HashTags (ComponentHash)
 import Unison.Hash qualified as Hash
 import Unison.Name (Name)
+import Unison.NameSegment (NameSegment)
 import Unison.Server.Share.DefinitionSummary (TermSummary (..), TypeSummary (..))
 import Unison.Server.Types (TermTag, TypeTag)
 import Unison.ShortHash (ShortHash)
@@ -100,40 +101,35 @@ data DefnSearchToken r
 -- >>> hash = ComponentHash $ Hash.unsafeFromBase32HexText "abcd"
 -- >>> tokenToText (HashToken hash)
 -- "#abc0:hash"
-tokenToText :: DefnSearchToken Name -> Text
-tokenToText = \case
-  (NameToken n) -> Text.intercalate ":" [Name.toText n, "name"]
-  (TypeMentionToken n o) -> Text.intercalate ":" [Name.toText n, "mention", tShow o]
-  (TypeVarToken v o) -> Text.intercalate ":" ["_", "var", tShow v, tShow o]
-  (HashToken h) -> Text.intercalate ":" [into @Text $ PrefixedHash @"#" h, "hash"]
+-- tokenToText :: DefnSearchToken Name -> Text
+-- tokenToText = \case
+--   (NameToken n) -> Text.intercalate ":" [Name.toText n, "name"]
+--   (TypeMentionToken n o) -> Text.intercalate ":" [Name.toText n, "mention", tShow o]
+--   (TypeVarToken v o) -> Text.intercalate ":" ["_", "var", tShow v, tShow o]
+--   (HashToken h) -> Text.intercalate ":" [into @Text $ PrefixedHash @"#" h, "hash"]
 
-tokenFromText :: Text -> Maybe (DefnSearchToken Name)
-tokenFromText t = case Text.splitOn ":" t of
-  [name, "name"] -> NameToken <$> Name.parseText name
-  [name, "mention", occ] -> TypeMentionToken <$> (Name.parseText name) <*> readMaybe (Text.unpack occ)
-  [_, "var", vid, occ] -> TypeVarToken <$> readMaybe (Text.unpack vid) <*> readMaybe (Text.unpack occ)
-  [prefixedHash, "hash"] ->
-    case Text.stripPrefix "#" prefixedHash of
-      Just hash -> HashToken . into @ComponentHash <$> Hash.fromBase32HexText hash
-      Nothing -> Nothing
-  _ -> Nothing
+-- tokenFromText :: Text -> Maybe (DefnSearchToken Name)
+-- tokenFromText t = case Text.splitOn ":" t of
+--   [name, "name"] -> NameToken <$> Name.parseText name
+--   [name, "mention", occ] -> TypeMentionToken <$> (Name.parseText name) <*> readMaybe (Text.unpack occ)
+--   [_, "var", vid, occ] -> TypeVarToken <$> readMaybe (Text.unpack vid) <*> readMaybe (Text.unpack occ)
+--   [prefixedHash, "hash"] ->
+--     case Text.stripPrefix "#" prefixedHash of
+--       Just hash -> HashToken . into @ComponentHash <$> Hash.fromBase32HexText hash
+--       Nothing -> Nothing
+--   _ -> Nothing
 
 data DefinitionDocument = DefinitionDocument
   { projectShortHand :: ProjectShortHand,
     releaseVersion :: ReleaseVersion,
     fqn :: Name,
     hash :: ShortHash,
-    tokens :: Set (DefnSearchToken Name),
+    -- For now we only index types by their final name segment, may need to revisit this
+    -- in the future.
+    tokens :: Set (DefnSearchToken NameSegment),
     payload :: TermOrTypeSummary
   }
   deriving (Show)
-
-instance ToJSON (DefnSearchToken Name) where
-  toJSON = String . tokenToText
-
-instance FromJSON (DefnSearchToken Name) where
-  parseJSON = withText "DefnSearchToken" $ \t ->
-    maybe (fail $ "Invalid DefnSearchToken: " <> Text.unpack t) pure $ tokenFromText t
 
 -- | Formats a DefinitionDocument into a documentName
 --

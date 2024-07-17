@@ -6,6 +6,7 @@ module Share.Postgres.Search.DefinitionSync
   )
 where
 
+import Share.BackgroundJobs.Search.DefinitionSync.Types
 import Share.IDs (ReleaseId)
 import Share.Postgres
 
@@ -35,3 +36,8 @@ claimUnsyncedRelease = do
       WHERE global_definition_search_release_queue.id = chosen_release.id
     RETURNING chosen_release.id
     |]
+
+-- | Save definition documents to be indexed for search.
+insertDefinitionDocuments :: [DefinitionDocument] -> Transaction e ()
+insertDefinitionDocuments docs = do
+  _

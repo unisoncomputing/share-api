@@ -10,6 +10,7 @@ import Data.Map qualified as Map
 import Data.Map.Monoidal.Strict (MonoidalMap)
 import Data.Map.Monoidal.Strict qualified as MonMap
 import Data.Set qualified as Set
+import Data.Set.Lens (setOf)
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..), DefnSearchToken (..), Occurrence (Occurrence), TermOrTypeSummary (..), VarId)
@@ -23,6 +24,7 @@ import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId, ComponentHash)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
+import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.Queries qualified as PG
 import Share.Postgres.Search.DefinitionSync qualified as DefnSyncQ
 import Share.Prelude
@@ -34,14 +36,21 @@ import Share.Web.Authorization qualified as AuthZ
 import U.Codebase.Referent (Referent)
 import U.Codebase.Referent qualified as Referent
 import Unison.ABT qualified as ABT
+import Unison.HashQualifiedPrime qualified as HQ'
+import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
+import Unison.Name qualified as Name
 import Unison.Parser.Ann (Ann)
+import Unison.PrettyPrintEnv qualified as PPE
+import Unison.PrettyPrintEnvDecl qualified as PPED
+import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Reference (TypeReference)
 import Unison.Server.Share.DefinitionSummary qualified as Summary
 import Unison.ShortHash (ShortHash)
 import Unison.Symbol (Symbol)
 import Unison.Type qualified as Type
 import Unison.Util.Monoid qualified as Monoid
+import Unison.Util.Set qualified as Set
 import Unison.Var qualified as Var
 import UnliftIO qualified
 import UnliftIO.Concurrent qualified as UnliftIO
@@ -62,14 +71,15 @@ worker scope = newWorker scope "search:defn-sync" $ forever do
   liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
   Logging.logInfoText "Syncing definitions..."
   authZReceipt <- AuthZ.backgroundJobAuthZ
-  toIO <- UnliftIO.askRunInIO
-  let syncDD = transactionUnsafeIO . toIO . syncDefinitionToCloud
   PG.runTransaction $ do
     mayReleaseId <- DefnSyncQ.claimUnsyncedRelease
     for_ mayReleaseId (syncRelease authZReceipt syncDD)
 
-syncRelease :: AuthZ.AuthZReceipt -> (DefinitionDocument -> CodebaseM e ()) -> ReleaseId -> PG.Transaction e ()
-syncRelease authZReceipt syncDD releaseId = fmap (fromMaybe ()) . runMaybeT $ do
+syncRelease ::
+  AuthZ.AuthZReceipt ->
+  ReleaseId ->
+  PG.Transaction e ()
+syncRelease authZReceipt releaseId = fmap (fromMaybe ()) . runMaybeT $ do
   Release {projectId, squashedCausal, version = releaseVersion} <- lift $ PG.expectReleaseById releaseId
   Project {slug, ownerUserId, visibility = projectVis} <- lift $ PG.expectProjectById projectId
   User {handle, visibility = userVis} <- PG.expectUserByUserId ownerUserId
@@ -79,42 +89,50 @@ syncRelease authZReceipt syncDD releaseId = fmap (fromMaybe ()) . runMaybeT $ do
   guard $ userVis == UserPublic
   lift $ do
     bhId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausal
-    nlReceipt <- NLOps.ensureNameLookupForBranchId bhId
+    namesPerspective <- NLOps.namesPerspectiveForRootAndPath bhId (NL.PathSegments [])
+    let nlReceipt = NL.nameLookupReceipt namesPerspective
     let codebaseLoc = Codebase.codebaseLocationForProjectRelease ownerUserId
     let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
     Codebase.codebaseMToTransaction codebase $ do
       termsCursor <- lift $ NLOps.termsWithinNamespace nlReceipt bhId
       let projectShortHand = ProjectShortHand handle slug
-      syncTerms syncDD bhId projectShortHand releaseVersion termsCursor
+      syncTerms namesPerspective bhId projectShortHand releaseVersion termsCursor
       typesCursor <- lift $ NLOps.typesWithinNamespace nlReceipt bhId
-      syncTypes syncDD projectShortHand releaseVersion typesCursor
+      syncTypes projectShortHand releaseVersion typesCursor
 
 syncTerms ::
-  _ ->
-  (DefinitionDocument -> CodebaseM e ()) ->
+  NL.NamesPerspective ->
   BranchHashId ->
   ProjectShortHand ->
   ReleaseVersion ->
   Cursors.PGCursor (Name, Referent) ->
   CodebaseM e [DefnIndexingFailure]
-syncTerms np syncDD bhId projectShortHand releaseVersion termsCursor =
+syncTerms namesPerspective bhId projectShortHand releaseVersion termsCursor =
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
-    terms & foldMapM \(fqn, ref) -> fmap (either (pure @[]) (const [])) . runExceptT $ do
-      typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
-      termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
-      let sh = Referent.toShortHash ref
-      let refTokens = tokensForTerm fqn ref typ termSummary
-      ppedForReferences
-      let dd =
-            DefinitionDocument
-              { projectShortHand,
-                releaseVersion,
-                fqn,
-                hash = sh,
-                tokens,
-                payload = TermSummary termSummary
-              }
-      syncDD dd
+    docs <-
+      terms & foldMapM \(fqn, ref) -> fmap (either (pure @[]) (const [])) . runExceptT $ do
+        typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
+        termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
+        let sh = Referent.toShortHash ref
+        let refTokens = tokensForTerm fqn ref typ termSummary
+        let deps = setOf (folded . folded . to LD.TypeReference) refTokens
+        pped <- PPEPostgres.ppedForReferences namesPerspective deps
+        let ppe = PPED.unsuffixifiedPPE pped
+        let namedTokens =
+              refTokens & Set.mapMaybe \token -> do
+                fqn <- traverse (PPE.types ppe) token
+                pure $ Name.lastSegment . HQ'.toName <$> fqn
+        let dd =
+              DefinitionDocument
+                { projectShortHand,
+                  releaseVersion,
+                  fqn,
+                  hash = sh,
+                  tokens = namedTokens,
+                  payload = ToTTermSummary termSummary
+                }
+        pure dd
+    PG.insertDefinitionDocuments docs
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
 tokensForTerm :: Name -> Referent -> Type.Type v a -> Summary.TermSummary -> Set (DefnSearchToken TypeReference)
@@ -190,7 +208,3 @@ typeSigTokens typ =
           error "typeRefTokens: Found variable without corresponding Abs in type signature"
 
 syncTypes = undefined
-
-syncDefinitionToCloud :: DefinitionDocument -> Background ()
-syncDefinitionToCloud dd = do
-  _
