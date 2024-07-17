@@ -17,7 +17,7 @@ import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..)
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
-import Share.IDs (ProjectShortHand (ProjectShortHand), ReleaseId, ReleaseVersion)
+import Share.IDs (ProjectId, ProjectShortHand (ProjectShortHand), ReleaseId, ReleaseVersion)
 import Share.Postgres (QueryM (transactionUnsafeIO))
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursors
@@ -26,6 +26,7 @@ import Share.Postgres.IDs (BranchHashId, ComponentHash)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.Queries qualified as PG
+import Share.Postgres.Search.DefinitionSync qualified as DDQ
 import Share.Postgres.Search.DefinitionSync qualified as DefnSyncQ
 import Share.Prelude
 import Share.Project (Project (..), ProjectVisibility (..))
@@ -80,7 +81,7 @@ syncRelease ::
   ReleaseId ->
   PG.Transaction e ()
 syncRelease authZReceipt releaseId = fmap (fromMaybe ()) . runMaybeT $ do
-  Release {projectId, squashedCausal, version = releaseVersion} <- lift $ PG.expectReleaseById releaseId
+  Release {projectId, releaseId, squashedCausal, version = releaseVersion} <- lift $ PG.expectReleaseById releaseId
   Project {slug, ownerUserId, visibility = projectVis} <- lift $ PG.expectProjectById projectId
   User {handle, visibility = userVis} <- PG.expectUserByUserId ownerUserId
   -- Don't sync private projects
@@ -96,21 +97,21 @@ syncRelease authZReceipt releaseId = fmap (fromMaybe ()) . runMaybeT $ do
     Codebase.codebaseMToTransaction codebase $ do
       termsCursor <- lift $ NLOps.termsWithinNamespace nlReceipt bhId
       let projectShortHand = ProjectShortHand handle slug
-      syncTerms namesPerspective bhId projectShortHand releaseVersion termsCursor
+      syncTerms namesPerspective bhId projectId releaseId termsCursor
       typesCursor <- lift $ NLOps.typesWithinNamespace nlReceipt bhId
       syncTypes projectShortHand releaseVersion typesCursor
 
 syncTerms ::
   NL.NamesPerspective ->
   BranchHashId ->
-  ProjectShortHand ->
-  ReleaseVersion ->
+  ProjectId ->
+  ReleaseId ->
   Cursors.PGCursor (Name, Referent) ->
   CodebaseM e [DefnIndexingFailure]
-syncTerms namesPerspective bhId projectShortHand releaseVersion termsCursor =
+syncTerms namesPerspective bhId projectId releaseId termsCursor =
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
-    docs <-
-      terms & foldMapM \(fqn, ref) -> fmap (either (pure @[]) (const [])) . runExceptT $ do
+    (errs, docs) <-
+      terms & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
         typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
         termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
         let sh = Referent.toShortHash ref
@@ -124,15 +125,16 @@ syncTerms namesPerspective bhId projectShortHand releaseVersion termsCursor =
                 pure $ Name.lastSegment . HQ'.toName <$> fqn
         let dd =
               DefinitionDocument
-                { projectShortHand,
-                  releaseVersion,
+                { project = projectId,
+                  release = releaseId,
                   fqn,
                   hash = sh,
                   tokens = namedTokens,
-                  payload = ToTTermSummary termSummary
+                  metadata = ToTTermSummary termSummary
                 }
         pure dd
-    PG.insertDefinitionDocuments docs
+    lift $ DDQ.insertDefinitionDocuments docs
+    pure errs
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
 tokensForTerm :: Name -> Referent -> Type.Type v a -> Summary.TermSummary -> Set (DefnSearchToken TypeReference)

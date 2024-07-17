@@ -13,18 +13,12 @@ where
 import Data.Aeson
 import Data.Monoid (Sum (..))
 import Data.Text qualified as Text
-import Share.IDs (PrefixedHash (..), ProjectShortHand, ReleaseVersion)
-import Share.IDs qualified as IDs
 import Share.Prelude
-import U.Codebase.HashTags (ComponentHash)
-import Unison.Hash qualified as Hash
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.Server.Share.DefinitionSummary (TermSummary (..), TypeSummary (..))
 import Unison.Server.Types (TermTag, TypeTag)
 import Unison.ShortHash (ShortHash)
-import Unison.ShortHash qualified as SH
-import Unison.Syntax.Name qualified as Name
 
 data TermOrTypeSummary = ToTTermSummary TermSummary | ToTTypeSummary TypeSummary
   deriving (Show)
@@ -70,6 +64,7 @@ newtype Occurrence = Occurrence Int
 newtype VarId = VarId Int
   deriving newtype (Show, Read, Eq, Ord, Num, ToJSON)
 
+-- | Represents the possible ways we can search the global definitions index.
 data DefnSearchToken r
   = -- Allows searching by literal name
     NameToken Name
@@ -119,37 +114,17 @@ data DefnSearchToken r
 --       Nothing -> Nothing
 --   _ -> Nothing
 
-data DefinitionDocument = DefinitionDocument
-  { projectShortHand :: ProjectShortHand,
-    releaseVersion :: ReleaseVersion,
+data DefinitionDocument proj release = DefinitionDocument
+  { project :: proj,
+    release :: release,
     fqn :: Name,
     hash :: ShortHash,
     -- For now we only index types by their final name segment, may need to revisit this
     -- in the future.
     tokens :: Set (DefnSearchToken NameSegment),
-    payload :: TermOrTypeSummary
+    metadata :: TermOrTypeSummary
   }
   deriving (Show)
-
--- | Formats a DefinitionDocument into a documentName
---
--- >>> projectShortHand = IDs.ProjectShortHand "unison" "base"
--- >>> releaseVersion = IDs.ReleaseVersion 1 2 3
--- >>> fqn = Name.unsafeFromText "data.List.map"
--- >>> hash = ShortHash "abcdef"
--- >>> formatDocName DefinitionDocument {projectShortHand, releaseVersion, fqn, hash, tokens = mempty, payload = undefined}
-formatDocName :: DefinitionDocument -> Text
-formatDocName DefinitionDocument {projectShortHand, fqn, hash} =
-  Text.unwords [IDs.toText projectShortHand, Name.toText fqn, SH.toText hash]
-
-instance ToJSON DefinitionDocument where
-  toJSON dd@DefinitionDocument {releaseVersion, tokens, payload} =
-    object
-      [ "documentName" .= formatDocName dd,
-        "releaseVersion" .= IDs.toText releaseVersion,
-        "tokens" .= tokens,
-        "metadata" .= payload
-      ]
 
 data SearchDefinition = SearchDefinition
   { fqn :: Name,
