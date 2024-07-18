@@ -14,7 +14,6 @@ import Hasql.Interpolate qualified as Hasql
 import Share.BackgroundJobs.Search.DefinitionSync.Types
 import Share.IDs (ProjectId, ReleaseId)
 import Share.Postgres
-import Share.Postgres qualified as PG
 import Share.Prelude
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
@@ -55,12 +54,16 @@ claimUnsyncedRelease = do
 insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)] -> Transaction e ()
 insertDefinitionDocuments docs = do
   let docsTable = docRow <$> docs
-  execute_ $
-    [sql|
-    INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, metadata)
-      SELECT * FROM ^{PG.toTable docsTable}
-      ON CONFLICT DO NOTHING
-    |]
+  for_ docsTable \(projectId, releaseId, fqn, tokens, metadata) -> do
+    -- Ideally we'd do a bulk insert, but Hasql doesn't provide any method for passing arrays of
+    -- arrays as parameters, so instead we insert each record individually so we can use our
+    -- only level of array-ness for the tokens.
+    execute_ $
+      [sql|
+      INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, metadata)
+        VALUES (#{projectId}, #{releaseId}, #{fqn}, array_to_tsvector(#{tokens}), #{metadata}::jsonb)
+        ON CONFLICT DO NOTHING
+      |]
   where
     docRow :: DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash) -> (ProjectId, ReleaseId, Text, [Text], Hasql.Jsonb)
     docRow DefinitionDocument {project, release, fqn, tokens, metadata} =

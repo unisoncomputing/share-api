@@ -38,6 +38,7 @@ import U.Codebase.Referent qualified as Referent
 import Unison.ABT qualified as ABT
 import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
+import Unison.Debug qualified as Debug
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
@@ -67,7 +68,7 @@ pollingIntervalSeconds = 10
 
 -- | How many definitions to hold in memory at a time while syncing
 defnBatchSize :: Int32
-defnBatchSize = 10
+defnBatchSize = 1000
 
 worker :: Ki.Scope -> Background ()
 worker scope = newWorker scope "search:defn-sync" $ forever do
@@ -75,6 +76,7 @@ worker scope = newWorker scope "search:defn-sync" $ forever do
   authZReceipt <- AuthZ.backgroundJobAuthZ
   PG.runTransaction $ do
     mayReleaseId <- DefnSyncQ.claimUnsyncedRelease
+    Debug.debugM Debug.Temp "Syncing release" mayReleaseId
     for_ mayReleaseId (syncRelease authZReceipt)
   liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
 
@@ -90,16 +92,21 @@ syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
   guard $ projectVis == ProjectPublic
   -- Don't sync private users
   guard $ userVis == UserPublic
+  Debug.debugM Debug.Temp "Syncing release" releaseId
   lift $ do
     bhId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausal
+    Debug.debugM Debug.Temp "bhId" bhId
     namesPerspective <- NLOps.namesPerspectiveForRootAndPath bhId (NL.PathSegments [])
     let nlReceipt = NL.nameLookupReceipt namesPerspective
     let codebaseLoc = Codebase.codebaseLocationForProjectRelease ownerUserId
     let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
     Codebase.codebaseMToTransaction codebase $ do
+      Debug.debugM Debug.Temp "Building cursor" releaseId
       termsCursor <- lift $ NLOps.termsWithinNamespace nlReceipt bhId
+      Debug.debugM Debug.Temp "Syncing terms" releaseId
       termErrs <- syncTerms namesPerspective bhId projectId releaseId termsCursor
       typesCursor <- lift $ NLOps.typesWithinNamespace nlReceipt bhId
+      Debug.debugM Debug.Temp "Syncing types" releaseId
       typeErrs <- syncTypes namesPerspective projectId releaseId typesCursor
       pure (termErrs <> typeErrs)
 
@@ -112,6 +119,7 @@ syncTerms ::
   CodebaseM e [DefnIndexingFailure]
 syncTerms namesPerspective bhId projectId releaseId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
+    Debug.debugM Debug.Temp "Fetched N more terms" (length terms)
     (errs, refDocs) <-
       terms & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
         typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
