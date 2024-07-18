@@ -6,6 +6,7 @@
 
 module Share.Web.Share.Impl where
 
+import Servant
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs (TourId, UserHandle)
@@ -35,7 +36,6 @@ import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
-import Servant
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
@@ -213,7 +213,7 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "type-summary" cacheParams rootCausalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      serveTypeSummary ref mayName rootCausalId relativeTo renderWidth
+      serveTypeSummary ref mayName renderWidth
   where
     cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
