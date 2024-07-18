@@ -14,8 +14,8 @@ import Data.Aeson
 import Data.Monoid (Sum (..))
 import Data.Text qualified as Text
 import Share.Prelude
+import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
-import Unison.NameSegment (NameSegment)
 import Unison.Server.Share.DefinitionSummary (TermSummary (..), TypeSummary (..))
 import Unison.Server.Types (TermTag, TypeTag)
 import Unison.ShortHash (ShortHash)
@@ -54,7 +54,7 @@ instance FromJSON TermOrTypeSummary where
 -- occur 3 times, and the set would be:
 -- {NameMention "Text" (Occurrence 1), NameMention "Text" (Occurrence 2), NameMention "Text" (Occurrence 3)}
 newtype Occurrence = Occurrence Int
-  deriving newtype (Show, Read, Eq, Ord, Num, ToJSON)
+  deriving newtype (Show, Read, Eq, Ord, Num, ToJSON, Enum)
   deriving (Semigroup) via Sum Int
   deriving (Monoid) via Sum Int
 
@@ -62,14 +62,14 @@ newtype Occurrence = Occurrence Int
 -- E.g. 'map : (a -> b) -> List a -> List b' would have two type var Ids, one for a, one
 -- for b, and would have occurrences 1 and 2 for each respectively.
 newtype VarId = VarId Int
-  deriving newtype (Show, Read, Eq, Ord, Num, ToJSON)
+  deriving newtype (Show, Read, Eq, Ord, Num, ToJSON, Enum)
 
 -- | Represents the possible ways we can search the global definitions index.
-data DefnSearchToken r
+data DefnSearchToken typeRef
   = -- Allows searching by literal name
     NameToken Name
   | -- A mention of some external type or ability
-    TypeMentionToken r Occurrence
+    TypeMentionToken typeRef Occurrence
   | -- Allows searching for type sigs with type variables
     TypeVarToken VarId Occurrence
   | -- Allows searching by component hash
@@ -78,7 +78,8 @@ data DefnSearchToken r
     HashToken ShortHash
   | TermTagToken TermTag
   | TypeTagToken TypeTag
-  deriving (Show, Eq, Ord)
+  | TypeModToken DD.Modifier
+  deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 -- | Converts a DefnSearchToken to a prefix-searchable text string.
 --
@@ -114,17 +115,17 @@ data DefnSearchToken r
 --       Nothing -> Nothing
 --   _ -> Nothing
 
-data DefinitionDocument proj release = DefinitionDocument
+data DefinitionDocument proj release name typeRef = DefinitionDocument
   { project :: proj,
     release :: release,
     fqn :: Name,
     hash :: ShortHash,
     -- For now we only index types by their final name segment, may need to revisit this
     -- in the future.
-    tokens :: Set (DefnSearchToken NameSegment),
+    tokens :: Set (DefnSearchToken typeRef),
     metadata :: TermOrTypeSummary
   }
-  deriving (Show)
+  deriving (Show, Generic)
 
 data SearchDefinition = SearchDefinition
   { fqn :: Name,

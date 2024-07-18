@@ -16,8 +16,11 @@ import Share.IDs (ProjectId, ReleaseId)
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Prelude
+import Unison.DataDeclaration qualified as DD
+import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.Server.Types (TermTag (..), TypeTag (..))
+import Unison.ShortHash (ShortHash)
 import Unison.Syntax.Name qualified as Name
 import Unison.Syntax.NameSegment qualified as NameSegment
 
@@ -49,7 +52,7 @@ claimUnsyncedRelease = do
     |]
 
 -- | Save definition documents to be indexed for search.
-insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId] -> Transaction e ()
+insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)] -> Transaction e ()
 insertDefinitionDocuments docs = do
   let docsTable = docRow <$> docs
   execute_ $
@@ -59,49 +62,52 @@ insertDefinitionDocuments docs = do
       ON CONFLICT DO NOTHING
     |]
   where
-    docRow :: DefinitionDocument ProjectId ReleaseId -> (ProjectId, ReleaseId, Text, [Text], Hasql.Jsonb)
+    docRow :: DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash) -> (ProjectId, ReleaseId, Text, [Text], Hasql.Jsonb)
     docRow DefinitionDocument {project, release, fqn, tokens, metadata} =
       ( project,
         release,
         Name.toText fqn,
-        searchTokensToTSVectorArray $ Set.toList tokens,
+        foldMap searchTokenToText $ Set.toList tokens,
         Hasql.Jsonb $ Aeson.toJSON metadata
       )
-
--- | Prepare search tokens in a standard format for indexing.
-searchTokensToTSVectorArray :: [DefnSearchToken NameSegment] -> [Text]
-searchTokensToTSVectorArray tokens = do
-  searchTokensToTSVector <$> tokens
 
 -- | Convert a search token to a TSVector.
 --
 -- >>> import Unison.Syntax.Name qualified as Name
--- >>> searchTokensToTSVector (NameToken (Name.unsafeParseText "my.cool.name"))
--- "n:my.cool.name"
+-- >>> searchTokenToText (NameToken (Name.unsafeParseText "my.cool.name"))
+-- ["n:my.cool.name"]
 --
--- >>> searchTokensToTSVector (TypeMentionToken (NameSegment.unsafeParseText "Nat") (Occurrence 1))
--- "m:Nat:1"
+-- >>> import Unison.ShortHash qualified as SH
+-- >>> import Data.Maybe (fromJust)
+-- >>> searchTokenToText (TypeMentionToken (NameSegment.unsafeParseText "Thing", fromJust $ SH.fromText "#2tWjVAuc7") (Occurrence 1))
+-- ["mn:Thing:1","mh:#2tWjVAuc7:1"]
 --
--- >>> searchTokensToTSVector (TypeVarToken (VarId 1) (Occurrence 1))
--- "v:1:1"
+-- >>> searchTokenToText (TypeVarToken (VarId 1) (Occurrence 1))
+-- ["v:1:1"]
 --
--- >>> searchTokensToTSVector (TermTagToken Doc)
--- "t:doc"
---
--- >>> searchTokensToTSVector (TermTagToken (Constructor Data))
--- "t:data-con"
---
--- >>> searchTokensToTSVector (TypeTagToken Data)
--- "t:data"
-searchTokensToTSVector :: DefnSearchToken NameSegment -> Text
-searchTokensToTSVector = \case
-  NameToken name -> makeSearchToken nameType (Name.toText name) Nothing
-  TypeMentionToken t occ -> makeSearchToken typeMentionType (NameSegment.toEscapedText t) (Just occ)
-  TypeVarToken varId occ -> makeSearchToken typeVarType (varIdText varId) (Just occ)
-  HashToken sh -> makeSearchToken hashType (into @Text sh) Nothing
-  TermTagToken termTag -> makeSearchToken tagType (termTagText termTag) Nothing
-  TypeTagToken typTag -> makeSearchToken tagType (typeTagText typTag) Nothing
+-- >>> searchTokenToText (TermTagToken Doc)
+-- ["t:doc"]
+-- >>> searchTokenToText (TermTagToken (Constructor Data))
+-- WAS WAS WAS "t:data-con"
+-- ["t:data-con"]
+-- >>> searchTokenToText (TypeTagToken Data)
+-- ["t:data"]
+searchTokenToText :: DefnSearchToken (NameSegment, ShortHash) -> [Text]
+searchTokenToText = \case
+  NameToken name -> [makeSearchToken nameType (Name.toText name) Nothing]
+  TypeMentionToken (ns, typeRef) occ ->
+    [ makeSearchToken typeMentionTypeByNameType (NameSegment.toEscapedText ns) (Just occ),
+      makeSearchToken typeMentionTypeByHashType (into @Text @ShortHash typeRef) (Just occ)
+    ]
+  TypeVarToken varId occ -> [makeSearchToken typeVarType (varIdText varId) (Just occ)]
+  HashToken sh -> [makeSearchToken hashType (into @Text sh) Nothing]
+  TermTagToken termTag -> [makeSearchToken tagType (termTagText termTag) Nothing]
+  TypeTagToken typTag -> [makeSearchToken tagType (typeTagText typTag) Nothing]
+  TypeModToken mod -> [makeSearchToken typeModType (typeModText mod) Nothing]
   where
+    typeModText = \case
+      DD.Structural -> "structural"
+      DD.Unique {} -> "unique"
     varIdText :: VarId -> Text
     varIdText (VarId n) = tShow n
     termTagText :: TermTag -> Text
@@ -116,14 +122,18 @@ searchTokensToTSVector = \case
       Ability -> "ability"
     nameType :: Text
     nameType = "n"
-    typeMentionType :: Text
-    typeMentionType = "m"
+    typeMentionTypeByNameType :: Text
+    typeMentionTypeByNameType = "mn"
+    typeMentionTypeByHashType :: Text
+    typeMentionTypeByHashType = "mh"
     typeVarType :: Text
     typeVarType = "v"
     hashType :: Text
     hashType = "h"
     tagType :: Text
     tagType = "t"
+    typeModType :: Text
+    typeModType = "mod"
     makeSearchToken :: Text -> Text -> Maybe Occurrence -> Text
     makeSearchToken kind txt occ = do
       Text.intercalate ":" $
