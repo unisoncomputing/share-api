@@ -6,13 +6,13 @@ CREATE EXTENSION IF NOT EXISTS btree_gin;
 
 -- Table of all releases which have been published, but not yet synced to the global definition search index.
 CREATE TABLE global_definition_search_release_queue (
-  release_id UUID PRIMARY KEY REFERENCES releases(id) ON DELETE CASCADE,
+  release_id UUID PRIMARY KEY REFERENCES project_releases(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE global_definition_search_docs (
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  release_id UUID NOT NULL REFERENCES releases(id) ON DELETE CASCADE,
+  release_id UUID NOT NULL REFERENCES project_releases(id) ON DELETE CASCADE,
   -- Fully qualified name
   name TEXT NOT NULL,
   search_tokens TSVECTOR NOT NULL,

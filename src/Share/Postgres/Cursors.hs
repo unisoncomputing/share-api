@@ -10,7 +10,10 @@ module Share.Postgres.Cursors
   )
 where
 
+import Data.Char qualified as Char
 import Data.List.NonEmpty qualified as NEL
+import Data.String (IsString (fromString))
+import Data.Text qualified as Text
 import Data.UUID (UUID)
 import Share.Postgres
 import Share.Prelude
@@ -40,26 +43,31 @@ newColCursor namePrefix query = do
 -- This cursor will be closed when the transaction ends, and must not be used outside of the
 -- transaction in which it was created.
 newRowCursor :: forall r m. (QueryM m) => (DecodeRow r) => Text -> Sql -> m (PGCursor r)
-newRowCursor namePrefix query = do
-  uuid <- transactionUnsafeIO $ randomIO @UUID
-  let cursorName = namePrefix <> "_" <> into @Text uuid
-  execute_
-    [sql|
-    DECLARE #{uuid}
+newRowCursor namePrefix query =
+  do
+    uuid <- transactionUnsafeIO $ randomIO @UUID
+    -- We can't use a parameter for cursor names, so we make sure to clean it to prevent any
+    -- possible sql errors/injections.
+    let cursorName = Text.filter (\c -> Char.isAlphaNum c || c == '_') (namePrefix <> "_" <> into @Text uuid)
+    let declaration = fromString $ "DECLARE " <> Text.unpack cursorName <> "\n"
+    execute_ $
+      declaration
+        <> [sql|
       NO SCROLL
       CURSOR
       WITHOUT HOLD
       FOR ^{query}
     |]
-  pure $ PGCursor cursorName id
+    pure $ PGCursor cursorName id
 
 -- | Fetch UP TO the next N results from the cursor. If there are no more rows, returns Nothing.
 fetchN :: forall r m. (QueryM m) => PGCursor r -> Int32 -> m (Maybe (NonEmpty r))
 fetchN (PGCursor cursorName f) n = do
-  rows <-
-    queryListRows
-      [sql| FETCH FORWARD #{n} FROM #{cursorName}
-    |]
+  -- PG doesn't allow bind params for limits or cursor names.
+  -- We're safe from injection here because `n` is just an int, and we guarantee the
+  -- cursorName is safe at construction time.
+  let sql = fromString . Text.unpack $ Text.intercalate " " ["FETCH FORWARD", tShow n, "FROM", cursorName]
+  rows <- queryListRows sql
   pure $ NEL.nonEmpty (f <$> rows)
 
 -- | Fold over the cursor in batches of N rows.

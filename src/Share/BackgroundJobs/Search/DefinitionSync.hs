@@ -71,12 +71,12 @@ defnBatchSize = 10
 
 worker :: Ki.Scope -> Background ()
 worker scope = newWorker scope "search:defn-sync" $ forever do
-  liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
   Logging.logInfoText "Syncing definitions..."
   authZReceipt <- AuthZ.backgroundJobAuthZ
   PG.runTransaction $ do
     mayReleaseId <- DefnSyncQ.claimUnsyncedRelease
     for_ mayReleaseId (syncRelease authZReceipt)
+  liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
 
 syncRelease ::
   AuthZ.AuthZReceipt ->
