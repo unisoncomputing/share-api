@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
@@ -8,6 +9,7 @@
 module Share.Postgres
   ( -- * Types
     Transaction,
+    Pipeline,
     T,
     Session,
     Mode (..),
@@ -19,6 +21,7 @@ module Share.Postgres
     Interp.DecodeField,
     RawBytes (..),
     Only (..),
+    QueryA (..),
     QueryM (..),
     decodeField,
     (:.) (..),
@@ -39,6 +42,9 @@ module Share.Postgres
     tryRunSessionWithPool,
     unliftSession,
     defaultIsolationLevel,
+    pipelined,
+    pFor,
+    pFor_,
 
     -- * query Helpers
     rollback,
@@ -69,6 +75,7 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
 import Data.Maybe
 import Data.Text qualified as Text
@@ -79,6 +86,7 @@ import Data.Void
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Interp
+import Hasql.Pipeline qualified as Hasql.Pipeline
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Hasql
 import Hasql.Session qualified as Session
@@ -100,7 +108,7 @@ data TransactionError e
 
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
 newtype Transaction e a = Transaction {unTransaction :: Hasql.Session (Either (TransactionError e) a)}
-  deriving (Functor, Applicative, Monad, MonadIO) via (ExceptT (TransactionError e) Hasql.Session)
+  deriving (Functor, Applicative, Monad) via (ExceptT (TransactionError e) Hasql.Session)
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err
@@ -109,6 +117,20 @@ instance MonadError e (Transaction e) where
       Left (Err e) -> unTransaction (f e)
       Left (Unrecoverable err) -> pure (Left (Unrecoverable err))
       Right a -> pure (Right a)
+
+-- | Applicative pipelining transaction
+newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (TransactionError e) a)}
+  deriving (Functor, Applicative) via (Compose Hasql.Pipeline.Pipeline (Either (TransactionError e)))
+
+-- | Run a pipeline in a transaction
+pipelined :: Pipeline e a -> Transaction e a
+pipelined p = Transaction (Hasql.pipeline (unPipeline p))
+
+pFor :: (Traversable f) => f a -> (a -> Pipeline e b) -> Transaction e (f b)
+pFor f p = pipelined $ for f p
+
+pFor_ :: (Foldable f) => f a -> (a -> Pipeline e b) -> Transaction e ()
+pFor_ f p = pipelined $ for_ f p
 
 -- | A transaction that has no errors. Prefer using a fully polymorphic 'e' when possible,
 -- but this is very helpful when dealing with data type which include fields which are
@@ -296,46 +318,56 @@ tryRunSessionWithPool pool s = do
 runSessionOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => Session e a -> WebApp a
 runSessionOrRespondError t = tryRunSession t >>= either respondError pure
 
--- | Represents any monad in which we can run a statement
-class (Monad m) => QueryM m where
+-- | Represents anywhere we can run a statement
+class (Applicative m) => QueryA m where
   statement :: q -> Hasql.Statement q r -> m r
-
-  -- | Allow running IO actions in a transaction. These actions may be run multiple times if
-  -- the transaction is retried.
-  transactionUnsafeIO :: IO a -> m a
 
   -- | Fail the transaction and whole request with an unrecoverable server error.
   unrecoverableError :: (HasCallStack, ToServerError e, Loggable e, Show e) => e -> m a
 
-instance QueryM (Transaction e) where
+class (Monad m, QueryA m) => QueryM m where
+  -- | Allow running IO actions in a transaction. These actions may be run multiple times if
+  -- the transaction is retried.
+  transactionUnsafeIO :: IO a -> m a
+
+instance QueryA (Transaction e) where
   statement q s = do
     transactionStatement q s
 
-  transactionUnsafeIO io = Transaction (Right <$> liftIO io)
-
   unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
 
-instance QueryM (Session e) where
+instance QueryM (Transaction e) where
+  transactionUnsafeIO io = Transaction (Right <$> liftIO io)
+
+instance QueryA (Session e) where
   statement q s = do
     lift $ Session.statement q s
 
-  transactionUnsafeIO io = lift $ liftIO io
-
   unrecoverableError e = throwError (Unrecoverable (someServerError e))
 
-instance (QueryM m) => QueryM (ReaderT e m) where
+instance QueryM (Session e) where
+  transactionUnsafeIO io = lift $ liftIO io
+
+instance QueryA (Pipeline e) where
+  statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
+
+  unrecoverableError e = Pipeline $ pure (Left (Unrecoverable (someServerError e)))
+
+instance (QueryM m) => QueryA (ReaderT e m) where
   statement q s = lift $ statement q s
 
+  unrecoverableError e = lift $ unrecoverableError e
+
+instance (QueryM m) => QueryM (ReaderT e m) where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
+
+instance (QueryM m) => QueryA (MaybeT m) where
+  statement q s = lift $ statement q s
 
   unrecoverableError e = lift $ unrecoverableError e
 
 instance (QueryM m) => QueryM (MaybeT m) where
-  statement q s = lift $ statement q s
-
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
-
-  unrecoverableError e = lift $ unrecoverableError e
 
 prepareStatements :: Bool
 prepareStatements = True
@@ -352,7 +384,7 @@ query1Col sql = listToMaybe <$> queryListCol sql
 queryListCol :: forall a m. (QueryM m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
 queryListCol sql = queryListRows @(Interp.OneColumn a) sql <&> coerce @[Interp.OneColumn a] @[a]
 
-execute_ :: (QueryM m) => Interp.Sql -> m ()
+execute_ :: (QueryA m) => Interp.Sql -> m ()
 execute_ sql = statement () (Interp.interp prepareStatements sql)
 
 queryExpect1Row :: forall r m. (HasCallStack) => (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m r

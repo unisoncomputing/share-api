@@ -203,20 +203,27 @@ instance Hasql.DecodeValue SqliteTermEdit.Typing where
           _ -> Nothing
       )
 
-instance ToServerError Hasql.QueryError where
+instance ToServerError Hasql.SessionError where
   toServerError _ = (ErrorID "query-error", err500)
 
-instance Logging.Loggable Hasql.QueryError where
-  toLog (Hasql.QueryError template params err) =
-    Logging.withSeverity Logging.Error . Logging.textLog $
-      Text.unlines
-        [ "QueryError:",
-          indent (tShow err),
-          "TEMPLATE:",
-          indent (Text.decodeUtf8 template),
-          "PARAMS:",
-          indent (tShow params)
-        ]
+instance Logging.Loggable Hasql.SessionError where
+  toLog = \case
+    (Hasql.QueryError template params err) ->
+      Logging.withSeverity Logging.Error . Logging.textLog $
+        Text.unlines
+          [ "QueryError:",
+            indent (tShow err),
+            "TEMPLATE:",
+            indent (Text.decodeUtf8 template),
+            "PARAMS:",
+            indent (tShow params)
+          ]
+    (Hasql.PipelineError cmdErr) ->
+      Logging.withSeverity Logging.Error . Logging.textLog $
+        Text.unlines
+          [ "PipelineError:",
+            indent (tShow cmdErr)
+          ]
     where
       indent :: Text -> Text
       indent = Text.unlines . fmap ("    " <>) . Text.lines
