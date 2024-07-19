@@ -4,6 +4,7 @@ module Share.Postgres.Search.DefinitionSync
   ( submitReleaseToBeSynced,
     claimUnsyncedRelease,
     insertDefinitionDocuments,
+    cleanIndexForRelease,
   )
 where
 
@@ -73,6 +74,15 @@ insertDefinitionDocuments docs = do
         foldMap searchTokenToText $ Set.toList tokens,
         Hasql.Jsonb $ Aeson.toJSON metadata
       )
+
+-- | Wipe out any rows for the given release, useful when re-indexing.
+cleanIndexForRelease :: ReleaseId -> Transaction e ()
+cleanIndexForRelease releaseId = do
+  execute_
+    [sql|
+    DELETE FROM global_definition_search_docs
+    WHERE release_id = #{releaseId}
+    |]
 
 -- | Convert a search token to a TSVector.
 --

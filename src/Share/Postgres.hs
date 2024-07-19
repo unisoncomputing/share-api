@@ -27,6 +27,7 @@ module Share.Postgres
     readTransaction,
     writeTransaction,
     runTransaction,
+    runTransactionMode,
     tryRunTransaction,
     tryRunTransactionMode,
     unliftTransaction,
@@ -234,6 +235,9 @@ writeTransaction t = transaction defaultIsolationLevel ReadWrite t
 -- benefit in distinguishing transaction types.
 runTransaction :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => Transaction Void a -> m a
 runTransaction t = runSession (writeTransaction t)
+
+runTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => IsolationLevel -> Mode -> Transaction Void a -> m a
+runTransactionMode isoLevel mode t = runSession (transaction isoLevel mode t)
 
 -- | Run a transaction in the App monad, returning an Either error.
 --

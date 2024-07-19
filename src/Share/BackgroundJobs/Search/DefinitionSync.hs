@@ -18,6 +18,7 @@ import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
 import Share.IDs (ProjectId, ReleaseId)
+import Share.Metrics qualified as Metrics
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.Hashes.Queries qualified as HashQ
@@ -71,14 +72,15 @@ defnBatchSize :: Int32
 defnBatchSize = 1000
 
 worker :: Ki.Scope -> Background ()
-worker scope = newWorker scope "search:defn-sync" $ forever do
-  Logging.logInfoText "Syncing definitions..."
+worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
-  PG.runTransaction $ do
-    mayReleaseId <- DefnSyncQ.claimUnsyncedRelease
-    Debug.debugM Debug.Temp "Syncing release" mayReleaseId
-    for_ mayReleaseId (syncRelease authZReceipt)
-  liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
+  newWorker scope "search:defn-sync" $ forever do
+    Logging.logInfoText "Syncing definitions..."
+    Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      mayReleaseId <- DefnSyncQ.claimUnsyncedRelease
+      Debug.debugM Debug.Temp "Syncing release" mayReleaseId
+      for_ mayReleaseId (syncRelease authZReceipt)
+    liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
 
 syncRelease ::
   AuthZ.AuthZReceipt ->
@@ -86,6 +88,9 @@ syncRelease ::
   PG.Transaction e [DefnIndexingFailure]
 syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
   Release {projectId, releaseId, squashedCausal} <- lift $ PG.expectReleaseById releaseId
+  -- Wipe out any existing rows for this release. Normally there should be none, but this
+  -- makes it easy to re-index later if we change how we tokenize things.
+  lift $ DDQ.cleanIndexForRelease releaseId
   Project {ownerUserId, visibility = projectVis} <- lift $ PG.expectProjectById projectId
   User {visibility = userVis} <- PG.expectUserByUserId ownerUserId
   -- Don't sync private projects
@@ -121,25 +126,26 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
     Debug.debugM Debug.Temp "Fetched N more terms" (length terms)
     (errs, refDocs) <-
-      terms & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-        typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
-        termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
-        let sh = Referent.toShortHash ref
-        let refTokens = tokensForTerm fqn ref typ termSummary
-        let dd =
-              DefinitionDocument
-                { project = projectId,
-                  release = releaseId,
-                  fqn,
-                  hash = sh,
-                  tokens = refTokens,
-                  metadata = ToTTermSummary termSummary
-                }
-        pure dd
+      PG.timeTransaction "Building terms" $
+        terms & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
+          typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
+          termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
+          let sh = Referent.toShortHash ref
+          let refTokens = tokensForTerm fqn ref typ termSummary
+          let dd =
+                DefinitionDocument
+                  { project = projectId,
+                    release = releaseId,
+                    fqn,
+                    hash = sh,
+                    tokens = refTokens,
+                    metadata = ToTTermSummary termSummary
+                  }
+          pure dd
 
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
-    pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
+    pped <- PG.timeTransaction "Build PPED" $ PPEPostgres.ppedForReferences namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
     let namedDocs :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)]
         namedDocs =
@@ -148,7 +154,7 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
               for token \ref -> do
                 name <- PPE.types ppe ref
                 pure $ (Name.lastSegment . HQ'.toName $ name, Reference.toShortHash ref)
-    lift $ DDQ.insertDefinitionDocuments namedDocs
+    lift $ PG.timeTransaction "Inserting Docs" $ DDQ.insertDefinitionDocuments namedDocs
     pure errs
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
