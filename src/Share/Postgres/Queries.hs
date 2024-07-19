@@ -21,7 +21,7 @@ import Share.Github
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.OAuth.Types
-import Share.Postgres (QueryM (unrecoverableError))
+import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.LooseCode.Queries qualified as LCQ
@@ -41,13 +41,13 @@ import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (.
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-expectUserByUserId :: PG.QueryM m => UserId -> m User
+expectUserByUserId :: (PG.QueryM m) => UserId -> m User
 expectUserByUserId uid = do
   userByUserId uid >>= \case
     Just user -> pure user
     Nothing -> unrecoverableError $ EntityMissing (ErrorID "user:missing") ("User with id " <> IDs.toText uid <> " not found")
 
-userByUserId :: PG.QueryM m => UserId -> m (Maybe User)
+userByUserId :: (PG.QueryM m) => UserId -> m (Maybe User)
 userByUserId uid = do
   PG.query1Row
     [PG.sql|
@@ -711,7 +711,7 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
       |]
 
 createRelease ::
-  PG.QueryM m =>
+  (PG.QueryM m) =>
   NameLookupReceipt ->
   ProjectId ->
   ReleaseVersion ->

@@ -53,7 +53,7 @@ claimUnsyncedRelease = do
 
 -- | Save definition documents to be indexed for search.
 insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)] -> Transaction e ()
-insertDefinitionDocuments docs = do
+insertDefinitionDocuments docs = pipelined $ do
   let docsTable = docRow <$> docs
   for_ docsTable \(projectId, releaseId, fqn, tokens, metadata) -> do
     -- Ideally we'd do a bulk insert, but Hasql doesn't provide any method for passing arrays of

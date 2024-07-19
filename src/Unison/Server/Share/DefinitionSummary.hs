@@ -26,7 +26,7 @@ import Servant.Server (err500)
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseM)
-import Share.Postgres (QueryM (unrecoverableError))
+import Share.Postgres (unrecoverableError)
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
