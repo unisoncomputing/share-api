@@ -4,11 +4,13 @@ module Share.BackgroundJobs.Search.DefinitionSync (worker) where
 
 import Control.Lens
 import Control.Monad.Except
+import Data.Either (isRight)
 import Data.Generics.Product (HasField (..))
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Map.Monoidal.Strict (MonoidalMap)
 import Data.Map.Monoidal.Strict qualified as MonMap
+import Data.Monoid (Any (..), Sum (..))
 import Data.Set qualified as Set
 import Data.Set.Lens (setOf)
 import Ki.Unlifted qualified as Ki
@@ -131,7 +133,7 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
           typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
           termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
           let sh = Referent.toShortHash ref
-          let refTokens = tokensForTerm fqn ref typ termSummary
+          let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
           let dd =
                 DefinitionDocument
                   { project = projectId,
@@ -139,6 +141,7 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
                     fqn,
                     hash = sh,
                     tokens = refTokens,
+                    arity = arity,
                     metadata = ToTTermSummary termSummary
                   }
           pure dd
@@ -158,12 +161,13 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
     pure errs
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
-tokensForTerm :: (Var.Var v) => Name -> Referent -> Type.Type v a -> Summary.TermSummary -> Set (DefnSearchToken TypeReference)
+tokensForTerm :: (Var.Var v) => Name -> Referent -> Type.Type v a -> Summary.TermSummary -> (Set (DefnSearchToken TypeReference), Int)
 tokensForTerm name ref typ (Summary.TermSummary {tag}) = do
   let sh = Referent.toShortHash ref
       baseTokens = Set.fromList [NameToken name, HashToken sh]
       tagTokens = Set.singleton $ TermTagToken tag
-   in baseTokens <> typeSigTokens typ <> tagTokens
+      (tsTokens, arity) = typeSigTokens typ
+   in (baseTokens <> tsTokens <> tagTokens, arity)
 
 data TokenGenEnv v = TokenGenEnv
   { varIds :: Map v VarId
@@ -178,14 +182,15 @@ data TokenGenState v = TokenGenState
 type TokenGenM v = ReaderT (TokenGenEnv v) (State (TokenGenState v))
 
 -- | Compute var occurrence and type ref occurrence search tokens from a type signature.
-typeSigTokens :: forall v ann. (Var.Var v) => Type.Type v ann -> Set (DefnSearchToken TypeReference)
+typeSigTokens :: forall v ann. (Var.Var v) => Type.Type v ann -> (Set (DefnSearchToken TypeReference), Int)
 typeSigTokens typ =
-  let occMap :: MonoidalMap (Either VarId TypeReference) Occurrence
-      occMap = flip evalState initState . flip runReaderT (TokenGenEnv mempty) $ ABT.cata alg typ
+  let occMap :: MonoidalMap (Either VarId TypeReference) (Occurrence, Any)
+      arity :: Int
+      (occMap, Sum arity) = flip evalState initState . flip runReaderT (TokenGenEnv mempty) $ ABT.cata alg typ
       (varIds, typeRefs) =
         MonMap.toList occMap & foldMap \case
-          (Left vId, occ) -> ([(vId, occ)], [])
-          (Right typeRef, occ) -> ([], [(typeRef, occ)])
+          (Left vId, (occ, ret)) -> ([(vId, (occ, ret))], [])
+          (Right typeRef, (occ, ret)) -> ([], [(typeRef, (occ, ret))])
       expandedVarTokens =
         varIds
           -- Rewrite varIds normalized by number of occurrences,
@@ -200,36 +205,40 @@ typeSigTokens typ =
           & imap (\i (_vId, occ) -> (VarId i, occ))
           -- Expand a token for each occurrence of a variable, this way
           -- 'Text' still matches the type 'Text -> Text'
-          & foldMap (\(vId, occ) -> (TypeVarToken vId) <$> [1 .. occ])
+          & foldMap
+            ( \(vId, (occ, Any isReturn)) ->
+                Monoid.whenM isReturn [TypeVarToken vId Nothing] <> ((TypeVarToken vId . Just) <$> [1 .. occ])
+            )
           & Set.fromList
       expandedTypeRefTokens =
         typeRefs
-          & foldMap \(typeRef, occ) ->
-            TypeMentionToken typeRef <$> [1 .. occ]
+          & foldMap \(typeRef, (occ, Any isReturn)) ->
+            Monoid.whenM isReturn [TypeMentionToken typeRef Nothing] <> (TypeMentionToken typeRef . Just <$> [1 .. occ])
               & Set.fromList
-   in expandedVarTokens <> expandedTypeRefTokens
+   in (expandedVarTokens <> expandedTypeRefTokens, arity)
   where
     initState = TokenGenState 0
     -- Cata algebra for collecting type reference tokens from a type signature.
     alg ::
       ann ->
-      ABT.ABT Type.F v (TokenGenM v (MonoidalMap (Either VarId TypeReference) Occurrence)) ->
-      TokenGenM v (MonoidalMap (Either VarId TypeReference) Occurrence)
+      ABT.ABT Type.F v (TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Int)) ->
+      TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Int)
     alg _ann = \case
       ABT.Var v -> do
         vId <- varIdFor v
-        pure $ MonMap.singleton (Left vId) 1
+        pure $ (MonMap.singleton (Left vId) (1, Any True), mempty)
       ABT.Cycle a -> a
       ABT.Abs v r -> do
         vId <- nextVarId
         local (field @"varIds" . at v ?~ vId) r
       ABT.Tm tf -> case tf of
         Type.Ref typeRef -> do
-          pure $ MonMap.singleton (Right typeRef) 1
+          pure $ (MonMap.singleton (Right typeRef) (1, Any True), mempty)
         Type.Arrow a b -> do
-          aTokens <- a
-          bTokens <- b
-          pure $ aTokens <> bTokens
+          -- Anything on the left of an arrow is not a return type.
+          aTokens <- a <&> \(toks, _arity) -> MonMap.map (\(occ, _) -> (occ, Any False)) toks
+          (bTokens, arity) <- b
+          pure $ (aTokens <> bTokens, arity + 1)
         Type.Ann a _kind -> a
         -- At the moment we don't handle higher kinded type applications differently than regular
         -- type mentions.
@@ -238,12 +247,15 @@ typeSigTokens typ =
           bTokens <- b
           pure $ aTokens <> bTokens
         Type.Effect a b -> do
-          aTokens <- a
-          bTokens <- b
-          pure $ aTokens <> bTokens
-        Type.Effects as -> Monoid.foldMapM id as
+          -- Don't include vars from effects.
+          aTokens <- removeVars . fst <$> a
+          (bTokens, bArity) <- b
+          pure $ (aTokens <> bTokens, bArity)
+        Type.Effects as -> first removeVars <$> Monoid.foldMapM id as
         Type.Forall a -> a
         Type.IntroOuter a -> a
+    removeVars :: MonoidalMap (Either VarId TypeReference) (Occurrence, Any) -> MonoidalMap (Either VarId TypeReference) (Occurrence, Any)
+    removeVars = MonMap.filterWithKey (\k _ -> isRight k)
     nextVarId :: TokenGenM v VarId
     nextVarId = field @"nextVarId" <<%= succ
     varIdFor :: v -> TokenGenM v VarId
@@ -263,11 +275,11 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
     (errs, refDocs) <-
       types & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-        declTokens <- case ref of
-          Reference.Builtin _ -> pure mempty
+        (declTokens, declArity) <- case ref of
+          Reference.Builtin _ -> pure (mempty, 0)
           Reference.DerivedId refId -> do
             decl <- lift (Codebase.loadTypeDeclaration refId) `whenNothingM` throwError (NoDeclForType fqn ref)
-            pure $ tokensForDecl refId decl
+            pure $ (tokensForDecl refId decl, length . DD.bound $ DD.asDataDecl decl)
         let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
 
         typeSummary <- lift $ Summary.typeSummaryForReference ref (Just fqn) Nothing
@@ -279,6 +291,7 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
                   fqn,
                   hash = sh,
                   tokens = declTokens <> basicTokens,
+                  arity = declArity,
                   metadata = ToTTypeSummary typeSummary
                 }
         pure dd

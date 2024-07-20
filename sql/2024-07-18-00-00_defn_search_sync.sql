@@ -16,6 +16,9 @@ CREATE TABLE global_definition_search_docs (
   -- Fully qualified name
   name TEXT NOT NULL,
   search_tokens TSVECTOR NOT NULL,
+  -- Number of arguments. 0 for values. 
+  arity INT NOT NULL,
+
   -- Contains the rendered type signature, type, hash, etc.
   -- so we don't need to look up types for hundreds of search results on the fly.
   metadata JSONB NOT NULL,

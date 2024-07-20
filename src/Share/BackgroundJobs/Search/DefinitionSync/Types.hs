@@ -69,9 +69,9 @@ data DefnSearchToken typeRef
   = -- Allows searching by literal name
     NameToken Name
   | -- A mention of some external type or ability
-    TypeMentionToken typeRef Occurrence
+    TypeMentionToken typeRef (Maybe Occurrence {- Nothing means it's a return value -})
   | -- Allows searching for type sigs with type variables
-    TypeVarToken VarId Occurrence
+    TypeVarToken VarId (Maybe Occurrence {- Nothing means it's a return value -})
   | -- Allows searching by component hash
     -- Note: not actually a _short_ hash, it's a full hash with the referent info tagged
     -- on.
@@ -123,6 +123,7 @@ data DefinitionDocument proj release name typeRef = DefinitionDocument
     -- For now we only index types by their final name segment, may need to revisit this
     -- in the future.
     tokens :: Set (DefnSearchToken typeRef),
+    arity :: Int,
     metadata :: TermOrTypeSummary
   }
   deriving (Show, Generic)

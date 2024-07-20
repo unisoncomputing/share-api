@@ -55,23 +55,24 @@ claimUnsyncedRelease = do
 insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)] -> Transaction e ()
 insertDefinitionDocuments docs = pipelined $ do
   let docsTable = docRow <$> docs
-  for_ docsTable \(projectId, releaseId, fqn, tokens, metadata) -> do
+  for_ docsTable \(projectId, releaseId, fqn, tokens, arity, metadata) -> do
     -- Ideally we'd do a bulk insert, but Hasql doesn't provide any method for passing arrays of
     -- arrays as parameters, so instead we insert each record individually so we can use our
     -- only level of array-ness for the tokens.
     execute_ $
       [sql|
-      INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, metadata)
-        VALUES (#{projectId}, #{releaseId}, #{fqn}, array_to_tsvector(#{tokens}), #{metadata}::jsonb)
+      INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, metadata)
+        VALUES (#{projectId}, #{releaseId}, #{fqn}, array_to_tsvector(#{tokens}), #{arity}, #{metadata}::jsonb)
         ON CONFLICT DO NOTHING
       |]
   where
-    docRow :: DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash) -> (ProjectId, ReleaseId, Text, [Text], Hasql.Jsonb)
-    docRow DefinitionDocument {project, release, fqn, tokens, metadata} =
+    docRow :: DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash) -> (ProjectId, ReleaseId, Text, [Text], Int32, Hasql.Jsonb)
+    docRow DefinitionDocument {project, release, fqn, tokens, arity, metadata} =
       ( project,
         release,
         Name.toText fqn,
         foldMap searchTokenToText $ Set.toList tokens,
+        fromIntegral arity,
         Hasql.Jsonb $ Aeson.toJSON metadata
       )
 
@@ -147,10 +148,11 @@ searchTokenToText = \case
     tagType = "t"
     typeModType :: Text
     typeModType = "mod"
-    makeSearchToken :: Text -> Text -> Maybe Occurrence -> Text
+    makeSearchToken :: Text -> Text -> Maybe (Maybe Occurrence) -> Text
     makeSearchToken kind txt occ = do
       Text.intercalate ":" $
         [kind, Text.replace ":" "" txt]
           <> case occ of
-            Just (Occurrence n) -> [tShow n]
+            Just (Just (Occurrence n)) -> [tShow n]
+            Just Nothing -> ["r"]
             Nothing -> []
