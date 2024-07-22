@@ -34,6 +34,7 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
+import Share.Web.Share.Contributions.Types (ShareContribution (projectShortHand))
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
 import Unison.Codebase.Path qualified as Path
@@ -350,6 +351,27 @@ searchEndpoint (MaybeAuthedUserID callerUserId) query (fromMaybe (Limit 20) -> l
             let projectShortHand = IDs.ProjectShortHand {userHandle = ownerHandle, projectSlug = slug}
              in SearchResultProject projectShortHand summary visibility
   pure $ userResults <> projectResults
+
+searchDefinitionNamesEndpoint ::
+  Maybe UserId ->
+  Query ->
+  Maybe Limit ->
+  Maybe UserHandle ->
+  Maybe ProjectShortHandParam ->
+  WebApp [DefinitionNameSearchResult]
+searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter = do
+  filter <- runMaybeT $ resolveProjectFilter <|> resolveUserFilter
+  DDQ.defNameSearch callerUserId filter query limit
+  where
+    limit = fromMaybe (Limit 20) mayLimit
+    resolveProjectFilter = do
+      projectShortHand <- hoistMaybe projectFilter
+      Project {projectId} <- lift $ PG.runTransaction $ Q.projectByShortHand projectShortHand
+      pure $ Left projectId
+    resolveUserFilter = do
+      userHandle <- hoistMaybe userFilter
+      User {user_id} <- lift $ PG.runTransaction $ Q.userByHandle userHandle
+      pure $ Right user_id
 
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do

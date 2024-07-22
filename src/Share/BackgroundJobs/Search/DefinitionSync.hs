@@ -28,8 +28,7 @@ import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.Queries qualified as PG
-import Share.Postgres.Search.DefinitionSync qualified as DDQ
-import Share.Postgres.Search.DefinitionSync qualified as DefnSyncQ
+import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
 import Share.Project (Project (..), ProjectVisibility (..))
 import Share.Release (Release (..))
@@ -79,7 +78,7 @@ worker scope = do
   newWorker scope "search:defn-sync" $ forever do
     Logging.logInfoText "Syncing definitions..."
     Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      mayReleaseId <- DefnSyncQ.claimUnsyncedRelease
+      mayReleaseId <- DDQ.claimUnsyncedRelease
       Debug.debugM Debug.Temp "Syncing release" mayReleaseId
       for_ mayReleaseId (syncRelease authZReceipt)
     liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000

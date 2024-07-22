@@ -70,7 +70,7 @@ library
       Share.Postgres.Projects.Queries
       Share.Postgres.Queries
       Share.Postgres.Refs.Types
-      Share.Postgres.Search.DefinitionSync
+      Share.Postgres.Search.DefinitionSearch.Queries
       Share.Postgres.Serialization
       Share.Postgres.Sync.Conversions
       Share.Postgres.Sync.Queries

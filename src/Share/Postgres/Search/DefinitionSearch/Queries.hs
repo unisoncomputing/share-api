@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Postgres.Search.DefinitionSync
+module Share.Postgres.Search.DefinitionSearch.Queries
   ( submitReleaseToBeSynced,
     claimUnsyncedRelease,
     insertDefinitionDocuments,
@@ -156,3 +156,22 @@ searchTokenToText = \case
             Just (Just (Occurrence n)) -> [tShow n]
             Just Nothing -> ["r"]
             Nothing -> []
+
+defNameSearch :: Maybe UserId -> Maybe (Either ProjectId ReleaseId) -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name)]
+defNameSearch mayCaller mayFilter (Query query) = do
+  let filters = case mayFilter of
+        Left projId -> [sql| AND project_id = #{projId} |]
+        Right relId -> [sql| AND release_id = #{relId} |]
+  query1Col
+    [sql|
+    SELECT project_id, release_id, name FROM global_definition_search_docs doc
+      JOIN projects p ON p.id = doc.project_id
+      WHERE
+        -- Search name by a trigram 'word similarity'
+        -- which will match if the query is similar to any 'word' (e.g. name segment)
+        -- in the name.
+        #{query} <% name
+      AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{mayCaller} AND project_id = p.id)))
+        ^{filters}
+      ORDER BY (similarity(#{query}, name)) DESC
+  |]
