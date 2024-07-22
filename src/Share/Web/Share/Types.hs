@@ -160,6 +160,13 @@ data DefinitionNameSearchResult
     kind :: Text
   }
 
+instance ToJSON DefinitionNameSearchResult where
+  toJSON DefinitionNameSearchResult {..} =
+    Aeson.object
+      [ "token" .= token,
+        "kind" .= kind
+      ]
+
 data DefinitionSearchResult
   = DefinitionSearchResult
   { fqn :: Name,

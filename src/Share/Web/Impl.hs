@@ -60,6 +60,7 @@ server =
     :<|> Share.userCodebaseServer
     :<|> Share.userServer
     :<|> Share.searchEndpoint
+    :<|> Share.searchDefinitionNamesEndpoint
     :<|> Share.accountServer
     :<|> Projects.catalogServer
     :<|> discoveryEndpoint

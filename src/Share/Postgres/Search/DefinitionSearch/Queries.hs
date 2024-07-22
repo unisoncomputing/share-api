@@ -175,10 +175,10 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
         Nothing -> mempty
   queryListRows @(ProjectId, ReleaseId, Name)
     [sql|
-    WITH matches_deduped_by_project(project_id, release_id, name) AS (
-      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name FROM global_definition_search_docs doc
+    WITH matches_deduped_by_project(project_id, release_id, name, tag) AS (
+      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.tag FROM global_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
-        JOIN releases r ON r.id = doc.release_id
+        JOIN project_releases r ON r.id = doc.release_id
         WHERE
           -- Search name by a trigram 'word similarity'
           -- which will match if the query is similar to any 'word' (e.g. name segment)
@@ -186,11 +186,11 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
           #{query} <% doc.name
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
-        ORDER BY doc.project_id, doc.name, release.major_version, release.minor_version, release.patch_version
+        ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
     ),
     -- Find the <limit> best matches
-    best_results(project_id, release_id, name)  AS (
-      SELECT m.project_id, m.release_id, m.name
+    best_results(project_id, release_id, name, tag)  AS (
+      SELECT m.project_id, m.release_id, m.name, m.tag
         FROM matches_deduped_by_project m
         ORDER BY similarity(#{query}, m.name) DESC
         LIMIT #{limit}
@@ -199,5 +199,5 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
     SELECT br.project_id, br.release_id, br.name
         FROM best_results br
         -- docs and tests to the bottom, but otherwise sort by quality of the match.
-        ORDER BY (br.tag = 'doc'::definition_tag, br.tag = 'test'::definition_tag, similarity(#{query}, br.name)) DESC
+        ORDER BY (br.tag <> 'doc'::definition_tag, br.tag <> 'test'::definition_tag, br.name LIKE ('%' || like_escape(#{query})), similarity(#{query}, br.name)) DESC
   |]

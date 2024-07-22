@@ -5,7 +5,7 @@ module Share.Web.Share.API where
 
 import Servant
 import Share.IDs
-import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession)
+import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
 import Share.Prelude (NonEmpty)
 import Share.Utils.API
 import Share.Utils.Caching
@@ -53,7 +53,7 @@ type SearchEndpoint =
 
 -- | Search for names to use in a definition search.
 type SearchDefinitionNamesEndpoint =
-  MaybeAuthenticatedSession
+  MaybeAuthenticatedUserId
     :> RequiredQueryParam "query" Query
     :> QueryParam "limit" Limit
     :> QueryParam "user-filter" UserHandle
