@@ -13,6 +13,7 @@ import Control.Monad.Reader
 import Data.Binary.Builder qualified as Builder
 import Data.ByteString.Char8 qualified as BSC
 import Data.ByteString.Lazy.Char8 qualified as BL
+import Data.List.Extra qualified as List
 import Data.Map qualified as Map
 import Data.Maybe qualified as Maybe
 import Data.Text qualified as Text
@@ -21,6 +22,18 @@ import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Data.Typeable qualified as Typeable
 import Data.UUID (UUID)
 import Data.Vault.Lazy as Vault
+import Network.HTTP.Types (HeaderName, statusCode)
+import Network.HTTP.Types qualified as HTTP
+import Network.URI qualified as URI
+import Network.Wai
+import Network.Wai qualified as Wai
+import Network.Wai.Handler.Warp (run)
+import Network.Wai.Internal qualified as Wai
+import Network.Wai.Middleware.Cors
+import Network.Wai.Middleware.Gzip qualified as Gzip
+import Network.Wai.Middleware.RequestLogger (logStdoutDev)
+import Network.Wai.Middleware.Routed (routedMiddleware)
+import Servant
 import Share.App
 import Share.Env qualified as Env
 import Share.IDs (RequestId, UserId)
@@ -41,17 +54,6 @@ import Share.Web.App (WebApp, localRequestCtx)
 import Share.Web.App qualified as WebApp
 import Share.Web.Errors
 import Share.Web.Impl qualified as Web
-import Network.HTTP.Types (HeaderName, statusCode)
-import Network.HTTP.Types qualified as HTTP
-import Network.Wai
-import Network.Wai qualified as Wai
-import Network.Wai.Handler.Warp (run)
-import Network.Wai.Internal qualified as Wai
-import Network.Wai.Middleware.Cors
-import Network.Wai.Middleware.Gzip qualified as Gzip
-import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import Network.Wai.Middleware.Routed (routedMiddleware)
-import Servant
 import System.Log.FastLogger (FastLogger, FormattedTime, LogStr)
 import System.Log.Raven qualified as Sentry
 import System.Log.Raven.Types qualified as Sentry
@@ -216,15 +218,34 @@ mkApp env = do
         ("search" : _) -> True
         ("sync" : _) -> True
         _ -> False
-    corsPolicy :: CorsResourcePolicy
-    corsPolicy =
-      simpleCorsResourcePolicy
-        { corsOrigins = Just ([BSC.pack . show @URI $ Env.shareUiOrigin env, BSC.pack . show @URI $ Env.cloudUiOrigin env], True {- allow receiving cookies in requests made from these origins -}),
-          corsRequestHeaders = "X-XSRF-TOKEN" : simpleHeaders,
-          corsMethods = ["PATCH", "DELETE", "PUT"] <> simpleMethods
-        }
+    corsPolicy :: Request -> Maybe CorsResourcePolicy
+    corsPolicy req = case Deployment.deployment of
+      Deployment.Local -> Nothing
+      Deployment.Staging ->
+        case (List.lookup "Origin" $ requestHeaders req) >>= URI.parseAbsoluteURI . BSC.unpack of
+          Just uri
+            | isValidSubdomain uri ->
+                let rootSubdomain = uri {uriPath = [], uriQuery = [], uriFragment = []}
+                 in -- Allow requests from any subdomain of the share staging origin.
+                    Just $ defaultCorsPolicy [BSC.pack . show @URI $ rootSubdomain]
+          _ -> Just $ defaultCorsPolicy []
+      Deployment.Production ->
+        Just $ defaultCorsPolicy []
+      where
+        isValidSubdomain origin = fromMaybe False $ do
+          originHostParts <- List.splitOn "." . URI.uriRegName <$> URI.uriAuthority origin
+          shareHostParts <- List.splitOn "." . URI.uriRegName <$> URI.uriAuthority (Env.shareUiOrigin env)
+          cloudHostParts <- List.splitOn "." . URI.uriRegName <$> URI.uriAuthority (Env.cloudUiOrigin env)
+          pure $ shareHostParts `List.isSuffixOf` originHostParts || cloudHostParts `List.isSuffixOf` originHostParts
+        -- Require that the request come from one of the known cloud or share origins.
+        defaultCorsPolicy additionalOrigins =
+          simpleCorsResourcePolicy
+            { corsOrigins = Just ([BSC.pack . show @URI $ Env.shareUiOrigin env, BSC.pack . show @URI $ Env.cloudUiOrigin env] <> additionalOrigins, True {- allow receiving cookies in requests made from these origins -}),
+              corsRequestHeaders = "X-XSRF-TOKEN" : simpleHeaders,
+              corsMethods = ["PATCH", "DELETE", "PUT"] <> simpleMethods
+            }
     corsMiddleware :: Middleware
-    corsMiddleware = cors (const $ Just corsPolicy)
+    corsMiddleware = cors corsPolicy
 
 mkReqLogger :: Vault.Key WebApp.ReqTagsVar -> IO FormattedTime -> FastLogger -> Middleware
 mkReqLogger reqTagsKey timeCache logger app = do
