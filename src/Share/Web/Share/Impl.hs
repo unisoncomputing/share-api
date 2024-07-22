@@ -18,9 +18,11 @@ import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalHash)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
+import Share.Release (Release (..))
 import Share.User (User (..))
 import Share.UserProfile (UserProfile (..))
 import Share.Utils.API
@@ -34,7 +36,6 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
-import Share.Web.Share.Contributions.Types (ShareContribution (projectShortHand))
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
 import Unison.Codebase.Path qualified as Path
@@ -43,7 +44,8 @@ import Unison.Name (Name)
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
-import Unison.Server.Share.DefinitionSummary (TermSummary, TypeSummary, serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.Definitions qualified as ShareBackend
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceDetails qualified as ND
@@ -357,21 +359,31 @@ searchDefinitionNamesEndpoint ::
   Query ->
   Maybe Limit ->
   Maybe UserHandle ->
-  Maybe ProjectShortHandParam ->
+  Maybe IDs.ProjectShortHand ->
+  Maybe IDs.ReleaseVersion ->
   WebApp [DefinitionNameSearchResult]
-searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter = do
-  filter <- runMaybeT $ resolveProjectFilter <|> resolveUserFilter
-  DDQ.defNameSearch callerUserId filter query limit
+searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter releaseFilter = do
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter <|> resolveUserFilter
+  matches <- PG.runTransaction $ DDQ.defNameSearch callerUserId filter query limit
+  -- TODO: Fix this:
+  let response = matches <&> \(_projId, _releaseId, name) -> DefinitionNameSearchResult (Name.toText name) "name"
+  pure response
   where
     limit = fromMaybe (Limit 20) mayLimit
-    resolveProjectFilter = do
+    resolveProjectAndReleaseFilter :: MaybeT WebApp DDQ.DefnNameSearchFilter
+    resolveProjectAndReleaseFilter = do
       projectShortHand <- hoistMaybe projectFilter
-      Project {projectId} <- lift $ PG.runTransaction $ Q.projectByShortHand projectShortHand
-      pure $ Left projectId
+      Project {projectId} <- lift . PG.runTransactionOrRespondError $ Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "no-project-found") $ "No project found for short hand: " <> IDs.toText projectShortHand)
+      case releaseFilter of
+        Nothing -> pure $ DDQ.ProjectFilter projectId
+        Just releaseVersion -> do
+          Release {releaseId} <- lift . PG.runTransactionOrRespondError $ Q.releaseByProjectIdAndReleaseShortHand projectId (IDs.ReleaseShortHand releaseVersion) `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and version: " <> IDs.toText releaseVersion)
+          pure $ DDQ.ReleaseFilter releaseId
+    resolveUserFilter :: MaybeT WebApp DDQ.DefnNameSearchFilter
     resolveUserFilter = do
       userHandle <- hoistMaybe userFilter
-      User {user_id} <- lift $ PG.runTransaction $ Q.userByHandle userHandle
-      pure $ Right user_id
+      User {user_id} <- lift $ PG.runTransactionOrRespondError $ Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+      pure $ DDQ.UserFilter user_id
 
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do

@@ -48,7 +48,8 @@ import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
-import Unison.Server.Share.DefinitionSummary (TermSummary, TypeSummary, serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.Definitions qualified as ShareBackend
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceDetails qualified as ND

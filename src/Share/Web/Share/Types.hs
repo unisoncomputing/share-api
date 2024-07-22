@@ -13,6 +13,7 @@ import Share.Prelude
 import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
+import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
 
 data UpdateUserRequest = UpdateUserRequest
@@ -153,7 +154,11 @@ instance ToJSON UserDisplayInfo where
         "userId" Aeson..= userId
       ]
 
-data DefinitionNameSearchResult = DefinitionNameSearchResult
+data DefinitionNameSearchResult
+  = DefinitionNameSearchResult
+  { token :: Text,
+    kind :: Text
+  }
 
 data DefinitionSearchResult
   = DefinitionSearchResult

@@ -10,7 +10,6 @@ import Share.Prelude (NonEmpty)
 import Share.Utils.API
 import Share.Utils.Caching
 import Share.Utils.Servant
-import Share.Utils.Unison (ProjectShortHandParam)
 import Share.Web.Share.Branches.API (UserBranchesAPI)
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.API (ContributionsByUserAPI)
@@ -59,6 +58,7 @@ type SearchDefinitionNamesEndpoint =
     :> QueryParam "limit" Limit
     :> QueryParam "user-filter" UserHandle
     :> QueryParam "project-filter" ProjectShortHand
+    :> QueryParam "release-filter" ReleaseVersion
     :> Get '[JSON] [DefinitionNameSearchResult]
 
 -- | Submit a definition search

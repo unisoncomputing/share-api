@@ -32,7 +32,9 @@ import Unison.Hash (Hash)
 import Unison.Hash qualified as Hash
 import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
+import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
+import Unison.Syntax.Name qualified as Name
 
 -- Orphans for 'Hash'
 instance Hasql.EncodeValue Hash where
@@ -99,6 +101,16 @@ deriving via Hash instance ToHttpApiData ComponentHash
 deriving via Text instance Hasql.DecodeValue NameSegment
 
 deriving via Text instance Hasql.EncodeValue NameSegment
+
+instance Hasql.DecodeValue Name where
+  decodeValue =
+    Hasql.decodeValue @Text
+      & Decoders.refine Name.parseTextEither
+
+instance Hasql.EncodeValue Name where
+  encodeValue =
+    Hasql.encodeValue @Text
+      & contramap Name.toText
 
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.DecodeRow (Reference' t h) where
   decodeRow = do

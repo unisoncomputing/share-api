@@ -5,6 +5,8 @@ module Share.Postgres.Search.DefinitionSearch.Queries
     claimUnsyncedRelease,
     insertDefinitionDocuments,
     cleanIndexForRelease,
+    defNameSearch,
+    DefnNameSearchFilter (..),
   )
 where
 
@@ -13,9 +15,10 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Hasql.Interpolate qualified as Hasql
 import Share.BackgroundJobs.Search.DefinitionSync.Types
-import Share.IDs (ProjectId, ReleaseId)
+import Share.IDs (ProjectId, ReleaseId, UserId)
 import Share.Postgres
 import Share.Prelude
+import Share.Utils.API (Limit, Query (Query))
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
@@ -157,21 +160,43 @@ searchTokenToText = \case
             Just Nothing -> ["r"]
             Nothing -> []
 
-defNameSearch :: Maybe UserId -> Maybe (Either ProjectId ReleaseId) -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name)]
-defNameSearch mayCaller mayFilter (Query query) = do
+data DefnNameSearchFilter
+  = ProjectFilter ProjectId
+  | ReleaseFilter ReleaseId
+  | UserFilter UserId
+
+defNameSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name)]
+defNameSearch mayCaller mayFilter (Query query) limit = do
   let filters = case mayFilter of
-        Left projId -> [sql| AND project_id = #{projId} |]
-        Right relId -> [sql| AND release_id = #{relId} |]
-  query1Col
+        Just (ProjectFilter projId) -> [sql| AND project_id = #{projId} |]
+        Just (ReleaseFilter relId) -> [sql| AND release_id = #{relId} |]
+        Just (UserFilter userId) -> [sql| AND p.owner_id = #{userId} |]
+        Nothing -> mempty
+  queryListRows @(ProjectId, ReleaseId, Name)
     [sql|
-    SELECT project_id, release_id, name FROM global_definition_search_docs doc
-      JOIN projects p ON p.id = doc.project_id
-      WHERE
-        -- Search name by a trigram 'word similarity'
-        -- which will match if the query is similar to any 'word' (e.g. name segment)
-        -- in the name.
-        #{query} <% name
-      AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{mayCaller} AND project_id = p.id)))
-        ^{filters}
-      ORDER BY (similarity(#{query}, name)) DESC
+    WITH matches_deduped_by_project(project_id, release_id, name) AS (
+      SELECT DISTINCT ON (project_id, name) project_id, release_id, name FROM global_definition_search_docs doc
+        JOIN projects p ON p.id = doc.project_id
+        JOIN releases r ON r.id = doc.release_id
+        WHERE
+          -- Search name by a trigram 'word similarity'
+          -- which will match if the query is similar to any 'word' (e.g. name segment)
+          -- in the name.
+          #{query} <% name
+        AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{mayCaller} AND project_id = p.id)))
+          ^{filters}
+        ORDER BY project_id, name, release.major_version, release.minor_version, release.patch_version
+    ),
+    -- Find the <limit> best matches
+    best_results(project_id, release_id, name)  AS (
+      SELECT project_id, release_id, name
+        FROM matches_deduped_by_project
+        ORDER BY similarity(#{query}, name) DESC
+        LIMIT #{limit}
+    )
+    -- THEN sort docs to the bottom.
+    SELECT project_id, release_id, name
+        FROM best_results
+        -- docs and tests to the bottom, but otherwise sort by quality of the match.
+        ORDER BY (tag = 'doc', tag = 'test', similarity(#{query}, name)) DESC
   |]

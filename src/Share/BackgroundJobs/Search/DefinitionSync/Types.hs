@@ -16,7 +16,7 @@ import Data.Text qualified as Text
 import Share.Prelude
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
-import Unison.Server.Share.DefinitionSummary (TermSummary (..), TypeSummary (..))
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
 import Unison.Server.Types (TermTag, TypeTag)
 import Unison.ShortHash (ShortHash)
 

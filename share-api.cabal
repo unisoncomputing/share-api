@@ -152,6 +152,7 @@ library
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
       Unison.Server.Share.DefinitionSummary
+      Unison.Server.Share.DefinitionSummary.Types
       Unison.Server.Share.Docs
       Unison.Server.Share.FuzzyFind
       Unison.Server.Share.NamespaceDetails

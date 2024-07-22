@@ -5,6 +5,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Share.IDs
@@ -357,8 +358,10 @@ branchNameParser = do
   Megaparsec.observing eof >>= \case
     Left _ -> pure ()
     Right () -> customFailure BranchNameParseFailure'Empty
-  (BranchNameTag'ReleaseDraft,) . releaseDraftFixup <$> releaseDraftParser
-    <|> (BranchNameTag'Plain,) <$> plainBranchParser
+  (BranchNameTag'ReleaseDraft,) . releaseDraftFixup
+    <$> releaseDraftParser
+      <|> (BranchNameTag'Plain,)
+    <$> plainBranchParser
   where
     releaseDraftParser :: Parsec BranchNameParseFailure Text ReleaseVersion
     releaseDraftParser = do

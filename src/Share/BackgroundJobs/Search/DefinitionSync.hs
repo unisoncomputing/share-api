@@ -52,6 +52,7 @@ import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Reference (TypeReference)
 import Unison.Reference qualified as Reference
 import Unison.Server.Share.DefinitionSummary qualified as Summary
+import Unison.Server.Share.DefinitionSummary.Types qualified as Summary
 import Unison.Server.Types qualified as Server.Types
 import Unison.ShortHash (ShortHash)
 import Unison.Type qualified as Type
