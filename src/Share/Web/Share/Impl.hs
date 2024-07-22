@@ -6,6 +6,7 @@
 
 module Share.Web.Share.Impl where
 
+import Servant
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs (TourId, UserHandle)
@@ -17,9 +18,11 @@ import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalHash)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
+import Share.Release (Release (..))
 import Share.User (User (..))
 import Share.UserProfile (UserProfile (..))
 import Share.Utils.API
@@ -35,14 +38,14 @@ import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
-import Servant
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
-import Unison.Server.Share.DefinitionSummary (TermSummary, TypeSummary, serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.Definitions qualified as ShareBackend
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceDetails qualified as ND
@@ -213,7 +216,7 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "type-summary" cacheParams rootCausalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      serveTypeSummary ref mayName rootCausalId relativeTo renderWidth
+      serveTypeSummary ref mayName renderWidth
   where
     cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
@@ -350,6 +353,37 @@ searchEndpoint (MaybeAuthedUserID callerUserId) query (fromMaybe (Limit 20) -> l
             let projectShortHand = IDs.ProjectShortHand {userHandle = ownerHandle, projectSlug = slug}
              in SearchResultProject projectShortHand summary visibility
   pure $ userResults <> projectResults
+
+searchDefinitionNamesEndpoint ::
+  Maybe UserId ->
+  Query ->
+  Maybe Limit ->
+  Maybe UserHandle ->
+  Maybe IDs.ProjectShortHand ->
+  Maybe IDs.ReleaseVersion ->
+  WebApp [DefinitionNameSearchResult]
+searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter releaseFilter = do
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter <|> resolveUserFilter
+  matches <- PG.runTransaction $ DDQ.defNameSearch callerUserId filter query limit
+  -- TODO: Fix this:
+  let response = matches <&> \(_projId, _releaseId, name) -> DefinitionNameSearchResult (Name.toText name) "name"
+  pure response
+  where
+    limit = fromMaybe (Limit 20) mayLimit
+    resolveProjectAndReleaseFilter :: MaybeT WebApp DDQ.DefnNameSearchFilter
+    resolveProjectAndReleaseFilter = do
+      projectShortHand <- hoistMaybe projectFilter
+      Project {projectId} <- lift . PG.runTransactionOrRespondError $ Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "no-project-found") $ "No project found for short hand: " <> IDs.toText projectShortHand)
+      case releaseFilter of
+        Nothing -> pure $ DDQ.ProjectFilter projectId
+        Just releaseVersion -> do
+          Release {releaseId} <- lift . PG.runTransactionOrRespondError $ Q.releaseByProjectIdAndReleaseShortHand projectId (IDs.ReleaseShortHand releaseVersion) `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and version: " <> IDs.toText releaseVersion)
+          pure $ DDQ.ReleaseFilter releaseId
+    resolveUserFilter :: MaybeT WebApp DDQ.DefnNameSearchFilter
+    resolveUserFilter = do
+      userHandle <- hoistMaybe userFilter
+      User {user_id} <- lift $ PG.runTransactionOrRespondError $ Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+      pure $ DDQ.UserFilter user_id
 
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do

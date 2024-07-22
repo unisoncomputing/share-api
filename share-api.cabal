@@ -27,6 +27,12 @@ library
       Share
       Share.App
       Share.Backend
+      Share.BackgroundJobs
+      Share.BackgroundJobs.Errors
+      Share.BackgroundJobs.Monad
+      Share.BackgroundJobs.Search.DefinitionSync
+      Share.BackgroundJobs.Search.DefinitionSync.Types
+      Share.BackgroundJobs.Workers
       Share.Branch
       Share.Codebase
       Share.Codebase.Types
@@ -45,6 +51,7 @@ library
       Share.Postgres.Causal.Types
       Share.Postgres.Comments.Queries
       Share.Postgres.Contributions.Queries
+      Share.Postgres.Cursors
       Share.Postgres.Definitions.Queries
       Share.Postgres.Definitions.Types
       Share.Postgres.Hashes.Queries
@@ -63,6 +70,7 @@ library
       Share.Postgres.Projects.Queries
       Share.Postgres.Queries
       Share.Postgres.Refs.Types
+      Share.Postgres.Search.DefinitionSearch.Queries
       Share.Postgres.Serialization
       Share.Postgres.Sync.Conversions
       Share.Postgres.Sync.Queries
@@ -144,6 +152,7 @@ library
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
       Unison.Server.Share.DefinitionSummary
+      Unison.Server.Share.DefinitionSummary.Types
       Unison.Server.Share.Docs
       Unison.Server.Share.FuzzyFind
       Unison.Server.Share.NamespaceDetails
@@ -217,11 +226,13 @@ library
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory
     , mmorph
     , monad-validate
+    , monoidal-containers
     , mtl
     , network
     , network-simple
@@ -356,11 +367,13 @@ executable share-api
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory
     , mmorph
     , monad-validate
+    , monoidal-containers
     , mtl
     , network
     , network-simple

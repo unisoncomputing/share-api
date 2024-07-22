@@ -74,6 +74,8 @@ import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text.Encoding qualified as Text
+import Servant qualified
+import Servant.Server (err500)
 import Share.Branch (Branch (..))
 import Share.Codebase.Types
 import Share.Codebase.Types qualified as Codebase
@@ -99,8 +101,6 @@ import Share.Web.App
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
-import Servant qualified
-import Servant.Server (err500)
 import U.Codebase.Branch qualified as V2
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.Decl qualified as V2
@@ -113,6 +113,7 @@ import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration qualified as V1
+import Unison.Debug qualified as Debug
 import Unison.Parser.Ann
 import Unison.Parser.Ann qualified as Ann
 import Unison.Prelude (askUnliftIO)
@@ -278,10 +279,10 @@ expectTypeOfReferents :: Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> 
 expectTypeOfReferents trav s = do
   s & trav %%~ expectTypeOfReferent
 
-expectDeclKind :: PG.QueryM m => Reference.TypeReference -> m CT.ConstructorType
+expectDeclKind :: (PG.QueryM m) => Reference.TypeReference -> m CT.ConstructorType
 expectDeclKind r = loadDeclKind r `whenNothingM` (unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r))
 
-expectDeclKindsOf :: PG.QueryM m => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
+expectDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
 expectDeclKindsOf trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
@@ -290,10 +291,10 @@ expectDeclKindsOf trav s = do
         (r, Nothing) -> unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r)
         (_, Just ct) -> pure ct
 
-loadDeclKind :: PG.QueryM m => V2.TypeReference -> m (Maybe CT.ConstructorType)
+loadDeclKind :: (PG.QueryM m) => V2.TypeReference -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: PG.QueryM m => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refs -> do
@@ -448,6 +449,7 @@ squashCausalAndAddToCodebase causalId = runMaybeT $ do
   causalBranch <- MaybeT (CausalQ.loadCausalNamespace causalId)
   (squashedCausalId, _squashedCausal) <- lift $ squashCausal causalBranch
   squashedBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id squashedCausalId
+  Debug.debugLogM Debug.Temp "Squashed, making name lookup"
   lift . lift $ NLOps.ensureNameLookupForBranchId squashedBranchHashId
   pure squashedCausalId
 
@@ -455,6 +457,7 @@ squashCausalAndAddToCodebase causalId = runMaybeT $ do
 -- Causal node at every level.
 squashCausal :: V2.CausalBranch (CodebaseM e) -> CodebaseM e (CausalId, V2.CausalBranch (CodebaseM e))
 squashCausal Causal.Causal {valueHash = unsquashedBranchHash, value} = do
+  Debug.debugM Debug.Temp "Squashing" unsquashedBranchHash
   mayCachedSquashResult <- runMaybeT $ do
     causalId <- MaybeT (CausalQ.tryGetCachedSquashResult unsquashedBranchHash)
     fmap (causalId,) . MaybeT $ CausalQ.loadCausalNamespace causalId

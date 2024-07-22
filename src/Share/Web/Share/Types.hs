@@ -6,12 +6,14 @@ module Share.Web.Share.Types where
 
 import Data.Aeson (KeyValue ((.=)), ToJSON (..))
 import Data.Aeson qualified as Aeson
+import Network.URI (URI)
+import Share.BackgroundJobs.Search.DefinitionSync.Types qualified as DefSync
 import Share.IDs
 import Share.Prelude
 import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
-import Network.URI (URI)
+import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
 
 data UpdateUserRequest = UpdateUserRequest
@@ -151,3 +153,17 @@ instance ToJSON UserDisplayInfo where
         "avatarUrl" Aeson..= avatarUrl,
         "userId" Aeson..= userId
       ]
+
+data DefinitionNameSearchResult
+  = DefinitionNameSearchResult
+  { token :: Text,
+    kind :: Text
+  }
+
+data DefinitionSearchResult
+  = DefinitionSearchResult
+  { fqn :: Name,
+    summary :: DefSync.TermOrTypeSummary,
+    project :: ProjectShortHand,
+    release :: ReleaseShortHand
+  }

@@ -62,11 +62,13 @@ dependencies:
 - http-media
 - http-types
 - jose
+- ki-unlifted
 - lens
 - megaparsec
 - memory
 - mmorph
 - monad-validate
+- monoidal-containers
 - mtl
 - network
 - network-simple
