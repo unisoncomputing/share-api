@@ -2,6 +2,9 @@
 -- In this case it allows us to include the project_id and release_id in the GIN index for search tokens.
 CREATE EXTENSION IF NOT EXISTS btree_gin;
 
+-- Allows us to create trigram indexes for fuzzy searching.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;  
+
 -- New table for coordinating background job for syncing global definitions for search.
 
 -- Table of all releases which have been published, but not yet synced to the global definition search index.
@@ -31,3 +34,6 @@ CREATE TABLE global_definition_search_docs (
 -- Index for searching global definitions by 'search token', with an optional project/release filter.
 -- P.s. there's a search token type for name, so we don't need to index that separately.
 CREATE INDEX global_definition_search_tokens ON global_definition_search_docs USING GIN(search_tokens, project_id, release_id);
+
+-- Index for fuzzy-searching on the fully qualified name.
+CREATE INDEX global_definition_search_name_trigram ON global_definition_search_docs USING GIST (name gist_trgm_ops);
