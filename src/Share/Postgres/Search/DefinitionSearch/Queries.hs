@@ -58,24 +58,25 @@ claimUnsyncedRelease = do
 insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)] -> Transaction e ()
 insertDefinitionDocuments docs = pipelined $ do
   let docsTable = docRow <$> docs
-  for_ docsTable \(projectId, releaseId, fqn, tokens, arity, metadata) -> do
+  for_ docsTable \(projectId, releaseId, fqn, tokens, arity, tag, metadata) -> do
     -- Ideally we'd do a bulk insert, but Hasql doesn't provide any method for passing arrays of
     -- arrays as parameters, so instead we insert each record individually so we can use our
     -- only level of array-ness for the tokens.
     execute_ $
       [sql|
-      INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, metadata)
-        VALUES (#{projectId}, #{releaseId}, #{fqn}, array_to_tsvector(#{tokens}), #{arity}, #{metadata}::jsonb)
+      INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, tag, metadata)
+        VALUES (#{projectId}, #{releaseId}, #{fqn}, array_to_tsvector(#{tokens}), #{arity}, #{tag}::definition_tag, #{metadata}::jsonb)
         ON CONFLICT DO NOTHING
       |]
   where
-    docRow :: DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash) -> (ProjectId, ReleaseId, Text, [Text], Int32, Hasql.Jsonb)
-    docRow DefinitionDocument {project, release, fqn, tokens, arity, metadata} =
+    docRow :: DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash) -> (ProjectId, ReleaseId, Text, [Text], Int32, TermOrTypeTag, Hasql.Jsonb)
+    docRow DefinitionDocument {project, release, fqn, tokens, arity, tag, metadata} =
       ( project,
         release,
         Name.toText fqn,
         foldMap searchTokenToText $ Set.toList tokens,
         fromIntegral arity,
+        tag,
         Hasql.Jsonb $ Aeson.toJSON metadata
       )
 
@@ -175,28 +176,28 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
   queryListRows @(ProjectId, ReleaseId, Name)
     [sql|
     WITH matches_deduped_by_project(project_id, release_id, name) AS (
-      SELECT DISTINCT ON (project_id, name) project_id, release_id, name FROM global_definition_search_docs doc
+      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name FROM global_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
         JOIN releases r ON r.id = doc.release_id
         WHERE
           -- Search name by a trigram 'word similarity'
           -- which will match if the query is similar to any 'word' (e.g. name segment)
           -- in the name.
-          #{query} <% name
-        AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{mayCaller} AND project_id = p.id)))
+          #{query} <% doc.name
+        AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
-        ORDER BY project_id, name, release.major_version, release.minor_version, release.patch_version
+        ORDER BY doc.project_id, doc.name, release.major_version, release.minor_version, release.patch_version
     ),
     -- Find the <limit> best matches
     best_results(project_id, release_id, name)  AS (
-      SELECT project_id, release_id, name
-        FROM matches_deduped_by_project
-        ORDER BY similarity(#{query}, name) DESC
+      SELECT m.project_id, m.release_id, m.name
+        FROM matches_deduped_by_project m
+        ORDER BY similarity(#{query}, m.name) DESC
         LIMIT #{limit}
     )
     -- THEN sort docs to the bottom.
-    SELECT project_id, release_id, name
-        FROM best_results
+    SELECT br.project_id, br.release_id, br.name
+        FROM best_results br
         -- docs and tests to the bottom, but otherwise sort by quality of the match.
-        ORDER BY (tag = 'doc', tag = 'test', similarity(#{query}, name)) DESC
+        ORDER BY (br.tag = 'doc'::definition_tag, br.tag = 'test'::definition_tag, similarity(#{query}, br.name)) DESC
   |]

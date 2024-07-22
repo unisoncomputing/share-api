@@ -3,6 +3,7 @@
 
 module Share.BackgroundJobs.Search.DefinitionSync.Types
   ( TermOrTypeSummary (..),
+    TermOrTypeTag (..),
     DefinitionDocument (..),
     DefnSearchToken (..),
     Occurrence (..),
@@ -13,11 +14,13 @@ where
 import Data.Aeson
 import Data.Monoid (Sum (..))
 import Data.Text qualified as Text
+import Hasql.Encoders qualified as Encoders
+import Hasql.Interpolate qualified as Hasql
 import Share.Prelude
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
-import Unison.Server.Types (TermTag, TypeTag)
+import Unison.Server.Types (TermTag (..), TypeTag (..))
 import Unison.ShortHash (ShortHash)
 
 data TermOrTypeSummary = ToTTermSummary TermSummary | ToTTypeSummary TypeSummary
@@ -48,6 +51,27 @@ instance FromJSON TermOrTypeSummary where
           tag <- o .: "tag"
           pure $ ToTTypeSummary $ TypeSummary {..}
       _ -> fail $ "Invalid kind: " <> Text.unpack kind
+
+data TermOrTypeTag = ToTTermTag TermTag | ToTTypeTag TypeTag
+  deriving stock (Show, Eq, Ord)
+
+instance Hasql.EncodeValue TermOrTypeTag where
+  encodeValue =
+    Encoders.enum
+      ( \case
+          ToTTermTag tt -> encodeTermTag tt
+          ToTTypeTag tt -> encodeTypeTag tt
+      )
+    where
+      encodeTermTag = \case
+        Doc -> "doc"
+        Test -> "test"
+        Plain -> "plain"
+        Constructor Data -> "data-constructor"
+        Constructor Ability -> "ability-constructor"
+      encodeTypeTag = \case
+        Data -> "data"
+        Ability -> "ability"
 
 -- | The number of occurences of this token in the search query.
 -- E.g. for the query: 'Text -> Text -> Text', the Text type mention token would
@@ -124,6 +148,7 @@ data DefinitionDocument proj release name typeRef = DefinitionDocument
     -- in the future.
     tokens :: Set (DefnSearchToken typeRef),
     arity :: Int,
+    tag :: TermOrTypeTag,
     metadata :: TermOrTypeSummary
   }
   deriving (Show, Generic)

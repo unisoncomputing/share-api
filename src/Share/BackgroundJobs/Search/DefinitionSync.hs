@@ -15,7 +15,7 @@ import Data.Set qualified as Set
 import Data.Set.Lens (setOf)
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
-import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..), DefnSearchToken (..), Occurrence, TermOrTypeSummary (..), VarId (VarId))
+import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..), DefnSearchToken (..), Occurrence, TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
@@ -142,6 +142,7 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
                     hash = sh,
                     tokens = refTokens,
                     arity = arity,
+                    tag = ToTTermTag (termSummary.tag),
                     metadata = ToTTermSummary termSummary
                   }
           pure dd
@@ -292,6 +293,7 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
                   hash = sh,
                   tokens = declTokens <> basicTokens,
                   arity = declArity,
+                  tag = ToTTypeTag (typeSummary.tag),
                   metadata = ToTTypeSummary typeSummary
                 }
         pure dd

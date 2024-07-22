@@ -161,6 +161,7 @@ default-extensions:
   - BlockArguments
   - QuasiQuotes
   - ImportQualifiedPost
+  - OverloadedRecordDot
 
 library:
   source-dirs: src
