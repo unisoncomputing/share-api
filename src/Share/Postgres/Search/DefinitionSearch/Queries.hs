@@ -169,8 +169,8 @@ data DefnNameSearchFilter
 defNameSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name)]
 defNameSearch mayCaller mayFilter (Query query) limit = do
   let filters = case mayFilter of
-        Just (ProjectFilter projId) -> [sql| AND project_id = #{projId} |]
-        Just (ReleaseFilter relId) -> [sql| AND release_id = #{relId} |]
+        Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
+        Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
         Just (UserFilter userId) -> [sql| AND p.owner_id = #{userId} |]
         Nothing -> mempty
   queryListRows @(ProjectId, ReleaseId, Name)
