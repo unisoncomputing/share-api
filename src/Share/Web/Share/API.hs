@@ -63,12 +63,13 @@ type SearchDefinitionNamesEndpoint =
 
 -- | Submit a definition search
 type SearchDefinitionsEndpoint =
-  MaybeAuthenticatedSession
+  MaybeAuthenticatedUserId
     :> RequiredQueryParam "query" Query
     :> QueryParam "limit" Limit
     :> QueryParam "user-filter" UserHandle
     :> QueryParam "project-filter" ProjectShortHand
-    :> Get '[JSON] [DefinitionSearchResult]
+    :> QueryParam "release-filter" ReleaseVersion
+    :> Get '[JSON] DefinitionSearchResults
 
 type AccountAPI =
   AuthenticatedSession

@@ -75,6 +75,7 @@ dependencies:
 - network-uri
 - nonempty-containers
 - parallel
+- parser-combinators
 - pem
 - hasql
 - hasql-pool

@@ -363,27 +363,45 @@ searchDefinitionNamesEndpoint ::
   Maybe IDs.ReleaseVersion ->
   WebApp [DefinitionNameSearchResult]
 searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter releaseFilter = do
-  filter <- runMaybeT $ resolveProjectAndReleaseFilter <|> resolveUserFilter
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
   matches <- PG.runTransaction $ DDQ.defNameSearch callerUserId filter query limit
-  -- TODO: Fix this:
-  let response = matches <&> \(_projId, _releaseId, name) -> DefinitionNameSearchResult (Name.toText name) "name"
+  let response = matches <&> \(_projId, _releaseId, name, tag) -> DefinitionNameSearchResult name tag
   pure response
   where
     limit = fromMaybe (Limit 20) mayLimit
-    resolveProjectAndReleaseFilter :: MaybeT WebApp DDQ.DefnNameSearchFilter
-    resolveProjectAndReleaseFilter = do
-      projectShortHand <- hoistMaybe projectFilter
-      Project {projectId} <- lift . PG.runTransactionOrRespondError $ Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "no-project-found") $ "No project found for short hand: " <> IDs.toText projectShortHand)
-      case releaseFilter of
-        Nothing -> pure $ DDQ.ProjectFilter projectId
-        Just releaseVersion -> do
-          Release {releaseId} <- lift . PG.runTransactionOrRespondError $ Q.releaseByProjectIdAndReleaseShortHand projectId (IDs.ReleaseShortHand releaseVersion) `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and version: " <> IDs.toText releaseVersion)
-          pure $ DDQ.ReleaseFilter releaseId
-    resolveUserFilter :: MaybeT WebApp DDQ.DefnNameSearchFilter
-    resolveUserFilter = do
-      userHandle <- hoistMaybe userFilter
-      User {user_id} <- lift $ PG.runTransactionOrRespondError $ Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-      pure $ DDQ.UserFilter user_id
+
+resolveProjectAndReleaseFilter :: Maybe IDs.ProjectShortHand -> Maybe IDs.ReleaseVersion -> MaybeT WebApp DDQ.DefnNameSearchFilter
+resolveProjectAndReleaseFilter projectFilter releaseFilter = do
+  projectShortHand <- hoistMaybe projectFilter
+  Project {projectId} <- lift . PG.runTransactionOrRespondError $ Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "no-project-found") $ "No project found for short hand: " <> IDs.toText projectShortHand)
+  case releaseFilter of
+    Nothing -> pure $ DDQ.ProjectFilter projectId
+    Just releaseVersion -> do
+      Release {releaseId} <- lift . PG.runTransactionOrRespondError $ Q.releaseByProjectIdAndReleaseShortHand projectId (IDs.ReleaseShortHand releaseVersion) `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and version: " <> IDs.toText releaseVersion)
+      pure $ DDQ.ReleaseFilter releaseId
+
+resolveUserFilter :: Maybe UserHandle -> MaybeT WebApp DDQ.DefnNameSearchFilter
+resolveUserFilter userFilter = do
+  userHandle <- hoistMaybe userFilter
+  User {user_id} <- lift $ PG.runTransactionOrRespondError $ Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+  pure $ DDQ.UserFilter user_id
+
+searchDefinitionsEndpoint ::
+  Maybe UserId ->
+  Query ->
+  Maybe Limit ->
+  Maybe UserHandle ->
+  Maybe IDs.ProjectShortHand ->
+  Maybe IDs.ReleaseVersion ->
+  WebApp DefinitionSearchResults
+searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
+  let searchTokens = DefinitionSearch.queryToTokens query
+  matches <- PG.runTransaction $ DDQ.definitionSearch callerUserId filter limit _
+  let results = matches <&> _
+  pure $ DefinitionSearchResults results
+  where
+    limit = fromMaybe (Limit 20) mayLimit
 
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do

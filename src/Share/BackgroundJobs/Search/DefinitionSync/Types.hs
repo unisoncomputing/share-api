@@ -14,8 +14,11 @@ where
 import Data.Aeson
 import Data.Monoid (Sum (..))
 import Data.Text qualified as Text
+import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Hasql
+import Servant (FromHttpApiData)
+import Servant.API (FromHttpApiData (..), ToHttpApiData (..))
 import Share.Prelude
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
@@ -55,6 +58,30 @@ instance FromJSON TermOrTypeSummary where
 data TermOrTypeTag = ToTTermTag TermTag | ToTTypeTag TypeTag
   deriving stock (Show, Eq, Ord)
 
+instance FromHttpApiData TermOrTypeTag where
+  parseQueryParam = \case
+    "doc" -> Right $ ToTTermTag Doc
+    "test" -> Right $ ToTTermTag Test
+    "plain" -> Right $ ToTTermTag Plain
+    "data-constructor" -> Right $ ToTTermTag $ Constructor Data
+    "ability-constructor" -> Right $ ToTTermTag $ Constructor Ability
+    "data" -> Right $ ToTTypeTag Data
+    "ability" -> Right $ ToTTypeTag Ability
+    _ -> Left "Invalid TermOrTypeTag"
+
+instance ToHttpApiData TermOrTypeTag where
+  toQueryParam = \case
+    ToTTermTag Doc -> "doc"
+    ToTTermTag Test -> "test"
+    ToTTermTag Plain -> "plain"
+    ToTTermTag (Constructor Data) -> "data-constructor"
+    ToTTermTag (Constructor Ability) -> "ability-constructor"
+    ToTTypeTag Data -> "data"
+    ToTTypeTag Ability -> "ability"
+
+instance ToJSON TermOrTypeTag where
+  toJSON = String . toQueryParam
+
 instance Hasql.EncodeValue TermOrTypeTag where
   encodeValue =
     Encoders.enum
@@ -72,6 +99,17 @@ instance Hasql.EncodeValue TermOrTypeTag where
       encodeTypeTag = \case
         Data -> "data"
         Ability -> "ability"
+
+instance Hasql.DecodeValue TermOrTypeTag where
+  decodeValue = Decoders.enum $ \case
+    "doc" -> pure $ ToTTermTag Doc
+    "test" -> pure $ ToTTermTag Test
+    "plain" -> pure $ ToTTermTag Plain
+    "data-constructor" -> pure $ ToTTermTag $ Constructor Data
+    "ability-constructor" -> pure $ ToTTermTag $ Constructor Ability
+    "data" -> pure $ ToTTypeTag Data
+    "ability" -> pure $ ToTTypeTag Ability
+    _ -> fail "Invalid TermOrTypeTag"
 
 -- | The number of occurences of this token in the search query.
 -- E.g. for the query: 'Text -> Text -> Text', the Text type mention token would

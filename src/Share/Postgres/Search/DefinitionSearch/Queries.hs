@@ -6,6 +6,7 @@ module Share.Postgres.Search.DefinitionSearch.Queries
     insertDefinitionDocuments,
     cleanIndexForRelease,
     defNameSearch,
+    definitionSearch,
     DefnNameSearchFilter (..),
   )
 where
@@ -166,14 +167,14 @@ data DefnNameSearchFilter
   | ReleaseFilter ReleaseId
   | UserFilter UserId
 
-defNameSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name)]
+defNameSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeTag)]
 defNameSearch mayCaller mayFilter (Query query) limit = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
         Just (UserFilter userId) -> [sql| AND p.owner_id = #{userId} |]
         Nothing -> mempty
-  queryListRows @(ProjectId, ReleaseId, Name)
+  queryListRows @(ProjectId, ReleaseId, Name, TermOrTypeTag)
     [sql|
     WITH matches_deduped_by_project(project_id, release_id, name, tag) AS (
       SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.tag FROM global_definition_search_docs doc
@@ -196,8 +197,11 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
         LIMIT #{limit}
     )
     -- THEN sort docs to the bottom.
-    SELECT br.project_id, br.release_id, br.name
+    SELECT br.project_id, br.release_id, br.name, br.tag
         FROM best_results br
         -- docs and tests to the bottom, but otherwise sort by quality of the match.
         ORDER BY (br.tag <> 'doc'::definition_tag, br.tag <> 'test'::definition_tag, br.name LIKE ('%' || like_escape(#{query})), similarity(#{query}, br.name)) DESC
   |]
+
+definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Transaction e [DefinitionDocument proj release name typeRef]
+definitionSearch searchTokens = _

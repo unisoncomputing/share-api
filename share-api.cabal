@@ -126,6 +126,7 @@ library
       Share.Web.Share.Contributions.Impl
       Share.Web.Share.Contributions.MergeDetection
       Share.Web.Share.Contributions.Types
+      Share.Web.Share.DefinitionSearch
       Share.Web.Share.Diffs.Impl
       Share.Web.Share.Diffs.Types
       Share.Web.Share.Impl
@@ -240,6 +241,7 @@ library
     , network-uri
     , nonempty-containers
     , parallel
+    , parser-combinators
     , pem
     , prometheus-client
     , prometheus-metrics-ghc
@@ -382,6 +384,7 @@ executable share-api
     , network-uri
     , nonempty-containers
     , parallel
+    , parser-combinators
     , pem
     , prometheus-client
     , prometheus-metrics-ghc

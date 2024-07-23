@@ -7,6 +7,7 @@ module Share.Web.Share.Types where
 import Data.Aeson (KeyValue ((.=)), ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Network.URI (URI)
+import Share.BackgroundJobs.Search.DefinitionSync.Types (TermOrTypeTag)
 import Share.BackgroundJobs.Search.DefinitionSync.Types qualified as DefSync
 import Share.IDs
 import Share.Prelude
@@ -156,15 +157,25 @@ instance ToJSON UserDisplayInfo where
 
 data DefinitionNameSearchResult
   = DefinitionNameSearchResult
-  { token :: Text,
-    kind :: Text
+  { token :: Name,
+    tag :: TermOrTypeTag
   }
 
 instance ToJSON DefinitionNameSearchResult where
   toJSON DefinitionNameSearchResult {..} =
     Aeson.object
       [ "token" .= token,
-        "kind" .= kind
+        "tag" .= tag
+      ]
+
+newtype DefinitionSearchResults = DefinitionSearchResults
+  { results :: [DefinitionSearchResult]
+  }
+
+instance ToJSON DefinitionSearchResults where
+  toJSON DefinitionSearchResults {..} =
+    Aeson.object
+      [ "results" .= results
       ]
 
 data DefinitionSearchResult
@@ -174,3 +185,12 @@ data DefinitionSearchResult
     project :: ProjectShortHand,
     release :: ReleaseShortHand
   }
+
+instance ToJSON DefinitionSearchResult where
+  toJSON DefinitionSearchResult {..} =
+    Aeson.object
+      [ "fqn" .= fqn,
+        "summary" .= summary,
+        "project" .= project,
+        "release" .= release
+      ]

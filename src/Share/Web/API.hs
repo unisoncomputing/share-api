@@ -23,6 +23,7 @@ type API =
     :<|> ("users" :> Share.UserAPI)
     :<|> ("search" :> Share.SearchEndpoint)
     :<|> ("search-names" :> Share.SearchDefinitionNamesEndpoint)
+    :<|> ("search-definitions" :> Share.SearchDefinitionsEndpoint)
     :<|> ("account" :> Share.AccountAPI)
     :<|> ("catalog" :> Projects.CatalogAPI)
     -- This path is part of the standard: https://datatracker.ietf.org/doc/html/rfc5785
