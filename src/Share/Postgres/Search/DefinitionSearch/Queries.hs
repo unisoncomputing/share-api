@@ -52,7 +52,7 @@ submitReleaseToBeSynced :: (QueryM m) => ReleaseId -> m ()
 submitReleaseToBeSynced releaseId = do
   execute_
     [sql|
-    INSERT INTO global_definition_search_release_queue (id)
+    INSERT INTO global_definition_search_release_queue (release_id)
     VALUES (#{releaseId})
     |]
 
