@@ -16,6 +16,7 @@ import Text.Megaparsec qualified as MP
 import Text.Megaparsec.Char qualified as MP
 import Text.Megaparsec.Char.Lexer qualified as MP hiding (space)
 import Unison.Name (Name)
+import Unison.Name qualified as Name
 import Unison.ShortHash (ShortHash)
 import Unison.ShortHash qualified as SH
 import Unison.Syntax.Name qualified as Name
@@ -36,6 +37,7 @@ data MentionRef
   | NameMention Name
   | TypeNameMention Name
   | TypeVarMention Text
+  | TypeHashMention ShortHash
   deriving stock (Show, Eq, Ord)
 
 type P = MP.Parsec QueryError Text
@@ -69,65 +71,73 @@ type P = MP.Parsec QueryError Text
 -- Right (fromList [HashToken (Builtin "Nat")],Nothing)
 --
 -- >>> queryToTokens "Nat Text #deadbeef Abort"
--- Right (fromList [TypeMentionToken (Left (NameSegment {toUnescapedText = "Abort"})) (Just 1),TypeMentionToken (Left (NameSegment {toUnescapedText = "Nat"})) (Just 1),TypeMentionToken (Left (NameSegment {toUnescapedText = "Text"})) (Just 1),HashToken (ShortHash {prefix = "deadbeef", cycle = Nothing, cid = Nothing})],Nothing)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Abort"} :| []))) (Just 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Nat"} :| []))) (Just 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Just 1),TypeMentionToken (Right (ShortHash {prefix = "deadbeef", cycle = Nothing, cid = Nothing})) (Just 1)],Nothing)
 --
 -- >>> queryToTokens "k -> v -> Map k v -> Map k v"
--- Right (fromList [TypeMentionToken (Left (NameSegment {toUnescapedText = "Map"})) (Just 2),TypeVarToken 0 (Just 3),TypeVarToken 1 (Just 3)],Just 3)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Map"} :| []))) (Just 2),TypeVarToken 0 (Just 3),TypeVarToken 1 (Just 3)],Just 3)
 --
 -- >>> queryToTokens ": b -> a -> b"
 -- Right (fromList [TypeVarToken 0 (Just 1),TypeVarToken 1 (Just 2)],Just 2)
 --
 -- >>> queryToTokens "(a ->{𝕖} b) -> [a] ->{𝕖} [b]"
--- Right (fromList [TypeMentionToken (Left (NameSegment {toUnescapedText = "List"})) (Just 2),TypeVarToken 0 (Just 2),TypeVarToken 1 (Just 2)],Just 2)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "List"} :| []))) (Just 2),TypeVarToken 0 (Just 2),TypeVarToken 1 (Just 2)],Just 2)
 --
 -- >>> queryToTokens "'{Abort} ()"
--- Right (fromList [TypeMentionToken (Left (NameSegment {toUnescapedText = "Abort"})) (Just 1)],Nothing)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Abort"} :| []))) (Just 1)],Nothing)
 --
 -- Unfinished query:
 -- >>> queryToTokens "(Text -> Text"
--- Right (fromList [TypeMentionToken (Left (NameSegment {toUnescapedText = "Text"})) (Just 2)],Nothing)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Just 2)],Nothing)
 --
 -- Horribly mishapen query:
 -- >>> queryToTokens "[{ &Text !{𝕖} (Optional)"
--- Right (fromList [TypeMentionToken (Left (NameSegment {toUnescapedText = "Optional"})) (Just 1),TypeMentionToken (Left (NameSegment {toUnescapedText = "Text"})) (Just 1)],Nothing)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Just 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Just 1)],Nothing)
+--
+-- >>> queryToTokens "e -> abilities.Exception"
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) (Just 1),TypeVarToken 0 (Just 1)],Just 1)
 queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either Name ShortHash)), Maybe Arity)
 queryToTokens query =
   let cleanQuery =
         query
           & Text.filter Char.isAscii
-   in MP.runParser queryParser "query" cleanQuery
-        & \case
-          (Left _err) ->
-            let simpleQuery =
-                  query
-                    & Text.map (\c -> if Char.isAlphaNum c || c `elem` ("#." :: String) then c else ' ')
-                    & Text.words
-                    & Text.unwords
-             in -- If even the lax parser fails, try simplifying the query even further to see if
-                -- we can parse anything at all.
-                queryToTokens simpleQuery
-          (Right (mayArity, occurrences)) ->
-            let (hashAndNameTokens, typeVarMentions) =
-                  MonMap.toList
-                    occurrences
-                    & foldMap \case
-                      (HashMention hash, _occ) -> ([HashToken hash], [])
-                      (NameMention name, _occ) -> ([NameToken name], [])
-                      (TypeNameMention name, occ) -> ([TypeMentionToken (Left name) $ Just occ], [])
-                      (TypeVarMention var, occ) -> ([], [(var, occ)])
+      parseResult =
+        MP.runParser queryParser "query" cleanQuery
+          & \case
+            (Left _err) ->
+              let simpleQuery =
+                    cleanQuery
+                      & Text.map (\c -> if Char.isAlphaNum c || c `elem` ("#." :: String) then c else ' ')
+                      & Text.words
+                      & Text.unwords
+               in -- If even the lax parser fails, try simplifying the query even further to see if
+                  -- we can parse anything at all.
+                  mapLeft (Text.pack . MP.errorBundlePretty) $ MP.runParser queryParser "query" simpleQuery
+            (Right r) -> Right r
+   in case parseResult of
+        Left err -> Left err
+        Right (mayArity, occurrences) ->
+          let (hashAndNameTokens, typeVarMentions) =
+                MonMap.toList
+                  occurrences
+                  & foldMap \case
+                    (HashMention hash, _occ) -> ([HashToken hash], [])
+                    (NameMention name, _occ) -> ([NameToken name], [])
+                    (TypeNameMention name, occ) -> ([TypeMentionToken (Left name) $ Just occ], [])
+                    (TypeVarMention var, occ) -> ([], [(var, occ)])
+                    (TypeHashMention hash, occ) -> ([TypeMentionToken (Right hash) $ Just occ], [])
 
-                -- Normalize type vars so varIds are sorted according to number of occurences.
-                normalizedTypeVarTokens =
-                  List.sortOn snd typeVarMentions
-                    & imap (\i (_vId, occ) -> TypeVarToken (VarId i) $ Just occ)
-                -- if there's no indication the user is trying to do a 'real' type query then
-                -- ignore arity.
-                arity = do
-                  Sum n <- mayArity
-                  if n <= 0
-                    then Nothing
-                    else Just n
-             in Right (Set.fromList $ hashAndNameTokens <> normalizedTypeVarTokens, arity)
+              -- Normalize type vars so varIds are sorted according to number of occurences.
+              normalizedTypeVarTokens =
+                List.sortOn snd typeVarMentions
+                  & imap (\i (_vId, occ) -> TypeVarToken (VarId i) $ Just occ)
+              -- if there's no indication the user is trying to do a 'real' type query then
+              -- ignore arity.
+              arity = do
+                Sum n <- mayArity
+                if n <= 0
+                  then Nothing
+                  else Just n
+           in Right (Set.fromList $ hashAndNameTokens <> normalizedTypeVarTokens, arity)
 
 queryParser :: P (Maybe (Sum Arity), MonoidalMap MentionRef Occurrence)
 queryParser = do
@@ -150,7 +160,7 @@ simpleHashQueryP = do
 
 simpleNameQueryP :: P (MonoidalMap MentionRef Occurrence)
 simpleNameQueryP = do
-  name <- nameP False
+  name <- initialNameP
   -- Simple queries have ONLY the name
   MP.eof
   pure $ MonMap.singleton (NameMention name) 1
@@ -159,7 +169,7 @@ simpleNameQueryP = do
 typeQueryP :: P (Sum Arity, MonoidalMap MentionRef Occurrence)
 typeQueryP = do
   _ <- optional $ lexeme (MP.char ':')
-  fmap fold . many $ do
+  fmap fold . some $ do
     tokens <-
       lexeme $
         MP.choice
@@ -197,7 +207,7 @@ tupleP = MP.between (MP.char '(') (MP.char ')') do
   pure $ MonMap.singleton (TypeNameMention (Name.unsafeParseText "Tuple")) 1
 
 listP :: P (MonoidalMap MentionRef Occurrence)
-listP = MP.between (lexeme (MP.char '[')) (optional $ lexeme (MP.char ']')) do
+listP = MP.between (lexeme (MP.char '[')) (lexeme (MP.char ']')) do
   (_, tokens) <- typeQueryP
   pure $ tokens <> MonMap.singleton (TypeNameMention (Name.unsafeParseText "List")) 1
 
@@ -205,27 +215,24 @@ typeQueryTokenP :: P (MonoidalMap MentionRef Occurrence)
 typeQueryTokenP = do
   MP.choice
     [ hashMentionTokenP,
-      typeVarMentionTokenP,
-      typeNameMentionTokenP
+      typeMentionP
     ]
   where
     hashMentionTokenP :: P (MonoidalMap MentionRef Occurrence)
     hashMentionTokenP = do
       hash <- hashP
-      pure $ MonMap.singleton (HashMention hash) 1
+      pure $ MonMap.singleton (TypeHashMention hash) 1
 
-    typeNameMentionTokenP :: P (MonoidalMap MentionRef Occurrence)
-    typeNameMentionTokenP = do
-      name <- nameP True
-      pure $ MonMap.singleton (TypeNameMention name) 1
-
-    typeVarMentionTokenP :: P (MonoidalMap MentionRef Occurrence)
-    typeVarMentionTokenP = do
-      varText <- typeVarP
-      pure $ MonMap.singleton (TypeVarMention varText) 1
-
-typeVarP :: P Text
-typeVarP = Text.pack <$> liftA2 (:) (MP.oneOf $ ['a' .. 'z'] <> "_") (many $ MP.alphaNumChar <|> MP.char '_')
+typeMentionP :: P (MonoidalMap MentionRef Occurrence)
+typeMentionP = do
+  name <- nameP
+  case name of
+    n
+      | Just (c, _) <- Text.uncons . NameSegment.toEscapedText . Name.lastSegment $ n,
+        Char.isLower c,
+        Name.countSegments n == 1 ->
+          pure $ MonMap.singleton (TypeVarMention (Name.toText n)) 1
+      | otherwise -> pure $ MonMap.singleton (TypeNameMention name) 1
 
 hashP :: P ShortHash
 hashP = do
@@ -236,16 +243,16 @@ hashP = do
     Nothing -> MP.customFailure . InvalidHash $ Text.pack possibleHash
     Just hash -> pure hash
 
-nameP :: Bool -> P Name
-nameP mustBeType = do
-  firstChar <-
-    if mustBeType
-      then MP.satisfy Char.isUpper
-      else MP.satisfy (\c -> NameSegment.symbolyIdChar c || NameSegment.wordyIdChar c)
-  nameRemainder <-
-    if mustBeType
-      then many (MP.satisfy $ \c -> NameSegment.wordyIdChar c || c == '.')
-      else (many (MP.satisfy $ \c -> NameSegment.symbolyIdChar c || NameSegment.wordyIdChar c || c == '.'))
-  case Name.parseTextEither (Text.pack $ firstChar : nameRemainder) of
-    Left _ -> MP.customFailure . InvalidName $ Text.pack (firstChar : nameRemainder)
+nameP :: P Name
+nameP = do
+  name <- List.intercalate "." <$> MP.sepBy (liftA2 (:) (MP.satisfy NameSegment.wordyIdStartChar) (many (MP.satisfy NameSegment.wordyIdChar))) (MP.char '.')
+  case Name.parseTextEither (Text.pack name) of
+    Left _ -> MP.customFailure . InvalidName $ Text.pack name
+    Right name -> pure name
+
+initialNameP :: P Name
+initialNameP = do
+  name <- some (MP.satisfy NameSegment.symbolyIdChar) <|> (liftA2 (:) (MP.satisfy NameSegment.wordyIdStartChar) (some (MP.satisfy NameSegment.wordyIdChar)))
+  case Name.parseTextEither (Text.pack name) of
+    Left _ -> MP.customFailure . InvalidName $ Text.pack name
     Right name -> pure name
