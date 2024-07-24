@@ -15,7 +15,7 @@ import Data.Set qualified as Set
 import Data.Set.Lens (setOf)
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
-import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..), DefnSearchToken (..), Occurrence, TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
+import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
@@ -44,8 +44,6 @@ import Unison.Debug qualified as Debug
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
-import Unison.Name qualified as Name
-import Unison.NameSegment (NameSegment)
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
@@ -151,18 +149,18 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
     pped <- PG.timeTransaction "Build PPED" $ PPEPostgres.ppedForReferences namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
-    let namedDocs :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)]
+    let namedDocs :: [DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash)]
         namedDocs =
           refDocs
             & traversed . field @"tokens" %~ Set.mapMaybe \token -> do
               for token \ref -> do
                 name <- PPE.types ppe ref
-                pure $ (Name.lastSegment . HQ'.toName $ name, Reference.toShortHash ref)
+                pure $ (HQ'.toName $ name, Reference.toShortHash ref)
     lift $ PG.timeTransaction "Inserting Docs" $ DDQ.insertDefinitionDocuments namedDocs
     pure errs
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
-tokensForTerm :: (Var.Var v) => Name -> Referent -> Type.Type v a -> Summary.TermSummary -> (Set (DefnSearchToken TypeReference), Int)
+tokensForTerm :: (Var.Var v) => Name -> Referent -> Type.Type v a -> Summary.TermSummary -> (Set (DefnSearchToken TypeReference), Arity)
 tokensForTerm name ref typ (Summary.TermSummary {tag}) = do
   let sh = Referent.toShortHash ref
       baseTokens = Set.fromList [NameToken name, HashToken sh]
@@ -183,10 +181,10 @@ data TokenGenState v = TokenGenState
 type TokenGenM v = ReaderT (TokenGenEnv v) (State (TokenGenState v))
 
 -- | Compute var occurrence and type ref occurrence search tokens from a type signature.
-typeSigTokens :: forall v ann. (Var.Var v) => Type.Type v ann -> (Set (DefnSearchToken TypeReference), Int)
+typeSigTokens :: forall v ann. (Var.Var v) => Type.Type v ann -> (Set (DefnSearchToken TypeReference), Arity)
 typeSigTokens typ =
   let occMap :: MonoidalMap (Either VarId TypeReference) (Occurrence, Any)
-      arity :: Int
+      arity :: Arity
       (occMap, Sum arity) = flip evalState initState . flip runReaderT (TokenGenEnv mempty) $ ABT.cata alg typ
       (varIds, typeRefs) =
         MonMap.toList occMap & foldMap \case
@@ -222,8 +220,8 @@ typeSigTokens typ =
     -- Cata algebra for collecting type reference tokens from a type signature.
     alg ::
       ann ->
-      ABT.ABT Type.F v (TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Int)) ->
-      TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Int)
+      ABT.ABT Type.F v (TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)) ->
+      TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)
     alg _ann = \case
       ABT.Var v -> do
         vId <- varIdFor v
@@ -277,10 +275,10 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
     (errs, refDocs) <-
       types & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
         (declTokens, declArity) <- case ref of
-          Reference.Builtin _ -> pure (mempty, 0)
+          Reference.Builtin _ -> pure (mempty, Arity 0)
           Reference.DerivedId refId -> do
             decl <- lift (Codebase.loadTypeDeclaration refId) `whenNothingM` throwError (NoDeclForType fqn ref)
-            pure $ (tokensForDecl refId decl, length . DD.bound $ DD.asDataDecl decl)
+            pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
         let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
 
         typeSummary <- lift $ Summary.typeSummaryForReference ref (Just fqn) Nothing
@@ -301,13 +299,13 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
     pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
-    let namedDocs :: [DefinitionDocument ProjectId ReleaseId Name (NameSegment, ShortHash)]
+    let namedDocs :: [DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash)]
         namedDocs =
           refDocs
             & traversed . field @"tokens" %~ Set.mapMaybe \token -> do
               for token \ref -> do
                 name <- PPE.types ppe ref
-                pure $ (Name.lastSegment . HQ'.toName $ name, Reference.toShortHash ref)
+                pure $ (HQ'.toName name, Reference.toShortHash ref)
     lift $ DDQ.insertDefinitionDocuments namedDocs
     pure errs
 

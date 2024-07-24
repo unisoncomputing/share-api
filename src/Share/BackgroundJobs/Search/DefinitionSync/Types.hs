@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Share.BackgroundJobs.Search.DefinitionSync.Types
   ( TermOrTypeSummary (..),
@@ -8,9 +9,11 @@ module Share.BackgroundJobs.Search.DefinitionSync.Types
     DefnSearchToken (..),
     Occurrence (..),
     VarId (..),
+    Arity (..),
   )
 where
 
+import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Monoid (Sum (..))
 import Data.Text qualified as Text
@@ -126,6 +129,9 @@ newtype Occurrence = Occurrence Int
 newtype VarId = VarId Int
   deriving newtype (Show, Read, Eq, Ord, Num, ToJSON, Enum)
 
+newtype Arity = Arity Int32
+  deriving newtype (Show, Read, Eq, Ord, Num, ToJSON, Enum, Hasql.EncodeValue, Hasql.DecodeValue)
+
 -- | Represents the possible ways we can search the global definitions index.
 data DefnSearchToken typeRef
   = -- Allows searching by literal name
@@ -142,6 +148,8 @@ data DefnSearchToken typeRef
   | TypeTagToken TypeTag
   | TypeModToken DD.Modifier
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+makePrisms ''DefnSearchToken
 
 -- | Converts a DefnSearchToken to a prefix-searchable text string.
 --
@@ -185,7 +193,7 @@ data DefinitionDocument proj release name typeRef = DefinitionDocument
     -- For now we only index types by their final name segment, may need to revisit this
     -- in the future.
     tokens :: Set (DefnSearchToken typeRef),
-    arity :: Int,
+    arity :: Arity,
     tag :: TermOrTypeTag,
     metadata :: TermOrTypeSummary
   }

@@ -13,7 +13,6 @@ import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import GHC.TypeLits qualified as TypeError
 import Hasql.Interpolate qualified as Interp
-import Text.Megaparsec qualified as MP
 import Unison.Server.Orphans ()
 import Unison.ShortHash (ShortHash)
 import Unison.ShortHash qualified as SH
