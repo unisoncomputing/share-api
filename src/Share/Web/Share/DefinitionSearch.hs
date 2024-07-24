@@ -95,6 +95,9 @@ type P = MP.Parsec QueryError Text
 --
 -- >>> queryToTokens "e -> abilities.Exception"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) (Just 1),TypeVarToken 0 (Just 1)],Just 1)
+--
+-- >>> queryToTokens "Json.Text"
+-- Right (fromList [NameToken (Name Relative (NameSegment {toUnescapedText = "Text"} :| [NameSegment {toUnescapedText = "Json"}]))],Nothing)
 queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either Name ShortHash)), Maybe Arity)
 queryToTokens query =
   let cleanQuery =
@@ -252,7 +255,7 @@ nameP = do
 
 initialNameP :: P Name
 initialNameP = do
-  name <- some (MP.satisfy NameSegment.symbolyIdChar) <|> (liftA2 (:) (MP.satisfy NameSegment.wordyIdStartChar) (some (MP.satisfy NameSegment.wordyIdChar)))
+  name <- List.intercalate "." <$> MP.sepBy (some (MP.satisfy NameSegment.symbolyIdChar) <|> (liftA2 (:) (MP.satisfy NameSegment.wordyIdStartChar) (many (MP.satisfy NameSegment.wordyIdChar)))) (MP.char '.')
   case Name.parseTextEither (Text.pack name) of
     Left _ -> MP.customFailure . InvalidName $ Text.pack name
     Right name -> pure name
