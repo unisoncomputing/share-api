@@ -26,6 +26,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.LooseCode.Queries qualified as LCQ
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
+import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
 import Share.Project
 import Share.Release
@@ -720,8 +721,9 @@ createRelease ::
   UserId ->
   m (Release CausalId UserId)
 createRelease !_nlReceipt projectId ReleaseVersion {major, minor, patch} squashedCausalId unsquashedCausalId creatorId = do
-  PG.queryExpect1Row
-    [PG.sql|
+  release@Release {releaseId} <-
+    PG.queryExpect1Row
+      [PG.sql|
         INSERT INTO project_releases(
           project_id,
           created_by,
@@ -748,6 +750,8 @@ createRelease !_nlReceipt projectId ReleaseVersion {major, minor, patch} squashe
           minor_version,
           patch_version
       |]
+  DDQ.submitReleaseToBeSynced releaseId
+  pure release
 
 setBranchCausalHash ::
   NameLookupReceipt ->
