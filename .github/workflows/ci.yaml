@@ -247,7 +247,7 @@ jobs:
           docker volume rm docker_postgresVolume 2>/dev/null || true
 
           # Start share and it's dependencies in the background
-          docker compose -f docker/transcripts.docker-compose.yml up --wait
+          docker compose -f docker/docker-compose.yml up --wait
           
           # Run the transcript tests
           zsh ./transcripts/run-transcripts.zsh
