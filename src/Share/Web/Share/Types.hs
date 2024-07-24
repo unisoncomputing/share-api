@@ -16,6 +16,7 @@ import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
 import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
 
 data UpdateUserRequest = UpdateUserRequest
   { name :: NullableUpdate Text,
@@ -189,8 +190,29 @@ data DefinitionSearchResult
 instance ToJSON DefinitionSearchResult where
   toJSON DefinitionSearchResult {..} =
     Aeson.object
-      [ "fqn" .= fqn,
-        "summary" .= summary,
-        "project" .= project,
-        "release" .= release
+      [ "fqn" Aeson..= fqn,
+        "projectRef" Aeson..= project,
+        "branchRef" Aeson..= release,
+        "kind" Aeson..= kind,
+        "definition" Aeson..= definition
       ]
+    where
+      (kind, definition) = case summary of
+        DefSync.ToTTermSummary TermSummary {displayName, hash, summary, tag} ->
+          ( Aeson.String "term",
+            Aeson.object
+              [ "displayName" Aeson..= displayName,
+                "hash" Aeson..= hash,
+                "summary" Aeson..= summary,
+                "tag" Aeson..= tag
+              ]
+          )
+        DefSync.ToTTypeSummary TypeSummary {displayName, hash, summary, tag} ->
+          ( Aeson.String "type",
+            Aeson.object
+              [ "displayName" Aeson..= displayName,
+                "hash" Aeson..= hash,
+                "summary" Aeson..= summary,
+                "tag" Aeson..= tag
+              ]
+          )

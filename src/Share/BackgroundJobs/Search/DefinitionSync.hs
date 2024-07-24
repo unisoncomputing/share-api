@@ -43,6 +43,7 @@ import Unison.Debug qualified as Debug
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
+import Unison.Name qualified as Name
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
@@ -123,7 +124,14 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
       PG.timeTransaction "Building terms" $
         terms & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
           typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
-          termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just fqn) bhId Nothing Nothing
+          let displayName =
+                fqn
+                  & Name.reverseSegments
+                  -- For now we treat the display name for search as just the last 2 segments of the name.
+                  & \case
+                    (ns :| rest) -> ns :| take 1 rest
+                  & Name.fromReverseSegments
+          termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) bhId Nothing Nothing
           let sh = Referent.toShortHash ref
           let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
           let dd =
