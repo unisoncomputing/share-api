@@ -287,7 +287,7 @@ expectCausalIdsOf trav = do
       then unrecoverableError $ EntityMissing "missing-expected-causal" $ "Missing one of these causals: " <> Text.intercalate ", " (into @Text <$> hashes)
       else pure results
 
-expectNamespaceIdsByCausalIdsOf :: QueryM m => Traversal s t CausalId BranchHashId -> s -> m t
+expectNamespaceIdsByCausalIdsOf :: (QueryM m) => Traversal s t CausalId BranchHashId -> s -> m t
 expectNamespaceIdsByCausalIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \causalIds -> do
@@ -334,7 +334,38 @@ loadCausalIdByHash causalHash = do
               AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causals.id AND o.user_id = #{codebaseOwner})
     |]
 
-expectCausalIdByHash :: HasCallStack => CausalHash -> Codebase.CodebaseM e CausalId
+expectCausalIdByHash :: (HasCallStack) => CausalHash -> Codebase.CodebaseM e CausalId
 expectCausalIdByHash causalHash = do
   loadCausalIdByHash causalHash
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal id for hash: " <> tShow causalHash)
+
+-- | TODO:
+
+---- | Expands shorthashes to their full form (still as a ShortHash)
+----
+---- Note: Be wary, this could cause hashes which are unknown to a user to leak if they're not
+-- expandShortHashesOf :: (HasCallStack) => Traversal s t ShortHash ShortHash -> s -> CodebaseM e t
+-- expandShortHashesOf trav s = do
+--  codebaseOwner <- asks Codebase.codebaseOwner
+--  s
+--    & unsafePartsOf (trav . prefix_) %%~ \shortHashes -> do
+--      let numberedShortHashes = zip [0 :: Int32 ..] shortHashes
+--      results :: [Text] <-
+--        queryListCol
+--          [sql|
+--      WITH hash_prefixes(ord, prefix) AS (
+--        SELECT * FROM ^{toTable numberedShortHashes}
+--      )
+--      SELECT sh.prefix
+--        FROM hash_prefixes sh
+--          JOIN short_hashes sh2 ON sh.prefix = sh2.prefix
+--        ORDER BY sh.ord ASC
+--      |]
+--      if length results /= length shortHashes
+--        then error "expandShortHashesOf: Missing expected short hash"
+--        else pure results
+--  where
+--    prefix_ :: Traversal' ShortHash Text
+--    prefix_ f = \case
+--      SH.Builtin b -> pure $ SH.Builtin b
+--      SH.ShortHash p c i -> SH.ShortHash <$> f p <*> pure c <*> pure i

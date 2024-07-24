@@ -7,6 +7,7 @@
 module Share.Web.Share.Impl where
 
 import Servant
+import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..))
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs (TourId, UserHandle)
@@ -27,6 +28,7 @@ import Share.User (User (..))
 import Share.UserProfile (UserProfile (..))
 import Share.Utils.API
 import Share.Utils.Caching
+import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
@@ -36,6 +38,7 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
+import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
 import Unison.Codebase.Path qualified as Path
@@ -396,10 +399,21 @@ searchDefinitionsEndpoint ::
   WebApp DefinitionSearchResults
 searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
-  let searchTokens = DefinitionSearch.queryToTokens query
-  matches <- PG.runTransaction $ DDQ.definitionSearch callerUserId filter limit _
-  let results = matches <&> _
-  pure $ DefinitionSearchResults results
+  case DefinitionSearch.queryToTokens query of
+    Left _err -> do
+      Logging.logErrorText $ "Failed to parse query: " <> query
+      pure $ DefinitionSearchResults []
+    Right (searchTokens, mayArity) -> do
+      matches <- PG.runTransaction $ DDQ.definitionSearch callerUserId filter limit searchTokens mayArity
+      let results =
+            matches <&> \DefinitionDocument {fqn, metadata = summary, project, release} ->
+              DefinitionSearchResult
+                { fqn,
+                  summary,
+                  project,
+                  release
+                }
+      pure $ DefinitionSearchResults results
   where
     limit = fromMaybe (Limit 20) mayLimit
 

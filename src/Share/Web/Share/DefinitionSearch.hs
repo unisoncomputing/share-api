@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Share.Web.DefinitionSearch (queryToTokens) where
+module Share.Web.Share.DefinitionSearch (queryToTokens) where
 
 import Control.Lens
 import Data.Char qualified as Char

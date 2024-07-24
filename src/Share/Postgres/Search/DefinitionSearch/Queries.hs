@@ -203,5 +203,5 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
         ORDER BY (br.tag <> 'doc'::definition_tag, br.tag <> 'test'::definition_tag, br.name LIKE ('%' || like_escape(#{query})), similarity(#{query}, br.name)) DESC
   |]
 
-definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Transaction e [DefinitionDocument proj release name typeRef]
-definitionSearch searchTokens = _
+definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either NameSegment ShortHash)) -> Maybe Int -> Transaction e [DefinitionDocument proj release name typeRef]
+definitionSearch searchTokens preferredArity = _
