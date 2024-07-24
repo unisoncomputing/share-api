@@ -17,10 +17,10 @@ services:
       POSTGRES_PASSWORD: sekrit
     volumes:
       - ../sql:/docker-entrypoint-initdb.d
-      # # Optionally persist the data between container invocations
-      # - postgresVolume:/var/lib/postgresql/data
+      # Optionally persist the data between container invocations
+      - postgresVolume:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf #  -c log_statement=all
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf   -c log_statement=all
 
 
   redis:
@@ -85,5 +85,5 @@ services:
       - redis
       - postgres
 
-# volumes:
-#   postgresVolume:
+volumes:
+  postgresVolume:

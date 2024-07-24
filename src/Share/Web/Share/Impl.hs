@@ -6,8 +6,8 @@
 
 module Share.Web.Share.Impl where
 
+import Control.Lens
 import Servant
-import Share.BackgroundJobs.Search.DefinitionSync.Types (DefinitionDocument (..))
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs (TourId, UserHandle)
@@ -18,7 +18,9 @@ import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalHash)
 import Share.Postgres.Ops qualified as PGO
+import Share.Postgres.Projects.Queries qualified as PQ
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
@@ -404,9 +406,14 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
       Logging.logErrorText $ "Failed to parse query: " <> query
       pure $ DefinitionSearchResults []
     Right (searchTokens, mayArity) -> do
-      matches <- PG.runTransaction $ DDQ.definitionSearch callerUserId filter limit searchTokens mayArity
+      matches <-
+        PG.runTransaction $
+          DDQ.definitionSearch callerUserId filter limit searchTokens mayArity
+            >>= PQ.expectProjectShortHandsOf (traversed . _1)
+            >>= RQ.expectReleaseVersionsOf (traversed . _2)
+            <&> over (traversed . _2) IDs.ReleaseShortHand
       let results =
-            matches <&> \DefinitionDocument {fqn, metadata = summary, project, release} ->
+            matches <&> \(project, release, fqn, summary) ->
               DefinitionSearchResult
                 { fqn,
                   summary,

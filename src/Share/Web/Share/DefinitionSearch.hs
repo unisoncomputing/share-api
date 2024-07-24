@@ -10,14 +10,12 @@ import Data.Map.Monoidal qualified as MonMap
 import Data.Monoid (Sum (..))
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Share.BackgroundJobs.Search.DefinitionSync.Types (DefnSearchToken (..), Occurrence, VarId (..))
+import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity, DefnSearchToken (..), Occurrence, VarId (..))
 import Share.Prelude
 import Text.Megaparsec qualified as MP
 import Text.Megaparsec.Char qualified as MP
 import Text.Megaparsec.Char.Lexer qualified as MP hiding (space)
 import Unison.Name (Name)
-import Unison.Name qualified as Name
-import Unison.NameSegment (NameSegment)
 import Unison.ShortHash (ShortHash)
 import Unison.ShortHash qualified as SH
 import Unison.Syntax.Name qualified as Name
@@ -92,7 +90,7 @@ type P = MP.Parsec QueryError Text
 -- Horribly mishapen query:
 -- >>> queryToTokens "[{ &Text !{𝕖} (Optional)"
 -- Right (fromList [TypeMentionToken (Left (NameSegment {toUnescapedText = "Optional"})) (Just 1),TypeMentionToken (Left (NameSegment {toUnescapedText = "Text"})) (Just 1)],Nothing)
-queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either NameSegment ShortHash)), Maybe Int)
+queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either Name ShortHash)), Maybe Arity)
 queryToTokens query =
   let cleanQuery =
         query
@@ -115,7 +113,7 @@ queryToTokens query =
                     & foldMap \case
                       (HashMention hash, _occ) -> ([HashToken hash], [])
                       (NameMention name, _occ) -> ([NameToken name], [])
-                      (TypeNameMention name, occ) -> ([TypeMentionToken (Left $ Name.lastSegment name) $ Just occ], [])
+                      (TypeNameMention name, occ) -> ([TypeMentionToken (Left name) $ Just occ], [])
                       (TypeVarMention var, occ) -> ([], [(var, occ)])
 
                 -- Normalize type vars so varIds are sorted according to number of occurences.
@@ -131,7 +129,7 @@ queryToTokens query =
                     else Just n
              in Right (Set.fromList $ hashAndNameTokens <> normalizedTypeVarTokens, arity)
 
-queryParser :: P (Maybe (Sum Int), MonoidalMap MentionRef Occurrence)
+queryParser :: P (Maybe (Sum Arity), MonoidalMap MentionRef Occurrence)
 queryParser = do
   MP.choice
     [ (Nothing,) <$> MP.try simpleHashQueryP,
@@ -158,7 +156,7 @@ simpleNameQueryP = do
   pure $ MonMap.singleton (NameMention name) 1
 
 -- | Parse a type query, returning the arity of the top-level type
-typeQueryP :: P (Sum Int, MonoidalMap MentionRef Occurrence)
+typeQueryP :: P (Sum Arity, MonoidalMap MentionRef Occurrence)
 typeQueryP = do
   _ <- optional $ lexeme (MP.char ':')
   fmap fold . many $ do

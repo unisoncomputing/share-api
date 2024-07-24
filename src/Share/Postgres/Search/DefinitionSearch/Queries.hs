@@ -79,18 +79,17 @@ claimUnsyncedRelease = do
 insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash)] -> Transaction e ()
 insertDefinitionDocuments docs = pipelined $ do
   let docsTable = docRow <$> docs
-  for_ docsTable \(projectId, releaseId, fqn, tokens, arity, tag, metadata) -> do
-    -- Ideally we'd do a bulk insert, but Hasql doesn't provide any method for passing arrays of
-    -- arrays as parameters, so instead we insert each record individually so we can use our
-    -- only level of array-ness for the tokens.
-    execute_ $
-      [sql|
-      INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, tag, metadata)
-        VALUES (#{projectId}, #{releaseId}, #{fqn}, array_to_tsvector(#{tokens}), #{arity}, #{tag}::definition_tag, #{metadata}::jsonb)
+  execute_ $
+    [sql|
+      WITH docs(project_id, release_id, name, token_text, arity, tag, metadata) AS (
+        SELECT * FROM ^{toTable docsTable}
+      ) INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, tag, metadata)
+        SELECT d.project_id, d.release_id, d.name, tsvector(d.token_text::text), d.arity, d.tag::definition_tag, d.metadata
+          FROM docs d
         ON CONFLICT DO NOTHING
       |]
   where
-    docRow :: DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash) -> (ProjectId, ReleaseId, Text, [Text], Arity, TermOrTypeTag, Hasql.Jsonb)
+    docRow :: DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash) -> (ProjectId, ReleaseId, Text, Text, Arity, TermOrTypeTag, Hasql.Jsonb)
     docRow DefinitionDocument {project, release, fqn, tokens, arity, tag, metadata} =
       let expandedTokens :: [DefnSearchToken (Either Name ShortHash)]
           expandedTokens =
@@ -105,7 +104,7 @@ insertDefinitionDocuments docs = pipelined $ do
        in ( project,
             release,
             Name.toText fqn,
-            searchTokenToText False <$> expandedTokens,
+            Text.unwords (searchTokenToText False <$> expandedTokens),
             arity,
             tag,
             Hasql.Jsonb $ Aeson.toJSON metadata
@@ -145,8 +144,8 @@ cleanIndexForRelease releaseId = do
 -- >>> searchTokenToText False (TypeMentionToken (Right $ fromJust $ SH.fromText "#2tWjVAuc7") Nothing)
 -- "mh,r,#2tWjVAuc7"
 --
--- >>> searchTokenToText False (TypeVarToken (VarId 1) (Just $ Occurrence 1))
--- "v,1,1"
+-- >>> searchTokenToText False (TypeVarToken (VarId 1) (Just $ Occurrence 2))
+-- "v,2,1"
 --
 -- >>> searchTokenToText False (TermTagToken Doc)
 -- "t,doc"
@@ -290,7 +289,7 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
         ORDER BY (br.tag <> 'doc'::definition_tag, br.tag <> 'test'::definition_tag, br.name LIKE ('%' || like_escape(#{query})), similarity(#{query}, br.name)) DESC
   |]
 
-definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Int32 -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
 definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
@@ -301,8 +300,8 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
-    WITH matches_deduped_by_project(project_id, release_id, name, arity, metadata) AS (
-      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.arity, doc.metadata FROM global_definition_search_docs doc
+    WITH matches_deduped_by_project(project_id, release_id, name, arity, metadata, num_search_tokens) AS (
+      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.arity, doc.metadata, length(doc.search_tokens) FROM global_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
         JOIN project_releases r ON r.id = doc.release_id
         WHERE
@@ -315,7 +314,7 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
         FROM matches_deduped_by_project m
         -- prefer results which have at LEAST the requested arity, then prefer shorter
         -- arities.
-        ORDER BY (m.arity >= #{preferredArity}) DESC, m.arity ASC
+        ORDER BY (m.arity >= #{preferredArity}) DESC, m.arity ASC, m.num_search_tokens ASC
         LIMIT #{limit}
   |]
   rows & traverseOf (traversed . _4) \(Hasql.Jsonb v) -> do
