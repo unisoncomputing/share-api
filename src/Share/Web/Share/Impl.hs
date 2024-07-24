@@ -407,7 +407,7 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
       pure $ DefinitionSearchResults []
     Right (searchTokens, mayArity) -> do
       matches <-
-        PG.runTransaction $
+        PG.runTransactionMode PG.ReadCommitted PG.Read $
           DDQ.definitionSearch callerUserId filter limit searchTokens mayArity
             >>= PQ.expectProjectShortHandsOf (traversed . _1)
             >>= RQ.expectReleaseVersionsOf (traversed . _2)

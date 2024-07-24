@@ -30,9 +30,8 @@ import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.Queries qualified as PG
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
-import Share.Project (Project (..), ProjectVisibility (..))
+import Share.Project (Project (..))
 import Share.Release (Release (..))
-import Share.User (User (..), UserVisibility (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import U.Codebase.Referent (Referent)
@@ -91,12 +90,7 @@ syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
   -- Wipe out any existing rows for this release. Normally there should be none, but this
   -- makes it easy to re-index later if we change how we tokenize things.
   lift $ DDQ.cleanIndexForRelease releaseId
-  Project {ownerUserId, visibility = projectVis} <- lift $ PG.expectProjectById projectId
-  User {visibility = userVis} <- PG.expectUserByUserId ownerUserId
-  -- Don't sync private projects
-  guard $ projectVis == ProjectPublic
-  -- Don't sync private users
-  guard $ userVis == UserPublic
+  Project {ownerUserId} <- lift $ PG.expectProjectById projectId
   Debug.debugM Debug.Temp "Syncing release" releaseId
   lift $ do
     bhId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausal
