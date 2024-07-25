@@ -377,7 +377,7 @@ pgT :: PG.Transaction e a -> ExceptT e WebApp a
 pgT = ExceptT . PG.tryRunTransaction
 
 -- | Helper for easily converting a failed lookup into the appropriate return type.
-orThrow :: (Monad m, MonadError e m) => m (Maybe a) -> e -> m a
+orThrow :: (MonadError e m) => m (Maybe a) -> e -> m a
 orThrow m e = m `whenNothingM` throwError e
 
 -- | Helper for easily converting a failed auth check into the appropriate return type.

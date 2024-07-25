@@ -216,7 +216,7 @@ isCausalHashAllowedToBeMismatched providedHash actualHash = do
       )
     |]
 
-addKnownComponentHashMismatch :: (HasCallStack, QueryM m) => ComponentHash -> ComponentHash -> m ()
+addKnownComponentHashMismatch :: (QueryM m) => ComponentHash -> ComponentHash -> m ()
 addKnownComponentHashMismatch providedHash actualHash = do
   execute_
     [sql|
@@ -225,7 +225,7 @@ addKnownComponentHashMismatch providedHash actualHash = do
       ON CONFLICT DO NOTHING
     |]
 
-addKnownCausalHashMismatch :: (HasCallStack, QueryM m) => CausalHash -> CausalHash -> m ()
+addKnownCausalHashMismatch :: (QueryM m) => CausalHash -> CausalHash -> m ()
 addKnownCausalHashMismatch providedHash actualHash = do
   execute_
     [sql|
@@ -287,7 +287,7 @@ expectCausalIdsOf trav = do
       then unrecoverableError $ EntityMissing "missing-expected-causal" $ "Missing one of these causals: " <> Text.intercalate ", " (into @Text <$> hashes)
       else pure results
 
-expectNamespaceIdsByCausalIdsOf :: QueryM m => Traversal s t CausalId BranchHashId -> s -> m t
+expectNamespaceIdsByCausalIdsOf :: (QueryM m) => Traversal s t CausalId BranchHashId -> s -> m t
 expectNamespaceIdsByCausalIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \causalIds -> do
@@ -334,7 +334,7 @@ loadCausalIdByHash causalHash = do
               AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causals.id AND o.user_id = #{codebaseOwner})
     |]
 
-expectCausalIdByHash :: HasCallStack => CausalHash -> Codebase.CodebaseM e CausalId
+expectCausalIdByHash :: (HasCallStack) => CausalHash -> Codebase.CodebaseM e CausalId
 expectCausalIdByHash causalHash = do
   loadCausalIdByHash causalHash
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal id for hash: " <> tShow causalHash)

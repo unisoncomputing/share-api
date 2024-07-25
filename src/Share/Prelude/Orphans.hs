@@ -12,15 +12,15 @@ import GHC.TypeLits qualified as TypeError
 import Hasql.Interpolate qualified as Interp
 import Unison.Server.Orphans ()
 
-instance {-# OVERLAPPING #-} TypeError.TypeError ('TypeError.Text "A String will be encoded as char[], Did you mean to use Text instead?") => Interp.EncodeValue String where
+instance {-# OVERLAPPING #-} (TypeError.TypeError ('TypeError.Text "A String will be encoded as char[], Did you mean to use Text instead?")) => Interp.EncodeValue String where
   encodeValue = error "unpossible"
 
-instance {-# OVERLAPPING #-} TypeError.TypeError ('TypeError.Text "Strings are decoded as a char[], Did you mean to use Text instead?") => Interp.DecodeValue String where
+instance {-# OVERLAPPING #-} (TypeError.TypeError ('TypeError.Text "Strings are decoded as a char[], Did you mean to use Text instead?")) => Interp.DecodeValue String where
   decodeValue = error "unpossible"
 
 -- Useful instance, but doesn't exist in either lib, likely because they just don't want to depend on one another.
-instance Semialign f => Semialign (Cofree f) where
-  align :: Semialign f => Cofree f a -> Cofree f b -> Cofree f (These a b)
+instance (Semialign f) => Semialign (Cofree f) where
+  align :: Cofree f a -> Cofree f b -> Cofree f (These a b)
   align (a :< l) (b :< r) =
     These a b :< alignWith go l r
     where

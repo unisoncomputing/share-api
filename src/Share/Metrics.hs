@@ -17,17 +17,17 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding
 import Data.Time qualified as Time
+import Network.HTTP.Types qualified as HTTP
+import Network.Wai qualified as Wai
+import Network.Wai.Middleware.Prometheus qualified as Prom
+import Prometheus qualified as Prom
+import Prometheus.Metric.GHC qualified as Prom
 import Share.Env qualified as Env
 import Share.Postgres qualified as PG
 import Share.Postgres.Metrics.Queries qualified as Q
 import Share.Prelude
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Servant.PathInfo (HasPathInfo, normalizePath)
-import Network.HTTP.Types qualified as HTTP
-import Network.Wai qualified as Wai
-import Network.Wai.Middleware.Prometheus qualified as Prom
-import Prometheus qualified as Prom
-import Prometheus.Metric.GHC qualified as Prom
 import System.Clock (Clock (..), diffTimeSpec, toNanoSecs)
 import System.Clock qualified as Clock
 import UnliftIO qualified
@@ -83,7 +83,7 @@ serveMetricsMiddleware env = do
         }
 
 -- | Record an event to the middleware metric.
-requestMetricsMiddleware :: HasPathInfo api => Proxy api -> Wai.Middleware
+requestMetricsMiddleware :: (HasPathInfo api) => Proxy api -> Wai.Middleware
 requestMetricsMiddleware api app req handleResponse = do
   if recordRequest req
     then do
@@ -97,7 +97,7 @@ requestMetricsMiddleware api app req handleResponse = do
           let status = Just $ Text.pack (show (HTTP.statusCode (Wai.responseStatus resp)))
           result <- handleResponse resp
           let latency :: Double
-              latency = fromRational $ toRational (toNanoSecs (end `diffTimeSpec` start) % 1000000000)
+              latency = fromRational (toNanoSecs (end `diffTimeSpec` start) % 1000000000)
           Prom.withLabel
             requestLatency
             (tShow Deployment.deployment, service, fromMaybe "" method, fromMaybe "" status, fromMaybe "unknown-path" path)
@@ -269,7 +269,7 @@ numUsersWithTickets =
     info = Prom.Info "num_users_with_tickets" "The number of users who have interacted with tickets."
 
 -- | Adds one to the user-signup counter
-tickUserSignup :: MonadIO m => m ()
+tickUserSignup :: (MonadIO m) => m ()
 tickUserSignup = liftIO do
   Prom.withLabel userSignupsCounter (tShow Deployment.deployment, "share-api") Prom.incCounter
 
@@ -393,9 +393,9 @@ timeActionIntoHistogram histogram l m = do
     end startTime = UnliftIO.liftIO $ do
       end <- Clock.getTime Monotonic
       let latency :: Double
-          latency = fromRational $ toRational (toNanoSecs (end `diffTimeSpec` startTime) % 1000000000)
+          latency = fromRational (toNanoSecs (end `diffTimeSpec` startTime) % 1000000000)
       Prom.withLabel histogram l (flip Prom.observe latency)
 
 -- | Record the duration of a background import.
-recordBackgroundImportDuration :: MonadUnliftIO m => m r -> m r
+recordBackgroundImportDuration :: (MonadUnliftIO m) => m r -> m r
 recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDurationSeconds (deployment, service)
