@@ -79,7 +79,10 @@ fetch "$transcript_user" GET project-catalog-get '/catalog'
 fetch "$transcript_user" GET project-search '/search?query=test'
 
 # Should filter project search by user if provided a full valid handle:
-fetch "$transcript_user" GET project-search-with-user '/search?query=@test/public'
+fetch "$transcript_user" GET project-search-with-user-and-project-query '/search?query=@test/public'
+
+# Should return all projects in a user if provided a full valid handle, but no project query:
+fetch "$transcript_user" GET project-search-with-only-user '/search?query=@test/'
 
 # Transcript user should not find 'test' user's private project
 fetch "$transcript_user" GET project-search-inaccessible '/search?query=privatetestproject'

@@ -261,6 +261,22 @@ searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
 -- The PG.queryListRows accepts strings as web search queries, see
 -- https://www.postgresql.org/docs/current/textsearch-controls.html
 searchProjects :: Maybe UserId -> Maybe UserId -> Query -> Limit -> PG.Transaction e [(Project, UserHandle)]
+-- Don't search with an empty query
+searchProjects _caller Nothing (Query "") _limit = pure []
+searchProjects caller (Just userId) (Query "") limit = do
+  -- If we have a userId filter but no query, just return all the projects owned by that user
+  -- which the caller has access to.
+  PG.queryListRows @(Project PG.:. PG.Only UserHandle)
+    [PG.sql|
+    SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
+      FROM projects p
+        JOIN users owner ON p.owner_user_id = owner.id
+      WHERE p.owner_user_id = #{userId}
+        AND (NOT p.private OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
+      ORDER BY p.created_at DESC
+      LIMIT #{limit}
+      |]
+    <&> fmap \(project PG.:. PG.Only handle) -> (project, handle)
 searchProjects caller userIdFilter (Query query) limit = do
   let prefixQuery =
         query
