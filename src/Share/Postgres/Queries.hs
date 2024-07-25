@@ -39,7 +39,7 @@ import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (.
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-userByUserId :: PG.QueryM m => UserId -> m (Maybe User)
+userByUserId :: (PG.QueryM m) => UserId -> m (Maybe User)
 userByUserId uid = do
   PG.query1Row
     [PG.sql|
@@ -260,8 +260,8 @@ searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
 --
 -- The PG.queryListRows accepts strings as web search queries, see
 -- https://www.postgresql.org/docs/current/textsearch-controls.html
-searchProjectsByUserQuery :: Maybe UserId -> Query -> Limit -> PG.Transaction e [(Project, UserHandle)]
-searchProjectsByUserQuery caller (Query query) limit = do
+searchProjects :: Maybe UserId -> Maybe UserId -> Query -> Limit -> PG.Transaction e [(Project, UserHandle)]
+searchProjects caller userIdFilter (Query query) limit = do
   let prefixQuery =
         query
           -- Remove any chars with special meaning for tsqueries.
@@ -280,6 +280,7 @@ searchProjectsByUserQuery caller (Query query) limit = do
         JOIN users AS owner ON p.owner_user_id = owner.id
       WHERE (webquery @@ p.project_text_document OR prefixquery @@ p.project_text_document)
       AND (NOT p.private OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
+      AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
       ORDER BY (ts_rank_cd(p.project_text_document, webquery), ts_rank_cd(p.project_text_document, prefixquery)) DESC
       LIMIT #{limit}
       |]
@@ -698,7 +699,7 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
       |]
 
 createRelease ::
-  PG.QueryM m =>
+  (PG.QueryM m) =>
   NameLookupReceipt ->
   ProjectId ->
   ReleaseVersion ->

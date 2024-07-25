@@ -78,6 +78,9 @@ fetch "$transcript_user" GET project-catalog-get '/catalog'
 # Should find projects we have access to (e.g. Unison's private project), but none that we don't.
 fetch "$transcript_user" GET project-search '/search?query=test'
 
+# Should filter project search by user if provided a full valid handle:
+fetch "$transcript_user" GET project-search-with-user '/search?query=@test/public'
+
 # Transcript user should not find 'test' user's private project
 fetch "$transcript_user" GET project-search-inaccessible '/search?query=privatetestproject'
 
