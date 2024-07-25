@@ -27,11 +27,11 @@ runAppM env (AppM m) = runReaderT m env
 
 instance Logging.MonadLogger (AppM ()) where
   logMsg msg = do
-    log <- asks Env.logger
+    log' <- asks Env.logger
     minSeverity <- asks Env.minLogSeverity
     when (Logging.severity msg >= minSeverity) $ do
       timestamp <- asks timeCache >>= liftIO
-      liftIO . log . Logging.logFmtFormatter timestamp $ msg
+      liftIO . log' . Logging.logFmtFormatter timestamp $ msg
 
 instance Cryptonite.MonadRandom (AppM reqCtx) where
   getRandomBytes =

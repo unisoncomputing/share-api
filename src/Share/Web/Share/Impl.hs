@@ -6,11 +6,12 @@
 
 module Share.Web.Share.Impl where
 
-import Control.Lens
+import Data.Text qualified as Text
 import Servant
+import Control.Lens
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
-import Share.IDs (TourId, UserHandle)
+import Share.IDs (TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
 import Share.OAuth.Session
@@ -27,6 +28,7 @@ import Share.Prelude
 import Share.Project (Project (..))
 import Share.Release (Release (..))
 import Share.User (User (..))
+import Share.User qualified as User
 import Share.UserProfile (UserProfile (..))
 import Share.Utils.API
 import Share.Utils.Caching
@@ -340,13 +342,23 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
 -- all private users in the PG query itself.
 searchEndpoint :: Maybe Session -> Query -> Maybe Limit -> WebApp [SearchResult]
 searchEndpoint _caller (Query "") _limit = pure []
-searchEndpoint (MaybeAuthedUserID callerUserId) query (fromMaybe (Limit 20) -> limit) = do
+searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 20) -> limit) = do
+  (userQuery :: Query, (projectUserFilter :: Maybe UserId, projectQuery :: Query)) <-
+    fromMaybe query (Text.stripPrefix "@" query)
+      & Text.splitOn "/"
+      & \case
+        (userQuery : projectQueryText : _rest) -> do
+          mayUserId <- PG.runTransaction $ fmap User.user_id <$> Q.userByHandle (UserHandle userQuery)
+          pure (Query query, (mayUserId, Query projectQueryText))
+        [projectOrUserQuery] -> pure (Query projectOrUserQuery, (Nothing, Query projectOrUserQuery))
+        -- This is impossible
+        [] -> pure (Query query, (Nothing, Query query))
   -- We don't have a great way to order users and projects together, so we just limit to a max
   -- of 5 users (who match the query as a prefix), then return the rest of the results from
   -- projects.
   (users, projects) <- PG.runTransaction $ do
-    users <- Q.searchUsersByNameOrHandlePrefix query (Limit 5)
-    projects <- Q.searchProjectsByUserQuery callerUserId query limit
+    users <- Q.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+    projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
     pure (users, projects)
   let userResults =
         users
