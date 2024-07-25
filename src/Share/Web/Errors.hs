@@ -43,6 +43,9 @@ import Data.String (IsString)
 import Data.Text (pack)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import GHC.Stack qualified as GHC
+import Servant
+import Servant.Client
 import Share.Env qualified as Env
 import Share.Monitoring qualified as Monitoring
 import Share.OAuth.Errors (OAuth2Error (..), OAuth2ErrorCode (..), OAuth2ErrorRedirect (..))
@@ -51,9 +54,6 @@ import Share.Prelude
 import Share.Utils.Logging
 import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
-import GHC.Stack qualified as GHC
-import Servant
-import Servant.Client
 import Unison.Server.Backend qualified as Backend
 import Unison.Server.Errors qualified as Backend
 import Unison.Sync.Types qualified as Sync
@@ -340,10 +340,10 @@ instance Exception SomeServerError
 data WithCallStack e = WithCallStack GHC.CallStack e
   deriving stock (Show)
 
-instance ToServerError e => ToServerError (WithCallStack e) where
+instance (ToServerError e) => ToServerError (WithCallStack e) where
   toServerError (WithCallStack _ e) = toServerError e
 
-instance Loggable e => Loggable (WithCallStack e) where
+instance (Loggable e) => Loggable (WithCallStack e) where
   toLog (WithCallStack cs e) =
     toLog e
       & withCallstackIfUnset cs
@@ -351,7 +351,7 @@ instance Loggable e => Loggable (WithCallStack e) where
 -- | Wraps a server error to include a callstack.
 -- 'HasCallStack' implements 'Loggable' and 'ToServerError' so you
 -- can use this in most error situations.
-withCallstack :: (HasCallStack, Loggable e) => e -> WithCallStack e
+withCallstack :: (HasCallStack) => e -> WithCallStack e
 withCallstack = WithCallStack GHC.callStack
 
 throwSomeServerError :: (Show e, ToServerError e, Loggable e, MonadError SomeServerError m, HasCallStack) => e -> m a

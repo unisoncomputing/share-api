@@ -92,7 +92,7 @@ addRequestTag k v = do
   RequestCtx {reqTagsVar} <- asks requestCtx
   atomically $ modifyTVar' reqTagsVar (Map.insert k v)
 
-addServerTag :: HasServer api '[] => Proxy api -> Text -> Text -> ServerT api WebApp -> ServerT api WebApp
+addServerTag :: (HasServer api '[]) => Proxy api -> Text -> Text -> ServerT api WebApp -> ServerT api WebApp
 addServerTag proxy label value api = hoistServer proxy go api
   where
     go :: forall x. WebApp x -> WebApp x
@@ -108,7 +108,7 @@ addServerTag proxy label value api = hoistServer proxy go api
 --
 -- for users \user -> withLocalTag "user" (userId user) do
 --   ...
-withLocalTag :: (MonadReader (Env RequestCtx) m, MonadIO m) => Text -> Text -> m a -> m a
+withLocalTag :: (MonadReader (Env RequestCtx) m) => Text -> Text -> m a -> m a
 withLocalTag k v action = do
   localRequestCtx (\ctx -> ctx {localTags = Map.insert k v $ localTags ctx}) action
 

@@ -224,7 +224,7 @@ expectNamespace branchHashId = do
           )
         <&> Map.fromList
 
-    getChildren :: (QueryM m) => BranchHashId -> m (Map NameSegment (CausalBranch m))
+    getChildren :: BranchHashId -> m (Map NameSegment (CausalBranch m))
     getChildren branchHashId = do
       childIds <-
         queryListRows
@@ -385,7 +385,7 @@ expectPgNamespace branchHashId = do
             (nameSegmentId, (branchHashId, causalId))
       pure $ Map.fromList childList
 
-loadNamespaceIdForCausal :: (HasCallStack, QueryM m) => CausalId -> m (Maybe BranchHashId)
+loadNamespaceIdForCausal :: (QueryM m) => CausalId -> m (Maybe BranchHashId)
 loadNamespaceIdForCausal causalId = runMaybeT do
   MaybeT $
     query1Col

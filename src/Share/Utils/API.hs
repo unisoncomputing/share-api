@@ -30,9 +30,9 @@ import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Typeable (typeRep)
+import Servant
 import Share.Postgres qualified as PG
 import Share.Prelude
-import Servant
 
 -- | Type for updating of nullable fields.
 --
@@ -62,7 +62,7 @@ data NullableUpdate a
 -- parseJSON = withObject "Foo" $ \obj -> do
 --   parseNullableUpdate obj "key"
 -- @
-parseNullableUpdate :: forall a. (FromJSON a, Typeable a) => Aeson.Object -> Text -> Parser (NullableUpdate a)
+parseNullableUpdate :: forall a. (FromJSON a) => Aeson.Object -> Text -> Parser (NullableUpdate a)
 parseNullableUpdate obj key =
   obj .:! Aeson.Key.fromText key >>= \case
     Nothing -> pure Unchanged

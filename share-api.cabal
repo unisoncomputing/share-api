@@ -180,7 +180,7 @@ library
       BlockArguments
       QuasiQuotes
       ImportQualifiedPost
-  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -Wincomplete-uni-patterns -Widentities -Wredundant-constraints -Wpartial-fields -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
   build-depends:
       Diff
     , MonadRandom
@@ -319,7 +319,7 @@ executable share-api
       BlockArguments
       QuasiQuotes
       ImportQualifiedPost
-  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -Wincomplete-uni-patterns -Widentities -Wredundant-constraints -Wpartial-fields -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
   build-depends:
       Diff
     , MonadRandom

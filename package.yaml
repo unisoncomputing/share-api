@@ -23,6 +23,10 @@ ghc-options:
 - -Wno-name-shadowing
 - -Wno-type-defaults
 - -Wno-missing-pattern-synonym-signatures
+- -Wincomplete-uni-patterns
+- -Widentities
+- -Wredundant-constraints
+- -Wpartial-fields
 - -fprint-expanded-synonyms
 - -fwrite-ide-info
 - -O2

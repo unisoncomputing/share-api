@@ -38,12 +38,12 @@ where
 
 import Control.Monad.Reader
 import Data.Char qualified as Char
-import Data.Coerce
-import Data.Kind
 import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
+import GHC.Stack (CallStack, callStack, prettyCallStack)
+import Servant.Client qualified as Servant
 import Share.Env qualified as Env
 import Share.OAuth.Errors (OAuth2Error)
 import Share.OAuth.Types (RedirectReceiverErr)
@@ -51,8 +51,6 @@ import Share.Prelude
 import Share.Utils.Deployment (deployment)
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging.Types as X
-import GHC.Stack (CallStack, callStack, prettyCallStack)
-import Servant.Client qualified as Servant
 import System.Log.FastLogger qualified as FL
 import Unison.Server.Backend qualified as Backend
 import Unison.Sync.Types qualified as Sync
@@ -66,9 +64,7 @@ type Logger = FL.LogStr -> IO ()
 newtype LoggerT m a = LoggerT (ReaderT (Logger, IO FL.FormattedTime, Severity, Map Text Text) m a)
   deriving newtype (Functor, Applicative, Monad, MonadIO)
 
-type Representational m = (forall a b. (Coercible a b) => Coercible (m a) (m b) :: Constraint)
-
-deriving instance (MonadUnliftIO m, Representational m) => MonadUnliftIO (LoggerT m)
+deriving instance (MonadUnliftIO m) => MonadUnliftIO (LoggerT m)
 
 instance (MonadIO m) => MonadLogger (LoggerT m) where
   logMsg msg = LoggerT $ do

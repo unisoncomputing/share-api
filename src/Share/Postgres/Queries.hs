@@ -39,7 +39,7 @@ import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (.
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-userByUserId :: PG.QueryM m => UserId -> m (Maybe User)
+userByUserId :: (PG.QueryM m) => UserId -> m (Maybe User)
 userByUserId uid = do
   PG.query1Row
     [PG.sql|
@@ -94,7 +94,7 @@ projectByIdWithMetadata caller projectId = do
   where
     releaseVersionFromInts :: Maybe Int64 -> Maybe Int64 -> Maybe Int64 -> Maybe ReleaseVersion
     releaseVersionFromInts major minor patch =
-      ReleaseVersion <$> (fromIntegral <$> major) <*> (fromIntegral <$> minor) <*> (fromIntegral <$> patch)
+      ReleaseVersion <$> major <*> minor <*> patch
     -- Select the project, also include the number of favs on the project and whether the
     -- caller has fav'd it, and the default branch and latest release version if they exist.
     sql =
@@ -698,7 +698,7 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
       |]
 
 createRelease ::
-  PG.QueryM m =>
+  (PG.QueryM m) =>
   NameLookupReceipt ->
   ProjectId ->
   ReleaseVersion ->
