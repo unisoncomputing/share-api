@@ -15,3 +15,6 @@ docker/tmp
 *.prof
 *.prof.html
 prelude.output.md
+
+# Scratch files
+*.u

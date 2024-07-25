@@ -88,6 +88,22 @@ clean_for_transcript() {
 }
 
 fetch() {
+    testname="$3"
+    result_file="$(mktemp)"
+    status_code_file="$(mktemp)"
+    api_path="$4"
+    echo "${testname}" "${api_path}"
+    fetch_data "$@" 2> "${status_code_file}" | clean_for_transcript > "${result_file}"
+    # Try embedding the json response as-is, but if it's not valid json (e.g. it's an error message instead), embed it as a string.
+    jq --sort-keys -n --slurpfile status "${status_code_file}" --slurpfile body "${result_file}" '{"status": $status, "body": ($body | .[0])}' > "./$testname.json" 2> /dev/null || {
+        jq --sort-keys -n --slurpfile status "${status_code_file}" --rawfile body "${result_file}" '{"status": $status, "body": $body}'  > "./$testname.json"
+    }
+}
+
+# fetch which returns the result,
+# stderr gets '{"status_code:xxx"}'
+# stdout gets the body
+fetch_data() {
     if [ "$#" -lt 4 ]; then
         echo "fetch requires at least 4 arguments: user_id, method, testname, api_path, [data]" >&2
         exit 1
@@ -101,21 +117,15 @@ fetch() {
     result_file="$(mktemp)"
     status_code_file="$(mktemp)"
 
-    echo "${testname}" "${api_path}"
     case $method in
         GET)
-            curl --request "GET" -L -s --cookie "$cookie_jar" -H "Accept: application/json" -w '%{stderr} {"status_code":%{http_code}}' "$url"  2> "${status_code_file}" | clean_for_transcript > "${result_file}"
+            curl --request "GET" -L -s --cookie "$cookie_jar" -H "Accept: application/json" -w '%{stderr} {"status_code":%{http_code}}' "$url"
             ;;
         *)
-            curl --request "$method" -L -s --cookie "$cookie_jar" -H "Accept: application/json" -H "Content-Type: application/json" --data-raw "$data" -w '%{stderr} {"status_code":%{http_code}}' "$url"  2> "${status_code_file}" | clean_for_transcript > "${result_file}"
+            curl --request "$method" -L -s --cookie "$cookie_jar" -H "Accept: application/json" -H "Content-Type: application/json" --data-raw "$data" -w '%{stderr} {"status_code":%{http_code}}' "$url"
             ;;
     esac
-    # Try embedding the json response as-is, but if it's not valid json (e.g. it's an error message instead), embed it as a string.
-    jq --sort-keys -n --slurpfile status "${status_code_file}" --slurpfile body "${result_file}" '{"status": $status, "body": ($body | .[0])}' > "./$testname.json" 2> /dev/null || {
-        jq --sort-keys -n --slurpfile status "${status_code_file}" --rawfile body "${result_file}" '{"status": $status, "body": $body}'  > "./$testname.json"
-    }
 }
-
 
 # Credentials setup 
 

@@ -1,0 +1,21 @@
+{
+  "body": {
+    "causalHashSquashed": "#ih4vtflqotqkapjcmcfsbn7ohs94rp5mr4lo4tddlbja0hf6n0bp964dbqumfli49jbvu40uu9i3257aq406kt3v0nt6jrei9ajf9j0",
+    "causalHashUnsquashed": "#ih4vtflqotqkapjcmcfsbn7ohs94rp5mr4lo4tddlbja0hf6n0bp964dbqumfli49jbvu40uu9i3257aq406kt3v0nt6jrei9ajf9j0",
+    "createdAt": "<TIMESTAMP>",
+    "createdBy": "@transcripts",
+    "projectRef": "@transcripts/search",
+    "status": {
+      "publishedAt": "<TIMESTAMP>",
+      "publishedBy": "@transcripts",
+      "status": "published"
+    },
+    "updatedAt": "<TIMESTAMP>",
+    "version": "1.2.3"
+  },
+  "status": [
+    {
+      "status_code": 201
+    }
+  ]
+}
