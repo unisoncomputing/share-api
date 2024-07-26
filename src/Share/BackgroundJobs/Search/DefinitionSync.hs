@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
+-- | This module provides the background worker which syncs definitions
 module Share.BackgroundJobs.Search.DefinitionSync (worker) where
 
 import Control.Lens
@@ -13,6 +14,7 @@ import Data.Map.Monoidal.Strict qualified as MonMap
 import Data.Monoid (Any (..), Sum (..))
 import Data.Set qualified as Set
 import Data.Set.Lens (setOf)
+import Data.Text qualified as Text
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
@@ -39,7 +41,6 @@ import U.Codebase.Referent qualified as Referent
 import Unison.ABT qualified as ABT
 import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
-import Unison.Debug qualified as Debug
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
@@ -62,6 +63,7 @@ import UnliftIO.Concurrent qualified as UnliftIO
 data DefnIndexingFailure
   = NoTypeSigForTerm Name Referent
   | NoDeclForType Name TypeReference
+  deriving stock (Show)
 
 -- | How often to poll for new releases to sync in seconds.
 pollingIntervalSeconds :: Int
@@ -76,10 +78,13 @@ worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
   newWorker scope "search:defn-sync" $ forever do
     Logging.logInfoText "Syncing definitions..."
-    Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+    mayErrs <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       mayReleaseId <- DDQ.claimUnsyncedRelease
-      Debug.debugM Debug.Temp "Syncing release" mayReleaseId
-      for_ mayReleaseId (syncRelease authZReceipt)
+      for mayReleaseId (syncRelease authZReceipt)
+    case mayErrs of
+      Just errs@(_ : _rrs) -> Logging.logErrorText $ "Definition sync errors: " <> Text.intercalate "," (tShow <$> errs)
+      _ -> pure ()
+
     liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
 
 syncRelease ::
@@ -92,21 +97,17 @@ syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
   -- makes it easy to re-index later if we change how we tokenize things.
   lift $ DDQ.cleanIndexForRelease releaseId
   Project {ownerUserId} <- lift $ PG.expectProjectById projectId
-  Debug.debugM Debug.Temp "Syncing release" releaseId
   lift $ do
     bhId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausal
-    Debug.debugM Debug.Temp "bhId" bhId
     namesPerspective <- NLOps.namesPerspectiveForRootAndPath bhId (NL.PathSegments [])
     let nlReceipt = NL.nameLookupReceipt namesPerspective
     let codebaseLoc = Codebase.codebaseLocationForProjectRelease ownerUserId
     let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
     Codebase.codebaseMToTransaction codebase $ do
-      Debug.debugM Debug.Temp "Building cursor" releaseId
       termsCursor <- lift $ NLOps.termsWithinNamespace nlReceipt bhId
-      Debug.debugM Debug.Temp "Syncing terms" releaseId
+
       termErrs <- syncTerms namesPerspective bhId projectId releaseId termsCursor
       typesCursor <- lift $ NLOps.typesWithinNamespace nlReceipt bhId
-      Debug.debugM Debug.Temp "Syncing types" releaseId
       typeErrs <- syncTypes namesPerspective projectId releaseId typesCursor
       pure (termErrs <> typeErrs)
 
@@ -119,7 +120,6 @@ syncTerms ::
   CodebaseM e [DefnIndexingFailure]
 syncTerms namesPerspective bhId projectId releaseId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
-    Debug.debugM Debug.Temp "Fetched N more terms" (length terms)
     (errs, refDocs) <-
       PG.timeTransaction "Building terms" $
         terms & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
@@ -171,12 +171,14 @@ tokensForTerm name ref typ (Summary.TermSummary {tag}) = do
    in (baseTokens <> tsTokens <> tagTokens, arity)
 
 data TokenGenEnv v = TokenGenEnv
-  { varIds :: Map v VarId
+  { -- Track which var names we've assigned to which Ids.
+    varIds :: Map v VarId
   }
   deriving stock (Show, Generic)
 
 data TokenGenState v = TokenGenState
-  { nextVarId :: VarId
+  { -- The next VarId to assign.
+    nextVarId :: VarId
   }
   deriving stock (Show, Generic)
 
@@ -192,7 +194,14 @@ typeSigTokens typ =
         MonMap.toList occMap & foldMap \case
           (Left vId, (occ, ret)) -> ([(vId, (occ, ret))], [])
           (Right typeRef, (occ, ret)) -> ([], [(typeRef, (occ, ret))])
-      expandedVarTokens =
+      -- Normalize and expand var tokens.
+      -- Tokens are normalized such that the varIds are assigned in increasing order to vars
+      -- by the number of occurrences they have in the type signature.
+      --
+      -- Then we expand them into one token for [1..numOccurrences] so they can be found by a
+      -- portion of the type in a search.
+      normalizedVarTokens :: Set (DefnSearchToken TypeReference)
+      normalizedVarTokens =
         varIds
           -- Rewrite varIds normalized by number of occurrences,
           -- this is necessary to ensure that order of type variables
@@ -216,25 +225,31 @@ typeSigTokens typ =
           & foldMap \(typeRef, (occ, Any isReturn)) ->
             Monoid.whenM isReturn [TypeMentionToken typeRef Nothing] <> (TypeMentionToken typeRef . Just <$> [1 .. occ])
               & Set.fromList
-   in (expandedVarTokens <> expandedTypeRefTokens, arity)
+   in (normalizedVarTokens <> expandedTypeRefTokens, arity)
   where
     initState = TokenGenState 0
-    -- Cata algebra for collecting type reference tokens from a type signature.
+    -- Algebra for collecting type reference tokens and arity from a type signature.
     alg ::
       ann ->
       ABT.ABT Type.F v (TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)) ->
       TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)
     alg _ann = \case
+      -- Type Var usage
       ABT.Var v -> do
         vId <- varIdFor v
         pure $ (MonMap.singleton (Left vId) (1, Any True), mempty)
       ABT.Cycle a -> a
+      -- Type Var scoping. Assign this var to a var id within this scope.
       ABT.Abs v r -> do
         vId <- nextVarId
         local (field @"varIds" . at v ?~ vId) r
       ABT.Tm tf -> case tf of
+        -- Type reference mention
         Type.Ref typeRef -> do
           pure $ (MonMap.singleton (Right typeRef) (1, Any True), mempty)
+        -- Arrow increases the arity of the type signature, we only use the arity of the RHS
+        -- due to how arrows are associated, this sorts out types like `(a -> b) -> c` where
+        -- the arity needs to be 1, not 2.
         Type.Arrow a b -> do
           -- Anything on the left of an arrow is not a return type.
           aTokens <- a <&> \(toks, _arity) -> MonMap.map (\(occ, _) -> (occ, Any False)) toks
@@ -248,7 +263,8 @@ typeSigTokens typ =
           bTokens <- b
           pure $ aTokens <> bTokens
         Type.Effect a b -> do
-          -- Don't include vars from effects.
+          -- Don't include vars from effects, people often leave off the `{g}` in types, so
+          -- including effect vars would throw off type-directed search a lot.
           aTokens <- removeVars . fst <$> a
           (bTokens, bArity) <- b
           pure $ (aTokens <> bTokens, bArity)
@@ -264,6 +280,7 @@ typeSigTokens typ =
       asks (Map.lookup v . varIds) >>= \case
         Just vid -> pure vid
         Nothing -> do
+          -- Should be impossible
           error "typeRefTokens: Found variable without corresponding Abs in type signature"
 
 syncTypes ::
@@ -282,7 +299,6 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
             decl <- lift (Codebase.loadTypeDeclaration refId) `whenNothingM` throwError (NoDeclForType fqn ref)
             pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
         let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
-
         typeSummary <- lift $ Summary.typeSummaryForReference ref (Just fqn) Nothing
         let sh = Reference.toShortHash ref
         let dd =
@@ -311,6 +327,8 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
     lift $ DDQ.insertDefinitionDocuments namedDocs
     pure errs
 
+-- | Compute the search tokens for a type declaration.
+-- Note that constructors are handled separately when syncing terms.
 tokensForDecl :: Reference.TypeReferenceId -> DD.Decl v a -> Set (DefnSearchToken TypeReference)
 tokensForDecl _typeRefId decl = do
   let ddecl = DD.asDataDecl decl
@@ -318,9 +336,4 @@ tokensForDecl _typeRefId decl = do
         CT.Data -> TypeTagToken Server.Types.Data
         CT.Effect -> TypeTagToken Server.Types.Ability
       modToken = TypeModToken $ DD.modifier ddecl
-   in -- Include the constructors as Name Tokens
-      -- constructorTokens =
-      --   DD.declConstructorReferents typeRefId decl
-      --     & (fmap . fmap) Reference.DerivedId
-      --     <&> \constructorReferent -> ConstructorToken constructorReferent
-      Set.fromList $ [tagToken, modToken]
+   in Set.fromList $ [tagToken, modToken]
