@@ -470,7 +470,7 @@ termsWithinNamespace !_nlReceipt bhId = do
     [sql|
         SELECT reversed_name, referent_builtin, referent_component_hash.base32, referent_component_index, referent_constructor_index
         FROM scoped_term_name_lookup
-        JOIN component_hashes referent_component_hash ON referent_component_hash.id = referent_component_hash_id
+        LEFT JOIN component_hashes referent_component_hash ON referent_component_hash.id = referent_component_hash_id
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
@@ -482,7 +482,7 @@ typesWithinNamespace !_nlReceipt bhId = do
     [sql|
         SELECT reversed_name, reference_builtin, reference_component_hash.base32, reference_component_index
         FROM scoped_type_name_lookup
-        JOIN component_hashes reference_component_hash ON reference_component_hash.id = reference_component_hash_id
+        LEFT JOIN component_hashes reference_component_hash ON reference_component_hash.id = reference_component_hash_id
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
