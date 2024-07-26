@@ -4,6 +4,7 @@ module Share.BackgroundJobs.Monad
     BackgroundCtx (..),
     withWorkerName,
     runBackground,
+    withTag,
   )
 where
 
@@ -15,7 +16,8 @@ import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 
 data BackgroundCtx = BackgroundCtx
-  { workerName :: Text
+  { workerName :: Text,
+    loggingTags :: Map Text Text
   }
 
 type Background = AppM BackgroundCtx
@@ -26,11 +28,14 @@ localBackgroundCtx f = local \env -> env {ctx = f (ctx env)}
 withWorkerName :: Text -> Background a -> Background a
 withWorkerName name = localBackgroundCtx \ctx -> ctx {workerName = name}
 
+withTag :: Text -> Text -> Background a -> Background a
+withTag key value = localBackgroundCtx \ctx -> ctx {loggingTags = Map.insert key value (loggingTags ctx)}
+
 instance Logging.MonadLogger Background where
   logMsg msg = do
     log <- asks Env.logger
-    BackgroundCtx {workerName} <- asks ctx
-    let currentTags = Map.singleton "workerName" workerName
+    BackgroundCtx {workerName, loggingTags} <- asks ctx
+    let currentTags = Map.singleton "workerName" workerName <> loggingTags
     msg <- pure $ msg {Logging.tags = Logging.tags msg `Map.union` currentTags}
     minSeverity <- asks Env.minLogSeverity
     when (Logging.severity msg >= minSeverity) $ do
@@ -39,4 +44,4 @@ instance Logging.MonadLogger Background where
 
 runBackground :: Env () -> Text -> Background a -> IO a
 runBackground env workerName bg =
-  runAppM env {ctx = BackgroundCtx {workerName}} bg
+  runAppM env {ctx = BackgroundCtx {workerName, loggingTags = mempty}} bg
