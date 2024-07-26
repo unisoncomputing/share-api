@@ -46,8 +46,9 @@ newRowCursor :: forall r m. (QueryM m) => (DecodeRow r) => Text -> Sql -> m (PGC
 newRowCursor namePrefix query =
   do
     uuid <- transactionUnsafeIO $ randomIO @UUID
-    -- We can't use a parameter for cursor names, so we make sure to clean it to prevent any
-    -- possible sql errors/injections.
+    -- We can't use a parameter for cursor names; cursor names are hard-coded and don't contain user input,
+    -- so we don't need to worry about SQL injection, but filter down the names just to be
+    -- safe.
     let cursorName = Text.filter (\c -> Char.isAlphaNum c || c == '_') (namePrefix <> "_" <> into @Text uuid)
     let declaration = fromString $ "DECLARE " <> Text.unpack cursorName <> "\n"
     execute_ $

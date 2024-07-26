@@ -151,40 +151,6 @@ data DefnSearchToken typeRef
 
 makePrisms ''DefnSearchToken
 
--- | Converts a DefnSearchToken to a prefix-searchable text string.
---
--- >>> tokenToText (NameToken (Name.unsafeParseText "List.map"))
--- "List.map:name"
---
--- >>> tokenToText (TypeMentionToken (Name.unsafeParseText "List.map") (Occurrence 1))
--- "List.map:mention:1"
---
--- >>> tokenToText (TypeVarToken (VarId 1) (Occurrence 1))
--- "_:var:1:1"
---
--- >>> import Unison.Hash qualified as Hash
--- >>> import U.Codebase.HashTags (ComponentHash (..))
--- >>> hash = ComponentHash $ Hash.unsafeFromBase32HexText "abcd"
--- >>> tokenToText (HashToken hash)
--- "#abc0:hash"
--- tokenToText :: DefnSearchToken Name -> Text
--- tokenToText = \case
---   (NameToken n) -> Text.intercalate ":" [Name.toText n, "name"]
---   (TypeMentionToken n o) -> Text.intercalate ":" [Name.toText n, "mention", tShow o]
---   (TypeVarToken v o) -> Text.intercalate ":" ["_", "var", tShow v, tShow o]
---   (HashToken h) -> Text.intercalate ":" [into @Text $ PrefixedHash @"#" h, "hash"]
-
--- tokenFromText :: Text -> Maybe (DefnSearchToken Name)
--- tokenFromText t = case Text.splitOn ":" t of
---   [name, "name"] -> NameToken <$> Name.parseText name
---   [name, "mention", occ] -> TypeMentionToken <$> (Name.parseText name) <*> readMaybe (Text.unpack occ)
---   [_, "var", vid, occ] -> TypeVarToken <$> readMaybe (Text.unpack vid) <*> readMaybe (Text.unpack occ)
---   [prefixedHash, "hash"] ->
---     case Text.stripPrefix "#" prefixedHash of
---       Just hash -> HashToken . into @ComponentHash <$> Hash.fromBase32HexText hash
---       Nothing -> Nothing
---   _ -> Nothing
-
 data DefinitionDocument proj release name typeRef = DefinitionDocument
   { project :: proj,
     release :: release,

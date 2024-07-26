@@ -26,7 +26,7 @@ data SomeBackgroundError where
 instance Loggable SomeBackgroundError where
   toLog (SomeBackgroundError e) = Logging.toLog e
 
-throwSomeServerError :: (Show e, Loggable e, MonadError SomeBackgroundError m, HasCallStack, Typeable e) => e -> m a
+throwSomeServerError :: (Loggable e, MonadError SomeBackgroundError m, HasCallStack, Typeable e) => e -> m a
 throwSomeServerError = throwError . SomeBackgroundError . withCallstack
 
 -- | Log any exceptions which occur within the worker.

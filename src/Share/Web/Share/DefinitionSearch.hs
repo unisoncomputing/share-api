@@ -1,5 +1,11 @@
 {-# LANGUAGE DataKinds #-}
 
+-- | This module provides a lax parser for queries that are used to search for definitions.
+--
+-- It supports search-by-type queries, search-by-name queries, and search-by-hash queries.
+--
+-- The parser is deliberately lax so users can type basically whatever they want into search
+-- and still get _some_ result.
 module Share.Web.Share.DefinitionSearch (queryToTokens) where
 
 import Control.Lens
@@ -43,6 +49,10 @@ data MentionRef
 type P = MP.Parsec QueryError Text
 
 -- | A very lax parser which converts a query into structured tokens for searching definitions.
+--
+-- If we can't parse something that looks like a name search, hash search, or type search,
+-- we fall back to stripping out all special characters and trying to just tokenize type
+-- mentions from whatever is left.
 --
 -- A query may look like:
 --
@@ -89,7 +99,7 @@ type P = MP.Parsec QueryError Text
 -- >>> queryToTokens "(Text -> Text"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Just 2)],Nothing)
 --
--- Horribly mishapen query:
+-- Horribly misshapen query:
 -- >>> queryToTokens "[{ &Text !{𝕖} (Optional)"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Just 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Just 1)],Nothing)
 --
@@ -101,20 +111,24 @@ type P = MP.Parsec QueryError Text
 queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either Name ShortHash)), Maybe Arity)
 queryToTokens query =
   let cleanQuery =
+        -- Queries may contain unicode chars, but they're usually not useful for search, e.g.
+        -- "∀" or "𝕖" so we just filter them out. The parser is lax enough it should still
+        -- manage to parse.
         query
           & Text.filter Char.isAscii
       parseResult =
         MP.runParser queryParser "query" cleanQuery
           & \case
             (Left _err) ->
+              -- If the parser fails because a type is mis-formed, try to simplify the query
+              -- further to see if we can parse anything at all.
               let simpleQuery =
                     cleanQuery
+                      -- Keep only name chars, hash chars, and dots.
                       & Text.map (\c -> if Char.isAlphaNum c || c `elem` ("#." :: String) then c else ' ')
                       & Text.words
                       & Text.unwords
-               in -- If even the lax parser fails, try simplifying the query even further to see if
-                  -- we can parse anything at all.
-                  mapLeft (Text.pack . MP.errorBundlePretty) $ MP.runParser queryParser "query" simpleQuery
+               in mapLeft (Text.pack . MP.errorBundlePretty) $ MP.runParser queryParser "query" simpleQuery
             (Right r) -> Right r
    in case parseResult of
         Left err -> Left err

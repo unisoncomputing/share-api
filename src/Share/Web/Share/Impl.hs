@@ -6,9 +6,9 @@
 
 module Share.Web.Share.Impl where
 
+import Control.Lens
 import Data.Text qualified as Text
 import Servant
-import Control.Lens
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs (TourId, UserHandle (..))
@@ -412,6 +412,7 @@ searchDefinitionsEndpoint ::
   Maybe IDs.ReleaseVersion ->
   WebApp DefinitionSearchResults
 searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
+  Logging.logInfoText $ "definition-search-query: " <> query
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
   case DefinitionSearch.queryToTokens query of
     Left _err -> do

@@ -113,7 +113,6 @@ import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration qualified as V1
-import Unison.Debug qualified as Debug
 import Unison.Parser.Ann
 import Unison.Parser.Ann qualified as Ann
 import Unison.Prelude (askUnliftIO)
@@ -449,7 +448,6 @@ squashCausalAndAddToCodebase causalId = runMaybeT $ do
   causalBranch <- MaybeT (CausalQ.loadCausalNamespace causalId)
   (squashedCausalId, _squashedCausal) <- lift $ squashCausal causalBranch
   squashedBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id squashedCausalId
-  Debug.debugLogM Debug.Temp "Squashed, making name lookup"
   lift . lift $ NLOps.ensureNameLookupForBranchId squashedBranchHashId
   pure squashedCausalId
 
@@ -457,7 +455,6 @@ squashCausalAndAddToCodebase causalId = runMaybeT $ do
 -- Causal node at every level.
 squashCausal :: V2.CausalBranch (CodebaseM e) -> CodebaseM e (CausalId, V2.CausalBranch (CodebaseM e))
 squashCausal Causal.Causal {valueHash = unsquashedBranchHash, value} = do
-  Debug.debugM Debug.Temp "Squashing" unsquashedBranchHash
   mayCachedSquashResult <- runMaybeT $ do
     causalId <- MaybeT (CausalQ.tryGetCachedSquashResult unsquashedBranchHash)
     fmap (causalId,) . MaybeT $ CausalQ.loadCausalNamespace causalId

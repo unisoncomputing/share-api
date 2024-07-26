@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeOperators #-}
 
+-- | This module contains queries for the definition search index.
 module Share.Postgres.Search.DefinitionSearch.Queries
   ( submitReleaseToBeSynced,
     claimUnsyncedRelease,
