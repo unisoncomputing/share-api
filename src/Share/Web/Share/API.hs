@@ -3,8 +3,9 @@
 
 module Share.Web.Share.API where
 
+import Servant
 import Share.IDs
-import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession)
+import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
 import Share.Prelude (NonEmpty)
 import Share.Utils.API
 import Share.Utils.Caching
@@ -14,7 +15,6 @@ import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.API (ContributionsByUserAPI)
 import Share.Web.Share.Projects.API (ProjectsAPI)
 import Share.Web.Share.Types
-import Servant
 
 type UserAPI =
   MaybeAuthenticatedSession
@@ -50,6 +50,26 @@ type SearchEndpoint =
     :> RequiredQueryParam "query" Query
     :> QueryParam "limit" Limit
     :> Get '[JSON] [SearchResult]
+
+-- | Search for names to use in a definition search.
+type SearchDefinitionNamesEndpoint =
+  MaybeAuthenticatedUserId
+    :> RequiredQueryParam "query" Query
+    :> QueryParam "limit" Limit
+    :> QueryParam "user-filter" UserHandle
+    :> QueryParam "project-filter" ProjectShortHand
+    :> QueryParam "release-filter" ReleaseVersion
+    :> Get '[JSON] [DefinitionNameSearchResult]
+
+-- | Submit a definition search
+type SearchDefinitionsEndpoint =
+  MaybeAuthenticatedUserId
+    :> RequiredQueryParam "query" Query
+    :> QueryParam "limit" Limit
+    :> QueryParam "user-filter" UserHandle
+    :> QueryParam "project-filter" ProjectShortHand
+    :> QueryParam "release-filter" ReleaseVersion
+    :> Get '[JSON] DefinitionSearchResults
 
 type AccountAPI =
   AuthenticatedSession

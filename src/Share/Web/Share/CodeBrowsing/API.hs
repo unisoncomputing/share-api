@@ -4,16 +4,16 @@
 module Share.Web.Share.CodeBrowsing.API where
 
 import Data.Text (Text)
+import Servant
 import Share.Utils.Caching
 import Share.Utils.Servant (OptionalCapture, RequiredQueryParam)
-import Servant
 import U.Codebase.HashTags (CausalHash)
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
-import Unison.Server.Share.DefinitionSummary (TermSummary, TypeSummary)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceListing (NamespaceListing)
 import Unison.Server.Types (DefinitionDisplayResults, NamespaceDetails)

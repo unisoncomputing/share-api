@@ -9,96 +9,42 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Unison.Server.Share.DefinitionSummary
-  ( TermSummaryAPI,
-    serveTermSummary,
-    TermSummary (..),
-    TypeSummaryAPI,
+  ( serveTermSummary,
+    termSummaryForReferent,
     serveTypeSummary,
-    TypeSummary (..),
+    typeSummaryForReference,
   )
 where
 
-import Data.Aeson
-import Servant (Capture, QueryParam, (:>))
-import Servant.Server (err500)
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseM)
-import Share.Postgres (QueryM (unrecoverableError))
+import Share.Postgres (unrecoverableError)
 import Share.Postgres.Hashes.Queries qualified as HashQ
-import Share.Postgres.IDs (CausalId)
+import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NameLookups
-import Share.Utils.Logging qualified as Logging
-import Share.Web.Errors (ToServerError (..))
+import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
 import Unison.Codebase.Path qualified as Path
-import Unison.Codebase.ShortCausalHash (ShortCausalHash)
-import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
+import Unison.Codebase.SqliteCodebase.Conversions qualified as CV
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.NameSegment.Internal qualified as NameSegment
+import Unison.Parser.Ann (Ann)
 import Unison.Prelude
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Reference (Reference)
 import Unison.Reference qualified as Reference
 import Unison.Referent (Referent)
-import Unison.Referent qualified as Referent
-import Unison.Server.Syntax (SyntaxText)
+import Unison.Server.Backend (BackendError (..))
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
 import Unison.Server.Types
-  ( APIGet,
-    TermTag (..),
-    TypeTag,
-    mayDefaultWidth,
+  ( mayDefaultWidth,
   )
-import Unison.ShortHash qualified as SH
+import Unison.Symbol (Symbol)
 import Unison.Type qualified as Type
 import Unison.Util.Pretty (Width)
-
-data SummaryError = MissingSignatureForTerm Reference
-  deriving (Show)
-
-instance ToServerError SummaryError where
-  toServerError = \case
-    MissingSignatureForTerm _reference ->
-      ("missing-term-signature", err500)
-
-instance Logging.Loggable SummaryError where
-  toLog = \case
-    e@(MissingSignatureForTerm {}) ->
-      Logging.withSeverity Logging.Error . Logging.showLog $ e
-
-type TermSummaryAPI =
-  "definitions"
-    :> "terms"
-    :> "by-hash"
-    :> Capture "hash" Referent
-    :> "summary"
-    -- Optional name to include in summary.
-    -- It's propagated through to the response as-is.
-    -- If missing, the short hash will be used instead.
-    :> QueryParam "name" Name
-    :> QueryParam "rootBranch" ShortCausalHash
-    :> QueryParam "relativeTo" Path.Path
-    :> QueryParam "renderWidth" Width
-    :> APIGet TermSummary
-
-data TermSummary = TermSummary
-  { displayName :: HQ.HashQualified Name,
-    hash :: SH.ShortHash,
-    summary :: DisplayObject SyntaxText SyntaxText,
-    tag :: TermTag
-  }
-  deriving (Generic, Show)
-
-instance ToJSON TermSummary where
-  toJSON (TermSummary {..}) =
-    object
-      [ "displayName" .= displayName,
-        "hash" .= hash,
-        "summary" .= summary,
-        "tag" .= tag
-      ]
 
 serveTermSummary ::
   Referent ->
@@ -108,72 +54,55 @@ serveTermSummary ::
   Maybe Width ->
   CodebaseM e TermSummary
 serveTermSummary referent mayName rootCausalId relativeTo mayWidth = do
-  let shortHash = Referent.toShortHash referent
+  rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
+  let v2Referent = CV.referent1to2 referent
+  sig <-
+    Codebase.loadTypeOfReferent v2Referent
+      `whenNothingM` unrecoverableError (MissingSignatureForTerm $ V2Referent.toReference v2Referent)
+  termSummaryForReferent v2Referent sig mayName rootBranchHashId relativeTo mayWidth
+
+termSummaryForReferent ::
+  V2Referent.Referent ->
+  Type.Type Symbol Ann ->
+  Maybe Name ->
+  BranchHashId ->
+  Maybe Path.Path ->
+  Maybe Width ->
+  CodebaseM e TermSummary
+termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayWidth = do
+  let shortHash = V2Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   let relativeToPath = fromMaybe Path.empty relativeTo
-  let termReference = Referent.toReference referent
-  let v2Referent = Cv.referent1to2 referent
-  rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
-  sig <- Codebase.loadTypeOfReferent v2Referent
-  case sig of
-    Nothing ->
-      unrecoverableError (MissingSignatureForTerm termReference)
-    Just typeSig -> do
-      let deps = Type.labeledDependencies typeSig
-      namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
-      pped <- PPEPostgres.ppedForReferences namesPerspective deps
-      let formattedTermSig = Backend.formatSuffixedType pped width typeSig
-      let summary = mkSummary termReference formattedTermSig
-      tag <- Backend.getTermTag v2Referent typeSig
-      pure $ TermSummary displayName shortHash summary tag
+  let termReference = V2Referent.toReference referent
+  let deps = Type.labeledDependencies typeSig
+  namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
+  pped <- PPEPostgres.ppedForReferences namesPerspective deps
+  let formattedTypeSig = Backend.formatSuffixedType pped width typeSig
+  let summary = mkSummary termReference formattedTypeSig
+  tag <- Backend.getTermTag referent typeSig
+  pure $ TermSummary displayName shortHash summary tag
   where
     width = mayDefaultWidth mayWidth
 
-    mkSummary reference termSig =
+    mkSummary reference sig =
       if Reference.isBuiltin reference
-        then BuiltinObject termSig
-        else UserObject termSig
-
-type TypeSummaryAPI =
-  "definitions"
-    :> "types"
-    :> "by-hash"
-    :> Capture "hash" Reference
-    :> "summary"
-    -- Optional name to include in summary.
-    -- It's propagated through to the response as-is.
-    -- If missing, the short hash will be used instead.
-    :> QueryParam "name" Name
-    :> QueryParam "rootBranch" ShortCausalHash
-    :> QueryParam "relativeTo" Path.Path
-    :> QueryParam "renderWidth" Width
-    :> APIGet TypeSummary
-
-data TypeSummary = TypeSummary
-  { displayName :: HQ.HashQualified Name,
-    hash :: SH.ShortHash,
-    summary :: DisplayObject SyntaxText SyntaxText,
-    tag :: TypeTag
-  }
-  deriving (Generic, Show)
-
-instance ToJSON TypeSummary where
-  toJSON (TypeSummary {..}) =
-    object
-      [ "displayName" .= displayName,
-        "hash" .= hash,
-        "summary" .= summary,
-        "tag" .= tag
-      ]
+        then BuiltinObject sig
+        else UserObject sig
 
 serveTypeSummary ::
   Reference ->
   Maybe Name ->
-  CausalId ->
-  Maybe Path.Path ->
   Maybe Width ->
   CodebaseM e TypeSummary
-serveTypeSummary reference mayName _root _relativeTo mayWidth = do
+serveTypeSummary reference mayName mayWidth = do
+  typeSummaryForReference reference mayName mayWidth
+
+typeSummaryForReference ::
+  Reference ->
+  Maybe Name ->
+  Maybe Width ->
+  CodebaseM e TypeSummary
+typeSummaryForReference reference mayName mayWidth = do
   let shortHash = Reference.toShortHash reference
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   tag <- Backend.getTypeTag reference

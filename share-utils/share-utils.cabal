@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.2.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -24,6 +24,7 @@ source-repository head
 
 library
   exposed-modules:
+      Share.Debug
       Share.Utils.Binary
       Share.Utils.Deployment
       Share.Utils.IDs
@@ -83,6 +84,7 @@ library
     , lens
     , memory
     , network-uri
+    , pretty-simple
     , random
     , servant-auth
     , servant-server

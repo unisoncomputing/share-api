@@ -5,6 +5,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Share.IDs
@@ -54,6 +55,9 @@ import Data.Char qualified as Char
 import Data.List (intercalate)
 import Data.Text qualified as Text
 import Data.UUID (UUID)
+import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
+import Hasql.Interpolate qualified as Hasql
+import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Share.OAuth.Types
   ( JTI (..),
     PendingSessionId (..),
@@ -62,9 +66,6 @@ import Share.OAuth.Types
   )
 import Share.Prelude
 import Share.Utils.IDs (CaseInsensitiveID (..), IsID (..), PrefixedID (..), UsingID (..), fromId, fromUUID, idFrom)
-import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
-import Hasql.Interpolate qualified as Hasql
-import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Text.Megaparsec
   ( ErrorFancy (..),
     MonadParsec (eof, takeWhileP),
@@ -357,8 +358,10 @@ branchNameParser = do
   Megaparsec.observing eof >>= \case
     Left _ -> pure ()
     Right () -> customFailure BranchNameParseFailure'Empty
-  (BranchNameTag'ReleaseDraft,) . releaseDraftFixup <$> releaseDraftParser
-    <|> (BranchNameTag'Plain,) <$> plainBranchParser
+  (BranchNameTag'ReleaseDraft,) . releaseDraftFixup
+    <$> releaseDraftParser
+      <|> (BranchNameTag'Plain,)
+    <$> plainBranchParser
   where
     releaseDraftParser :: Parsec BranchNameParseFailure Text ReleaseVersion
     releaseDraftParser = do
@@ -649,6 +652,11 @@ newtype CommentId = CommentId UUID
 newtype PrefixedHash (prefix :: Symbol) h = PrefixedHash h
   deriving newtype (Eq, Ord)
   deriving (Show)
+
+instance (From h Text, KnownSymbol prefix) => From (PrefixedHash prefix h) Text where
+  from (PrefixedHash h) =
+    let prefix = Text.pack $ symbolVal (Proxy @prefix)
+     in prefix <> into @Text h
 
 instance (KnownSymbol prefix, ToHttpApiData h) => ToHttpApiData (PrefixedHash prefix h) where
   toUrlPiece (PrefixedHash h) =

@@ -3,6 +3,7 @@
 
 module Share.Web.API where
 
+import Servant
 import Share.OAuth.API qualified as OAuth
 import Share.OAuth.Session (MaybeAuthenticatedSession)
 import Share.Prelude
@@ -12,7 +13,6 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Projects.API qualified as Projects
 import Share.Web.Support.API qualified as Support
 import Share.Web.Types
-import Servant
 import Unison.Share.API.Projects qualified as UCMProjects
 import Unison.Sync.API qualified as Unison.Sync
 
@@ -22,6 +22,8 @@ type API =
     :<|> ("codebases" :> Share.UserPublicCodebaseAPI)
     :<|> ("users" :> Share.UserAPI)
     :<|> ("search" :> Share.SearchEndpoint)
+    :<|> ("search-names" :> Share.SearchDefinitionNamesEndpoint)
+    :<|> ("search-definitions" :> Share.SearchDefinitionsEndpoint)
     :<|> ("account" :> Share.AccountAPI)
     :<|> ("catalog" :> Projects.CatalogAPI)
     -- This path is part of the standard: https://datatracker.ietf.org/doc/html/rfc5785

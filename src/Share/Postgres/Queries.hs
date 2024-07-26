@@ -21,10 +21,12 @@ import Share.Github
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.OAuth.Types
+import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.LooseCode.Queries qualified as LCQ
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
+import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
 import Share.Project
 import Share.Release
@@ -33,13 +35,20 @@ import Share.Ticket qualified as Ticket
 import Share.User
 import Share.Utils.API
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
 import Share.Web.Share.Branches.Types (BranchKindFilter (..))
 import Share.Web.Share.Projects.Types (ContributionStats (..), DownloadStats (..), FavData, ProjectOwner, TicketStats (..))
 import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (..))
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-userByUserId :: PG.QueryM m => UserId -> m (Maybe User)
+expectUserByUserId :: (PG.QueryM m) => UserId -> m User
+expectUserByUserId uid = do
+  userByUserId uid >>= \case
+    Just user -> pure user
+    Nothing -> unrecoverableError $ EntityMissing (ErrorID "user:missing") ("User with id " <> IDs.toText uid <> " not found")
+
+userByUserId :: (PG.QueryM m) => UserId -> m (Maybe User)
 userByUserId uid = do
   PG.query1Row
     [PG.sql|
@@ -86,6 +95,11 @@ projectById projectId = do
         FROM projects p
         WHERE p.id = #{projectId}
       |]
+
+expectProjectById :: ProjectId -> PG.Transaction e Project
+expectProjectById projectId = do
+  mayResult <- projectById projectId
+  whenNothing mayResult $ unrecoverableError $ EntityMissing (ErrorID "project:missing") ("Project with id " <> IDs.toText projectId <> " not found")
 
 -- | returns (project, favData, projectOwner, default branch, latest release version)
 projectByIdWithMetadata :: Maybe UserId -> ProjectId -> PG.Transaction e (Maybe (Project, FavData, ProjectOwner, Maybe BranchName, Maybe ReleaseVersion))
@@ -260,8 +274,24 @@ searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
 --
 -- The PG.queryListRows accepts strings as web search queries, see
 -- https://www.postgresql.org/docs/current/textsearch-controls.html
-searchProjectsByUserQuery :: Maybe UserId -> Query -> Limit -> PG.Transaction e [(Project, UserHandle)]
-searchProjectsByUserQuery caller (Query query) limit = do
+searchProjects :: Maybe UserId -> Maybe UserId -> Query -> Limit -> PG.Transaction e [(Project, UserHandle)]
+-- Don't search with an empty query
+searchProjects _caller Nothing (Query "") _limit = pure []
+searchProjects caller (Just userId) (Query "") limit = do
+  -- If we have a userId filter but no query, just return all the projects owned by that user
+  -- which the caller has access to.
+  PG.queryListRows @(Project PG.:. PG.Only UserHandle)
+    [PG.sql|
+    SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
+      FROM projects p
+        JOIN users owner ON p.owner_user_id = owner.id
+      WHERE p.owner_user_id = #{userId}
+        AND ((NOT p.private) OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
+      ORDER BY p.created_at DESC
+      LIMIT #{limit}
+      |]
+    <&> fmap \(project PG.:. PG.Only handle) -> (project, handle)
+searchProjects caller userIdFilter (Query query) limit = do
   let prefixQuery =
         query
           -- Remove any chars with special meaning for tsqueries.
@@ -280,6 +310,7 @@ searchProjectsByUserQuery caller (Query query) limit = do
         JOIN users AS owner ON p.owner_user_id = owner.id
       WHERE (webquery @@ p.project_text_document OR prefixquery @@ p.project_text_document)
       AND (NOT p.private OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
+      AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
       ORDER BY (ts_rank_cd(p.project_text_document, webquery), ts_rank_cd(p.project_text_document, prefixquery)) DESC
       LIMIT #{limit}
       |]
@@ -490,7 +521,7 @@ updateProject projectId newSummary tagChanges newVisibility =
   -- This method is a bit naive, we just get the old project, update the fields accordingly,
   -- then save the entire project again.
   isJust <$> runMaybeT do
-    Project {..} <- MaybeT $ projectById projectId
+    Project {..} <- lift $ expectProjectById projectId
     let updatedSummary = fromNullableUpdate summary newSummary
     let updatedTags = Set.toList $ applySetUpdate tags tagChanges
     let updatedVisibility = fromMaybe visibility newVisibility
@@ -698,7 +729,7 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
       |]
 
 createRelease ::
-  PG.QueryM m =>
+  (PG.QueryM m) =>
   NameLookupReceipt ->
   ProjectId ->
   ReleaseVersion ->
@@ -707,8 +738,9 @@ createRelease ::
   UserId ->
   m (Release CausalId UserId)
 createRelease !_nlReceipt projectId ReleaseVersion {major, minor, patch} squashedCausalId unsquashedCausalId creatorId = do
-  PG.queryExpect1Row
-    [PG.sql|
+  release@Release {releaseId} <-
+    PG.queryExpect1Row
+      [PG.sql|
         INSERT INTO project_releases(
           project_id,
           created_by,
@@ -735,6 +767,8 @@ createRelease !_nlReceipt projectId ReleaseVersion {major, minor, patch} squashe
           minor_version,
           patch_version
       |]
+  DDQ.submitReleaseToBeSynced releaseId
+  pure release
 
 setBranchCausalHash ::
   NameLookupReceipt ->
@@ -1085,6 +1119,11 @@ releaseById releaseId = do
         WHERE release.id = #{releaseId}
       |]
 
+expectReleaseById :: ReleaseId -> PG.Transaction e (Release CausalId UserId)
+expectReleaseById releaseId = do
+  mayRow <- releaseById releaseId
+  whenNothing mayRow $ unrecoverableError $ EntityMissing (ErrorID "release:missing") ("Release with id " <> IDs.toText releaseId <> " not found")
+
 releaseByProjectReleaseShortHand :: ProjectReleaseShortHand -> PG.Transaction e (Maybe (Release CausalId UserId))
 releaseByProjectReleaseShortHand ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion = ReleaseVersion {major, minor, patch}} = do
   PG.query1Row
@@ -1252,7 +1291,7 @@ data UpdateReleaseResult
 updateRelease :: UserId -> ReleaseId -> Maybe StatusUpdate -> PG.Transaction e UpdateReleaseResult
 updateRelease caller releaseId newStatus = do
   fromMaybe UpdateRelease'NotFound <$> runMaybeT do
-    Release {..} <- MaybeT $ releaseById releaseId
+    Release {..} <- lift $ expectReleaseById releaseId
     -- Can go from draft -> published -> deprecated
     -- or straight from draft -> deprecated
     -- but can't go from published -> draft or deprecated -> draft.

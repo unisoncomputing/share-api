@@ -9,6 +9,7 @@ module Share.Metrics
     requestMetricsMiddleware,
     tickUserSignup,
     recordBackgroundImportDuration,
+    recordDefinitionSearchIndexDuration,
   )
 where
 
@@ -17,17 +18,17 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding
 import Data.Time qualified as Time
+import Network.HTTP.Types qualified as HTTP
+import Network.Wai qualified as Wai
+import Network.Wai.Middleware.Prometheus qualified as Prom
+import Prometheus qualified as Prom
+import Prometheus.Metric.GHC qualified as Prom
 import Share.Env qualified as Env
 import Share.Postgres qualified as PG
 import Share.Postgres.Metrics.Queries qualified as Q
 import Share.Prelude
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Servant.PathInfo (HasPathInfo, normalizePath)
-import Network.HTTP.Types qualified as HTTP
-import Network.Wai qualified as Wai
-import Network.Wai.Middleware.Prometheus qualified as Prom
-import Prometheus qualified as Prom
-import Prometheus.Metric.GHC qualified as Prom
 import System.Clock (Clock (..), diffTimeSpec, toNanoSecs)
 import System.Clock qualified as Clock
 import UnliftIO qualified
@@ -83,7 +84,7 @@ serveMetricsMiddleware env = do
         }
 
 -- | Record an event to the middleware metric.
-requestMetricsMiddleware :: HasPathInfo api => Proxy api -> Wai.Middleware
+requestMetricsMiddleware :: (HasPathInfo api) => Proxy api -> Wai.Middleware
 requestMetricsMiddleware api app req handleResponse = do
   if recordRequest req
     then do
@@ -269,7 +270,7 @@ numUsersWithTickets =
     info = Prom.Info "num_users_with_tickets" "The number of users who have interacted with tickets."
 
 -- | Adds one to the user-signup counter
-tickUserSignup :: MonadIO m => m ()
+tickUserSignup :: (MonadIO m) => m ()
 tickUserSignup = liftIO do
   Prom.withLabel userSignupsCounter (tShow Deployment.deployment, "share-api") Prom.incCounter
 
@@ -385,6 +386,18 @@ backgroundImportDurationSeconds =
         "background_codebase_import_duration_seconds"
         "The time it took to import a pulled branch into the user's codebase."
 
+{-# NOINLINE definitionSearchIndexDurationSeconds #-}
+definitionSearchIndexDurationSeconds :: Prom.Vector Prom.Label2 Prom.Histogram
+definitionSearchIndexDurationSeconds =
+  Prom.unsafeRegister $
+    Prom.vector ("deployment", "service") $
+      Prom.histogram info Prom.defaultBuckets
+  where
+    info =
+      Prom.Info
+        "definition_search_indexing_duration_seconds"
+        "The time it took to index a release for definition search"
+
 timeActionIntoHistogram :: (Prom.Label l, MonadUnliftIO m) => (Prom.Vector l Prom.Histogram) -> l -> m c -> m c
 timeActionIntoHistogram histogram l m = do
   UnliftIO.bracket start end \_ -> m
@@ -397,5 +410,9 @@ timeActionIntoHistogram histogram l m = do
       Prom.withLabel histogram l (flip Prom.observe latency)
 
 -- | Record the duration of a background import.
-recordBackgroundImportDuration :: MonadUnliftIO m => m r -> m r
+recordBackgroundImportDuration :: (MonadUnliftIO m) => m r -> m r
 recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDurationSeconds (deployment, service)
+
+-- | Record the duration of a background import.
+recordDefinitionSearchIndexDuration :: (MonadUnliftIO m) => m r -> m r
+recordDefinitionSearchIndexDuration = timeActionIntoHistogram definitionSearchIndexDurationSeconds (deployment, service)

@@ -27,6 +27,12 @@ library
       Share
       Share.App
       Share.Backend
+      Share.BackgroundJobs
+      Share.BackgroundJobs.Errors
+      Share.BackgroundJobs.Monad
+      Share.BackgroundJobs.Search.DefinitionSync
+      Share.BackgroundJobs.Search.DefinitionSync.Types
+      Share.BackgroundJobs.Workers
       Share.Branch
       Share.Codebase
       Share.Codebase.Types
@@ -45,6 +51,7 @@ library
       Share.Postgres.Causal.Types
       Share.Postgres.Comments.Queries
       Share.Postgres.Contributions.Queries
+      Share.Postgres.Cursors
       Share.Postgres.Definitions.Queries
       Share.Postgres.Definitions.Types
       Share.Postgres.Hashes.Queries
@@ -63,6 +70,8 @@ library
       Share.Postgres.Projects.Queries
       Share.Postgres.Queries
       Share.Postgres.Refs.Types
+      Share.Postgres.Releases.Queries
+      Share.Postgres.Search.DefinitionSearch.Queries
       Share.Postgres.Serialization
       Share.Postgres.Sync.Conversions
       Share.Postgres.Sync.Queries
@@ -118,6 +127,7 @@ library
       Share.Web.Share.Contributions.Impl
       Share.Web.Share.Contributions.MergeDetection
       Share.Web.Share.Contributions.Types
+      Share.Web.Share.DefinitionSearch
       Share.Web.Share.Diffs.Impl
       Share.Web.Share.Diffs.Types
       Share.Web.Share.Impl
@@ -144,6 +154,7 @@ library
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
       Unison.Server.Share.DefinitionSummary
+      Unison.Server.Share.DefinitionSummary.Types
       Unison.Server.Share.Docs
       Unison.Server.Share.FuzzyFind
       Unison.Server.Share.NamespaceDetails
@@ -180,7 +191,8 @@ library
       BlockArguments
       QuasiQuotes
       ImportQualifiedPost
-  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
+      OverloadedRecordDot
+  ghc-options: -Wall -Werror -Wname-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
   build-depends:
       Diff
     , MonadRandom
@@ -217,17 +229,20 @@ library
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory
     , mmorph
     , monad-validate
+    , monoidal-containers
     , mtl
     , network
     , network-simple
     , network-uri
     , nonempty-containers
     , parallel
+    , parser-combinators
     , pem
     , prometheus-client
     , prometheus-metrics-ghc
@@ -319,7 +334,8 @@ executable share-api
       BlockArguments
       QuasiQuotes
       ImportQualifiedPost
-  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
+      OverloadedRecordDot
+  ghc-options: -Wall -Werror -Wname-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
   build-depends:
       Diff
     , MonadRandom
@@ -356,17 +372,20 @@ executable share-api
     , http-media
     , http-types
     , jose
+    , ki-unlifted
     , lens
     , megaparsec
     , memory
     , mmorph
     , monad-validate
+    , monoidal-containers
     , mtl
     , network
     , network-simple
     , network-uri
     , nonempty-containers
     , parallel
+    , parser-combinators
     , pem
     , prometheus-client
     , prometheus-metrics-ghc

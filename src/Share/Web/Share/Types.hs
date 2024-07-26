@@ -6,13 +6,17 @@ module Share.Web.Share.Types where
 
 import Data.Aeson (KeyValue ((.=)), ToJSON (..))
 import Data.Aeson qualified as Aeson
+import Network.URI (URI)
+import Share.BackgroundJobs.Search.DefinitionSync.Types (TermOrTypeTag)
+import Share.BackgroundJobs.Search.DefinitionSync.Types qualified as DefSync
 import Share.IDs
 import Share.Prelude
 import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
-import Network.URI (URI)
+import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
 
 data UpdateUserRequest = UpdateUserRequest
   { name :: NullableUpdate Text,
@@ -151,3 +155,64 @@ instance ToJSON UserDisplayInfo where
         "avatarUrl" Aeson..= avatarUrl,
         "userId" Aeson..= userId
       ]
+
+data DefinitionNameSearchResult
+  = DefinitionNameSearchResult
+  { token :: Name,
+    tag :: TermOrTypeTag
+  }
+
+instance ToJSON DefinitionNameSearchResult where
+  toJSON DefinitionNameSearchResult {..} =
+    Aeson.object
+      [ "token" .= token,
+        "tag" .= tag
+      ]
+
+newtype DefinitionSearchResults = DefinitionSearchResults
+  { results :: [DefinitionSearchResult]
+  }
+
+instance ToJSON DefinitionSearchResults where
+  toJSON DefinitionSearchResults {..} =
+    Aeson.object
+      [ "results" .= results
+      ]
+
+data DefinitionSearchResult
+  = DefinitionSearchResult
+  { fqn :: Name,
+    summary :: DefSync.TermOrTypeSummary,
+    project :: ProjectShortHand,
+    release :: ReleaseShortHand
+  }
+
+instance ToJSON DefinitionSearchResult where
+  toJSON DefinitionSearchResult {..} =
+    Aeson.object
+      [ "fqn" Aeson..= fqn,
+        "projectRef" Aeson..= project,
+        "branchRef" Aeson..= release,
+        "kind" Aeson..= kind,
+        "definition" Aeson..= definition
+      ]
+    where
+      (kind, definition) = case summary of
+        DefSync.ToTTermSummary TermSummary {displayName, hash, summary, tag} ->
+          ( Aeson.String "term",
+            Aeson.object
+              [ "displayName" Aeson..= displayName,
+                "hash" Aeson..= hash,
+                "summary" Aeson..= summary,
+                "tag" Aeson..= tag
+              ]
+          )
+        DefSync.ToTTypeSummary TypeSummary {displayName, hash, summary, tag} ->
+          ( Aeson.String "type",
+            Aeson.object
+              [ "displayName" Aeson..= displayName,
+                "hash" Aeson..= hash,
+                "summary" Aeson..= summary,
+                "tag" Aeson..= tag
+              ]
+          )
