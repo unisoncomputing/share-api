@@ -48,7 +48,8 @@ import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
-import Unison.Server.Share.DefinitionSummary (TermSummary, TypeSummary, serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.Definitions qualified as ShareBackend
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceDetails qualified as ND
@@ -65,7 +66,7 @@ getProjectBranch ::
 getProjectBranch projectBranchShortHand = do
   onNothingM missingBranch . PG.runTransaction . runMaybeT $ do
     branch@Branch {projectId} <- MaybeT $ Q.branchByProjectBranchShortHand projectBranchShortHand
-    project <- MaybeT $ Q.projectById projectId
+    project <- lift $ Q.expectProjectById projectId
     pure (project, branch)
   where
     missingBranch = respondError (EntityMissing (ErrorID "missing-project-branch") "Branch could not be found")
@@ -222,7 +223,7 @@ projectBranchTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHand
   causalId <- resolveRootHash codebase branchHead rootHash
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-type-summary" cacheParams causalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      serveTypeSummary ref mayName causalId relativeTo renderWidth
+      serveTypeSummary ref mayName renderWidth
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]

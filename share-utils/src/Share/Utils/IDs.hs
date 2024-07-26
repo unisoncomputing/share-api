@@ -122,6 +122,9 @@ instance (IsID a, Typeable a) => Hasql.DecodeValue (UsingID a) where
     Hasql.decodeValue
       & Decoder.refine \txt -> fromText txt <&> UsingID
 
+instance (IsID a) => From (UsingID a) Text where
+  from = toText
+
 -- | CI doesnt' expose its internal constructor so we can't derive via without adding our own
 -- instances.
 newtype CaseInsensitiveID = CaseInsensitiveID (CI Text)

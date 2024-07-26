@@ -4,19 +4,19 @@ module Share.Env
 where
 
 import Database.Redis qualified as R
+import Hasql.Pool qualified as Hasql
+import Network.URI (URI)
+import Servant qualified as S
 import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Utils.Logging.Types qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
-import Hasql.Pool qualified as Hasql
-import Network.URI (URI)
-import Servant qualified as S
 import System.Log.FastLogger (FormattedTime, LogStr)
 import System.Log.Raven.Types (SentryService)
 import Unison.Codebase.Runtime (Runtime)
 import Unison.Symbol (Symbol)
 
-data Env reqCtx = Env
+data Env ctx = Env
   { redisConnection :: R.Connection,
     pgConnectionPool :: Hasql.Pool,
     logger :: LogStr -> IO (),
@@ -41,7 +41,7 @@ data Env reqCtx = Env
     sentryService :: SentryService,
     -- The commit hash of the currently running version of Share
     commitHash :: Text,
-    requestCtx :: reqCtx,
+    ctx :: ctx,
     shouldCheckForMigration :: Bool,
     -- The maximum number of workers to use for concurrent work on a single request.
     -- E.g. sync can parallelize signing/verifying JWTs or run multiple transactions against

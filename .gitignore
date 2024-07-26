@@ -16,3 +16,6 @@ docker/tmp
 *.prof.html
 prelude.output.md
 /dist-newstyle
+
+# Scratch files
+*.u

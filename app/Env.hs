@@ -23,6 +23,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Web.Authentication (cookieSessionTTL)
 import Hasql.Pool qualified as Pool
+import Hasql.Pool.Config qualified as Pool
 import Network.URI (parseURI)
 import Servant.API qualified as Servant
 import System.Environment (lookupEnv)
@@ -97,11 +98,11 @@ withEnv action = do
   let pgConnectionMaxIdleTime = Time.secondsToDiffTime (60 * 5) -- 5 minutes
   -- Limiting max lifetime helps cycle connections which may have accumulated memory cruft.
   let pgConnectionMaxLifetime = Time.secondsToDiffTime (60 * 60) -- 1 hour
-  pgConnectionPool <-
-    Pool.acquire postgresConnMax pgConnectionAcquisitionTimeout pgConnectionMaxLifetime pgConnectionMaxIdleTime  (Text.encodeUtf8 postgresConfig)
+  let pgSettings = Pool.settings [Pool.staticConnectionSettings (Text.encodeUtf8 postgresConfig), Pool.size postgresConnMax, Pool.acquisitionTimeout pgConnectionAcquisitionTimeout, Pool.idlenessTimeout pgConnectionMaxIdleTime, Pool.agingTimeout pgConnectionMaxLifetime]
+  pgConnectionPool <- Pool.acquire pgSettings
   timeCache <- FL.newTimeCache FL.simpleTimeFormat -- E.g. 05/Sep/2023:13:23:56 -0700
   sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"
-  let requestCtx = ()
+  let ctx = ()
   -- We use a zero-width-space to separate log-lines on ingestion, this allows us to use newlines for
   -- formatting, but without affecting log-grouping.
   let zeroWidthSpace = "\x200B"

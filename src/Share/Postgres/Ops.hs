@@ -45,9 +45,6 @@ projectIdByUserHandleAndSlug :: UserHandle -> ProjectSlug -> WebApp ProjectId
 projectIdByUserHandleAndSlug userHandle projectSlug = do
   PG.runTransaction (Q.projectIDFromHandleAndSlug userHandle projectSlug) `or404` (EntityMissing (ErrorID "no-project-for-handle-and-slug") $ "Project not found: " <> IDs.toText userHandle <> "/" <> IDs.toText projectSlug)
 
-expectProjectById :: ProjectId -> WebApp Project
-expectProjectById projectId = PG.runTransaction (Q.projectById projectId) `or404` (EntityMissing (ErrorID "no-project-for-project-id") $ "Project not found for id: " <> IDs.toText projectId)
-
 createProject :: UserId -> ProjectSlug -> Maybe Text -> Set ProjectTag -> ProjectVisibility -> WebApp ProjectId
 createProject ownerUserId slug summary tags visibility = do
   PG.runTransactionOrRespondError do

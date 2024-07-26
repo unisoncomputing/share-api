@@ -128,7 +128,7 @@ reportError :: (HasCallStack, ToServerError e, Loggable e) => e -> WebApp ()
 reportError e = do
   let (ErrorID errID, serverErr) = toServerError e
   env <- ask
-  RequestCtx {pathInfo, rawURI} <- asks Env.requestCtx
+  RequestCtx {pathInfo, rawURI} <- asks Env.ctx
   reqTags <- getTags
   let errLog@LogMsg {msg} = withTag ("error-id", errID) $ toLog e
   -- We emit a separate log message for each error, but it's also

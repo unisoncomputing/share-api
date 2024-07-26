@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
@@ -8,6 +9,7 @@
 module Share.Postgres
   ( -- * Types
     Transaction,
+    Pipeline,
     T,
     Session,
     Mode (..),
@@ -19,6 +21,7 @@ module Share.Postgres
     Interp.DecodeField,
     RawBytes (..),
     Only (..),
+    QueryA (..),
     QueryM (..),
     decodeField,
     (:.) (..),
@@ -27,6 +30,7 @@ module Share.Postgres
     readTransaction,
     writeTransaction,
     runTransaction,
+    runTransactionMode,
     tryRunTransaction,
     tryRunTransactionMode,
     unliftTransaction,
@@ -37,8 +41,10 @@ module Share.Postgres
     runSessionWithPool,
     tryRunSessionWithPool,
     unliftSession,
-    transactionUnsafeIO,
     defaultIsolationLevel,
+    pipelined,
+    pFor,
+    pFor_,
 
     -- * query Helpers
     rollback,
@@ -59,6 +65,9 @@ module Share.Postgres
     Interp.toTable,
     Interp.Sql,
     singleColumnTable,
+
+    -- * Debugging
+    timeTransaction,
   )
 where
 
@@ -66,12 +75,24 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.ByteString.Char8 qualified as BSC
+import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
 import Data.Maybe
 import Data.Text qualified as Text
+import Data.Time.Clock (picosecondsToDiffTime)
+import Data.Time.Clock.System (getSystemTime, systemToTAITime)
+import Data.Time.Clock.TAI (diffAbsoluteTime)
 import Data.Void
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Interpolate qualified as Interp
+import Hasql.Pipeline qualified as Hasql.Pipeline
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Hasql
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Hasql
 import Share.App
+import Share.Debug qualified as Debug
 import Share.Env qualified as Env
 import Share.Postgres.Orphans ()
 import Share.Prelude
@@ -79,16 +100,7 @@ import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
-import Hasql.Decoders qualified as Decoders
-import Hasql.Encoders qualified as Encoders
-import Hasql.Interpolate qualified as Interp
-import Hasql.Pool qualified as Pool
-import Hasql.Session qualified as Hasql
-import Hasql.Session qualified as Session
-import Hasql.Statement qualified as Hasql
-
-debug :: Bool
-debug = False
+import System.CPUTime (getCPUTime)
 
 data TransactionError e
   = Unrecoverable SomeServerError
@@ -96,7 +108,7 @@ data TransactionError e
 
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
 newtype Transaction e a = Transaction {unTransaction :: Hasql.Session (Either (TransactionError e) a)}
-  deriving (Functor, Applicative, Monad, MonadIO) via (ExceptT (TransactionError e) Hasql.Session)
+  deriving (Functor, Applicative, Monad) via (ExceptT (TransactionError e) Hasql.Session)
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err
@@ -105,6 +117,20 @@ instance MonadError e (Transaction e) where
       Left (Err e) -> unTransaction (f e)
       Left (Unrecoverable err) -> pure (Left (Unrecoverable err))
       Right a -> pure (Right a)
+
+-- | Applicative pipelining transaction
+newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (TransactionError e) a)}
+  deriving (Functor, Applicative) via (Compose Hasql.Pipeline.Pipeline (Either (TransactionError e)))
+
+-- | Run a pipeline in a transaction
+pipelined :: Pipeline e a -> Transaction e a
+pipelined p = Transaction (Hasql.pipeline (unPipeline p))
+
+pFor :: (Traversable f) => f a -> (a -> Pipeline e b) -> Transaction e (f b)
+pFor f p = pipelined $ for f p
+
+pFor_ :: (Foldable f) => f a -> (a -> Pipeline e b) -> Transaction e ()
+pFor_ f p = pipelined $ for_ f p
 
 -- | A transaction that has no errors. Prefer using a fully polymorphic 'e' when possible,
 -- but this is very helpful when dealing with data type which include fields which are
@@ -143,9 +169,6 @@ data IsolationLevel
   | RepeatableRead
   | Serializable
   deriving stock (Show, Eq)
-
-transactionUnsafeIO :: IO a -> Transaction e a
-transactionUnsafeIO io = Transaction (Right <$> liftIO io)
 
 -- | Run a transaction in a session
 transaction :: forall e a. IsolationLevel -> Mode -> Transaction e a -> Session e a
@@ -235,6 +258,9 @@ writeTransaction t = transaction defaultIsolationLevel ReadWrite t
 runTransaction :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => Transaction Void a -> m a
 runTransaction t = runSession (writeTransaction t)
 
+runTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => IsolationLevel -> Mode -> Transaction Void a -> m a
+runTransactionMode isoLevel mode t = runSession (transaction isoLevel mode t)
+
 -- | Run a transaction in the App monad, returning an Either error.
 --
 -- Uses a Write transaction for simplicity since there's not much
@@ -276,11 +302,11 @@ unliftSession s = do
   pure $ tryRunSessionWithPool pool s
 
 -- | Manually run an unfailing session using a connection pool.
-runSessionWithPool :: HasCallStack => Pool.Pool -> Session Void a -> IO a
+runSessionWithPool :: (HasCallStack) => Pool.Pool -> Session Void a -> IO a
 runSessionWithPool pool s = either absurd id <$> tryRunSessionWithPool pool s
 
 -- | Manually run a session using a connection pool, returning an Either error.
-tryRunSessionWithPool :: HasCallStack => Pool.Pool -> Session e a -> IO (Either e a)
+tryRunSessionWithPool :: (HasCallStack) => Pool.Pool -> Session e a -> IO (Either e a)
 tryRunSessionWithPool pool s = do
   liftIO (Pool.use pool (runExceptT s)) >>= \case
     Left err -> throwIO . someServerError $ PostgresError err
@@ -292,36 +318,56 @@ tryRunSessionWithPool pool s = do
 runSessionOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => Session e a -> WebApp a
 runSessionOrRespondError t = tryRunSession t >>= either respondError pure
 
--- | Represents any monad in which we can run a statement
-class Monad m => QueryM m where
+-- | Represents anywhere we can run a statement
+class (Applicative m) => QueryA m where
   statement :: q -> Hasql.Statement q r -> m r
 
   -- | Fail the transaction and whole request with an unrecoverable server error.
   unrecoverableError :: (HasCallStack, ToServerError e, Loggable e, Show e) => e -> m a
 
-instance QueryM (Transaction e) where
-  statement q s@(Hasql.Statement bs _ _ _) = do
-    when debug $ transactionUnsafeIO $ BSC.putStrLn bs
+class (Monad m, QueryA m) => QueryM m where
+  -- | Allow running IO actions in a transaction. These actions may be run multiple times if
+  -- the transaction is retried.
+  transactionUnsafeIO :: IO a -> m a
+
+instance QueryA (Transaction e) where
+  statement q s = do
     transactionStatement q s
 
   unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
 
-instance QueryM (Session e) where
-  statement q s@(Hasql.Statement bs _ _ _) = do
-    when debug $ liftIO $ BSC.putStrLn bs
+instance QueryM (Transaction e) where
+  transactionUnsafeIO io = Transaction (Right <$> liftIO io)
+
+instance QueryA (Session e) where
+  statement q s = do
     lift $ Session.statement q s
 
   unrecoverableError e = throwError (Unrecoverable (someServerError e))
 
-instance QueryM m => QueryM (ReaderT e m) where
+instance QueryM (Session e) where
+  transactionUnsafeIO io = lift $ liftIO io
+
+instance QueryA (Pipeline e) where
+  statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
+
+  unrecoverableError e = Pipeline $ pure (Left (Unrecoverable (someServerError e)))
+
+instance (QueryM m) => QueryA (ReaderT e m) where
   statement q s = lift $ statement q s
 
   unrecoverableError e = lift $ unrecoverableError e
 
-instance QueryM m => QueryM (MaybeT m) where
+instance (QueryM m) => QueryM (ReaderT e m) where
+  transactionUnsafeIO io = lift $ transactionUnsafeIO io
+
+instance (QueryM m) => QueryA (MaybeT m) where
   statement q s = lift $ statement q s
 
   unrecoverableError e = lift $ unrecoverableError e
+
+instance (QueryM m) => QueryM (MaybeT m) where
+  transactionUnsafeIO io = lift $ transactionUnsafeIO io
 
 prepareStatements :: Bool
 prepareStatements = True
@@ -329,32 +375,32 @@ prepareStatements = True
 queryListRows :: forall r m. (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m [r]
 queryListRows sql = statement () (Interp.interp prepareStatements sql)
 
-query1Row :: forall r m. QueryM m => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
+query1Row :: forall r m. (QueryM m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
 query1Row sql = listToMaybe <$> queryListRows sql
 
 query1Col :: forall a m. (QueryM m, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
 query1Col sql = listToMaybe <$> queryListCol sql
 
-queryListCol :: forall a m. QueryM m => (Interp.DecodeField a) => Interp.Sql -> m [a]
+queryListCol :: forall a m. (QueryM m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
 queryListCol sql = queryListRows @(Interp.OneColumn a) sql <&> coerce @[Interp.OneColumn a] @[a]
 
-execute_ :: QueryM m => Interp.Sql -> m ()
+execute_ :: (QueryA m) => Interp.Sql -> m ()
 execute_ sql = statement () (Interp.interp prepareStatements sql)
 
-queryExpect1Row :: forall r m. HasCallStack => (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m r
+queryExpect1Row :: forall r m. (HasCallStack) => (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m r
 queryExpect1Row sql =
   query1Row sql >>= \case
     Nothing -> error "queryExpect1Row: expected 1 row, got 0"
     Just r -> pure r
 
-queryExpect1Col :: forall a m. HasCallStack => (Interp.DecodeField a, QueryM m) => Interp.Sql -> m a
+queryExpect1Col :: forall a m. (HasCallStack) => (Interp.DecodeField a, QueryM m) => Interp.Sql -> m a
 queryExpect1Col sql =
   query1Col sql >>= \case
     Nothing -> error "queryExpect1Col: expected 1 row, got 0"
     Just r -> pure r
 
 -- | Decode a single field as part of a Row
-decodeField :: Interp.DecodeField a => Decoders.Row a
+decodeField :: (Interp.DecodeField a) => Decoders.Row a
 decodeField = Decoders.column Interp.decodeField
 
 -- | Helper for decoding a row which contains many types which each have their own DecodeRow
@@ -378,7 +424,7 @@ newtype Only a = Only {fromOnly :: a}
   deriving stock (Generic)
   deriving anyclass (Interp.EncodeRow)
 
-instance Interp.DecodeField a => Interp.DecodeRow (Only a) where
+instance (Interp.DecodeField a) => Interp.DecodeRow (Only a) where
   decodeRow = Only <$> decodeField
 
 likeEscape :: Text -> Text
@@ -388,7 +434,7 @@ likeEscape = Text.replace "%" "\\%" . Text.replace "_" "\\_"
 --
 -- The @EncodeRow (Only a)@ instance might seem strange, but without it we get overlapping
 -- instances on @EncodeValue a@.
-singleColumnTable :: forall a. Interp.EncodeRow (Only a) => [a] -> Interp.Sql
+singleColumnTable :: forall a. (Interp.EncodeRow (Only a)) => [a] -> Interp.Sql
 singleColumnTable cols = Interp.toTable (coerce @[a] @[Only a] cols)
 
 -- | Helper for looking things up, using a cache for keys we've already seen (within the same
@@ -450,3 +496,19 @@ instance Interp.DecodeValue RawBytes where
 -- @@
 whenNonEmpty :: forall m f a x. (Monad m, Foldable f, Monoid a) => f x -> m a -> m a
 whenNonEmpty f m = if null f then pure mempty else m
+
+timeTransaction :: (QueryM m) => String -> m a -> m a
+timeTransaction label ma =
+  if Debug.shouldDebug Debug.Timing
+    then do
+      transactionUnsafeIO $ putStrLn $ "Timing Transaction: " ++ label ++ "..."
+      systemStart <- transactionUnsafeIO getSystemTime
+      cpuPicoStart <- transactionUnsafeIO getCPUTime
+      !a <- ma
+      cpuPicoEnd <- transactionUnsafeIO getCPUTime
+      systemEnd <- transactionUnsafeIO getSystemTime
+      let systemDiff = diffAbsoluteTime (systemToTAITime systemEnd) (systemToTAITime systemStart)
+      let cpuDiff = picosecondsToDiffTime (cpuPicoEnd - cpuPicoStart)
+      transactionUnsafeIO $ putStrLn $ "Finished " ++ label ++ " in " ++ show cpuDiff ++ " (cpu), " ++ show systemDiff ++ " (system)"
+      pure a
+    else ma
