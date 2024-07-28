@@ -180,7 +180,9 @@ searchTokenToText shouldAddWildcards = \case
     makeSearchToken nameType (reversedNameText name) Nothing
       & addWildCard
   TypeMentionToken (Left name) occ ->
-    makeSearchToken typeMentionTypeByNameType (reversedNameText name) (Just occ)
+    -- We normalize the name to lowercase for case-insensitive search, but only for type name
+    -- mentions.
+    makeSearchToken typeMentionTypeByNameType (Text.toLower $ reversedNameText name) (Just occ)
       & addWildCard
   TypeMentionToken (Right sh) occ ->
     makeSearchToken typeMentionTypeByHashType (into @Text @ShortHash sh) (Just occ)
