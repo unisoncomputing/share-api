@@ -48,12 +48,12 @@ import Share.Utils.Postgres (ordered)
 import Share.Web.Errors (EntityMissing (EntityMissing), MissingExpectedEntity (..))
 
 -- | Save a component hash, or return the existing hash id if it already exists
-ensureComponentHashId :: (HasCallStack, QueryM m) => ComponentHash -> m ComponentHashId
+ensureComponentHashId :: (HasCallStack, QueryM m e) => ComponentHash -> m ComponentHashId
 ensureComponentHashId componentHash = ensureComponentHashIdsOf id componentHash
 
 -- | Get the matching hashId for every component hash, saving any that are missing.
 -- Maintains the invariant that the returned list matches the positions of the input list.
-ensureComponentHashIdsOf :: forall m s t. (QueryM m, HasCallStack) => Traversal s t ComponentHash ComponentHashId -> s -> m t
+ensureComponentHashIdsOf :: forall m s t e. (QueryM m e, HasCallStack) => Traversal s t ComponentHash ComponentHashId -> s -> m t
 ensureComponentHashIdsOf trav s =
   s
     & unsafePartsOf trav %%~ \componentHashes ->
@@ -80,7 +80,7 @@ ensureComponentHashIdsOf trav s =
           then error "ensureComponentHashIdsOf: Missing expected component hash"
           else pure results
 
-expectComponentHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t ComponentHash ComponentHashId -> s -> m t
+expectComponentHashIdsOf :: (HasCallStack, QueryM m e) => Traversal s t ComponentHash ComponentHashId -> s -> m t
 expectComponentHashIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \componentHashes -> do
@@ -98,11 +98,11 @@ expectComponentHashIdsOf trav s = do
         then error "expectComponentHashIdsOf: Missing expected component hash"
         else pure results
 
-expectComponentHashId :: (HasCallStack, QueryM m) => ComponentHash -> m ComponentHashId
+expectComponentHashId :: (HasCallStack, QueryM m e) => ComponentHash -> m ComponentHashId
 expectComponentHashId componentHash = do
   queryExpect1Col [sql|SELECT id FROM component_hashes WHERE base32 = #{componentHash}|]
 
-expectComponentHashesOf :: (HasCallStack, QueryM m) => Traversal s t ComponentHashId ComponentHash -> s -> m t
+expectComponentHashesOf :: (HasCallStack, QueryM m e) => Traversal s t ComponentHashId ComponentHash -> s -> m t
 expectComponentHashesOf trav = do
   unsafePartsOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
@@ -119,10 +119,10 @@ expectComponentHashesOf trav = do
       then error "expectComponentHashesOf: Missing expected component hash"
       else pure results
 
-expectComponentHash :: (HasCallStack, QueryM m) => ComponentHashId -> m ComponentHash
+expectComponentHash :: (HasCallStack, QueryM m e) => ComponentHashId -> m ComponentHash
 expectComponentHash hashId = queryExpect1Col [sql|SELECT base32 FROM component_hashes WHERE id = #{hashId}|]
 
-expectPatchHashesOf :: (HasCallStack, QueryM m) => Traversal s t PatchId PatchHash -> s -> m t
+expectPatchHashesOf :: (HasCallStack, QueryM m e) => Traversal s t PatchId PatchHash -> s -> m t
 expectPatchHashesOf trav = do
   unsafePartsOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
@@ -163,7 +163,7 @@ expectPatchIdsOf trav = do
       else pure results
 
 -- | Save a branch hash, or return the existing hash id if it already exists
-ensureBranchHashId :: (HasCallStack, QueryM m) => BranchHash -> m BranchHashId
+ensureBranchHashId :: (HasCallStack, QueryM m e) => BranchHash -> m BranchHashId
 ensureBranchHashId branchHash = do
   query1Col [sql|SELECT id FROM branch_hashes WHERE base32 = #{branchHash}|] >>= \case
     Just hashId -> pure hashId
@@ -189,11 +189,11 @@ expectBranchHashId branchHash = do
     Just hashId -> pure hashId
     Nothing -> unrecoverableError $ EntityMissing "missing-namespace-for-hash" ("Namespace not found for hash: " <> into @Text branchHash)
 
-expectBranchHash :: (HasCallStack, QueryM m) => BranchHashId -> m BranchHash
+expectBranchHash :: (HasCallStack, QueryM m e) => BranchHashId -> m BranchHash
 expectBranchHash hashId = queryExpect1Col [sql|SELECT base32 FROM branch_hashes WHERE id = #{hashId}|]
 
 -- | Returns whether we should allow a hash mismatch for the given pair of hashes.
-isComponentHashAllowedToBeMismatched :: (HasCallStack, QueryM m) => ComponentHash -> ComponentHash -> m Bool
+isComponentHashAllowedToBeMismatched :: (HasCallStack, QueryM m e) => ComponentHash -> ComponentHash -> m Bool
 isComponentHashAllowedToBeMismatched providedHash actualHash = do
   queryExpect1Col
     [sql|
@@ -205,7 +205,7 @@ isComponentHashAllowedToBeMismatched providedHash actualHash = do
     |]
 
 -- | Returns whether we should allow a hash mismatch for the given pair of hashes.
-isCausalHashAllowedToBeMismatched :: (HasCallStack, QueryM m) => CausalHash -> CausalHash -> m Bool
+isCausalHashAllowedToBeMismatched :: (HasCallStack, QueryM m e) => CausalHash -> CausalHash -> m Bool
 isCausalHashAllowedToBeMismatched providedHash actualHash = do
   queryExpect1Col
     [sql|
@@ -216,7 +216,7 @@ isCausalHashAllowedToBeMismatched providedHash actualHash = do
       )
     |]
 
-addKnownComponentHashMismatch :: (QueryM m) => ComponentHash -> ComponentHash -> m ()
+addKnownComponentHashMismatch :: (QueryA m e) => ComponentHash -> ComponentHash -> m ()
 addKnownComponentHashMismatch providedHash actualHash = do
   execute_
     [sql|
@@ -225,7 +225,7 @@ addKnownComponentHashMismatch providedHash actualHash = do
       ON CONFLICT DO NOTHING
     |]
 
-addKnownCausalHashMismatch :: (QueryM m) => CausalHash -> CausalHash -> m ()
+addKnownCausalHashMismatch :: (QueryA m e) => CausalHash -> CausalHash -> m ()
 addKnownCausalHashMismatch providedHash actualHash = do
   execute_
     [sql|
@@ -235,7 +235,7 @@ addKnownCausalHashMismatch providedHash actualHash = do
     |]
 
 -- | Generic helper which fetches both branch hashes and causal hashes
-expectCausalHashesOfG :: (HasCallStack, QueryM m) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
+expectCausalHashesOfG :: (HasCallStack, QueryM m e) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
 expectCausalHashesOfG project trav = do
   unsafePartsOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
@@ -255,10 +255,10 @@ expectCausalHashesOfG project trav = do
       then error "expectCausalHashesOf: Missing expected causal hash"
       else pure (project <$> results)
 
-expectCausalAndBranchHashesOf :: (HasCallStack, QueryM m) => Traversal s t CausalId (BranchHash, CausalHash) -> s -> m t
+expectCausalAndBranchHashesOf :: (HasCallStack, QueryM m e) => Traversal s t CausalId (BranchHash, CausalHash) -> s -> m t
 expectCausalAndBranchHashesOf = expectCausalHashesOfG id
 
-expectCausalHashesByIdsOf :: (HasCallStack, QueryM m) => Traversal s t CausalId CausalHash -> s -> m t
+expectCausalHashesByIdsOf :: (HasCallStack, QueryM m e) => Traversal s t CausalId CausalHash -> s -> m t
 expectCausalHashesByIdsOf = expectCausalHashesOfG snd
 
 expectCausalIdsOf :: (HasCallStack) => Traversal s t CausalHash (BranchHashId, CausalId) -> s -> CodebaseM e t
@@ -287,7 +287,7 @@ expectCausalIdsOf trav = do
       then unrecoverableError $ EntityMissing "missing-expected-causal" $ "Missing one of these causals: " <> Text.intercalate ", " (into @Text <$> hashes)
       else pure results
 
-expectNamespaceIdsByCausalIdsOf :: (QueryM m) => Traversal s t CausalId BranchHashId -> s -> m t
+expectNamespaceIdsByCausalIdsOf :: (QueryM m e) => Traversal s t CausalId BranchHashId -> s -> m t
 expectNamespaceIdsByCausalIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \causalIds -> do
@@ -306,7 +306,7 @@ expectNamespaceIdsByCausalIdsOf trav s = do
         then unrecoverableError . MissingExpectedEntity $ "expectNamespaceIdsByCausalIdsOf: Expected to get the same number of results as causal ids. " <> tShow causalIds
         else pure results
 
-expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t BranchHashId BranchHash -> s -> m t
+expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryM m e) => Traversal s t BranchHashId BranchHash -> s -> m t
 expectNamespaceHashesByNamespaceHashIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \namespaceHashIds -> do

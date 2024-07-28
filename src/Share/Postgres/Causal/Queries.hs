@@ -34,6 +34,7 @@ import Share.Codebase.Types (CodebaseM)
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs (UserId)
 import Share.Postgres
+import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Types
 import Share.Postgres.Definitions.Queries qualified as Defn
 import Share.Postgres.Definitions.Types
@@ -58,7 +59,7 @@ import Unison.NameSegment.Internal as NameSegment
 import Unison.Reference qualified as Reference
 import Unison.Util.Map qualified as Map
 
-expectCausalNamespace :: (HasCallStack, QueryM m) => CausalId -> m (CausalNamespace m)
+expectCausalNamespace :: (HasCallStack, QueryM m e) => CausalId -> m (CausalNamespace m)
 expectCausalNamespace causalId =
   loadCausalNamespace causalId
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal branch for hash:" <> tShow causalId)
@@ -98,7 +99,7 @@ expectPgCausalNamespace causalId =
   loadPgCausalNamespace causalId
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal branch for causal: " <> tShow causalId)
 
-loadCausalNamespace :: forall m. (QueryM m) => CausalId -> m (Maybe (CausalNamespace m))
+loadCausalNamespace :: forall m e. (QueryM m e) => CausalId -> m (Maybe (CausalNamespace m))
 loadCausalNamespace causalId = runMaybeT $ do
   causalHash <- HashQ.expectCausalHashesByIdsOf id causalId
   branchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id causalId
@@ -139,22 +140,23 @@ expectNamespaceHashByCausalHash causalHash = do
                 AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causals.id AND o.user_id = #{codebaseOwner})
     |]
 
-expectNamespace :: forall m. (QueryM m) => BranchHashId -> m (Branch m)
+expectNamespace :: forall m e. (QueryM m e) => BranchHashId -> m (Branch m)
 expectNamespace branchHashId = do
-  termsAndConstructors <- getTermsAndConstructors branchHashId <&> (traversed . traversed %~ loadTermMetadata)
-  types <- getTypes branchHashId <&> (traversed . traversed %~ loadTypeMetadata)
   patches <- getPatches branchHashId
   children <- getChildren branchHashId
-  pure $
-    Branch
-      { -- (<>) is safe here because no referents will overlap between terms and constructors
-        terms = termsAndConstructors,
-        types,
-        patches,
-        children
-      }
+  pipelined $ do
+    termsAndConstructors <- getTermsAndConstructors branchHashId <&> (traversed . traversed %~ loadTermMetadata)
+    types <- getTypes branchHashId <&> (traversed . traversed %~ loadTypeMetadata)
+    pure $
+      Branch
+        { -- (<>) is safe here because no referents will overlap between terms and constructors
+          terms = termsAndConstructors,
+          types,
+          patches,
+          children
+        }
   where
-    getTermsAndConstructors :: BranchHashId -> m (Map NameSegment (Map Referent NamespaceTermMappingId))
+    getTermsAndConstructors :: forall m. (QueryA m e) => BranchHashId -> m (Map NameSegment (Map Referent NamespaceTermMappingId))
     getTermsAndConstructors branchHashId = do
       queryListRows @(NameSegment, Maybe Text, Maybe ComponentHash, Maybe PgComponentIndex, Maybe PgConstructorIndex, NamespaceTermMappingId)
         [sql| SELECT name_segment.text AS name_segment, builtin.text AS builtin_text, comp_hash.base32, COALESCE(term.component_index, constr_typ.component_index), constr.constructor_index, mapping.id
@@ -183,7 +185,7 @@ expectNamespace branchHashId = do
           )
         <&> Map.fromListWith (<>)
 
-    getTypes :: BranchHashId -> m (Map NameSegment (Map Reference NamespaceTypeMappingId))
+    getTypes :: forall m. (QueryA m e) => BranchHashId -> m (Map NameSegment (Map Reference NamespaceTypeMappingId))
     getTypes branchHashId = do
       queryListRows
         [sql| SELECT name_segment.text AS name_segment, builtin.text AS builtin_text, component_hashes.base32, typ.component_index, mapping.id
@@ -207,7 +209,7 @@ expectNamespace branchHashId = do
           )
         <&> Map.fromListWith (<>)
 
-    getPatches :: BranchHashId -> m (Map NameSegment (PatchHash, m Patch))
+    getPatches :: forall m. (QueryM m e) => BranchHashId -> m (Map NameSegment (PatchHash, m Patch))
     getPatches branchHashId = do
       queryListRows
         [sql| SELECT name_segment.text AS name_segment, patch.hash, patch.id
@@ -222,7 +224,7 @@ expectNamespace branchHashId = do
           )
         <&> Map.fromList
 
-    getChildren :: BranchHashId -> m (Map NameSegment (CausalBranch m))
+    getChildren :: forall m. (QueryM m e) => BranchHashId -> m (Map NameSegment (CausalBranch m))
     getChildren branchHashId = do
       childIds <-
         queryListRows
@@ -235,7 +237,7 @@ expectNamespace branchHashId = do
         (name_segment,) <$> expectCausalNamespace causalId
       pure $ Map.fromList childList
 
-    loadTermMetadata :: NamespaceTermMappingId -> m MdValues
+    loadTermMetadata :: forall m. (QueryA m e) => NamespaceTermMappingId -> m MdValues
     loadTermMetadata mappingId = do
       queryListRows @(Maybe Hash, Maybe PgComponentIndex, Maybe Text)
         [sql|
@@ -248,7 +250,7 @@ expectNamespace branchHashId = do
       |]
         <&> formatMdValues
 
-    loadTypeMetadata :: NamespaceTypeMappingId -> m MdValues
+    loadTypeMetadata :: forall m. (QueryA m e) => NamespaceTypeMappingId -> m MdValues
     loadTypeMetadata mappingId =
       do
         queryListRows @(Maybe Hash, Maybe PgComponentIndex, Maybe Text)
@@ -608,7 +610,7 @@ savePgNamespace mayBh b@(BranchFull.Branch {terms, types, patches, children}) = 
       execute_ [sql| SELECT save_namespace(#{bhId}) |]
 
 -- | Hash a namespace into a BranchHash
-hashPgNamespace :: forall m. (QueryM m) => PgNamespace -> m BranchHash
+hashPgNamespace :: forall m e. (QueryM m e) => PgNamespace -> m BranchHash
 hashPgNamespace b = do
   BranchFull.Branch {terms, types, patches, children} <-
     b
@@ -660,7 +662,7 @@ hashPgNamespace b = do
       Referent.Ref r -> H.ReferentRef (v2ToH2Reference r)
       Referent.Con r cid -> H.ReferentCon (v2ToH2Reference r) cid
 
-hashCausal :: (QueryM m) => BranchHashId -> Set CausalId -> m CausalHash
+hashCausal :: (QueryM m e) => BranchHashId -> Set CausalId -> m CausalHash
 hashCausal branchHashId ancestorIds = do
   branchHash <- HashQ.expectBranchHash branchHashId
   ancestors <-
@@ -778,7 +780,7 @@ saveV2BranchShallow v2Branch = do
     mdValuesToMetadataSetFormat (V2.MdValues meta) = BranchFull.Inline meta
 
 -- | Get the namespace stats of a namespace.
-expectNamespaceStatsOf :: (QueryM m) => Traversal s t BranchHash NamespaceStats -> s -> m t
+expectNamespaceStatsOf :: (QueryM m e) => Traversal s t BranchHash NamespaceStats -> s -> m t
 expectNamespaceStatsOf trav s =
   s
     & unsafePartsOf trav %%~ \branchHashes -> do
@@ -867,13 +869,13 @@ importAccessibleCausals causalHashes = do
               -- Order by determines which values are returned by DISTINCT ON
               ORDER BY copyable.causal_id ASC, copyable.created_at DESC
         |]
-  for_ results \case
+  lift $ PG.pFor_ results \case
     (causalId, owner) -> do
       execute_ [sql| SELECT copy_causal_into_codebase(#{causalId}, #{owner}, #{codebaseOwnerUserId}) |]
   pure results
 
 -- | Find the best common ancestor between two causals for diffs or merges.
-bestCommonAncestor :: (QueryM m) => CausalId -> CausalId -> m (Maybe CausalId)
+bestCommonAncestor :: (QueryM m e) => CausalId -> CausalId -> m (Maybe CausalId)
 bestCommonAncestor a b = do
   query1Col
     [sql| SELECT best_common_causal_ancestor(#{a}, #{b}) as causal_id

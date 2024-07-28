@@ -142,7 +142,7 @@ mkTermDefinition termPPED width r docs tm = do
           docs
 
 termListEntry ::
-  (PG.QueryM m) =>
+  (PG.QueryM m e) =>
   Type Symbol Ann ->
   ExactName NameSegment V2Referent.Referent ->
   m (Backend.TermEntry Symbol Ann)
@@ -160,7 +160,7 @@ termListEntry typ (ExactName nameSegment ref) = do
       }
 
 typeListEntry ::
-  (PG.QueryM m) =>
+  (PG.QueryM m e) =>
   ExactName NameSegment Reference ->
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
@@ -176,7 +176,7 @@ typeListEntry (ExactName nameSegment ref) = do
       }
 
 getTermTag ::
-  (PG.QueryM m, Var v) =>
+  (PG.QueryM m e, Var v) =>
   V2Referent.Referent ->
   Type v Ann ->
   m TermTag
@@ -199,7 +199,7 @@ getTermTag r termType = do
       | otherwise -> Plain
 
 getTypeTag ::
-  (PG.QueryM m) =>
+  (PG.QueryM m e) =>
   Reference.TypeReference ->
   m TypeTag
 getTypeTag r = do

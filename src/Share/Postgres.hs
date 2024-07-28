@@ -1,9 +1,11 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Postgres helpers
 module Share.Postgres
@@ -42,7 +44,6 @@ module Share.Postgres
     tryRunSessionWithPool,
     unliftSession,
     defaultIsolationLevel,
-    pipelined,
     pFor,
     pFor_,
 
@@ -121,10 +122,6 @@ instance MonadError e (Transaction e) where
 -- | Applicative pipelining transaction
 newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (TransactionError e) a)}
   deriving (Functor, Applicative) via (Compose Hasql.Pipeline.Pipeline (Either (TransactionError e)))
-
--- | Run a pipeline in a transaction
-pipelined :: Pipeline e a -> Transaction e a
-pipelined p = Transaction (Hasql.pipeline (unPipeline p))
 
 pFor :: (Traversable f) => f a -> (a -> Pipeline e b) -> Transaction e (f b)
 pFor f p = pipelined $ for f p
@@ -319,81 +316,106 @@ runSessionOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => Sessi
 runSessionOrRespondError t = tryRunSession t >>= either respondError pure
 
 -- | Represents anywhere we can run a statement
-class (Applicative m) => QueryA m where
+class (Applicative m) => QueryA m e | m -> e where
   statement :: q -> Hasql.Statement q r -> m r
 
   -- | Fail the transaction and whole request with an unrecoverable server error.
-  unrecoverableError :: (HasCallStack, ToServerError e, Loggable e, Show e) => e -> m a
+  unrecoverableError :: (HasCallStack, ToServerError x, Loggable x, Show x) => x -> m a
 
-class (Monad m, QueryA m) => QueryM m where
+  throwErr :: (ToServerError e, Loggable e, Show e) => e -> m a
+
+  pipelined :: Pipeline e a -> m a
+
+class (Monad m, QueryA m e) => QueryM m e | m -> e where
   -- | Allow running IO actions in a transaction. These actions may be run multiple times if
   -- the transaction is retried.
   transactionUnsafeIO :: IO a -> m a
 
-instance QueryA (Transaction e) where
+instance QueryA (Transaction e) e where
   statement q s = do
     transactionStatement q s
 
+  throwErr = throwError
+
+  pipelined p = Transaction (Hasql.pipeline (unPipeline p))
+
   unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
 
-instance QueryM (Transaction e) where
+instance QueryM (Transaction e) e where
   transactionUnsafeIO io = Transaction (Right <$> liftIO io)
 
-instance QueryA (Session e) where
+instance QueryA (Session e) e where
   statement q s = do
     lift $ Session.statement q s
 
+  throwErr = throwError . Err
+
+  pipelined p = do
+    ExceptT $ Hasql.pipeline (unPipeline p)
+
   unrecoverableError e = throwError (Unrecoverable (someServerError e))
 
-instance QueryM (Session e) where
+instance QueryM (Session e) e where
   transactionUnsafeIO io = lift $ liftIO io
 
-instance QueryA (Pipeline e) where
+instance QueryA (Pipeline e) e where
   statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
+
+  throwErr = Pipeline . pure . Left . Err
+
+  pipelined p = p
 
   unrecoverableError e = Pipeline $ pure (Left (Unrecoverable (someServerError e)))
 
-instance (QueryM m) => QueryA (ReaderT e m) where
+instance (QueryM m e) => QueryA (ReaderT r m) e where
   statement q s = lift $ statement q s
+
+  throwErr = lift . throwErr
+
+  pipelined p = lift $ pipelined p
 
   unrecoverableError e = lift $ unrecoverableError e
 
-instance (QueryM m) => QueryM (ReaderT e m) where
+instance (QueryM m e) => QueryM (ReaderT r m) e where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
 
-instance (QueryM m) => QueryA (MaybeT m) where
+instance (QueryM m e) => QueryA (MaybeT m) e where
   statement q s = lift $ statement q s
+
+  throwErr = lift . throwErr
+
+  pipelined p = lift $ pipelined p
 
   unrecoverableError e = lift $ unrecoverableError e
 
-instance (QueryM m) => QueryM (MaybeT m) where
+instance (QueryM m e) => QueryM (MaybeT m) e where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
 
 prepareStatements :: Bool
 prepareStatements = True
 
-queryListRows :: forall r m. (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m [r]
+queryListRows :: forall r m e. (Interp.DecodeRow r, QueryA m e) => Interp.Sql -> m [r]
 queryListRows sql = statement () (Interp.interp prepareStatements sql)
 
-query1Row :: forall r m. (QueryM m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
+query1Row :: forall r m e. (QueryA m e) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
 query1Row sql = listToMaybe <$> queryListRows sql
 
-query1Col :: forall a m. (QueryM m, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
+query1Col :: forall a m e. (QueryA m e, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
 query1Col sql = listToMaybe <$> queryListCol sql
 
-queryListCol :: forall a m. (QueryM m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
+queryListCol :: forall a m e. (QueryA m e) => (Interp.DecodeField a) => Interp.Sql -> m [a]
 queryListCol sql = queryListRows @(Interp.OneColumn a) sql <&> coerce @[Interp.OneColumn a] @[a]
 
-execute_ :: (QueryA m) => Interp.Sql -> m ()
+execute_ :: (QueryA m e) => Interp.Sql -> m ()
 execute_ sql = statement () (Interp.interp prepareStatements sql)
 
-queryExpect1Row :: forall r m. (HasCallStack) => (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m r
+queryExpect1Row :: forall r m e. (HasCallStack) => (Interp.DecodeRow r, QueryM m e) => Interp.Sql -> m r
 queryExpect1Row sql =
   query1Row sql >>= \case
     Nothing -> error "queryExpect1Row: expected 1 row, got 0"
     Just r -> pure r
 
-queryExpect1Col :: forall a m. (HasCallStack) => (Interp.DecodeField a, QueryM m) => Interp.Sql -> m a
+queryExpect1Col :: forall a m e. (HasCallStack) => (Interp.DecodeField a, QueryM m e) => Interp.Sql -> m a
 queryExpect1Col sql =
   query1Col sql >>= \case
     Nothing -> error "queryExpect1Col: expected 1 row, got 0"
@@ -497,7 +519,7 @@ instance Interp.DecodeValue RawBytes where
 whenNonEmpty :: forall m f a x. (Monad m, Foldable f, Monoid a) => f x -> m a -> m a
 whenNonEmpty f m = if null f then pure mempty else m
 
-timeTransaction :: (QueryM m) => String -> m a -> m a
+timeTransaction :: (QueryM m e) => String -> m a -> m a
 timeTransaction label ma =
   if Debug.shouldDebug Debug.Timing
     then do

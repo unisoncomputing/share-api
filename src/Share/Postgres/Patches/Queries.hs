@@ -27,7 +27,7 @@ import Unison.Hashing.V2 qualified as H
 import Unison.Reference qualified as Reference
 import Unison.Util.Map qualified as Map
 
-loadPatch :: forall m. QueryM m => PatchId -> m (Maybe V2.Patch)
+loadPatch :: forall m e. (QueryM m e) => PatchId -> m (Maybe V2.Patch)
 loadPatch patchId = runMaybeT do
   termMappings <- lift $ getTermMappings patchId
   constructorMappings <- lift $ getConstructorMappings patchId
@@ -128,7 +128,7 @@ loadPatch patchId = runMaybeT do
             )
         <&> Map.unionsWith (Set.union)
 
-expectPatch :: (HasCallStack, QueryM m) => PatchId -> m V2.Patch
+expectPatch :: (HasCallStack, QueryM m e) => PatchId -> m V2.Patch
 expectPatch patchId = do
   mayPatch <- loadPatch patchId
   case mayPatch of

@@ -52,7 +52,7 @@ instance Logging.Loggable DefinitionSearchError where
       Logging.textLog ("Failed to decode metadata: " <> tShow v <> " " <> err)
         & Logging.withSeverity Logging.Error
 
-submitReleaseToBeSynced :: (QueryM m) => ReleaseId -> m ()
+submitReleaseToBeSynced :: (QueryM m e) => ReleaseId -> m ()
 submitReleaseToBeSynced releaseId = do
   execute_
     [sql|

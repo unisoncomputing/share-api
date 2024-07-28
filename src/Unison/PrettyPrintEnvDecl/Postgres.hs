@@ -18,7 +18,7 @@ import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 
-ppedForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledDependency -> m PPED.PrettyPrintEnvDecl
+ppedForReferences :: forall m e. (PG.QueryM m e) => NamesPerspective -> Set LabeledDependency -> m PPED.PrettyPrintEnvDecl
 ppedForReferences namesPerspective refs = do
   withPGRefs <-
     Set.toList refs

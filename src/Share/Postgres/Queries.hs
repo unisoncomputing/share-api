@@ -42,13 +42,13 @@ import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (.
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-expectUserByUserId :: (PG.QueryM m) => UserId -> m User
+expectUserByUserId :: (PG.QueryM m e) => UserId -> m User
 expectUserByUserId uid = do
   userByUserId uid >>= \case
     Just user -> pure user
     Nothing -> unrecoverableError $ EntityMissing (ErrorID "user:missing") ("User with id " <> IDs.toText uid <> " not found")
 
-userByUserId :: (PG.QueryM m) => UserId -> m (Maybe User)
+userByUserId :: (PG.QueryM m e) => UserId -> m (Maybe User)
 userByUserId uid = do
   PG.query1Row
     [PG.sql|
@@ -729,7 +729,7 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
       |]
 
 createRelease ::
-  (PG.QueryM m) =>
+  (PG.QueryM m e) =>
   NameLookupReceipt ->
   ProjectId ->
   ReleaseVersion ->

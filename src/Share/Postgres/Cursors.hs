@@ -32,7 +32,7 @@ data PGCursor result where
 instance Functor PGCursor where
   fmap f (PGCursor name g) = PGCursor name (f . g)
 
-newColCursor :: forall a m. (QueryM m, DecodeField a) => Text -> Sql -> m (PGCursor a)
+newColCursor :: forall a m e. (QueryM m e, DecodeField a) => Text -> Sql -> m (PGCursor a)
 newColCursor namePrefix query = do
   newRowCursor namePrefix query
     <&> fmap fromOnly
@@ -42,7 +42,7 @@ newColCursor namePrefix query = do
 --
 -- This cursor will be closed when the transaction ends, and must not be used outside of the
 -- transaction in which it was created.
-newRowCursor :: forall r m. (QueryM m) => (DecodeRow r) => Text -> Sql -> m (PGCursor r)
+newRowCursor :: forall r m e. (QueryM m e) => (DecodeRow r) => Text -> Sql -> m (PGCursor r)
 newRowCursor namePrefix query =
   do
     uuid <- transactionUnsafeIO $ randomIO @UUID
@@ -62,7 +62,7 @@ newRowCursor namePrefix query =
     pure $ PGCursor cursorName id
 
 -- | Fetch UP TO the next N results from the cursor. If there are no more rows, returns Nothing.
-fetchN :: forall r m. (QueryM m) => PGCursor r -> Int32 -> m (Maybe (NonEmpty r))
+fetchN :: forall r m e. (QueryM m e) => PGCursor r -> Int32 -> m (Maybe (NonEmpty r))
 fetchN (PGCursor cursorName f) n = do
   -- PG doesn't allow bind params for limits or cursor names.
   -- We're safe from injection here because `n` is just an int, and we guarantee the
@@ -73,7 +73,7 @@ fetchN (PGCursor cursorName f) n = do
 
 -- | Fold over the cursor in batches of N rows.
 -- N.B. Fold is strict in the accumulator.
-foldBatched :: forall r m a. (QueryM m, Monoid a) => PGCursor r -> Int32 -> (NonEmpty r -> m a) -> m a
+foldBatched :: forall r m a e. (QueryM m e, Monoid a) => PGCursor r -> Int32 -> (NonEmpty r -> m a) -> m a
 foldBatched cursor batchSize f = do
   batch <- fetchN cursor batchSize
   case batch of

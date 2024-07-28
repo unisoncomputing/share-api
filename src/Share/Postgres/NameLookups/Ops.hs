@@ -52,7 +52,7 @@ import Unison.Util.List qualified as List
 --
 -- Or if your namespace is "subnamespace.user", you'd get back
 -- (the rootBranchId you provided, "", "subnamespace.user")
-namesPerspectiveForRootAndPath :: forall m. (PG.QueryM m) => BranchHashId -> PathSegments -> m NamesPerspective
+namesPerspectiveForRootAndPath :: forall m e. (PG.QueryM m e) => BranchHashId -> PathSegments -> m NamesPerspective
 namesPerspectiveForRootAndPath rootBranchHashId namespace = do
   nameLookupReceipt <- ensureNameLookupForBranchId rootBranchHashId
   namesPerspectiveForRootAndPathHelper nameLookupReceipt rootBranchHashId namespace
@@ -93,7 +93,7 @@ namesPerspectiveForRootAndPath rootBranchHashId namespace = do
 --
 -- A name root is either a project root or a dependency root.
 -- E.g. @.myproject.some.namespace -> .myproject@ or @.myproject.lib.base.List -> .myproject.lib.base@
-relocateToNameRoot :: (PG.QueryM m, Traversable hq) => Path -> hq Name -> BranchHashId -> m (NamesPerspective, hq Name)
+relocateToNameRoot :: (PG.QueryM m e, Traversable hq) => Path -> hq Name -> BranchHashId -> m (NamesPerspective, hq Name)
 relocateToNameRoot perspective query rootBh = do
   -- The namespace containing the name path
   let nameLocation = case getFirst query of
@@ -112,7 +112,7 @@ relocateToNameRoot perspective query rootBh = do
 -- | Search for term or type names which contain the provided list of segments in order.
 -- Search is case insensitive.
 fuzzySearchDefinitions ::
-  (PG.QueryM m) =>
+  (PG.QueryM m e) =>
   Bool ->
   NamesPerspective ->
   -- | Will return at most n terms and n types; i.e. max number of results is 2n
@@ -135,20 +135,20 @@ fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHas
   pure (termNames, typeNames)
 
 -- | Get the list of (fqn, suffixified) names for a given Referent.
-termNamesForRefWithinNamespace :: (PG.QueryM m) => NamesPerspective -> PGReferent -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
+termNamesForRefWithinNamespace :: (PG.QueryM m e) => NamesPerspective -> PGReferent -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
 termNamesForRefWithinNamespace NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} ref maySuffix = do
   NameLookupQ.termNamesForRefWithinNamespace nameLookupReceipt nameLookupBranchHashId mempty ref maySuffix
     <&> fmap (first $ prefixReversedName pathToMountedNameLookup)
 
 -- | Get the list of (fqn, suffixified) names for a given Reference.
-typeNamesForRefWithinNamespace :: (PG.QueryM m) => NamesPerspective -> PGReference -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
+typeNamesForRefWithinNamespace :: (PG.QueryM m e) => NamesPerspective -> PGReference -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
 typeNamesForRefWithinNamespace NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} ref maySuffix = do
   NameLookupQ.typeNamesForRefWithinNamespace nameLookupReceipt nameLookupBranchHashId mempty ref maySuffix
     <&> fmap (first $ prefixReversedName pathToMountedNameLookup)
 
 -- | Helper for findings refs by name within the correct mounted indexes.
 refsForExactName ::
-  (PG.QueryM m) =>
+  (PG.QueryM m e) =>
   (NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef ref]) ->
   NamesPerspective ->
   ReversedName ->
@@ -159,18 +159,18 @@ refsForExactName query NamesPerspective {nameLookupBranchHashId, pathToMountedNa
     namedRefs
       <&> prefixNamedRef pathToMountedNameLookup
 
-termRefsForExactName :: (PG.QueryM m) => NamesPerspective -> ReversedName -> m [NamedRef V1.Referent]
+termRefsForExactName :: (PG.QueryM m e) => NamesPerspective -> ReversedName -> m [NamedRef V1.Referent]
 termRefsForExactName namesPerspective reversedName = do
   refsForExactName NameLookupQ.termRefsForExactName namesPerspective reversedName
     >>= traverse (traverse (CV.referentPGTo1UsingCT))
 
-typeRefsForExactName :: (PG.QueryM m) => NamesPerspective -> ReversedName -> m [NamedRef V1.Reference]
+typeRefsForExactName :: (PG.QueryM m e) => NamesPerspective -> ReversedName -> m [NamedRef V1.Reference]
 typeRefsForExactName namesPerspective reversedName = do
   refsForExactName NameLookupQ.typeRefsForExactName namesPerspective reversedName
     >>= (traverse . traverse) CV.referencePGTo1
 
 -- | Check whether we've already got an index for a given branch hash.
-checkBranchHashNameLookupExists :: (PG.QueryM m) => BranchHash -> m Bool
+checkBranchHashNameLookupExists :: (PG.QueryM m e) => BranchHash -> m Bool
 checkBranchHashNameLookupExists bh = do
   bhId <- HashQ.ensureBranchHashId bh
   Q.checkBranchHashNameLookupExists bhId
@@ -183,7 +183,7 @@ deleteNameLookupsExceptFor reachable = do
   bhIds <- for (Set.toList reachable) HashQ.ensureBranchHashId
   Q.deleteNameLookupsExceptFor bhIds
 
-ensureNameLookupForBranchId :: (QueryM m) => BranchHashId -> m NameLookupReceipt
+ensureNameLookupForBranchId :: (QueryM m e) => BranchHashId -> m NameLookupReceipt
 ensureNameLookupForBranchId branchHashId = do
   PG.execute_ [PG.sql| SELECT ensure_name_lookup(#{branchHashId}) |]
   pure $ UnsafeNameLookupReceipt

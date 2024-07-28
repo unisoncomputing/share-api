@@ -278,10 +278,10 @@ expectTypeOfReferents :: Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> 
 expectTypeOfReferents trav s = do
   s & trav %%~ expectTypeOfReferent
 
-expectDeclKind :: (PG.QueryM m) => Reference.TypeReference -> m CT.ConstructorType
+expectDeclKind :: (PG.QueryM m e) => Reference.TypeReference -> m CT.ConstructorType
 expectDeclKind r = loadDeclKind r `whenNothingM` (unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r))
 
-expectDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
+expectDeclKindsOf :: (PG.QueryM m e) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
 expectDeclKindsOf trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
@@ -290,10 +290,10 @@ expectDeclKindsOf trav s = do
         (r, Nothing) -> unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r)
         (_, Just ct) -> pure ct
 
-loadDeclKind :: (PG.QueryM m) => V2.TypeReference -> m (Maybe CT.ConstructorType)
+loadDeclKind :: (PG.QueryM m e) => V2.TypeReference -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryM m e) => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refs -> do

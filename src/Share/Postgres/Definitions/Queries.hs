@@ -39,6 +39,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
+import Servant (err500)
 import Share.Codebase.Types (CodebaseEnv (..), CodebaseM)
 import Share.IDs
 import Share.Postgres
@@ -51,7 +52,6 @@ import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (OrdBy)
 import Share.Web.Errors (ErrorID (..), InternalServerError (InternalServerError), ToServerError (..))
-import Servant (err500)
 import U.Codebase.Decl qualified as Decl
 import U.Codebase.Decl qualified as V2 hiding (Type)
 import U.Codebase.Decl qualified as V2Decl
@@ -270,7 +270,7 @@ expectTypeComponent componentRef = do
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
-loadTermById :: QueryM m => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
+loadTermById :: (QueryM m e) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
 loadTermById codebaseUser termId = runMaybeT $ do
   (TermComponentElement trm typ) <-
     MaybeT $
@@ -288,7 +288,7 @@ loadTermById codebaseUser termId = runMaybeT $ do
       localIds = LocalIds.LocalIds {textLookup = Vector.fromList textLookup, defnLookup = Vector.fromList defnLookup}
   pure $ s2cTermWithType (localIds, trm, typ)
 
-termLocalTextReferences :: QueryM m => TermId -> m [Text]
+termLocalTextReferences :: (QueryA m e) => TermId -> m [Text]
 termLocalTextReferences termId =
   queryListCol
     [sql|
@@ -299,7 +299,7 @@ termLocalTextReferences termId =
           ORDER BY local_index ASC
       |]
 
-termLocalComponentReferences :: QueryM m => TermId -> m [ComponentHash]
+termLocalComponentReferences :: (QueryA m e) => TermId -> m [ComponentHash]
 termLocalComponentReferences termId =
   queryListCol
     [sql|
@@ -342,10 +342,10 @@ resolveConstructorTypeLocalIds (LocalIds.LocalIds {textLookup, defnLookup}) =
     substText i = textLookup ^?! ix (fromIntegral i)
     substHash i = unComponentHash $ (defnLookup ^?! ix (fromIntegral i))
 
-loadDeclKind :: PG.QueryM m => Reference.Id -> m (Maybe CT.ConstructorType)
+loadDeclKind :: (PG.QueryA m e) => Reference.Id -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: PG.QueryM m => Traversal s t Reference.Id (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryA m e) => Traversal s t Reference.Id (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refIds -> do
@@ -517,7 +517,7 @@ constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
 --
 -- This is intentionally not in CodebaseM because this method is used to build the
 -- CodebaseEnv.
-loadCachedEvalResult :: QueryM m => UserId -> Reference.Id -> m (Maybe (V2.Term Symbol))
+loadCachedEvalResult :: (QueryM m e) => UserId -> Reference.Id -> m (Maybe (V2.Term Symbol))
 loadCachedEvalResult codebaseOwnerUserId (Reference.Id hash compIndex) = runMaybeT do
   let compIndex' = pgComponentIndex compIndex
   (evalResultId :: EvalResultId, EvalResultTerm term) <-
@@ -557,12 +557,12 @@ loadCachedEvalResult codebaseOwnerUserId (Reference.Id hash compIndex) = runMayb
   pure $ resolveTermLocalIds localIds term
 
 -- | Get text ids for all provided texts, inserting any that don't already exist.
-ensureTextIds :: QueryM m => Traversable t => t Text -> m (t TextId)
+ensureTextIds :: (QueryM m e) => (Traversable t) => t Text -> m (t TextId)
 ensureTextIds = ensureTextIdsOf traversed
 
 -- | Efficiently saves all Text's focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureTextIdsOf :: QueryM m => Traversal s t Text TextId -> s -> m t
+ensureTextIdsOf :: (QueryM m e) => Traversal s t Text TextId -> s -> m t
 ensureTextIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \texts -> do
@@ -589,12 +589,12 @@ ensureTextIdsOf trav s = do
         else pure results
 
 -- | Get text ids for all provided texts, inserting any that don't already exist.
-ensureBytesIds :: QueryM m => Traversable t => t BS.ByteString -> m (t BytesId)
+ensureBytesIds :: (QueryM m e) => (Traversable t) => t BS.ByteString -> m (t BytesId)
 ensureBytesIds = ensureBytesIdsOf traversed
 
 -- | Efficiently saves all Text's focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureBytesIdsOf :: QueryM m => Traversal s t BS.ByteString BytesId -> s -> m t
+ensureBytesIdsOf :: (QueryM m e) => Traversal s t BS.ByteString BytesId -> s -> m t
 ensureBytesIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \bytestrings -> do
@@ -621,7 +621,7 @@ ensureBytesIdsOf trav s = do
         else pure results
 
 -- | Efficiently loads Texts for all TextIds focused by the provided traversal.
-expectTextsOf :: QueryM m => Traversal s t TextId Text -> s -> m t
+expectTextsOf :: (QueryM m e) => Traversal s t TextId Text -> s -> m t
 expectTextsOf trav =
   unsafePartsOf trav %%~ \textIds -> do
     let numberedTextIds = zip [0 :: Int32 ..] textIds
@@ -649,7 +649,7 @@ localizeTerm tm = do
 
 -- | Replace all references in a term with local references.
 _localizeTermAndType ::
-  HasCallStack =>
+  (HasCallStack) =>
   V2.Term Symbol ->
   V2.Type Symbol ->
   Transaction e (PgLocalIds, TermFormat.Term, TermFormat.Type)
@@ -997,7 +997,7 @@ resolveLocalIdsOf trav s = do
         >>= HashQ.expectComponentHashesOf (traversed . LocalIds.h_)
 
 -- | Fetch term tags for all the provided Referents.
-termTagsByReferentsOf :: HasCallStack => Traversal s t Referent.Referent Tags.TermTag -> s -> Transaction e t
+termTagsByReferentsOf :: (HasCallStack) => Traversal s t Referent.Referent Tags.TermTag -> s -> Transaction e t
 termTagsByReferentsOf trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
@@ -1080,7 +1080,7 @@ termTagsByReferentsOf trav s = do
         (refTagRow Tags.Test Decls.testResultListRef)
       ]
 
-typeTagsByReferencesOf :: HasCallStack => Traversal s t TypeReference Tags.TypeTag -> s -> Transaction e t
+typeTagsByReferencesOf :: (HasCallStack) => Traversal s t TypeReference Tags.TypeTag -> s -> Transaction e t
 typeTagsByReferencesOf trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do

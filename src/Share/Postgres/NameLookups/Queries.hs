@@ -41,7 +41,7 @@ import Unison.Util.Monoid qualified as Monoid
 
 -- | Get the list of term names and suffixifications for a given Referent within a given namespace.
 -- Considers one level of dependencies, but not transitive dependencies.
-termNamesForRefWithinNamespace :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> PGReferent -> Maybe ReversedName -> m [(ReversedName, ReversedName)]
+termNamesForRefWithinNamespace :: (PG.QueryM m e) => NameLookupReceipt -> BranchHashId -> PathSegments -> PGReferent -> Maybe ReversedName -> m [(ReversedName, ReversedName)]
 termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuffix = do
   let namespacePrefix = toNamespacePrefix namespaceRoot
   let reversedNamePrefix = case maySuffix of
@@ -123,7 +123,7 @@ termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
 
 -- | Get the list of type names for a given Reference within a given namespace.
 -- Considers one level of dependencies, but not transitive dependencies.
-typeNamesForRefWithinNamespace :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> PGReference -> Maybe ReversedName -> m [(ReversedName, ReversedName)]
+typeNamesForRefWithinNamespace :: (PG.QueryM m e) => NameLookupReceipt -> BranchHashId -> PathSegments -> PGReference -> Maybe ReversedName -> m [(ReversedName, ReversedName)]
 typeNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuffix = do
   let namespacePrefix = toNamespacePrefix namespaceRoot
   let reversedNamePrefix = case maySuffix of
@@ -224,7 +224,7 @@ transitiveDependenciesSql rootBranchHashId =
 -- id. It's the caller's job to select the correct name lookup for your exact name.
 --
 -- See termRefsForExactName in U.Codebase.Sqlite.Operations
-termRefsForExactName :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef (PGReferent, Maybe ConstructorType)]
+termRefsForExactName :: (PG.QueryM m e) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef (PGReferent, Maybe ConstructorType)]
 termRefsForExactName !_nameLookupReceipt bhId reversedName = do
   results :: [NamedRef (PGReferent PG.:. PG.Only (Maybe ConstructorType))] <-
     PG.queryListRows
@@ -243,7 +243,7 @@ termRefsForExactName !_nameLookupReceipt bhId reversedName = do
 -- id. It's the caller's job to select the correct name lookup for your exact name.
 --
 -- See termRefsForExactName in U.Codebase.Sqlite.Operations
-typeRefsForExactName :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef PGReference]
+typeRefsForExactName :: (PG.QueryM m e) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef PGReference]
 typeRefsForExactName !_nameLookupReceipt bhId reversedName = do
   PG.queryListRows
     [PG.sql|
@@ -254,7 +254,7 @@ typeRefsForExactName !_nameLookupReceipt bhId reversedName = do
     |]
 
 -- | Check if we've already got an index for the desired root branch hash.
-checkBranchHashNameLookupExists :: (PG.QueryM m) => BranchHashId -> m Bool
+checkBranchHashNameLookupExists :: (PG.QueryM m e) => BranchHashId -> m Bool
 checkBranchHashNameLookupExists hashId = do
   PG.queryExpect1Col
     [PG.sql|
@@ -288,7 +288,7 @@ deleteNameLookupsExceptFor hashIds = do
         |]
 
 -- | Fetch the name lookup mounts for a given name lookup index.
-listNameLookupMounts :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> m [(PathSegments, BranchHashId)]
+listNameLookupMounts :: (PG.QueryM m e) => NameLookupReceipt -> BranchHashId -> m [(PathSegments, BranchHashId)]
 listNameLookupMounts !_nameLookupReceipt rootBranchHashId =
   do
     PG.queryListRows
@@ -308,7 +308,7 @@ type FuzzySearchScore = (Bool, Bool, Int64, Int64)
 -- | Searches for all names within the given name lookup which contain the provided list of segments
 -- in order.
 -- Search is case insensitive.
-fuzzySearchTerms :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
+fuzzySearchTerms :: (PG.QueryM m e) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
 fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace querySegments = do
   fmap unRow
     <$> PG.queryListRows
@@ -368,7 +368,7 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
 -- in order.
 --
 -- Search is case insensitive.
-fuzzySearchTypes :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> m [(FuzzySearchScore, NamedRef PGReference)]
+fuzzySearchTypes :: (PG.QueryM m e) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> m [(FuzzySearchScore, NamedRef PGReference)]
 fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace querySegments = do
   fmap unRow
     <$> PG.queryListRows
