@@ -182,7 +182,7 @@ searchTokenToText shouldAddWildcards = \case
   TypeMentionToken (Left name) occ ->
     -- We normalize the name to lowercase for case-insensitive search, but only for type name
     -- mentions.
-    makeSearchToken typeMentionTypeByNameType (Text.toLower $ reversedNameText name) (Just occ)
+    makeSearchToken typeMentionTypeByNameType (Text.toLower (reversedNameText name)) (Just occ)
       & addWildCard
   TypeMentionToken (Right sh) occ ->
     makeSearchToken typeMentionTypeByHashType (into @Text @ShortHash sh) (Just occ)
@@ -195,7 +195,7 @@ searchTokenToText shouldAddWildcards = \case
   TypeTagToken typTag -> makeSearchToken tagType (typeTagText typTag) Nothing
   TypeModToken mod -> makeSearchToken typeModType (typeModText mod) Nothing
   where
-    addWildCard token = if shouldAddWildcards then (token <> ":*") else token
+    addWildCard token = if shouldAddWildcards then (token <> ".:*") else token
     typeModText = \case
       DD.Structural -> "structural"
       DD.Unique {} -> "unique"
@@ -242,7 +242,15 @@ searchTokenToText shouldAddWildcards = \case
             [kind] <> occ <> [escapeToken txt]
 
 reversedNameText :: Name -> Text
-reversedNameText n = Text.intercalate "." $ Foldable.toList $ fmap NameSegment.toEscapedText $ Name.reverseSegments n
+reversedNameText n =
+  n
+    & Name.reverseSegments
+    & fmap NameSegment.toEscapedText
+    & Foldable.toList
+    & Text.intercalate "."
+    -- We add a trailing dot so we can match on "Name.:*"to find versions of Name in different namespaces,
+    -- but don't match 'Interval' for 'Int', etc.
+    & (<> ".")
 
 searchTokensToTsQuery :: Set (DefnSearchToken (Either Name ShortHash)) -> Text
 searchTokensToTsQuery tokens =
