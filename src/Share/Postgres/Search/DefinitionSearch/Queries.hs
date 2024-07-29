@@ -6,7 +6,7 @@ module Share.Postgres.Search.DefinitionSearch.Queries
     claimUnsyncedRelease,
     insertDefinitionDocuments,
     cleanIndexForRelease,
-    defNameSearch,
+    defNameInfixSearch,
     definitionSearch,
     DefnNameSearchFilter (..),
     -- Exported for logging/debugging
@@ -266,8 +266,9 @@ data DefnNameSearchFilter
   | ReleaseFilter ReleaseId
   | UserFilter UserId
 
-defNameSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeTag)]
-defNameSearch mayCaller mayFilter (Query query) limit = do
+-- | Find definitions whose name contains the query.
+defNameInfixSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeTag)]
+defNameInfixSearch mayCaller mayFilter (Query query) limit = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
@@ -280,10 +281,8 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
         JOIN projects p ON p.id = doc.project_id
         JOIN project_releases r ON r.id = doc.release_id
         WHERE
-          -- Search name by a trigram 'word similarity'
-          -- which will match if the query is similar to any 'word' (e.g. name segment)
-          -- in the name.
-          #{query} <% doc.name
+          -- Find names which contain the query
+          doc.name ILIKE ('%' || like_escape(#{query}) || '%')
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
         ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
@@ -292,14 +291,17 @@ defNameSearch mayCaller mayFilter (Query query) limit = do
     best_results(project_id, release_id, name, tag)  AS (
       SELECT m.project_id, m.release_id, m.name, m.tag
         FROM matches_deduped_by_project m
-        ORDER BY similarity(#{query}, m.name) DESC
+        -- Prefer matches where the query is near the end of the name,
+        -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
+        ORDER BY length(m.name) - position(#{query} in m.name) ASC
         LIMIT #{limit}
     )
     -- THEN sort docs to the bottom.
     SELECT br.project_id, br.release_id, br.name, br.tag
         FROM best_results br
         -- docs and tests to the bottom, but otherwise sort by quality of the match.
-        ORDER BY (br.tag <> 'doc'::definition_tag, br.tag <> 'test'::definition_tag, br.name LIKE ('%' || like_escape(#{query})), similarity(#{query}, br.name)) DESC
+        ORDER BY br.tag <> 'doc'::definition_tag, br.tag <> 'test'::definition_tag DESC, 
+                 length(br.name) - position(#{query} in br.name) ASC
   |]
 
 definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]

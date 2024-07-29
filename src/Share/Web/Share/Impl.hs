@@ -380,13 +380,35 @@ searchDefinitionNamesEndpoint ::
   Maybe IDs.ProjectShortHand ->
   Maybe IDs.ReleaseVersion ->
   WebApp [DefinitionNameSearchResult]
-searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter releaseFilter = do
+searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit userFilter projectFilter releaseFilter = do
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
-  matches <- PG.runTransaction $ DDQ.defNameSearch callerUserId filter query limit
+  matches <-
+    (PG.runTransaction $ DDQ.defNameInfixSearch callerUserId filter query limit)
+      <&> over (traversed . _3) (rewriteMatches queryText)
   let response = matches <&> \(_projId, _releaseId, name, tag) -> DefinitionNameSearchResult name tag
   pure response
   where
     limit = fromMaybe (Limit 20) mayLimit
+
+    -- Try to rewrite the name to only include the part of the name that matches the query,
+    -- and any following suffix.
+    -- >>> Name.toText $ rewriteMatches "foo" (Name.unsafeParseText "foo.bar.baz")
+    -- "foo.bar.baz"
+    --
+    -- >>> Name.toText $ rewriteMatches "List.ma" (Name.unsafeParseText "data.List.map")
+    -- "List.map"
+    --
+    -- No match; we shouldn't get these back from the query, but if we do, just return the name as is.
+    -- >>> Name.toText $ rewriteMatches "foo" (Name.unsafeParseText "bar.baz")
+    -- "bar.baz"
+    rewriteMatches :: Text -> Name -> Name
+    rewriteMatches q name
+      | nameText <- Name.toText name,
+        Text.isInfixOf q nameText =
+          let (_before, after) = Text.breakOnEnd q nameText
+           in Name.parseText (q <> after)
+                & fromMaybe name
+      | otherwise = name
 
 resolveProjectAndReleaseFilter :: Maybe IDs.ProjectShortHand -> Maybe IDs.ReleaseVersion -> MaybeT WebApp DDQ.DefnNameSearchFilter
 resolveProjectAndReleaseFilter projectFilter releaseFilter = do

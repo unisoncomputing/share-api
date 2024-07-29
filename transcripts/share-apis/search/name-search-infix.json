@@ -2,7 +2,7 @@
   "body": [
     {
       "tag": "plain",
-      "token": "const"
+      "token": "List.map"
     }
   ],
   "status": [

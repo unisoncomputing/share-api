@@ -38,6 +38,7 @@ done
 # Name searches
 fetch "$transcript_user" GET 'name-search-suffix' '/search-names?query=const'
 fetch "$transcript_user" GET 'name-search-prefix' '/search-names?query=Func'
+fetch "$transcript_user" GET 'name-search-infix' '/search-names?query=List.ma'
 
 # Type searches
 # "b -> a -> a"
