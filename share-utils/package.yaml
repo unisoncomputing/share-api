@@ -71,6 +71,7 @@ dependencies:
 - jose
 - memory
 - network-uri
+- pretty-simple
 - random
 - servant-auth
 - servant-server

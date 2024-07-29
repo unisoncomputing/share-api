@@ -11,6 +11,7 @@ source "$(realpath "$(dirname "$0")")/transcript_helpers.sh"
 
 typeset -A transcripts
 transcripts=(
+    search transcripts/share-apis/search/
     users transcripts/share-apis/users/
     contribution-diffs transcripts/share-apis/contribution-diffs/
     definition-diffs transcripts/share-apis/definition-diffs/

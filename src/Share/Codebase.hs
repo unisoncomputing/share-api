@@ -74,6 +74,8 @@ import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text.Encoding qualified as Text
+import Servant qualified
+import Servant.Server (err500)
 import Share.Branch (Branch (..))
 import Share.Codebase.Types
 import Share.Codebase.Types qualified as Codebase
@@ -99,8 +101,6 @@ import Share.Web.App
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
-import Servant qualified
-import Servant.Server (err500)
 import U.Codebase.Branch qualified as V2
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.Decl qualified as V2
@@ -278,10 +278,10 @@ expectTypeOfReferents :: Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> 
 expectTypeOfReferents trav s = do
   s & trav %%~ expectTypeOfReferent
 
-expectDeclKind :: PG.QueryM m => Reference.TypeReference -> m CT.ConstructorType
+expectDeclKind :: (PG.QueryM m) => Reference.TypeReference -> m CT.ConstructorType
 expectDeclKind r = loadDeclKind r `whenNothingM` (unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r))
 
-expectDeclKindsOf :: PG.QueryM m => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
+expectDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
 expectDeclKindsOf trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
@@ -290,10 +290,10 @@ expectDeclKindsOf trav s = do
         (r, Nothing) -> unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r)
         (_, Just ct) -> pure ct
 
-loadDeclKind :: PG.QueryM m => V2.TypeReference -> m (Maybe CT.ConstructorType)
+loadDeclKind :: (PG.QueryM m) => V2.TypeReference -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: PG.QueryM m => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refs -> do

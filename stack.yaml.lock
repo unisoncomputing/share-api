@@ -54,13 +54,6 @@ packages:
   original:
     hackage: strings-1.1@sha256:0285dec4c8ab262359342b3e5ef1eb567074669461b9b38404f1cb870c881c5c,1617
 - completed:
-    hackage: hasql-interpolate-0.2.2.0@sha256:e6dcd161bd7147915f5f837b2dfc6f1710d6f0ce47341944ea1925194b8ed1fd,3206
-    pantry-tree:
-      sha256: e826a06d038ef9e2f1fdbaec5c0e3fb1baca63dbb463498fbf1e2d7540545c67
-      size: 1276
-  original:
-    hackage: hasql-interpolate-0.2.2.0@sha256:e6dcd161bd7147915f5f837b2dfc6f1710d6f0ce47341944ea1925194b8ed1fd,3206
-- completed:
     hackage: network-udp-0.0.0@sha256:408d2d4fa1a25e49e95752ee124cca641993404bb133ae10fb81daef22d876ae,1075
     pantry-tree:
       sha256: ee19a66c9d420861c5cc1dfad3210e2a53cdc6088ff3dd90b44f7961f5caebee
@@ -74,6 +67,41 @@ packages:
       size: 2489
   original:
     hackage: recover-rtti-0.5.0@sha256:7d598b0c89dac9e170b488a7a50b322fcae06342fbd2da18cb8a7f93a0b44e68,4913
+- completed:
+    hackage: hasql-1.8@sha256:52b61231259a79733428a4b51f5661c0eb7934001f6a3b3b637203a4a745c951,5642
+    pantry-tree:
+      sha256: 3aea9d8e5f3eccd419ba31336d0f2d737e0cc23b82fc0306cdc8975c281a272f
+      size: 3438
+  original:
+    hackage: hasql-1.8
+- completed:
+    hackage: hasql-pool-1.2.0.2@sha256:621e3997d701b424a777fc6cd0218e385c89dff9417a933305d19b03820deb3f,2389
+    pantry-tree:
+      sha256: 8dd1ee8e3a41894266708e28076a902c8d51b275af22c3f182d6bfe219ea7fa7
+      size: 982
+  original:
+    hackage: hasql-pool-1.2.0.2
+- completed:
+    hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
+    pantry-tree:
+      sha256: f7d9f29c576c4d36cb2f44d2f9a672e08e84d79060928aa9ed005e9e30c35202
+      size: 1276
+  original:
+    hackage: hasql-interpolate-1.0.1.0
+- completed:
+    hackage: postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
+    pantry-tree:
+      sha256: 29cfa313f2642c8b1d3ca15afbd2911ab842ae130e65d99fb5f18e8a24df8c88
+      size: 1661
+  original:
+    hackage: postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
+- completed:
+    hackage: postgresql-libpq-0.10.1.0@sha256:6a45edff0a9e30b32cda6e443107950492322622c4fbefc8fb4dcf6452dcf0b4,3203
+    pantry-tree:
+      sha256: 1c0120f2cd6d15bfdf64060ebde4b037f01381a8d04d188d753b43e1c978d164
+      size: 1096
+  original:
+    hackage: postgresql-libpq-0.10.1.0@sha256:6a45edff0a9e30b32cda6e443107950492322622c4fbefc8fb4dcf6452dcf0b4,3203
 snapshots:
 - completed:
     sha256: 8e7996960d864443a66eb4105338bbdd6830377b9f6f99cd5527ef73c10c01e7

@@ -6,9 +6,12 @@
 
 module Share.Web.Share.Impl where
 
+import Control.Lens
+import Data.Text qualified as Text
+import Servant
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
-import Share.IDs (TourId, UserHandle)
+import Share.IDs (TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
 import Share.OAuth.Session
@@ -16,14 +19,20 @@ import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalHash)
 import Share.Postgres.Ops qualified as PGO
+import Share.Postgres.Projects.Queries qualified as PQ
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Releases.Queries qualified as RQ
+import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
+import Share.Release (Release (..))
 import Share.User (User (..))
+import Share.User qualified as User
 import Share.UserProfile (UserProfile (..))
 import Share.Utils.API
 import Share.Utils.Caching
+import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
@@ -33,16 +42,17 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
+import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
-import Servant
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
-import Unison.Server.Share.DefinitionSummary (TermSummary, TypeSummary, serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
+import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.Definitions qualified as ShareBackend
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceDetails qualified as ND
@@ -213,7 +223,7 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "type-summary" cacheParams rootCausalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      serveTypeSummary ref mayName rootCausalId relativeTo renderWidth
+      serveTypeSummary ref mayName renderWidth
   where
     cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
@@ -332,13 +342,23 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
 -- all private users in the PG query itself.
 searchEndpoint :: Maybe Session -> Query -> Maybe Limit -> WebApp [SearchResult]
 searchEndpoint _caller (Query "") _limit = pure []
-searchEndpoint (MaybeAuthedUserID callerUserId) query (fromMaybe (Limit 20) -> limit) = do
+searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 20) -> limit) = do
+  (userQuery :: Query, (projectUserFilter :: Maybe UserId, projectQuery :: Query)) <-
+    fromMaybe query (Text.stripPrefix "@" query)
+      & Text.splitOn "/"
+      & \case
+        (userQuery : projectQueryText : _rest) -> do
+          mayUserId <- PG.runTransaction $ fmap User.user_id <$> Q.userByHandle (UserHandle userQuery)
+          pure (Query query, (mayUserId, Query projectQueryText))
+        [projectOrUserQuery] -> pure (Query projectOrUserQuery, (Nothing, Query projectOrUserQuery))
+        -- This is impossible
+        [] -> pure (Query query, (Nothing, Query query))
   -- We don't have a great way to order users and projects together, so we just limit to a max
   -- of 5 users (who match the query as a prefix), then return the rest of the results from
   -- projects.
   (users, projects) <- PG.runTransaction $ do
-    users <- Q.searchUsersByNameOrHandlePrefix query (Limit 5)
-    projects <- Q.searchProjectsByUserQuery callerUserId query limit
+    users <- Q.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+    projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
     pure (users, projects)
   let userResults =
         users
@@ -350,6 +370,72 @@ searchEndpoint (MaybeAuthedUserID callerUserId) query (fromMaybe (Limit 20) -> l
             let projectShortHand = IDs.ProjectShortHand {userHandle = ownerHandle, projectSlug = slug}
              in SearchResultProject projectShortHand summary visibility
   pure $ userResults <> projectResults
+
+searchDefinitionNamesEndpoint ::
+  Maybe UserId ->
+  Query ->
+  Maybe Limit ->
+  Maybe UserHandle ->
+  Maybe IDs.ProjectShortHand ->
+  Maybe IDs.ReleaseVersion ->
+  WebApp [DefinitionNameSearchResult]
+searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter releaseFilter = do
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
+  matches <- PG.runTransaction $ DDQ.defNameSearch callerUserId filter query limit
+  let response = matches <&> \(_projId, _releaseId, name, tag) -> DefinitionNameSearchResult name tag
+  pure response
+  where
+    limit = fromMaybe (Limit 20) mayLimit
+
+resolveProjectAndReleaseFilter :: Maybe IDs.ProjectShortHand -> Maybe IDs.ReleaseVersion -> MaybeT WebApp DDQ.DefnNameSearchFilter
+resolveProjectAndReleaseFilter projectFilter releaseFilter = do
+  projectShortHand <- hoistMaybe projectFilter
+  Project {projectId} <- lift . PG.runTransactionOrRespondError $ Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "no-project-found") $ "No project found for short hand: " <> IDs.toText projectShortHand)
+  case releaseFilter of
+    Nothing -> pure $ DDQ.ProjectFilter projectId
+    Just releaseVersion -> do
+      Release {releaseId} <- lift . PG.runTransactionOrRespondError $ Q.releaseByProjectIdAndReleaseShortHand projectId (IDs.ReleaseShortHand releaseVersion) `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and version: " <> IDs.toText releaseVersion)
+      pure $ DDQ.ReleaseFilter releaseId
+
+resolveUserFilter :: Maybe UserHandle -> MaybeT WebApp DDQ.DefnNameSearchFilter
+resolveUserFilter userFilter = do
+  userHandle <- hoistMaybe userFilter
+  User {user_id} <- lift $ PG.runTransactionOrRespondError $ Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+  pure $ DDQ.UserFilter user_id
+
+searchDefinitionsEndpoint ::
+  Maybe UserId ->
+  Query ->
+  Maybe Limit ->
+  Maybe UserHandle ->
+  Maybe IDs.ProjectShortHand ->
+  Maybe IDs.ReleaseVersion ->
+  WebApp DefinitionSearchResults
+searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
+  Logging.logInfoText $ "definition-search-query: " <> query
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
+  case DefinitionSearch.queryToTokens query of
+    Left _err -> do
+      Logging.logErrorText $ "Failed to parse query: " <> query
+      pure $ DefinitionSearchResults []
+    Right (searchTokens, mayArity) -> do
+      matches <-
+        PG.runTransactionMode PG.ReadCommitted PG.Read $
+          DDQ.definitionSearch callerUserId filter limit searchTokens mayArity
+            >>= PQ.expectProjectShortHandsOf (traversed . _1)
+            >>= RQ.expectReleaseVersionsOf (traversed . _2)
+            <&> over (traversed . _2) IDs.ReleaseShortHand
+      let results =
+            matches <&> \(project, release, fqn, summary) ->
+              DefinitionSearchResult
+                { fqn,
+                  summary,
+                  project,
+                  release
+                }
+      pure $ DefinitionSearchResults results
+  where
+    limit = fromMaybe (Limit 20) mayLimit
 
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do

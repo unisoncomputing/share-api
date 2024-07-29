@@ -9,6 +9,7 @@ module Share.Metrics
     requestMetricsMiddleware,
     tickUserSignup,
     recordBackgroundImportDuration,
+    recordDefinitionSearchIndexDuration,
   )
 where
 
@@ -385,6 +386,18 @@ backgroundImportDurationSeconds =
         "background_codebase_import_duration_seconds"
         "The time it took to import a pulled branch into the user's codebase."
 
+{-# NOINLINE definitionSearchIndexDurationSeconds #-}
+definitionSearchIndexDurationSeconds :: Prom.Vector Prom.Label2 Prom.Histogram
+definitionSearchIndexDurationSeconds =
+  Prom.unsafeRegister $
+    Prom.vector ("deployment", "service") $
+      Prom.histogram info Prom.defaultBuckets
+  where
+    info =
+      Prom.Info
+        "definition_search_indexing_duration_seconds"
+        "The time it took to index a release for definition search"
+
 timeActionIntoHistogram :: (Prom.Label l, MonadUnliftIO m) => (Prom.Vector l Prom.Histogram) -> l -> m c -> m c
 timeActionIntoHistogram histogram l m = do
   UnliftIO.bracket start end \_ -> m
@@ -399,3 +412,7 @@ timeActionIntoHistogram histogram l m = do
 -- | Record the duration of a background import.
 recordBackgroundImportDuration :: (MonadUnliftIO m) => m r -> m r
 recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDurationSeconds (deployment, service)
+
+-- | Record the duration of a background import.
+recordDefinitionSearchIndexDuration :: (MonadUnliftIO m) => m r -> m r
+recordDefinitionSearchIndexDuration = timeActionIntoHistogram definitionSearchIndexDurationSeconds (deployment, service)

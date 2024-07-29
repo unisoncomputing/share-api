@@ -20,7 +20,7 @@ description:         Please see the README on GitHub at <https://github.com/gith
 ghc-options:
 - -Wall
 - -Werror
-- -Wno-name-shadowing
+- -Wname-shadowing
 - -Wno-type-defaults
 - -Wno-missing-pattern-synonym-signatures
 - -Wincomplete-uni-patterns
@@ -66,17 +66,20 @@ dependencies:
 - http-media
 - http-types
 - jose
+- ki-unlifted
 - lens
 - megaparsec
 - memory
 - mmorph
 - monad-validate
+- monoidal-containers
 - mtl
 - network
 - network-simple
 - network-uri
 - nonempty-containers
 - parallel
+- parser-combinators
 - pem
 - hasql
 - hasql-pool
@@ -163,6 +166,7 @@ default-extensions:
   - BlockArguments
   - QuasiQuotes
   - ImportQualifiedPost
+  - OverloadedRecordDot
 
 library:
   source-dirs: src
