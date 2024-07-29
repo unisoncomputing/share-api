@@ -94,7 +94,7 @@ expectEntity hash = do
     PatchEntity -> Share.P <$> expectPatchEntity (PatchHash . Hash32.toHash $ hash)
   where
 
-expectCausalEntity :: (HasCallStack) => CausalHash -> CodebaseM e (Share.Causal Hash32)
+expectCausalEntity :: CausalHash -> CodebaseM e (Share.Causal Hash32)
 expectCausalEntity hash = do
   causalId <- CausalQ.expectCausalIdByHash hash
   U.Causal {valueHash, parents} <- CausalQ.expectCausalNamespace causalId
@@ -105,7 +105,7 @@ expectCausalEntity hash = do
         }
     )
 
-expectNamespaceEntity :: (HasCallStack) => BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
+expectNamespaceEntity :: BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
 expectNamespaceEntity bh = do
   bhId <- HashQ.expectBranchHashId bh
   v2Branch <- CausalQ.expectNamespace bhId
@@ -138,22 +138,21 @@ expectPatchEntity :: (HasCallStack) => PatchHash -> CodebaseM e (Share.Patch Tex
 expectPatchEntity patchHash = do
   patchId <- HashQ.expectPatchIdsOf id patchHash
   v2Patch <- PatchQ.expectPatch patchId
-  patchToEntity v2Patch
+  pure $ patchToEntity v2Patch
   where
-    patchToEntity :: V2.Patch -> CodebaseM e (Share.Patch Text Hash32 Hash32)
-    patchToEntity patch = do
+    patchToEntity :: V2.Patch -> (Share.Patch Text Hash32 Hash32)
+    patchToEntity patch =
       let patchFull = Cv.patchV2ToPF patch
-      let (PatchFormat.LocalIds {patchTextLookup, patchHashLookup, patchDefnLookup}, localPatch) = Localize.localizePatchG patchFull
-      let bytes = S.encodePatch localPatch
-      Share.Patch
-        { textLookup = Vector.toList patchTextLookup,
-          oldHashLookup = Vector.toList patchHashLookup,
-          newHashLookup = Vector.toList patchDefnLookup,
-          bytes
-        }
-        & Share.patchOldHashes_ %~ Hash32.fromHash
-        & Share.patchNewHashes_ %~ Hash32.fromHash
-        & pure
+          (PatchFormat.LocalIds {patchTextLookup, patchHashLookup, patchDefnLookup}, localPatch) = Localize.localizePatchG patchFull
+          bytes = S.encodePatch localPatch
+       in Share.Patch
+            { textLookup = Vector.toList patchTextLookup,
+              oldHashLookup = Vector.toList patchHashLookup,
+              newHashLookup = Vector.toList patchDefnLookup,
+              bytes
+            }
+            & Share.patchOldHashes_ %~ Hash32.fromHash
+            & Share.patchNewHashes_ %~ Hash32.fromHash
 
 -- | Determine the kind of an arbitrary hash.
 expectEntityKindForHash :: (HasCallStack) => Hash32 -> CodebaseM e EntityKind

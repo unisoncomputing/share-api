@@ -139,7 +139,7 @@ expectPatchHashesOf trav = do
       then error "expectPatchHashesOf: Missing expected patch hash"
       else pure results
 
-expectPatchIdsOf :: (HasCallStack) => Traversal s t PatchHash PatchId -> s -> CodebaseM e t
+expectPatchIdsOf :: Traversal s t PatchHash PatchId -> s -> CodebaseM e t
 expectPatchIdsOf trav = do
   unsafePartsOf trav %%~ \hashes -> do
     codebaseOwner <- asks Codebase.codebaseOwner
@@ -183,7 +183,7 @@ loadBranchHashId branchHash = do
       )
     |]
 
-expectBranchHashId :: (HasCallStack) => BranchHash -> CodebaseM e BranchHashId
+expectBranchHashId :: BranchHash -> CodebaseM e BranchHashId
 expectBranchHashId branchHash = do
   loadBranchHashId branchHash >>= \case
     Just hashId -> pure hashId
@@ -235,12 +235,12 @@ addKnownCausalHashMismatch providedHash actualHash = do
     |]
 
 -- | Generic helper which fetches both branch hashes and causal hashes
-expectCausalHashesOfG :: (HasCallStack, QueryM m e) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
+expectCausalHashesOfG :: (HasCallStack, QueryA m e) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
 expectCausalHashesOfG project trav = do
   unsafePartsOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
-    results :: [(BranchHash, CausalHash)] <-
-      queryListRows
+    unrecoverableErrorA $
+      queryListRows @(BranchHash, CausalHash)
         [sql|
       WITH causal_ids(ord, id) AS (
         SELECT * FROM ^{toTable numberedHashIds}
@@ -251,17 +251,18 @@ expectCausalHashesOfG project trav = do
           JOIN branch_hashes bh ON causal.namespace_hash_id = bh.id
         ORDER BY causal_ids.ord ASC
       |]
-    if length results /= length hashIds
-      then error "expectCausalHashesOf: Missing expected causal hash"
-      else pure (project <$> results)
+        <&> \results ->
+          if length results /= length hashIds
+            then Left . MissingExpectedEntity $ "expectCausalHashesOfG: Expected to get the same number of results as causal ids."
+            else pure (project <$> results)
 
 expectCausalAndBranchHashesOf :: (HasCallStack, QueryM m e) => Traversal s t CausalId (BranchHash, CausalHash) -> s -> m t
 expectCausalAndBranchHashesOf = expectCausalHashesOfG id
 
-expectCausalHashesByIdsOf :: (HasCallStack, QueryM m e) => Traversal s t CausalId CausalHash -> s -> m t
+expectCausalHashesByIdsOf :: (HasCallStack, QueryA m e) => Traversal s t CausalId CausalHash -> s -> m t
 expectCausalHashesByIdsOf = expectCausalHashesOfG snd
 
-expectCausalIdsOf :: (HasCallStack) => Traversal s t CausalHash (BranchHashId, CausalId) -> s -> CodebaseM e t
+expectCausalIdsOf :: Traversal s t CausalHash (BranchHashId, CausalId) -> s -> CodebaseM e t
 expectCausalIdsOf trav = do
   unsafePartsOf trav %%~ \hashes -> do
     codebaseOwnerId <- asks Codebase.codebaseOwner
@@ -287,12 +288,12 @@ expectCausalIdsOf trav = do
       then unrecoverableError $ EntityMissing "missing-expected-causal" $ "Missing one of these causals: " <> Text.intercalate ", " (into @Text <$> hashes)
       else pure results
 
-expectNamespaceIdsByCausalIdsOf :: (QueryM m e) => Traversal s t CausalId BranchHashId -> s -> m t
+expectNamespaceIdsByCausalIdsOf :: (QueryA m e) => Traversal s t CausalId BranchHashId -> s -> m t
 expectNamespaceIdsByCausalIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \causalIds -> do
       let causalIdsTable = ordered causalIds
-      results <-
+      unrecoverableErrorA $
         queryListCol @(BranchHashId)
           [sql| WITH causal_ids(ord, causal_id) AS (
                 SELECT ord, causal_id FROM ^{toTable causalIdsTable} as t(ord, causal_id)
@@ -302,16 +303,17 @@ expectNamespaceIdsByCausalIdsOf trav s = do
                 JOIN causals c ON cid.causal_id = c.id
                 ORDER BY cid.ord
         |]
-      if length results /= length causalIds
-        then unrecoverableError . MissingExpectedEntity $ "expectNamespaceIdsByCausalIdsOf: Expected to get the same number of results as causal ids. " <> tShow causalIds
-        else pure results
+          <&> \results ->
+            if length results /= length causalIds
+              then Left . MissingExpectedEntity $ "expectNamespaceIdsByCausalIdsOf: Expected to get the same number of results as causal ids. " <> tShow causalIds
+              else Right results
 
-expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryM m e) => Traversal s t BranchHashId BranchHash -> s -> m t
+expectNamespaceHashesByNamespaceHashIdsOf :: (QueryA m e) => Traversal s t BranchHashId BranchHash -> s -> m t
 expectNamespaceHashesByNamespaceHashIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \namespaceHashIds -> do
       let namespaceHashIdsTable = ordered namespaceHashIds
-      results <-
+      unrecoverableErrorA $
         queryListCol @(BranchHash)
           [sql| WITH namespace_hash_ids(ord, namespace_hash_id) AS (
                 SELECT ord, namespace_hash_id FROM ^{toTable namespaceHashIdsTable} as t(ord, namespace_hash_id)
@@ -321,9 +323,10 @@ expectNamespaceHashesByNamespaceHashIdsOf trav s = do
                 JOIN branch_hashes bh ON nhi.namespace_hash_id = bh.id
                 ORDER BY nhi.ord
         |]
-      if length results /= length namespaceHashIds
-        then unrecoverableError . MissingExpectedEntity $ "expectNamespaceHashesByNamespaceHashIdsOf: Expected to get the same number of results as namespace hash ids. " <> tShow namespaceHashIds
-        else pure results
+          <&> \results ->
+            if length results /= length namespaceHashIds
+              then Left . MissingExpectedEntity $ "expectNamespaceHashesByNamespaceHashIdsOf: Expected to get the same number of results as namespace hash ids. " <> tShow namespaceHashIds
+              else Right results
 
 loadCausalIdByHash :: CausalHash -> Codebase.CodebaseM e (Maybe CausalId)
 loadCausalIdByHash causalHash = do
@@ -334,7 +337,7 @@ loadCausalIdByHash causalHash = do
               AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causals.id AND o.user_id = #{codebaseOwner})
     |]
 
-expectCausalIdByHash :: (HasCallStack) => CausalHash -> Codebase.CodebaseM e CausalId
+expectCausalIdByHash :: CausalHash -> Codebase.CodebaseM e CausalId
 expectCausalIdByHash causalHash = do
   loadCausalIdByHash causalHash
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal id for hash: " <> tShow causalHash)

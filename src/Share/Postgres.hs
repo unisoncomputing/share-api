@@ -25,6 +25,8 @@ module Share.Postgres
     Only (..),
     QueryA (..),
     QueryM (..),
+    unrecoverableError,
+    throwErr,
     decodeField,
     (:.) (..),
 
@@ -120,7 +122,7 @@ instance MonadError e (Transaction e) where
       Right a -> pure (Right a)
 
 -- | Applicative pipelining transaction
-newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (TransactionError e) a)}
+newtype Pipeline e a = Pipeline {_unPipeline :: Hasql.Pipeline.Pipeline (Either (TransactionError e) a)}
   deriving (Functor, Applicative) via (Compose Hasql.Pipeline.Pipeline (Either (TransactionError e)))
 
 pFor :: (Traversable f) => f a -> (a -> Pipeline e b) -> Transaction e (f b)
@@ -320,9 +322,9 @@ class (Applicative m) => QueryA m e | m -> e where
   statement :: q -> Hasql.Statement q r -> m r
 
   -- | Fail the transaction and whole request with an unrecoverable server error.
-  unrecoverableError :: (HasCallStack, ToServerError x, Loggable x, Show x) => x -> m a
+  unrecoverableErrorA :: (HasCallStack, ToServerError x, Loggable x, Show x) => m (Either x a) -> m a
 
-  throwErr :: (ToServerError e, Loggable e, Show e) => e -> m a
+  throwErrA :: (ToServerError e, Loggable e, Show e) => m (Either e a) -> m a
 
   pipelined :: Pipeline e a -> m a
 
@@ -335,11 +337,14 @@ instance QueryA (Transaction e) e where
   statement q s = do
     transactionStatement q s
 
-  throwErr = throwError
+  throwErrA m = m >>= either throwError pure
 
-  pipelined p = Transaction (Hasql.pipeline (unPipeline p))
+  pipelined (Pipeline p) = Transaction (Hasql.pipeline p)
 
-  unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
+  unrecoverableErrorA me =
+    me >>= \case
+      Right a -> pure a
+      Left e -> Transaction (pure (Left (Unrecoverable (someServerError e))))
 
 instance QueryM (Transaction e) e where
   transactionUnsafeIO io = Transaction (Right <$> liftIO io)
@@ -348,12 +353,15 @@ instance QueryA (Session e) e where
   statement q s = do
     lift $ Session.statement q s
 
-  throwErr = throwError . Err
+  throwErrA m = m >>= either (throwError . Err) pure
 
-  pipelined p = do
-    ExceptT $ Hasql.pipeline (unPipeline p)
+  pipelined (Pipeline p) = do
+    ExceptT $ Hasql.pipeline p
 
-  unrecoverableError e = throwError (Unrecoverable (someServerError e))
+  unrecoverableErrorA me =
+    me >>= \case
+      Right a -> pure a
+      Left e -> throwError (Unrecoverable (someServerError e))
 
 instance QueryM (Session e) e where
   transactionUnsafeIO io = lift $ liftIO io
@@ -361,20 +369,34 @@ instance QueryM (Session e) e where
 instance QueryA (Pipeline e) e where
   statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
 
-  throwErr = Pipeline . pure . Left . Err
+  throwErrA (Pipeline me) =
+    -- Flatten error into pipeline
+    Pipeline $
+      me <&> \case
+        Left e -> Left e
+        Right (Left e) -> Left (Err e)
+        Right (Right a) -> Right a
 
   pipelined p = p
 
-  unrecoverableError e = Pipeline $ pure (Left (Unrecoverable (someServerError e)))
+  unrecoverableErrorA (Pipeline me) =
+    Pipeline
+      ( me <&> \case
+          Right (Left e) -> Left . Unrecoverable . someServerError $ e
+          Right (Right a) -> Right a
+          Left e -> Left e
+      )
+
+-- Pipeline $ pure (Left (Unrecoverable (someServerError e)))
 
 instance (QueryM m e) => QueryA (ReaderT r m) e where
   statement q s = lift $ statement q s
 
-  throwErr = lift . throwErr
+  throwErrA m = mapReaderT throwErrA m
 
   pipelined p = lift $ pipelined p
 
-  unrecoverableError e = lift $ unrecoverableError e
+  unrecoverableErrorA me = mapReaderT unrecoverableErrorA me
 
 instance (QueryM m e) => QueryM (ReaderT r m) e where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
@@ -382,14 +404,26 @@ instance (QueryM m e) => QueryM (ReaderT r m) e where
 instance (QueryM m e) => QueryA (MaybeT m) e where
   statement q s = lift $ statement q s
 
-  throwErr = lift . throwErr
+  throwErrA m =
+    m >>= \case
+      Left e -> lift $ throwErr e
+      Right a -> pure a
 
   pipelined p = lift $ pipelined p
 
-  unrecoverableError e = lift $ unrecoverableError e
+  unrecoverableErrorA m =
+    m >>= \case
+      Left e -> lift $ unrecoverableError e
+      Right a -> pure a
 
 instance (QueryM m e) => QueryM (MaybeT m) e where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
+
+unrecoverableError :: (QueryA m e) => (ToServerError x, Loggable x, Show x) => x -> m a
+unrecoverableError e = unrecoverableErrorA (pure $ Left e)
+
+throwErr :: (QueryA m e, ToServerError e, Loggable e, Show e) => e -> m a
+throwErr e = throwErrA (pure $ Left e)
 
 prepareStatements :: Bool
 prepareStatements = True

@@ -59,7 +59,7 @@ import Unison.NameSegment.Internal as NameSegment
 import Unison.Reference qualified as Reference
 import Unison.Util.Map qualified as Map
 
-expectCausalNamespace :: (HasCallStack, QueryM m e) => CausalId -> m (CausalNamespace m)
+expectCausalNamespace :: (QueryM m e) => CausalId -> m (CausalNamespace m)
 expectCausalNamespace causalId =
   loadCausalNamespace causalId
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal branch for hash:" <> tShow causalId)
@@ -101,26 +101,27 @@ expectPgCausalNamespace causalId =
 
 loadCausalNamespace :: forall m e. (QueryM m e) => CausalId -> m (Maybe (CausalNamespace m))
 loadCausalNamespace causalId = runMaybeT $ do
-  causalHash <- HashQ.expectCausalHashesByIdsOf id causalId
   branchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id causalId
-  namespaceHash <- HashQ.expectNamespaceHashesByNamespaceHashIdsOf id branchHashId
-  let namespace = expectNamespace branchHashId
-  ancestors <- lift $ ancestorsByCausalId causalId
-  pure $
-    Causal
-      { causalHash = causalHash,
-        valueHash = namespaceHash,
-        parents = ancestors,
-        value = namespace
-      }
+  pipelined $ do
+    causalHash <- HashQ.expectCausalHashesByIdsOf id causalId
+    namespaceHash <- HashQ.expectNamespaceHashesByNamespaceHashIdsOf id branchHashId
+    let namespace = expectNamespace branchHashId
+    ancestors <- ancestorsByCausalId causalId
+    pure $
+      Causal
+        { causalHash = causalHash,
+          valueHash = namespaceHash,
+          parents = ancestors,
+          value = namespace
+        }
   where
-    ancestorsByCausalId :: CausalId -> m ((Map CausalHash (m (CausalNamespace m))))
+    ancestorsByCausalId :: CausalId -> Pipeline e ((Map CausalHash (m (CausalNamespace m))))
     ancestorsByCausalId causalId = do
       getAncestors
         <&> fmap (\(ancestorId, ancestorHash) -> (ancestorHash, expectCausalNamespace ancestorId))
         <&> Map.fromList
       where
-        getAncestors :: m [(CausalId, CausalHash)]
+        getAncestors :: Pipeline e [(CausalId, CausalHash)]
         getAncestors = do
           queryListRows
             [sql| SELECT ancestor_id, ancestor.hash

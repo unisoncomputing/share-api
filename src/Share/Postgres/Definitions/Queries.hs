@@ -221,10 +221,11 @@ expectShareTermComponent componentHashId = do
       )
       `whenNothingM` do
         lift . unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound (That componentHashId))
-  second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) -> do
-    textLookup <- lift $ termLocalTextReferences termId
-    defnLookup <- lift $ termLocalComponentReferences termId
+  results <- pipelined $ for componentElements \(termId, LocalTermBytes bytes) -> do
+    textLookup <- termLocalTextReferences termId
+    defnLookup <- termLocalComponentReferences termId
     pure (Share.LocalIds {texts = textLookup, hashes = defnLookup}, bytes)
+  pure (second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList $ results)
   where
     checkElements :: [(TermId, Maybe LocalTermBytes)] -> Maybe (NonEmpty (TermId, LocalTermBytes))
     checkElements rows =
@@ -251,10 +252,11 @@ expectShareTypeComponent componentHashId = do
       )
       `whenNothingM` do
         lift . unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound (That componentHashId))
-  second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList <$> for componentElements \(typeId, LocalTypeBytes bytes) -> do
-    textLookup <- lift $ typeLocalTextReferences typeId
-    defnLookup <- lift $ typeLocalComponentReferences typeId
+  results <- pipelined $ for componentElements \(typeId, LocalTypeBytes bytes) -> do
+    textLookup <- typeLocalTextReferences typeId
+    defnLookup <- typeLocalComponentReferences typeId
     pure (Share.LocalIds {texts = Vector.toList textLookup, hashes = Vector.toList defnLookup}, bytes)
+  pure (second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList $ results)
   where
     checkElements :: [(TypeId, Maybe LocalTypeBytes)] -> Maybe (NonEmpty (TypeId, LocalTypeBytes))
     checkElements rows =
@@ -407,7 +409,7 @@ loadDecl codebaseUser (Reference.Id compHash (pgComponentIndex -> compIndex)) = 
       localIds = LocalIds.LocalIds {textLookup, defnLookup}
   pure $ s2cDecl localIds decl
 
-typeLocalTextReferences :: TypeId -> Transaction e (Vector Text)
+typeLocalTextReferences :: (QueryA m e) => TypeId -> m (Vector Text)
 typeLocalTextReferences typeId =
   Vector.fromList
     <$> queryListCol
@@ -419,7 +421,7 @@ typeLocalTextReferences typeId =
           ORDER BY local_index ASC
       |]
 
-typeLocalComponentReferences :: TypeId -> Transaction e (Vector ComponentHash)
+typeLocalComponentReferences :: (QueryA m e) => TypeId -> m (Vector ComponentHash)
 typeLocalComponentReferences typeId =
   Vector.fromList
     <$> queryListCol
