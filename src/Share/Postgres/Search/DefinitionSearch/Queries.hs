@@ -307,7 +307,13 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
         Just (UserFilter userId) -> [sql| AND p.owner_id = #{userId} |]
         Nothing -> mempty
-  let tsQueryText = searchTokensToTsQuery searchTokens
+  let (regularTokens, returnTokens) =
+        searchTokens & foldMap \token -> case token of
+          TypeMentionToken _ ReturnPosition -> (mempty, Set.singleton token)
+          TypeVarToken _ ReturnPosition -> (mempty, Set.singleton token)
+          _ -> (Set.singleton token, mempty)
+  let tsQueryText = searchTokensToTsQuery regularTokens
+  let returnTokensText = searchTokensToTsQuery returnTokens
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
@@ -323,9 +329,12 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
         ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
     ) SELECT m.project_id, m.release_id, m.name, m.metadata
         FROM matches_deduped_by_project m
-        -- prefer results which have at LEAST the requested arity, then prefer shorter
-        -- arities.
-        ORDER BY (m.arity >= #{preferredArity}) DESC, m.arity ASC, m.num_search_tokens ASC
+        -- Score matches by:
+        -- * Whether arity is equal or greater than the preferred arity
+        -- * Whether the return type of the query matches the type signature
+        -- * Prefer shorter arities
+        -- * Prefer less complex type signatures (by number of tokens)
+        ORDER BY (m.arity >= #{preferredArity}) DESC, tsquery(#{returnTokensText}) @@ doc.search_tokens DESC, m.arity ASC, m.num_search_tokens ASC
         LIMIT #{limit}
   |]
   rows & traverseOf (traversed . _4) \(Hasql.Jsonb v) -> do
