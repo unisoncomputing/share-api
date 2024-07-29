@@ -207,7 +207,7 @@
           },
           "tag": "Plain"
         },
-        "fqn": "List.map",
+        "fqn": "data.List.map",
         "kind": "term",
         "projectRef": "@transcripts/search"
       }
