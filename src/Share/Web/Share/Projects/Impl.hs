@@ -97,8 +97,8 @@ projectServer session handle =
                      :<|> contributionsByProjectServer session handle slug
                      :<|> ticketsByProjectServer session handle slug
                      :<|> ( diffNamespacesEndpoint session handle slug
-                              :<|> diffTermsEndpoint session handle slug
-                              :<|> diffTypesEndpoint session handle slug
+                              :<|> projectDiffTermsEndpoint session handle slug
+                              :<|> projectDiffTypesEndpoint session handle slug
                           )
                      :<|> createProjectEndpoint session handle slug
                      :<|> updateProjectEndpoint session handle slug
@@ -172,7 +172,7 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
   where
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}
 
-diffTermsEndpoint ::
+projectDiffTermsEndpoint ::
   Maybe Session ->
   UserHandle ->
   ProjectSlug ->
@@ -181,7 +181,7 @@ diffTermsEndpoint ::
   Name ->
   Name ->
   WebApp ShareTermDiffResponse
-diffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTermName newTermName =
+projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTermName newTermName =
   do
     project <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
@@ -203,7 +203,7 @@ diffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug 
     projectShortHand :: IDs.ProjectShortHand
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}
 
-diffTypesEndpoint ::
+projectDiffTypesEndpoint ::
   Maybe Session ->
   UserHandle ->
   ProjectSlug ->
@@ -212,7 +212,7 @@ diffTypesEndpoint ::
   Name ->
   Name ->
   WebApp ShareTypeDiffResponse
-diffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTypeName newTypeName =
+projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTypeName newTypeName =
   do
     project <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
@@ -243,7 +243,7 @@ namespaceHashForBranchOrRelease authZReceipt Project {projectId, ownerUserId = p
       let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId (Branch.contributorId branch)
       let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
       Codebase.codebaseMToTransaction codebase do
-        branchHashId <- CausalQ.expectNamespaceIdForCausal causalId
+        branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
         pure (codebase, causalId, branchHashId)
   IDs.IsReleaseShortHand releaseShortHand -> do
     PG.runTransactionOrRespondError $ do
@@ -252,7 +252,7 @@ namespaceHashForBranchOrRelease authZReceipt Project {projectId, ownerUserId = p
       let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
       let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
       Codebase.codebaseMToTransaction codebase do
-        branchHashId <- CausalQ.expectNamespaceIdForCausal causalId
+        branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
         pure (codebase, causalId, branchHashId)
 
 createProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> CreateProjectRequest -> WebApp CreateProjectResponse

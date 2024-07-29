@@ -42,8 +42,10 @@ import Share.Web.Share.Contributions.API
 import Share.Web.Share.Contributions.API qualified as API
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Impl qualified as Diffs
-import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..))
+import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
 import Share.Web.Share.Types (UserDisplayInfo)
+import Unison.Name (Name)
+import Unison.Syntax.Name qualified as Name
 
 contributionsByProjectServer :: Maybe Session -> UserHandle -> ProjectSlug -> ServerT API.ContributionsByProjectAPI WebApp
 contributionsByProjectServer session handle projectSlug =
@@ -62,8 +64,8 @@ contributionsByProjectServer session handle projectSlug =
         addServerTag (Proxy @API.ContributionResourceServer) "contribution-number" (IDs.toText contributionNumber) $
           getContributionByNumberEndpoint session handle projectSlug contributionNumber
             :<|> updateContributionByNumberEndpoint session handle projectSlug contributionNumber
-            :<|> ( contributionDiffTermsEndpoint
-                     :<|> contributionDiffTypesEndpoint
+            :<|> ( contributionDiffTermsEndpoint session handle projectSlug contributionNumber
+                     :<|> contributionDiffTypesEndpoint session handle projectSlug contributionNumber
                      :<|> contributionDiffEndpoint session handle projectSlug contributionNumber
                  )
             :<|> mergeContributionEndpoint session handle projectSlug contributionNumber
@@ -238,9 +240,9 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
     lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
 
-  let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldBranchCausalId]
+  let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
+  let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId]
   Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
-    let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
     namespaceDiff <- Diffs.diffCausals authZReceipt oldCausalId newBranchCausalId
     (newBranchCausalHash, oldCausalHash) <- PG.runTransaction $ do
       newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
@@ -256,6 +258,96 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
           diff = namespaceDiff
         }
   where
+    projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
+
+contributionDiffTermsEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  IDs.ContributionNumber ->
+  Name ->
+  Name ->
+  WebApp (Cached JSON ShareTermDiffResponse)
+contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber oldTermName newTermName =
+  do
+    ( project,
+      Contribution {contributionId, bestCommonAncestorCausalId},
+      oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
+      newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
+      ) <- PG.runTransactionOrRespondError $ do
+      project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+      contribution@Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId} <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+      newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+      oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+      pure (project, contribution, oldBranch, newBranch)
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
+    let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
+    let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
+    oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
+      lift $ Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
+      lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
+    let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
+    Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
+      (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
+      (oldTerm, newTerm, displayObjDiff) <- Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName)
+      pure $
+        ShareTermDiffResponse
+          { project = projectShorthand,
+            oldBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
+            newBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
+            oldTerm = oldTerm,
+            newTerm = newTerm,
+            diff = displayObjDiff
+          }
+  where
+    projectShorthand :: IDs.ProjectShortHand
+    projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
+
+contributionDiffTypesEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  IDs.ContributionNumber ->
+  Name ->
+  Name ->
+  WebApp (Cached JSON ShareTypeDiffResponse)
+contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber oldTypeName newTypeName =
+  do
+    ( project,
+      Contribution {contributionId, bestCommonAncestorCausalId},
+      oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
+      newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
+      ) <- PG.runTransactionOrRespondError $ do
+      project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+      contribution@Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId} <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+      newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+      oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+      pure (project, contribution, oldBranch, newBranch)
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
+    let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
+    let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
+    oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
+      lift $ Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
+      lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
+    let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTypeName, Name.toText newTypeName]
+    Caching.cachedResponse authZReceipt "contribution-diff-types" cacheKeys do
+      (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
+      (oldType, newType, displayObjDiff) <- Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName)
+      pure $
+        ShareTypeDiffResponse
+          { project = projectShorthand,
+            oldBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
+            newBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
+            oldType = oldType,
+            newType = newType,
+            diff = displayObjDiff
+          }
+  where
+    projectShorthand :: IDs.ProjectShortHand
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
 
 mergeContributionEndpoint ::

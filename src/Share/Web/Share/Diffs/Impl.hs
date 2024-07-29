@@ -67,12 +67,12 @@ diffCausals !_authZReceipt oldCausalId newCausalId = do
   -- Ensure name lookups for each thing we're diffing.
   -- We do this in two separate transactions to ensure we can still make progress even if we need to build name lookups.
   (oldBranchHashId, oldBranchNLReceipt) <- PG.runTransaction $ do
-    oldBranchHashId <- CausalQ.expectNamespaceIdForCausal oldCausalId
+    oldBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id oldCausalId
     oldBranchNLReceipt <- NLOps.ensureNameLookupForBranchId oldBranchHashId
     pure (oldBranchHashId, oldBranchNLReceipt)
 
   (newBranchHashId, newNLReceipt) <- PG.runTransaction $ do
-    newBranchHashId <- CausalQ.expectNamespaceIdForCausal newCausalId
+    newBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id newCausalId
     newNLReceipt <- NLOps.ensureNameLookupForBranchId newBranchHashId
     pure (newBranchHashId, newNLReceipt)
 

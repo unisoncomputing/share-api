@@ -79,7 +79,7 @@ definitionForHQName ::
   HQ.HashQualified Name ->
   Codebase.CodebaseM e DefinitionDisplayResults
 definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
-  rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdForCausal rootCausalId
+  rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
   (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
   Debug.debugM Debug.Server "definitionForHQName: (namesPerspective, query)" (namesPerspective, query)
   -- Bias towards both relative and absolute path to queries,

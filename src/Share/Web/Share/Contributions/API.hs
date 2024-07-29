@@ -46,12 +46,12 @@ type ContributionDiffEndpoint =
 type ContributionDiffTermsEndpoint =
   RequiredQueryParam "oldTerm" Name
     :> RequiredQueryParam "newTerm" Name
-    :> Get '[JSON] ShareTermDiffResponse
+    :> Get '[JSON] (Cached JSON ShareTermDiffResponse)
 
 type ContributionDiffTypesEndpoint =
   RequiredQueryParam "oldType" Name
     :> RequiredQueryParam "newType" Name
-    :> Get '[JSON] ShareTypeDiffResponse
+    :> Get '[JSON] (Cached JSON ShareTypeDiffResponse)
 
 type ListContributionsCursor = (UTCTime, ContributionId)
 
