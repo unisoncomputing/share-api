@@ -384,7 +384,7 @@ searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit user
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
   matches <-
     (PG.runTransaction $ DDQ.defNameInfixSearch callerUserId filter query limit)
-      <&> over (traversed . _3) (rewriteMatches queryText)
+      <&> ordNubOn (view _3) . (mapMaybe $ traverseOf _3 (rewriteMatches queryText))
   let response = matches <&> \(_projId, _releaseId, name, tag) -> DefinitionNameSearchResult name tag
   pure response
   where
@@ -392,23 +392,24 @@ searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit user
 
     -- Try to rewrite the name to only include the part of the name that matches the query,
     -- and any following suffix.
-    -- >>> Name.toText $ rewriteMatches "foo" (Name.unsafeParseText "foo.bar.baz")
-    -- "foo.bar.baz"
+    -- >>> Name.toText <$> rewriteMatches "foo" (Name.unsafeParseText "Foo.Bar.baz")
+    -- Just "Foo.Bar.baz"
     --
-    -- >>> Name.toText $ rewriteMatches "List.ma" (Name.unsafeParseText "data.List.map")
-    -- "List.map"
+    -- >>> Name.toText <$>  rewriteMatches "list.ma" (Name.unsafeParseText "data.List.map")
+    -- Just "List.map"
     --
-    -- No match; we shouldn't get these back from the query, but if we do, just return the name as is.
-    -- >>> Name.toText $ rewriteMatches "foo" (Name.unsafeParseText "bar.baz")
-    -- "bar.baz"
-    rewriteMatches :: Text -> Name -> Name
+    -- No match; we shouldn't get these back from the query, but if we do, just filter it out
+    -- >>> Name.toText <$>  rewriteMatches "foo" (Name.unsafeParseText "bar.baz")
+    -- Nothing
+    rewriteMatches :: Text -> Name -> Maybe Name
     rewriteMatches q name
       | nameText <- Name.toText name,
-        Text.isInfixOf q nameText =
-          let (_before, after) = Text.breakOnEnd q nameText
-           in Name.parseText (q <> after)
-                & fromMaybe name
-      | otherwise = name
+        Text.isInfixOf (Text.toLower q) (Text.toLower nameText) =
+          -- Find where the query starts in the name, and take the rest of the name from there
+          let (_before, after) = Text.breakOnEnd (Text.toLower q) (Text.toLower nameText)
+           in -- Use the length of the matching bits to get the right part of the name, but with the correct casing
+              Name.parseText (Text.takeEnd (Text.length $ q <> after) nameText)
+      | otherwise = Nothing
 
 resolveProjectAndReleaseFilter :: Maybe IDs.ProjectShortHand -> Maybe IDs.ReleaseVersion -> MaybeT WebApp DDQ.DefnNameSearchFilter
 resolveProjectAndReleaseFilter projectFilter releaseFilter = do

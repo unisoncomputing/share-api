@@ -293,15 +293,16 @@ defNameInfixSearch mayCaller mayFilter (Query query) limit = do
         FROM matches_deduped_by_project m
         -- Prefer matches where the query is near the end of the name,
         -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
-        ORDER BY length(m.name) - position(#{query} in m.name) ASC
+        ORDER BY length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC
         LIMIT #{limit}
     )
     -- THEN sort docs to the bottom.
     SELECT br.project_id, br.release_id, br.name, br.tag
         FROM best_results br
-        -- docs and tests to the bottom, but otherwise sort by quality of the match.
-        ORDER BY br.tag <> 'doc'::definition_tag, br.tag <> 'test'::definition_tag DESC, 
-                 length(br.name) - position(#{query} in br.name) ASC
+        -- docs and tests to the bottom, but otherwise sort by the quality of the match.
+        -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
+        ORDER BY br.tag <> 'doc'::definition_tag DESC, br.tag <> 'test'::definition_tag DESC,
+                 length(br.name) - position(LOWER(#{query}) in LOWER(br.name)) ASC
   |]
 
 definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
