@@ -19,7 +19,6 @@ import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
 import Share.Web.Authorization.Types (ProjectMaintainerPermissions)
 import Share.Web.Share.Types (UserDisplayInfo)
-import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TypeDefinition)
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
 projectToAPI projectOwner Project {slug, visibility, createdAt, updatedAt, summary, tags} =
@@ -277,70 +276,6 @@ instance ToJSON AddMaintainersResponse where
       [ "maintainers" Aeson..= maintainers
       ]
 
-data ShareTermDiffResponse = ShareTermDiffResponse
-  { project :: ProjectShortHand,
-    oldBranch :: BranchOrReleaseShortHand,
-    newBranch :: BranchOrReleaseShortHand,
-    oldTerm :: TermDefinition,
-    newTerm :: TermDefinition,
-    diff :: DisplayObjectDiff
-  }
-
-instance ToJSON ShareTermDiffResponse where
-  toJSON (ShareTermDiffResponse {diff, project, oldBranch, newBranch, oldTerm, newTerm}) =
-    case diff of
-      DisplayObjectDiff dispDiff ->
-        object
-          [ "diff" .= dispDiff,
-            "diffKind" .= ("diff" :: Text),
-            "project" .= project,
-            "oldBranchRef" .= oldBranch,
-            "newBranchRef" .= newBranch,
-            "oldTerm" .= oldTerm,
-            "newTerm" .= newTerm
-          ]
-      MismatchedDisplayObjects {} ->
-        object
-          [ "diffKind" .= ("mismatched" :: Text),
-            "project" .= project,
-            "oldBranchRef" .= oldBranch,
-            "newBranchRef" .= newBranch,
-            "oldTerm" .= oldTerm,
-            "newTerm" .= newTerm
-          ]
-
-data ShareTypeDiffResponse = ShareTypeDiffResponse
-  { project :: ProjectShortHand,
-    oldBranch :: BranchOrReleaseShortHand,
-    newBranch :: BranchOrReleaseShortHand,
-    oldType :: TypeDefinition,
-    newType :: TypeDefinition,
-    diff :: DisplayObjectDiff
-  }
-
-instance ToJSON ShareTypeDiffResponse where
-  toJSON (ShareTypeDiffResponse {diff, project, oldBranch, newBranch, oldType, newType}) =
-    case diff of
-      DisplayObjectDiff dispDiff ->
-        object
-          [ "diff" .= dispDiff,
-            "diffKind" .= ("diff" :: Text),
-            "project" .= project,
-            "oldBranchRef" .= oldBranch,
-            "newBranchRef" .= newBranch,
-            "oldType" .= oldType,
-            "newType" .= newType
-          ]
-      MismatchedDisplayObjects {} ->
-        object
-          [ "diffKind" .= ("mismatched" :: Text),
-            "project" .= project,
-            "oldBranchRef" .= oldBranch,
-            "newBranchRef" .= newBranch,
-            "oldType" .= oldType,
-            "newType" .= newType
-          ]
-
 data UpdateMaintainersResponse = UpdateMaintainersResponse
   { maintainers :: [Maintainer UserDisplayInfo]
   }
@@ -357,14 +292,14 @@ data Maintainer user = Maintainer
   }
   deriving (Show, Functor, Foldable, Traversable)
 
-instance ToJSON user => ToJSON (Maintainer user) where
+instance (ToJSON user) => ToJSON (Maintainer user) where
   toJSON Maintainer {..} =
     object
       [ "user" Aeson..= user,
         "permissions" Aeson..= permissions
       ]
 
-instance FromJSON user => FromJSON (Maintainer user) where
+instance (FromJSON user) => FromJSON (Maintainer user) where
   parseJSON = Aeson.withObject "Maintainer" $ \o -> do
     user <- o Aeson..: "user"
     permissions <- o Aeson..: "permissions"

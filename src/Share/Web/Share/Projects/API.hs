@@ -10,7 +10,7 @@ import Share.Utils.Caching (Cached)
 import Share.Utils.Servant (RequiredQueryParam)
 import Share.Web.Share.Branches.API (ProjectBranchesAPI)
 import Share.Web.Share.Contributions.API (ContributionsByProjectAPI)
-import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse)
+import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse, ShareTermDiffResponse, ShareTypeDiffResponse)
 import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.API
 import Share.Web.Share.Tickets.API (TicketsByProjectAPI)

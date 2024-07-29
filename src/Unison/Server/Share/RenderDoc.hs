@@ -14,7 +14,6 @@ import Data.Set qualified as Set
 import Share.Backend qualified as Backend
 import Share.Codebase.Types (CodebaseM, CodebaseRuntime)
 import Share.Postgres.Causal.Queries qualified as CausalQ
-import Share.Postgres.Causal.Queries qualified as HashQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (PathSegments (..))
@@ -40,7 +39,7 @@ findAndRenderDoc ::
   Maybe Width ->
   CodebaseM e (Maybe Doc)
 findAndRenderDoc docNames runtime namespacePath rootCausalId _mayWidth = runMaybeT do
-  rootNamespaceHashId <- lift $ HashQ.expectNamespaceIdForCausal rootCausalId
+  rootNamespaceHashId <- lift $ CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
   namespaceCausal <- MaybeT $ CausalQ.loadCausalNamespaceAtPath rootCausalId namespacePath
   shallowBranchAtNamespace <- lift $ V2Causal.value namespaceCausal
   namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootNamespaceHashId (coerce $ Path.toList namespacePath)

@@ -14,8 +14,6 @@ module Share.Postgres.Causal.Queries
     expectPgNamespace,
     savePgNamespace,
     saveCausal,
-    loadNamespaceIdForCausal,
-    expectNamespaceIdForCausal,
     tryGetCachedSquashResult,
     saveSquashResult,
     saveV2BranchShallow,
@@ -384,20 +382,6 @@ expectPgNamespace branchHashId = do
           <&> fmap \(nameSegmentId, branchHashId, causalId) ->
             (nameSegmentId, (branchHashId, causalId))
       pure $ Map.fromList childList
-
-loadNamespaceIdForCausal :: (QueryM m) => CausalId -> m (Maybe BranchHashId)
-loadNamespaceIdForCausal causalId = runMaybeT do
-  MaybeT $
-    query1Col
-      [sql| SELECT namespace_hash_id
-            FROM causals
-              WHERE causals.id = #{causalId}
-    |]
-
-expectNamespaceIdForCausal :: (HasCallStack, QueryM m) => CausalId -> m BranchHashId
-expectNamespaceIdForCausal c = do
-  loadNamespaceIdForCausal c
-    `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected namespace id for causal: " <> tShow c)
 
 -- | Crawls the namespace tree to find the causal id mounted at a given path from the provided
 -- root causal.
