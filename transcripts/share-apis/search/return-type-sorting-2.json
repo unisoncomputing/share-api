@@ -1,0 +1,99 @@
+{
+  "body": {
+    "results": [
+      {
+        "branchRef": "releases/1.2.3",
+        "definition": {
+          "displayName": "Nat.fromText",
+          "hash": "#he2h9hm6c2obcmnvp2g17dcg1l65h9t0q5mamjlrl2lk0flmjioc5j350l0386r88ho1u1ncqklh31qdqgrmbltrincivfcjcsmdeo0",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "contents": "##Text",
+                  "tag": "TypeReference"
+                },
+                "segment": "Text"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "TypeOperator"
+                },
+                "segment": "->"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "contents": "##Nat",
+                  "tag": "TypeReference"
+                },
+                "segment": "Nat"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Plain"
+        },
+        "fqn": "Nat.fromText",
+        "kind": "term",
+        "projectRef": "@transcripts/search"
+      },
+      {
+        "branchRef": "releases/1.2.3",
+        "definition": {
+          "displayName": "Nat.toText",
+          "hash": "#9da94h7t7rhg55vdur11jle4b1r8tn8ptpqc4m4hg8tve9vb57g64av66ghc0dpoc4r5e4f7ippu9qja7nqcq1c73cvd5fuvl0o6efo",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "contents": "##Nat",
+                  "tag": "TypeReference"
+                },
+                "segment": "Nat"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "TypeOperator"
+                },
+                "segment": "->"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "contents": "##Text",
+                  "tag": "TypeReference"
+                },
+                "segment": "Text"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Plain"
+        },
+        "fqn": "Nat.toText",
+        "kind": "term",
+        "projectRef": "@transcripts/search"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

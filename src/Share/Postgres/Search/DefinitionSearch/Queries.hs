@@ -9,6 +9,8 @@ module Share.Postgres.Search.DefinitionSearch.Queries
     defNameSearch,
     definitionSearch,
     DefnNameSearchFilter (..),
+    -- Exported for logging/debugging
+    searchTokensToTsQuery,
   )
 where
 
@@ -195,7 +197,7 @@ searchTokenToText shouldAddWildcards = \case
   TypeTagToken typTag -> makeSearchToken tagType (typeTagText typTag) Nothing
   TypeModToken mod -> makeSearchToken typeModType (typeModText mod) Nothing
   where
-    addWildCard token = if shouldAddWildcards then (token <> ".:*") else token
+    addWildCard token = if shouldAddWildcards then (token <> ":*") else token
     typeModText = \case
       DD.Structural -> "structural"
       DD.Unique {} -> "unique"
@@ -317,8 +319,8 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
-    WITH matches_deduped_by_project(project_id, release_id, name, arity, metadata, num_search_tokens) AS (
-      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.arity, doc.metadata, length(doc.search_tokens) FROM global_definition_search_docs doc
+    WITH matches_deduped_by_project(project_id, release_id, name, arity, metadata, search_tokens) AS (
+      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.arity, doc.metadata, doc.search_tokens FROM global_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
         JOIN project_releases r ON r.id = doc.release_id
         WHERE
@@ -330,11 +332,11 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
     ) SELECT m.project_id, m.release_id, m.name, m.metadata
         FROM matches_deduped_by_project m
         -- Score matches by:
-        -- * Whether arity is equal or greater than the preferred arity
-        -- * Whether the return type of the query matches the type signature
-        -- * Prefer shorter arities
-        -- * Prefer less complex type signatures (by number of tokens)
-        ORDER BY (m.arity >= #{preferredArity}) DESC, tsquery(#{returnTokensText}) @@ doc.search_tokens DESC, m.arity ASC, m.num_search_tokens ASC
+        -- - Whether arity is equal or greater than the preferred arity
+        -- - Whether the return type of the query matches the type signature
+        -- - Prefer shorter arities
+        -- - Prefer less complex type signatures (by number of tokens)
+        ORDER BY (m.arity >= #{preferredArity}) DESC, tsquery(#{returnTokensText}) @@ m.search_tokens DESC, m.arity ASC, length(m.search_tokens) ASC
         LIMIT #{limit}
   |]
   rows & traverseOf (traversed . _4) \(Hasql.Jsonb v) -> do

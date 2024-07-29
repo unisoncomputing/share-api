@@ -6,7 +6,7 @@
     },
     {
       "tag": "data-constructor",
-      "token": "List.Cons"
+      "token": "data.List.Cons"
     }
   ],
   "status": [

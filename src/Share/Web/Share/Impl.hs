@@ -23,6 +23,7 @@ import Share.Postgres.Projects.Queries qualified as PQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
+import Share.Postgres.Search.DefinitionSearch.Queries qualified as DSQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -419,6 +420,7 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
       Logging.logErrorText $ "Failed to parse query: " <> query
       pure $ DefinitionSearchResults []
     Right (searchTokens, mayArity) -> do
+      Logging.logInfoText $ "definition-search-tokens: " <> DSQ.searchTokensToTsQuery searchTokens
       matches <-
         PG.runTransactionMode PG.ReadCommitted PG.Read $
           DDQ.definitionSearch callerUserId filter limit searchTokens mayArity

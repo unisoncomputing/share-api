@@ -109,10 +109,13 @@ type P = MP.Parsec QueryError Text
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Nothing)
 --
 -- >>> queryToTokens "e -> abilities.Exception"
--- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) (Count 1),TypeVarToken 0 (Count 1)],Just 1)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) (Count 1),TypeVarToken 0 (Count 1)],Just 1)
 --
 -- >>> queryToTokens "Json.Text"
 -- Right (fromList [NameToken (Name Relative (NameSegment {toUnescapedText = "Text"} :| [NameSegment {toUnescapedText = "Json"}]))],Nothing)
+--
+-- >>> queryToTokens "Nat -> Text"
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Nat"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Just 1)
 queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either Name ShortHash)), Maybe Arity)
 queryToTokens query =
   let cleanQuery =
@@ -230,7 +233,7 @@ typeQueryP = do
   pure $
     -- If we've got at least one well-formed argument, then assume that the last segment is
     -- meant to be the return type.
-    if arity > 1
+    if arity >= 1
       then (arity, foldedTokens, foldOf (_last . _2 . to MonMap.keysSet) topLevelTypeSegments)
       else (arity, foldedTokens, mempty)
   where

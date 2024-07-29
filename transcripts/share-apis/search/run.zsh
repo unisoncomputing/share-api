@@ -45,3 +45,15 @@ fetch "$transcript_user" GET 'type-var-search' '/search-definitions?query=b%20-%
 
 # (a -> b) -> List a -> List b
 fetch "$transcript_user" GET 'complex-type-mention-search' '/search-definitions?query=(a%20-%3E%20b)%20-%3E%20List%20a%20-%3E%20List%20b'
+
+# Similar type search, should find 'map' but not 'usesListLike'
+# List a -> List b
+fetch "$transcript_user" GET 'similar-type-search' '/search-definitions?query=List%20a%20-%3E%20List%20b'
+
+# Return-type sorting. Should sort Nat.toText first
+# Nat -> Text
+fetch "$transcript_user" GET 'return-type-sorting-1' '/search-definitions?query=Nat%20-%3E%20Text'
+
+# Return-type sorting. Should sort Nat.fromText first
+# Text -> Nat
+fetch "$transcript_user" GET 'return-type-sorting-2' '/search-definitions?query=Text%20-%3E%20Nat'
