@@ -232,11 +232,11 @@ searchTokenToText shouldAddWildcards = \case
         & Text.replace "\\" "\\\\"
         -- Then fold over the provided characters, escaping them with a preceding backslash
         & \t -> foldr (\c acc -> Text.replace (Text.singleton c) (Text.pack ['\\', c]) acc) t ("()|& :*!," :: String)
-    makeSearchToken :: Text -> Text -> Maybe (Maybe Occurrence) -> Text
+    makeSearchToken :: Text -> Text -> Maybe OccurrenceKind -> Text
     makeSearchToken kind txt occTxt = do
       let occ = case occTxt of
-            Just (Just (Occurrence n)) -> [tShow n]
-            Just Nothing -> ["r"]
+            Just (Count (Occurrence n)) -> [tShow n]
+            Just ReturnPosition -> ["r"]
             Nothing -> []
        in Text.intercalate "," $
             [kind] <> occ <> [escapeToken txt]

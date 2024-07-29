@@ -17,7 +17,7 @@ import Data.Set.Lens (setOf)
 import Data.Text qualified as Text
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
-import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
+import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, OccurrenceKind (..), TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
@@ -217,13 +217,13 @@ typeSigTokens typ =
           -- 'Text' still matches the type 'Text -> Text'
           & foldMap
             ( \(vId, (occ, Any isReturn)) ->
-                Monoid.whenM isReturn [TypeVarToken vId Nothing] <> ((TypeVarToken vId . Just) <$> [1 .. occ])
+                Monoid.whenM isReturn [TypeVarToken vId ReturnPosition] <> ((TypeVarToken vId . Count) <$> [1 .. occ])
             )
           & Set.fromList
       expandedTypeRefTokens =
         typeRefs
           & foldMap \(typeRef, (occ, Any isReturn)) ->
-            Monoid.whenM isReturn [TypeMentionToken typeRef Nothing] <> (TypeMentionToken typeRef . Just <$> [1 .. occ])
+            Monoid.whenM isReturn [TypeMentionToken typeRef ReturnPosition] <> (TypeMentionToken typeRef . Count <$> [1 .. occ])
               & Set.fromList
    in (normalizedVarTokens <> expandedTypeRefTokens, arity)
   where

@@ -8,6 +8,7 @@ module Share.BackgroundJobs.Search.DefinitionSync.Types
     DefinitionDocument (..),
     DefnSearchToken (..),
     Occurrence (..),
+    OccurrenceKind (..),
     VarId (..),
     Arity (..),
   )
@@ -123,6 +124,9 @@ newtype Occurrence = Occurrence Int
   deriving (Semigroup) via Sum Int
   deriving (Monoid) via Sum Int
 
+data OccurrenceKind = ReturnPosition | Count Occurrence
+  deriving stock (Show, Eq, Ord)
+
 -- | An id for identifying unique type variables mentioned in a query.
 -- E.g. 'map : (a -> b) -> List a -> List b' would have two type var Ids, one for a, one
 -- for b, and would have occurrences 1 and 2 for each respectively.
@@ -137,9 +141,9 @@ data DefnSearchToken typeRef
   = -- Allows searching by literal name
     NameToken Name
   | -- A mention of some external type or ability
-    TypeMentionToken typeRef (Maybe Occurrence {- Nothing means it's a return value -})
+    TypeMentionToken typeRef OccurrenceKind
   | -- Allows searching for type sigs with type variables
-    TypeVarToken VarId (Maybe Occurrence {- Nothing means it's a return value -})
+    TypeVarToken VarId OccurrenceKind
   | -- Allows searching by component hash
     -- Note: not actually a _short_ hash, it's a full hash with the referent info tagged
     -- on.
@@ -148,8 +152,6 @@ data DefnSearchToken typeRef
   | TypeTagToken TypeTag
   | TypeModToken DD.Modifier
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
-
-makePrisms ''DefnSearchToken
 
 data DefinitionDocument proj release name typeRef = DefinitionDocument
   { project :: proj,
