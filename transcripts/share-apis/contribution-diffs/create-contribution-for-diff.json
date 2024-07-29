@@ -11,7 +11,7 @@
     "id": "C-<UUID>",
     "numComments": 0,
     "number": 1,
-    "projectRef": "@transcripts/namespace-diff",
+    "projectRef": "@transcripts/contribution-diff",
     "sourceBranchRef": "diff-end",
     "status": "in_review",
     "targetBranchRef": "diff-start",

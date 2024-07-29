@@ -1,7 +1,7 @@
 ```ucm:hide
-.> project.create-empty namespace-diff
-namespace-diff/main> branch /diff-start
-namespace-diff/diff-start> builtins.mergeio
+.> project.create-empty contribution-diff
+contribution-diff/main> branch /diff-start
+contribution-diff/diff-start> builtins.mergeio
 ```
 
 ```unison
@@ -48,22 +48,22 @@ deleteMeAfterFork = "delete me after fork"
 ```
 
 ```ucm:hide
-namespace-diff/diff-start> add
-namespace-diff/diff-start> push @transcripts/namespace-diff/diff-start
-namespace-diff/diff-start> branch /diff-end
-namespace-diff/diff-end> alias.term termAliasMe aTermAlias
-namespace-diff/diff-end> delete.term termDeleteMe
-namespace-diff/diff-end> alias.type DataAliasMe ATypeAlias
-namespace-diff/diff-end> delete.type DataDeleteMe
-namespace-diff/diff-end> delete.namespace DataDeleteMe
-namespace-diff/diff-end> alias.type AbilityAliasMe AbilityAlias
-namespace-diff/diff-end> delete.type AbilityDeleteMe
-namespace-diff/diff-end> delete.namespace AbilityDeleteMe
-namespace-diff/diff-end> delete.term a.definition.at.path1
-namespace-diff/diff-end> delete.term a.definition.at.path2
-namespace-diff/diff-end> delete.term a.different.path
-namespace-diff/diff-end> delete.term aDoc
-namespace-diff/diff-end> delete.term aTest
+contribution-diff/diff-start> add
+contribution-diff/diff-start> push @transcripts/contribution-diff/diff-start
+contribution-diff/diff-start> branch /diff-end
+contribution-diff/diff-end> alias.term termAliasMe aTermAlias
+contribution-diff/diff-end> delete.term termDeleteMe
+contribution-diff/diff-end> alias.type DataAliasMe ATypeAlias
+contribution-diff/diff-end> delete.type DataDeleteMe
+contribution-diff/diff-end> delete.namespace DataDeleteMe
+contribution-diff/diff-end> alias.type AbilityAliasMe AbilityAlias
+contribution-diff/diff-end> delete.type AbilityDeleteMe
+contribution-diff/diff-end> delete.namespace AbilityDeleteMe
+contribution-diff/diff-end> delete.term a.definition.at.path1
+contribution-diff/diff-end> delete.term a.definition.at.path2
+contribution-diff/diff-end> delete.term a.different.path
+contribution-diff/diff-end> delete.term aDoc
+contribution-diff/diff-end> delete.term aTest
 ```
 
 ```unison
@@ -83,13 +83,13 @@ ability AbilityNew where
 ```
 
 ```ucm
-namespace-diff/diff-end> update
-namespace-diff/diff-end> rename.term termRenameMe renamedTerm
-namespace-diff/diff-end> rename.type DataRenameMe RenamedType
-namespace-diff/diff-end> rename.namespace DataRenameMe RenamedType
-namespace-diff/diff-end> rename.type AbilityRenameMe AbilityRenamed
-namespace-diff/diff-end> rename.namespace AbilityRenameMe AbilityRenamed
-namespace-diff/diff-end> push @transcripts/namespace-diff/diff-end
+contribution-diff/diff-end> update
+contribution-diff/diff-end> rename.term termRenameMe renamedTerm
+contribution-diff/diff-end> rename.type DataRenameMe RenamedType
+contribution-diff/diff-end> rename.namespace DataRenameMe RenamedType
+contribution-diff/diff-end> rename.type AbilityRenameMe AbilityRenamed
+contribution-diff/diff-end> rename.namespace AbilityRenameMe AbilityRenamed
+contribution-diff/diff-end> push @transcripts/contribution-diff/diff-end
 ```
 
 Now we go back to the `diff-start` branch and make some more commits to test that 
@@ -103,7 +103,7 @@ termUpdateMe = "conflicted update"
 ```
 
 ```ucm
-namespace-diff/diff-start> update
-namespace-diff/diff-start> delete.term deleteMeAfterFork
-namespace-diff/diff-start> push @transcripts/namespace-diff/diff-start
+contribution-diff/diff-start> update
+contribution-diff/diff-start> delete.term deleteMeAfterFork
+contribution-diff/diff-start> push @transcripts/contribution-diff/diff-start
 ```
