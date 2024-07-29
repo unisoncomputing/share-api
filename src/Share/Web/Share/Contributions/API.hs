@@ -9,10 +9,12 @@ import Share.Contribution (ContributionStatus)
 import Share.IDs
 import Share.Utils.API
 import Share.Utils.Caching (Cached)
+import Share.Utils.Servant (RequiredQueryParam)
 import Share.Web.Share.Comments.API qualified as Comments
 import Share.Web.Share.Contributions.Types
-import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse)
+import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse, ShareTermDiffResponse, ShareTypeDiffResponse)
 import Share.Web.Share.Types (UserDisplayInfo)
+import Unison.Name (Name)
 
 type ContributionsByUserAPI = ListContributionsByUserEndpoint
 
@@ -24,7 +26,12 @@ type ContributionsByProjectAPI =
 type ContributionResourceServer =
   ( GetContributionByNumber
       :<|> UpdateContributionByNumber
-      :<|> ("diff" :> ContributionDiffEndpoint)
+      :<|> ( "diff"
+               :> ( ("terms" :> ContributionDiffTermsEndpoint)
+                      :<|> ("types" :> ContributionDiffTypesEndpoint)
+                      :<|> ContributionDiffEndpoint
+                  )
+           )
       :<|> ("merge" :> MergeContribution)
       :<|> ( "timeline"
                :> ( GetContributionTimeline
@@ -35,6 +42,16 @@ type ContributionResourceServer =
 
 type ContributionDiffEndpoint =
   Get '[JSON] (Cached JSON ShareNamespaceDiffResponse)
+
+type ContributionDiffTermsEndpoint =
+  RequiredQueryParam "oldTerm" Name
+    :> RequiredQueryParam "newTerm" Name
+    :> Get '[JSON] ShareTermDiffResponse
+
+type ContributionDiffTypesEndpoint =
+  RequiredQueryParam "oldType" Name
+    :> RequiredQueryParam "newType" Name
+    :> Get '[JSON] ShareTypeDiffResponse
 
 type ListContributionsCursor = (UTCTime, ContributionId)
 

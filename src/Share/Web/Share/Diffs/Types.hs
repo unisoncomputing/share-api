@@ -12,7 +12,7 @@ import Share.Postgres.IDs (CausalHash)
 import Share.Prelude
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
-import Unison.Server.Types (TermTag, TypeTag)
+import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermTag, TypeDefinition, TypeTag)
 import Unison.ShortHash (ShortHash)
 
 type ShareNamespaceDiff = NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash)
@@ -42,7 +42,7 @@ instance ToJSON ShareNamespaceDiffResponse where
       hqNameJSON :: Name -> NameSegment -> ShortHash -> Value
       hqNameJSON fqn name sh = object ["hash" .= sh, "shortName" .= name, "fullName" .= fqn]
       -- The preferred frontend format is a bit clunky to calculate here:
-      diffDataJSON :: ToJSON tag => NameSegment -> DefinitionDiff (tag, ShortHash) -> (tag, Value)
+      diffDataJSON :: (ToJSON tag) => NameSegment -> DefinitionDiff (tag, ShortHash) -> (tag, Value)
       diffDataJSON shortName (DefinitionDiff {fqn, kind}) = case kind of
         Added (defnTag, r) -> (defnTag, object ["tag" .= text "Added", "contents" .= hqNameJSON fqn shortName r])
         NewAlias (defnTag, r) existingNames ->
@@ -87,3 +87,67 @@ instance ToJSON ShareNamespaceDiffResponse where
               [ "changes" .= changesJSON,
                 "children" .= childrenJSON
               ]
+
+data ShareTermDiffResponse = ShareTermDiffResponse
+  { project :: ProjectShortHand,
+    oldBranch :: BranchOrReleaseShortHand,
+    newBranch :: BranchOrReleaseShortHand,
+    oldTerm :: TermDefinition,
+    newTerm :: TermDefinition,
+    diff :: DisplayObjectDiff
+  }
+
+instance ToJSON ShareTermDiffResponse where
+  toJSON (ShareTermDiffResponse {diff, project, oldBranch, newBranch, oldTerm, newTerm}) =
+    case diff of
+      DisplayObjectDiff dispDiff ->
+        object
+          [ "diff" .= dispDiff,
+            "diffKind" .= ("diff" :: Text),
+            "project" .= project,
+            "oldBranchRef" .= oldBranch,
+            "newBranchRef" .= newBranch,
+            "oldTerm" .= oldTerm,
+            "newTerm" .= newTerm
+          ]
+      MismatchedDisplayObjects {} ->
+        object
+          [ "diffKind" .= ("mismatched" :: Text),
+            "project" .= project,
+            "oldBranchRef" .= oldBranch,
+            "newBranchRef" .= newBranch,
+            "oldTerm" .= oldTerm,
+            "newTerm" .= newTerm
+          ]
+
+data ShareTypeDiffResponse = ShareTypeDiffResponse
+  { project :: ProjectShortHand,
+    oldBranch :: BranchOrReleaseShortHand,
+    newBranch :: BranchOrReleaseShortHand,
+    oldType :: TypeDefinition,
+    newType :: TypeDefinition,
+    diff :: DisplayObjectDiff
+  }
+
+instance ToJSON ShareTypeDiffResponse where
+  toJSON (ShareTypeDiffResponse {diff, project, oldBranch, newBranch, oldType, newType}) =
+    case diff of
+      DisplayObjectDiff dispDiff ->
+        object
+          [ "diff" .= dispDiff,
+            "diffKind" .= ("diff" :: Text),
+            "project" .= project,
+            "oldBranchRef" .= oldBranch,
+            "newBranchRef" .= newBranch,
+            "oldType" .= oldType,
+            "newType" .= newType
+          ]
+      MismatchedDisplayObjects {} ->
+        object
+          [ "diffKind" .= ("mismatched" :: Text),
+            "project" .= project,
+            "oldBranchRef" .= oldBranch,
+            "newBranchRef" .= newBranch,
+            "oldType" .= oldType,
+            "newType" .= newType
+          ]

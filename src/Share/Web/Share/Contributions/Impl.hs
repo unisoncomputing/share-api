@@ -62,7 +62,10 @@ contributionsByProjectServer session handle projectSlug =
         addServerTag (Proxy @API.ContributionResourceServer) "contribution-number" (IDs.toText contributionNumber) $
           getContributionByNumberEndpoint session handle projectSlug contributionNumber
             :<|> updateContributionByNumberEndpoint session handle projectSlug contributionNumber
-            :<|> contributionDiffEndpoint session handle projectSlug contributionNumber
+            :<|> ( contributionDiffTermsEndpoint
+                     :<|> contributionDiffTypesEndpoint
+                     :<|> contributionDiffEndpoint session handle projectSlug contributionNumber
+                 )
             :<|> mergeContributionEndpoint session handle projectSlug contributionNumber
             :<|> timelineServer contributionNumber
    in listContributionsByProjectEndpoint session handle projectSlug
