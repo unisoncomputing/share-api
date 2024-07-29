@@ -3,10 +3,6 @@
     {
       "tag": "plain",
       "token": "function.const"
-    },
-    {
-      "tag": "data-constructor",
-      "token": "data.List.Cons"
     }
   ],
   "status": [

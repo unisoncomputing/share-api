@@ -382,7 +382,7 @@ searchDefinitionNamesEndpoint ::
   WebApp [DefinitionNameSearchResult]
 searchDefinitionNamesEndpoint callerUserId query mayLimit userFilter projectFilter releaseFilter = do
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
-  matches <- PG.runTransaction $ DDQ.defNameSearch callerUserId filter query limit
+  matches <- PG.runTransaction $ DDQ.defNameInfixSearch callerUserId filter query limit
   let response = matches <&> \(_projId, _releaseId, name, tag) -> DefinitionNameSearchResult name tag
   pure response
   where
