@@ -303,8 +303,10 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
     SELECT br.project_id, br.release_id, br.name, br.tag
         FROM best_results br
         -- docs and tests to the bottom, but otherwise sort by the quality of the match.
-        -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
+        -- e.g. for query 'List', 'data.List' should come before 'data.List.map', and 
+        -- we should prioritize the correct case, e.g. 'Text' should match 'Text' before 'text'.
         ORDER BY br.tag <> 'doc'::definition_tag DESC, br.tag <> 'test'::definition_tag DESC,
+                 br.name LIKE ('%' || #{query} || '%') DESC,
                  length(br.name) - position(LOWER(#{query}) in LOWER(br.name)) ASC
   |]
     -- Names are stored in absolute form, but we usually work with them in relative form.
@@ -385,7 +387,7 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
         -- - whether it contains the exact provided spelling
         -- - how close the query is to the END of the name (generally we want to match the last segment)
         -- - similarity, just in case the query is a bit off
-        ORDER BY m.name ILIKE ('%.' || #{query} || '%') DESC, length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC, word_similarity(#{query}, m.name) DESC
+        ORDER BY m.name LIKE ('%' || #{query} || '%') DESC, length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC, word_similarity(#{query}, m.name) DESC
         LIMIT #{limit}
   |]
   rows
