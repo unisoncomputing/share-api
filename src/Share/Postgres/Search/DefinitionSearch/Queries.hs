@@ -294,9 +294,10 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
     best_results(project_id, release_id, name, tag)  AS (
       SELECT m.project_id, m.release_id, m.name, m.tag
         FROM matches_deduped_by_project m
-        -- Prefer matches where the query is near the end of the name,
+        -- Prefer matches where the original query appears (case-matched),
+        -- then matches where the query is near the end of the name,
         -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
-        ORDER BY length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC
+        ORDER BY m.name LIKE ('%' || #{query} || '%') DESC, length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC
         LIMIT #{limit}
     )
     -- THEN sort docs to the bottom.
