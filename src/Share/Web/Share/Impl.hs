@@ -443,7 +443,7 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
     [":"] -> pure $ []
     -- If the query is a single word, and it doesn't contain "->", we treat it as a name search
     [name]
-      | not (Text.isInfixOf "->" name) ->
+      | not (Text.isInfixOf "->" name) && not (Text.isInfixOf "#" name) ->
           PG.runTransactionMode PG.ReadCommitted PG.Read $
             DDQ.definitionNameSearch callerUserId filter limit (Query name)
     _ -> do

@@ -1,0 +1,73 @@
+{
+  "body": {
+    "results": [
+      {
+        "branchRef": "releases/1.2.3",
+        "definition": {
+          "displayName": "function.const",
+          "hash": "#20991ok5ht19nlsedaet8das0lq77c0hjjthlbmicvued7s733uhj7jmeao4is1mu380u98qlf1iosf15b8atsfl1mo4bv3kl3i7hdo",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "tag": "Var"
+                },
+                "segment": "a"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "TypeOperator"
+                },
+                "segment": "->"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "Var"
+                },
+                "segment": "b"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "TypeOperator"
+                },
+                "segment": "->"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "Var"
+                },
+                "segment": "a"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Plain"
+        },
+        "fqn": "function.const",
+        "kind": "term",
+        "projectRef": "@transcripts/search"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
