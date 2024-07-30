@@ -303,7 +303,7 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
     SELECT br.project_id, br.release_id, br.name, br.tag
         FROM best_results br
         -- docs and tests to the bottom, but otherwise sort by the quality of the match.
-        -- e.g. for query 'List', 'data.List' should come before 'data.List.map', and 
+        -- e.g. for query 'List', 'data.List' should come before 'data.List.map', and
         -- we should prioritize the correct case, e.g. 'Text' should match 'Text' before 'text'.
         ORDER BY br.tag <> 'doc'::definition_tag DESC, br.tag <> 'test'::definition_tag DESC,
                  br.name LIKE ('%' || #{query} || '%') DESC,
@@ -376,8 +376,8 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
         JOIN projects p ON p.id = doc.project_id
         JOIN project_releases r ON r.id = doc.release_id
         WHERE
-          -- Adjust the similarity threshold as needed (between 0 and 1)
-          word_similarity(#{query}, doc.name) >= 0.5
+          -- We may wish to adjust the similarity threshold before the query.
+          #{query} <% doc.name
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
         ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
