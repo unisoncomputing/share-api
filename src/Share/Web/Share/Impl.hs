@@ -383,7 +383,7 @@ searchDefinitionNamesEndpoint ::
 searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit userFilter projectFilter releaseFilter = do
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <-
-    (PG.runTransaction $ DDQ.defNameInfixSearch callerUserId filter query limit)
+    (PG.runTransaction $ DDQ.defNameCompletionSearch callerUserId filter query limit)
       <&> ordNubOn (view _3) . (mapMaybe $ traverseOf _3 (rewriteMatches queryText))
   let response = matches <&> \(_projId, _releaseId, name, tag) -> DefinitionNameSearchResult name tag
   pure response
@@ -438,27 +438,39 @@ searchDefinitionsEndpoint ::
 searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
   Logging.logInfoText $ "definition-search-query: " <> query
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
-  case DefinitionSearch.queryToTokens query of
-    Left _err -> do
-      Logging.logErrorText $ "Failed to parse query: " <> query
-      pure $ DefinitionSearchResults []
-    Right (searchTokens, mayArity) -> do
-      Logging.logInfoText $ "definition-search-tokens: " <> DSQ.searchTokensToTsQuery searchTokens
-      matches <-
-        PG.runTransactionMode PG.ReadCommitted PG.Read $
-          DDQ.definitionSearch callerUserId filter limit searchTokens mayArity
-            >>= PQ.expectProjectShortHandsOf (traversed . _1)
-            >>= RQ.expectReleaseVersionsOf (traversed . _2)
-            <&> over (traversed . _2) IDs.ReleaseShortHand
-      let results =
-            matches <&> \(project, release, fqn, summary) ->
+  matches <- case Text.words query of
+    [] -> pure $ []
+    [":"] -> pure $ []
+    -- If the query is a single word, and it doesn't contain "->", we treat it as a name search
+    [name]
+      | not (Text.isInfixOf "->" name) ->
+          PG.runTransactionMode PG.ReadCommitted PG.Read $
+            DDQ.definitionNameSearch callerUserId filter limit (Query name)
+    _ -> do
+      case DefinitionSearch.queryToTokens query of
+        Left _err -> do
+          Logging.logErrorText $ "Failed to parse query: " <> query
+          pure $ []
+        Right (searchTokens, mayArity) -> do
+          Logging.logInfoText $ "definition-search-tokens: " <> DSQ.searchTokensToTsQuery searchTokens
+          PG.runTransactionMode PG.ReadCommitted PG.Read $
+            DDQ.definitionTokenSearch callerUserId filter limit searchTokens mayArity
+  results <-
+    PG.runTransactionMode PG.ReadCommitted PG.Read $
+      do
+        PQ.expectProjectShortHandsOf (traversed . _1) matches
+        >>= RQ.expectReleaseVersionsOf (traversed . _2)
+        <&> over (traversed . _2) IDs.ReleaseShortHand
+        <&> fmap
+          ( \(project, release, fqn, summary) ->
               DefinitionSearchResult
                 { fqn,
                   summary,
                   project,
                   release
                 }
-      pure $ DefinitionSearchResults results
+          )
+  pure $ DefinitionSearchResults results
   where
     limit = fromMaybe (Limit 20) mayLimit
 

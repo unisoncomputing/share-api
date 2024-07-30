@@ -6,8 +6,9 @@ module Share.Postgres.Search.DefinitionSearch.Queries
     claimUnsyncedRelease,
     insertDefinitionDocuments,
     cleanIndexForRelease,
-    defNameInfixSearch,
-    definitionSearch,
+    defNameCompletionSearch,
+    definitionTokenSearch,
+    definitionNameSearch,
     DefnNameSearchFilter (..),
     -- Exported for logging/debugging
     searchTokensToTsQuery,
@@ -268,9 +269,9 @@ data DefnNameSearchFilter
   | ReleaseFilter ReleaseId
   | UserFilter UserId
 
--- | Find definitions whose name contains the query.
-defNameInfixSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeTag)]
-defNameInfixSearch mayCaller mayFilter (Query query) limit = do
+-- | Find names which would be valid completions for the given query.
+defNameCompletionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeTag)]
+defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
@@ -309,8 +310,9 @@ defNameInfixSearch mayCaller mayFilter (Query query) limit = do
     -- Names are stored in absolute form, but we usually work with them in relative form.
     <&> over (traversed . _3) Name.makeRelative
 
-definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
-definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
+-- | Perform a type search for the given tokens.
+definitionTokenSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
@@ -344,6 +346,43 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
         -- - Prefer shorter arities
         -- - Prefer less complex type signatures (by number of tokens)
         ORDER BY (m.arity >= #{preferredArity}) DESC, tsquery(#{returnTokensText}) @@ m.search_tokens DESC, m.arity ASC, length(m.search_tokens) ASC
+        LIMIT #{limit}
+  |]
+  rows
+    & over (traversed . _3) Name.makeRelative
+    & traverseOf
+      (traversed . _4)
+      ( \(Hasql.Jsonb v) -> do
+          case fromJSON v of
+            Aeson.Error err -> unrecoverableError $ FailedToDecodeMetadata v (Text.pack err)
+            Aeson.Success summary -> pure summary
+      )
+
+-- | Perform a fuzzy trigram search on definition names
+definitionNameSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+definitionNameSearch mayCaller mayFilter limit (Query query) = do
+  let filters = case mayFilter of
+        Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
+        Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
+        Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
+        Nothing -> mempty
+  rows <-
+    queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
+      [sql|
+    WITH matches_deduped_by_project(project_id, release_id, name, metadata) AS (
+      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
+        JOIN projects p ON p.id = doc.project_id
+        JOIN project_releases r ON r.id = doc.release_id
+        WHERE
+          -- Adjust the similarity threshold as needed (between 0 and 1)
+          word_similarity(#{query}, doc.name) >= 0.5
+        AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
+          ^{filters}
+        ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
+    ) SELECT m.project_id, m.release_id, m.name, m.metadata
+        FROM matches_deduped_by_project m
+        -- Score matches by name similarity
+        ORDER BY word_similarity(#{query}, m.name) DESC
         LIMIT #{limit}
   |]
   rows

@@ -55,6 +55,8 @@ fetch "$transcript_user" GET 'name-search-release-filter-sad' '/search-names?que
 # "b -> a -> a"
 fetch "$transcript_user" GET 'type-var-search' '/search-definitions?query=b%20-%3E%20a%20-%3E%20a'
 
+# Fuzzy search, should find 'Text' and 'Nat.toText' and 'Nat.fromText'
+fetch "$transcript_user" GET 'defn-search-fuzzy' '/search-definitions?query=Text'
 
 # (a -> b) -> List a -> List b
 fetch "$transcript_user" GET 'complex-type-mention-search' '/search-definitions?query=(a%20-%3E%20b)%20-%3E%20List%20a%20-%3E%20List%20b'
