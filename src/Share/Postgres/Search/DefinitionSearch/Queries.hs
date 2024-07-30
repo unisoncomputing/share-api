@@ -381,8 +381,11 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
         ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
     ) SELECT m.project_id, m.release_id, m.name, m.metadata
         FROM matches_deduped_by_project m
-        -- Score matches by name similarity
-        ORDER BY word_similarity(#{query}, m.name) DESC
+        -- Score matches by:
+        -- - whether it contains the exact provided spelling
+        -- - how close the query is to the END of the name (generally we want to match the last segment)
+        -- - similarity, just in case the query is a bit off
+        ORDER BY m.name ILIKE ('%.' || #{query} || '%') DESC, length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC, word_similarity(#{query}, m.name) DESC
         LIMIT #{limit}
   |]
   rows
