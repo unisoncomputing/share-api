@@ -106,7 +106,9 @@ insertDefinitionDocuments docs = pipelined $ do
               TypeModToken mod -> [TypeModToken mod]
        in ( project,
             release,
-            Name.toText fqn,
+            -- Prefix all names with '.' in the index
+            -- It helps with prefix matching by segment.
+            Name.toText . Name.makeAbsolute $ fqn,
             Text.unwords (searchTokenToText False <$> expandedTokens),
             arity,
             tag,
@@ -282,7 +284,7 @@ defNameInfixSearch mayCaller mayFilter (Query query) limit = do
         JOIN project_releases r ON r.id = doc.release_id
         WHERE
           -- Find names which contain the query
-          doc.name ILIKE ('%' || like_escape(#{query}) || '%')
+          doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
         ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
@@ -304,6 +306,8 @@ defNameInfixSearch mayCaller mayFilter (Query query) limit = do
         ORDER BY br.tag <> 'doc'::definition_tag DESC, br.tag <> 'test'::definition_tag DESC,
                  length(br.name) - position(LOWER(#{query}) in LOWER(br.name)) ASC
   |]
+    -- Names are stored in absolute form, but we usually work with them in relative form.
+    <&> over (traversed . _3) Name.makeRelative
 
 definitionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
 definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
@@ -342,7 +346,12 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
         ORDER BY (m.arity >= #{preferredArity}) DESC, tsquery(#{returnTokensText}) @@ m.search_tokens DESC, m.arity ASC, length(m.search_tokens) ASC
         LIMIT #{limit}
   |]
-  rows & traverseOf (traversed . _4) \(Hasql.Jsonb v) -> do
-    case fromJSON v of
-      Aeson.Error err -> unrecoverableError $ FailedToDecodeMetadata v (Text.pack err)
-      Aeson.Success summary -> pure summary
+  rows
+    & over (traversed . _3) Name.makeRelative
+    & traverseOf
+      (traversed . _4)
+      ( \(Hasql.Jsonb v) -> do
+          case fromJSON v of
+            Aeson.Error err -> unrecoverableError $ FailedToDecodeMetadata v (Text.pack err)
+            Aeson.Success summary -> pure summary
+      )
