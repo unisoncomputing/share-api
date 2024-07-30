@@ -9,6 +9,7 @@ import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuth
 import Share.Prelude (NonEmpty)
 import Share.Utils.API
 import Share.Utils.Caching
+import Share.Utils.IDs qualified as IDs
 import Share.Utils.Servant
 import Share.Web.Share.Branches.API (UserBranchesAPI)
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
@@ -56,7 +57,7 @@ type SearchDefinitionNamesEndpoint =
   MaybeAuthenticatedUserId
     :> RequiredQueryParam "query" Query
     :> QueryParam "limit" Limit
-    :> QueryParam "user-filter" UserHandle
+    :> QueryParam "user-filter" (IDs.PrefixedID "@" UserHandle)
     :> QueryParam "project-filter" ProjectShortHand
     :> QueryParam "release-filter" ReleaseVersion
     :> Get '[JSON] [DefinitionNameSearchResult]
@@ -66,7 +67,7 @@ type SearchDefinitionsEndpoint =
   MaybeAuthenticatedUserId
     :> RequiredQueryParam "query" Query
     :> QueryParam "limit" Limit
-    :> QueryParam "user-filter" UserHandle
+    :> QueryParam "user-filter" (IDs.PrefixedID "@" UserHandle)
     :> QueryParam "project-filter" ProjectShortHand
     :> QueryParam "release-filter" ReleaseVersion
     :> Get '[JSON] DefinitionSearchResults

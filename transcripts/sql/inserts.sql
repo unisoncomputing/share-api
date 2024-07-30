@@ -181,6 +181,7 @@ INSERT INTO project_releases (
   squashed_causal_id)
 VALUES
   -- A couple published releases on the test project
+  -- @test/publictestproject/releases/1.2.3
   (
     '551aff6a-c1ea-456d-9256-25ffeea414f7',
     'cdad39a9-9ed2-4a5e-b2d7-62bbe81446dd',
@@ -190,6 +191,7 @@ VALUES
     'd32f4ddf-2423-4f10-a4de-465939951354',
     0,
     0),
+  -- @test/publictestproject/releases/1.0.0
   (
     'c1480162-660c-4529-a39b-104e942f6ca1',
     'cdad39a9-9ed2-4a5e-b2d7-62bbe81446dd',

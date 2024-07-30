@@ -68,7 +68,7 @@ fromUUID = coerce
 -- User Handles may be prefixed with "@" or not prefixed at all.
 -- This type allows us to use the same underlying type, but easily alter the ToJSON/FromJSON
 -- and ToHttpApiData/FromHttpApiData instances to match the expected format.
-newtype PrefixedID (prefix :: Symbol) a = PrefixedID a
+newtype PrefixedID (prefix :: Symbol) a = PrefixedID {unPrefix :: a}
   deriving newtype (Eq, Ord, Generic)
   deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via (UsingID (PrefixedID prefix a))
 

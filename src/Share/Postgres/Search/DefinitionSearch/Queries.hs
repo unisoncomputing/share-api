@@ -272,7 +272,7 @@ defNameInfixSearch mayCaller mayFilter (Query query) limit = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
-        Just (UserFilter userId) -> [sql| AND p.owner_id = #{userId} |]
+        Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
   queryListRows @(ProjectId, ReleaseId, Name, TermOrTypeTag)
     [sql|
@@ -310,7 +310,7 @@ definitionSearch mayCaller mayFilter limit searchTokens preferredArity = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
-        Just (UserFilter userId) -> [sql| AND p.owner_id = #{userId} |]
+        Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
   let (regularTokens, returnTokens) =
         searchTokens & foldMap \token -> case token of

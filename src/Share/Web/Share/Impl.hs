@@ -376,12 +376,12 @@ searchDefinitionNamesEndpoint ::
   Maybe UserId ->
   Query ->
   Maybe Limit ->
-  Maybe UserHandle ->
+  Maybe (IDs.PrefixedID "@" UserHandle) ->
   Maybe IDs.ProjectShortHand ->
   Maybe IDs.ReleaseVersion ->
   WebApp [DefinitionNameSearchResult]
 searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit userFilter projectFilter releaseFilter = do
-  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <-
     (PG.runTransaction $ DDQ.defNameInfixSearch callerUserId filter query limit)
       <&> ordNubOn (view _3) . (mapMaybe $ traverseOf _3 (rewriteMatches queryText))
@@ -431,13 +431,13 @@ searchDefinitionsEndpoint ::
   Maybe UserId ->
   Query ->
   Maybe Limit ->
-  Maybe UserHandle ->
+  Maybe (IDs.PrefixedID "@" UserHandle) ->
   Maybe IDs.ProjectShortHand ->
   Maybe IDs.ReleaseVersion ->
   WebApp DefinitionSearchResults
 searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
   Logging.logInfoText $ "definition-search-query: " <> query
-  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter userFilter
+  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   case DefinitionSearch.queryToTokens query of
     Left _err -> do
       Logging.logErrorText $ "Failed to parse query: " <> query
