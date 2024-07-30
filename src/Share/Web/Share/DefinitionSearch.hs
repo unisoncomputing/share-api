@@ -106,7 +106,15 @@ type P = MP.Parsec QueryError Text
 --
 -- Horribly misshapen query:
 -- >>> queryToTokens "[{ &Text !{𝕖} (Optional)"
--- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Nothing)
+-- WAS WAS WAS WAS WAS WAS WAS WAS Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Nothing)
+-- WAS WAS WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
+-- WAS WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
+-- WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
+-- WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
+-- WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
+-- WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
+-- WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
+-- NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
 --
 -- >>> queryToTokens "e -> abilities.Exception"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) (Count 1),TypeVarToken 0 (Count 1)],Just 1)
@@ -116,6 +124,12 @@ type P = MP.Parsec QueryError Text
 --
 -- >>> queryToTokens "Nat -> Text"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Nat"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Just 1)
+--
+-- >>> queryToTokens "(a, b) -> (a -> c) -> (c, b)"
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) (Count 2),TypeVarToken 0 (Count 1),TypeVarToken 1 (Count 1)],Just 2)
+--
+-- >>> queryToTokens "Text -> ()"
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Just 1)
 queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either Name ShortHash)), Maybe Arity)
 queryToTokens query =
   let cleanQuery =
@@ -244,12 +258,12 @@ typeQueryP = do
 
 -- We just ignore units for now, they don't contribute much to the search.
 unitP :: P Tokens
-unitP = MP.choice [MP.string "()", MP.string "Unit", MP.string "'"] $> mempty
+unitP = lexeme $ MP.choice [MP.string "()", MP.string "Unit", MP.string "'"] $> mempty
 
 tupleP :: P Tokens
 tupleP = MP.between (MP.char '(') (MP.char ')') do
   typeQueryP
-  _ <- MP.char ','
+  _ <- lexeme (MP.char ',')
   typeQueryP
   pure $ MonMap.singleton (TypeNameMention (Name.unsafeParseText "Tuple")) 1
 
