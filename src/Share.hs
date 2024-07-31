@@ -15,7 +15,6 @@ import Data.ByteString.Char8 qualified as BSC
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.List.Extra qualified as List
 import Data.Map qualified as Map
-import Data.Maybe qualified as Maybe
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
