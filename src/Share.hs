@@ -143,7 +143,12 @@ mkShareServer env = do
     appServer reqTagsKey req noCacheHeader (Cookies.cookieVal -> noCacheCookie) mayRequestID mayUserId =
       let reqMethod = Wai.requestMethod req
           addReqCtx m = do
-            let useCaching = not Deployment.onLocal && Maybe.isNothing noCacheHeader && Maybe.isNothing noCacheCookie
+            let isSet = \case
+                  Nothing -> False
+                  Just v
+                    | lower <- Text.toLower v, lower == "false" -> False
+                    | otherwise -> True
+            let useCaching = not Deployment.onLocal && not (isSet noCacheHeader) && not (isSet noCacheCookie)
             let reqTags =
                   Map.fromList
                     [ ("caching-disabled", showBool $ not useCaching),
