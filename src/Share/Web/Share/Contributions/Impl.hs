@@ -232,7 +232,7 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
     newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
     oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     pure (project, contribution, oldBranch, newBranch)
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId project
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
   oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
@@ -280,7 +280,7 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
       newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
       oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
       pure (project, contribution, oldBranch, newBranch)
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId project
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
     let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
     oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
@@ -325,7 +325,7 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
       newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
       oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
       pure (project, contribution, oldBranch, newBranch)
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId project
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
     let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
     oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do

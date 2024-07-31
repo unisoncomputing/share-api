@@ -49,6 +49,7 @@ import Share.Web.Share.Tickets.Impl (ticketsByProjectServer)
 import Share.Web.Share.Types
 import Unison.Name (Name)
 import Unison.Server.Orphans ()
+import Unison.Syntax.Name qualified as Name
 
 data ProjectErrors
   = MaintainersAlreadyExist [UserId]
@@ -180,25 +181,28 @@ projectDiffTermsEndpoint ::
   IDs.BranchOrReleaseShortHand ->
   Name ->
   Name ->
-  WebApp ShareTermDiffResponse
+  WebApp (Cached JSON ShareTermDiffResponse)
 projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTermName newTermName =
   do
-    project <- PG.runTransactionOrRespondError do
+    project@Project {projectId} <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
     authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
-    (oldTerm, newTerm, displayObjectDiff) <- Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName)
-    pure $
-      ShareTermDiffResponse
-        { project = projectShortHand,
-          oldBranch = oldShortHand,
-          newBranch = newShortHand,
-          oldTerm = oldTerm,
-          newTerm = newTerm,
-          diff = displayObjectDiff
-        }
+
+    let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTermName, Name.toText newTermName]
+    Caching.cachedResponse authZReceipt "project-diff-terms" cacheKeys do
+      (oldTerm, newTerm, displayObjectDiff) <- Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName)
+      pure $
+        ShareTermDiffResponse
+          { project = projectShortHand,
+            oldBranch = oldShortHand,
+            newBranch = newShortHand,
+            oldTerm = oldTerm,
+            newTerm = newTerm,
+            diff = displayObjectDiff
+          }
   where
     projectShortHand :: IDs.ProjectShortHand
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}
@@ -211,25 +215,28 @@ projectDiffTypesEndpoint ::
   IDs.BranchOrReleaseShortHand ->
   Name ->
   Name ->
-  WebApp ShareTypeDiffResponse
+  WebApp (Cached JSON ShareTypeDiffResponse)
 projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand oldTypeName newTypeName =
   do
-    project <- PG.runTransactionOrRespondError do
+    project@Project {projectId} <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
     authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
-    (oldType, newType, typeDiffDisplayObject) <- Diffs.diffTypes authZReceipt (oldCodebase, oldBhId, oldTypeName) (newCodebase, newBhId, newTypeName)
-    pure $
-      ShareTypeDiffResponse
-        { project = projectShortHand,
-          oldBranch = oldShortHand,
-          newBranch = newShortHand,
-          oldType = oldType,
-          newType = newType,
-          diff = typeDiffDisplayObject
-        }
+
+    let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTypeName, Name.toText newTypeName]
+    Caching.cachedResponse authZReceipt "project-diff-types" cacheKeys do
+      (oldType, newType, typeDiffDisplayObject) <- Diffs.diffTypes authZReceipt (oldCodebase, oldBhId, oldTypeName) (newCodebase, newBhId, newTypeName)
+      pure $
+        ShareTypeDiffResponse
+          { project = projectShortHand,
+            oldBranch = oldShortHand,
+            newBranch = newShortHand,
+            oldType = oldType,
+            newType = newType,
+            diff = typeDiffDisplayObject
+          }
   where
     projectShortHand :: IDs.ProjectShortHand
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}

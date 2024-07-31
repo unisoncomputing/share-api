@@ -53,14 +53,14 @@ type ProjectDiffTermsEndpoint =
     :> RequiredQueryParam "newBranchRef" BranchOrReleaseShortHand
     :> RequiredQueryParam "oldTerm" Name
     :> RequiredQueryParam "newTerm" Name
-    :> Get '[JSON] ShareTermDiffResponse
+    :> Get '[JSON] (Cached JSON ShareTermDiffResponse)
 
 type ProjectDiffTypesEndpoint =
   RequiredQueryParam "oldBranchRef" BranchOrReleaseShortHand
     :> RequiredQueryParam "newBranchRef" BranchOrReleaseShortHand
     :> RequiredQueryParam "oldType" Name
     :> RequiredQueryParam "newType" Name
-    :> Get '[JSON] ShareTypeDiffResponse
+    :> Get '[JSON] (Cached JSON ShareTypeDiffResponse)
 
 type CreateProjectEndpoint =
   ReqBody '[JSON] CreateProjectRequest

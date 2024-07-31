@@ -1,3 +1,5 @@
+{-# LANGUAGE ApplicativeDo #-}
+
 -- | Logic for computing the differerences between two namespaces,
 -- typically used when showing the differences caused by a contribution.
 module Share.NamespaceDiffs
@@ -23,6 +25,7 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
+import Servant (err500)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Conversions qualified as Cv
@@ -31,7 +34,6 @@ import Share.Postgres.NamespaceDiffs qualified as ND
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
-import Servant (err500)
 import U.Codebase.Reference qualified as V2
 import U.Codebase.Referent qualified as V2
 import Unison.Codebase.Path (Path)
@@ -82,7 +84,7 @@ data DefinitionDiffKind r
     RenamedFrom r (NESet Name)
   deriving stock (Eq, Show, Ord, Functor, Foldable, Traversable)
 
-instance Ord r => Semigroup (DefinitionDiffs Name r) where
+instance (Ord r) => Semigroup (DefinitionDiffs Name r) where
   d1 <> d2 =
     DefinitionDiffs
       { added = added d1 <> added d2,
@@ -92,7 +94,7 @@ instance Ord r => Semigroup (DefinitionDiffs Name r) where
         newAliases = Map.unionWith (\(a1, b1) (a2, b2) -> (a1 <> a2, b1 <> b2)) (newAliases d1) (newAliases d2)
       }
 
-instance Ord r => Monoid (DefinitionDiffs Name r) where
+instance (Ord r) => Monoid (DefinitionDiffs Name r) where
   mempty =
     DefinitionDiffs
       { added = mempty,
@@ -133,26 +135,26 @@ data DiffAtPath referent reference = DiffAtPath
   deriving stock (Eq, Show)
 
 -- | A traversal over all the referents in a `DiffAtPath`.
-diffAtPathReferents_ :: Ord referent' => Traversal (DiffAtPath referent reference) (DiffAtPath referent' reference) referent referent'
+diffAtPathReferents_ :: (Ord referent') => Traversal (DiffAtPath referent reference) (DiffAtPath referent' reference) referent referent'
 diffAtPathReferents_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
   termDiffsAtPath
     & (Set.traverse . traverse) %%~ f
     & fmap \termDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 -- | A traversal over all the references in a `DiffAtPath`.
-diffAtPathReferences_ :: Ord reference' => Traversal (DiffAtPath referent reference) (DiffAtPath referent reference') reference reference'
+diffAtPathReferences_ :: (Ord reference') => Traversal (DiffAtPath referent reference) (DiffAtPath referent reference') reference reference'
 diffAtPathReferences_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
   typeDiffsAtPath
     & (Set.traverse . traverse) %%~ f
     & fmap \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 -- | Traversal over all the referents in a `NamespaceTreeDiff`.
-namespaceTreeDiffReferents_ :: Ord referent' => Traversal (NamespaceTreeDiff referent reference) (NamespaceTreeDiff referent' reference) referent referent'
+namespaceTreeDiffReferents_ :: (Ord referent') => Traversal (NamespaceTreeDiff referent reference) (NamespaceTreeDiff referent' reference) referent referent'
 namespaceTreeDiffReferents_ =
   traversed . traversed . diffAtPathReferents_
 
 -- | Traversal over all the references in a `NamespaceTreeDiff`.
-namespaceTreeDiffReferences_ :: Ord reference' => Traversal (NamespaceTreeDiff referent reference) (NamespaceTreeDiff referent reference') reference reference'
+namespaceTreeDiffReferences_ :: (Ord reference') => Traversal (NamespaceTreeDiff referent reference) (NamespaceTreeDiff referent reference') reference reference'
 namespaceTreeDiffReferences_ = traversed . traversed . diffAtPathReferences_
 
 data NamespaceDiffError = ImpossibleError Text
@@ -170,8 +172,10 @@ instance Logging.Loggable NamespaceDiffError where
 -- Note: This ignores all dependencies in the lib namespace.
 diffTreeNamespaces :: (BranchHashId, NameLookupReceipt) -> (BranchHashId, NameLookupReceipt) -> (PG.Transaction e (Either NamespaceDiffError (NamespaceTreeDiff V2.Referent V2.Reference)))
 diffTreeNamespaces (oldBHId, oldNLReceipt) (newBHId, newNLReceipt) = do
-  (oldTerms, newTerms) <- ND.getRelevantTermsForDiff oldNLReceipt oldBHId newBHId
-  (oldTypes, newTypes) <- ND.getRelevantTypesForDiff newNLReceipt oldBHId newBHId
+  ((oldTerms, newTerms), (oldTypes, newTypes)) <- PG.pipelined do
+    terms <- ND.getRelevantTermsForDiff oldNLReceipt oldBHId newBHId
+    types <- ND.getRelevantTypesForDiff newNLReceipt oldBHId newBHId
+    pure (terms, types)
   case diffTreeNamespacesHelper (oldTerms, newTerms) (oldTypes, newTypes) of
     Left e -> pure $ Left e
     Right nd ->
@@ -263,7 +267,7 @@ compressNameTree (diffs Cofree.:< children) =
 -- | Compute changes between two unstructured Name relations, determining what has changed and how
 -- it should be interpreted so it's meaningful to the user.
 computeDefinitionDiff ::
-  Ord ref =>
+  (Ord ref) =>
   Relation Name ref {- Relevant definitions from old namespace -} ->
   Relation Name ref {- Relevant definitions from new namespace -} ->
   Either NamespaceDiffError (DefinitionDiffs Name ref)
@@ -326,7 +330,7 @@ computeDefinitionDiff old new =
       )
 
 -- | Convert a `DefinitionDiffs` into a tree of differences.
-definitionDiffsToTree :: forall ref. Ord ref => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref)))
+definitionDiffsToTree :: forall ref. (Ord ref) => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref)))
 definitionDiffsToTree dd =
   let DefinitionDiffs {added, removed, updated, renamed, newAliases} = dd
       expandedAliases :: Map Name (Set (DefinitionDiffKind ref))

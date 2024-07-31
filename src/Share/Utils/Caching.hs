@@ -7,6 +7,7 @@
 module Share.Utils.Caching
   ( cachedResponse,
     causalIdCacheKey,
+    branchIdCacheKey,
     Cached,
   )
 where
@@ -15,13 +16,13 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Text.Encoding qualified as Text
 import Database.Redis qualified as R
-import Share.Postgres.IDs (CausalId (..))
-import Share.Prelude
-import Share.Web.App
-import Share.Web.Authorization qualified as AuthZ
 import Network.HTTP.Media
 import Network.HTTP.Types qualified as HTTP
 import Servant
+import Share.Postgres.IDs (BranchHashId (..), CausalId (..))
+import Share.Prelude
+import Share.Web.App
+import Share.Web.Authorization qualified as AuthZ
 
 data Cached ct a
   = Cached BS.ByteString
@@ -128,3 +129,8 @@ causalIdCacheKey :: CausalId -> Text
 causalIdCacheKey (CausalId causalIdInt) =
   -- Causal Ids are globally unique and never re-used.
   "causal-id:" <> tShow @Int32 causalIdInt
+
+branchIdCacheKey :: BranchHashId -> Text
+branchIdCacheKey (BranchHashId branchIdInt) =
+  -- Branch Ids are globally unique and never re-used.
+  "branch-id:" <> tShow @Int32 branchIdInt

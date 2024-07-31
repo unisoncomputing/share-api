@@ -27,6 +27,7 @@ module Share.Web.Authorization
     checkContributionCreate,
     checkContributionUpdate,
     checkContributionMerge,
+    checkContributionDiffRead,
     checkContributionRead,
     checkContributionTimelineRead,
     checkCommentCreate,
@@ -465,7 +466,7 @@ checkProjectBranchRead reqUserId project@Project {projectId} =
 
 checkProjectBranchDiff :: Maybe UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
 checkProjectBranchDiff reqUserId project@Project {projectId} =
-  mapLeft (const authzError) <$> do
+  bimap (const authzError) makeCacheable <$> do
     checkProjectGet reqUserId project
   where
     authzError = AuthZFailure $ (ProjectPermission (ProjectBranchDiff projectId))
@@ -538,6 +539,12 @@ checkContributionRead :: Maybe UserId -> Project -> WebApp (Either AuthZFailure 
 checkContributionRead mayReqUserId project@(Project {projectId}) =
   mapLeft (const authzError) <$> do
     checkProjectGet mayReqUserId project
+  where
+    authzError = AuthZFailure $ ProjectPermission (ContributionRead projectId)
+
+checkContributionDiffRead :: Maybe UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionDiffRead mayReqUserId project@(Project {projectId}) =
+  bimap (const authzError) makeCacheable <$> checkProjectGet mayReqUserId project
   where
     authzError = AuthZFailure $ ProjectPermission (ContributionRead projectId)
 
@@ -671,3 +678,9 @@ permissionGuard m =
   m >>= \case
     Right a -> pure a
     Left err -> Errors.respondError err
+
+-- | Make an auth receipt cacheable.
+-- useful when we're re-using an existing auth receipt, but know that the current endpoint is
+-- cacheable for authed users even if the original isn't.
+makeCacheable :: AuthZReceipt -> AuthZReceipt
+makeCacheable (AuthZReceipt _) = AuthZReceipt (Just CachingToken)
