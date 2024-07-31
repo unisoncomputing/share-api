@@ -372,7 +372,7 @@ instance (QueryM m) => QueryM (MaybeT m) where
 prepareStatements :: Bool
 prepareStatements = True
 
-queryListRows :: forall r m. (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m [r]
+queryListRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m [r]
 queryListRows sql = statement () (Interp.interp prepareStatements sql)
 
 query1Row :: forall r m. (QueryM m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)

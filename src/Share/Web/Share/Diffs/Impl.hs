@@ -33,6 +33,7 @@ import Unison.Server.Types (DisplayObjectDiff, TermDefinition (..), TermTag, Typ
 import Unison.ShortHash (ShortHash)
 import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty (Width)
+import UnliftIO qualified
 
 diffNamespaces ::
   AuthZReceipt ->
@@ -66,16 +67,16 @@ diffCausals ::
 diffCausals !_authZReceipt oldCausalId newCausalId = do
   -- Ensure name lookups for each thing we're diffing.
   -- We do this in two separate transactions to ensure we can still make progress even if we need to build name lookups.
-  (oldBranchHashId, oldBranchNLReceipt) <- PG.runTransaction $ do
-    oldBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id oldCausalId
-    oldBranchNLReceipt <- NLOps.ensureNameLookupForBranchId oldBranchHashId
-    pure (oldBranchHashId, oldBranchNLReceipt)
+  let getOldBranch = PG.runTransaction $ do
+        oldBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id oldCausalId
+        oldBranchNLReceipt <- NLOps.ensureNameLookupForBranchId oldBranchHashId
+        pure (oldBranchHashId, oldBranchNLReceipt)
 
-  (newBranchHashId, newNLReceipt) <- PG.runTransaction $ do
-    newBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id newCausalId
-    newNLReceipt <- NLOps.ensureNameLookupForBranchId newBranchHashId
-    pure (newBranchHashId, newNLReceipt)
-
+  let getNewBranch = PG.runTransaction $ do
+        newBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id newCausalId
+        newNLReceipt <- NLOps.ensureNameLookupForBranchId newBranchHashId
+        pure (newBranchHashId, newNLReceipt)
+  ((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newNLReceipt)) <- getOldBranch `UnliftIO.concurrently` getNewBranch
   PG.runTransactionOrRespondError $ do
     diff <- NamespaceDiffs.diffTreeNamespaces (oldBranchHashId, oldBranchNLReceipt) (newBranchHashId, newNLReceipt) `whenLeftM` throwError
     withTermTags <-
@@ -100,12 +101,12 @@ diffTerms ::
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   WebApp (TermDefinition, TermDefinition, DisplayObjectDiff)
-diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) =
-  do
-    oldTerm@(TermDefinition {termDefinition = oldDisplayObj}) <- getTermDefinition old `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
-    newTerm@(TermDefinition {termDefinition = newDisplayObj}) <- getTermDefinition new `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
-    let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects oldDisplayObj newDisplayObj
-    pure $ (oldTerm, newTerm, termDiffDisplayObject)
+diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
+  let getOldTerm = getTermDefinition old `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
+  let getNewTerm = getTermDefinition new `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
+  (oldTerm, newTerm) <- getOldTerm `UnliftIO.concurrently` getNewTerm
+  let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
+  pure $ (oldTerm, newTerm, termDiffDisplayObject)
   where
     renderWidth :: Width
     renderWidth = 80
@@ -124,12 +125,16 @@ diffTypes ::
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   WebApp (TypeDefinition, TypeDefinition, DisplayObjectDiff)
-diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) =
-  do
-    sourceType@(TypeDefinition {typeDefinition = sourceDisplayObj}) <- getTypeDefinition old `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
-    newType@(TypeDefinition {typeDefinition = newDisplayObj}) <- getTypeDefinition new `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
-    let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects sourceDisplayObj newDisplayObj
-    pure $ (sourceType, newType, typeDiffDisplayObject)
+diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
+  let getOldType =
+        getTypeDefinition old
+          `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
+  let getNewType =
+        getTypeDefinition new
+          `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
+  (sourceType, newType) <- getOldType `UnliftIO.concurrently` getNewType
+  let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition sourceType) (typeDefinition newType)
+  pure $ (sourceType, newType, typeDiffDisplayObject)
   where
     renderWidth :: Width
     renderWidth = 80

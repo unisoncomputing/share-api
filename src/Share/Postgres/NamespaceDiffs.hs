@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Share.Postgres.NamespaceDiffs
@@ -7,7 +8,6 @@ module Share.Postgres.NamespaceDiffs
 where
 
 import Data.Either qualified as Either
-import Share.Postgres (Transaction)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Types (NameLookupReceipt, NamedRef (..), ReversedName)
@@ -25,11 +25,11 @@ import Unison.Util.Relation qualified as Rel
 -- 3. Names that are in both namespaces, but have different refs
 -- 4. Refs that are in both namespaces, but have different names
 getRelevantTermsForDiff ::
+  (PG.QueryA m) =>
   NameLookupReceipt ->
   BranchHashId ->
   BranchHashId ->
-  Transaction
-    e
+  m
     ( Relation Name PGReferent {- relevant terms in old namespace -},
       Relation Name PGReferent {- relevant terms only in new namespace -}
     )
@@ -42,9 +42,8 @@ getRelevantTermsForDiff !_nameLookupReceipt oldBranchHashId newBranchHashId = do
   -- 4. Find (name, ref) pairs that are in both namespaces, but have different names
   -- 5. Return the results as a list of (ref, name, isNew) tuples. It's possible for the same
   --    (name, ref) pair to appear with both (isNew = true) and (isNew = false) in the result.
-  rows <-
-    PG.queryListRows @(NamedRef PGReferent PG.:. PG.Only Bool)
-      [PG.sql|
+  PG.queryListRows @(NamedRef PGReferent PG.:. PG.Only Bool)
+    [PG.sql|
             WITH only_in_old AS (
               ( SELECT old.reversed_name, old.referent_builtin, old.referent_component_hash_id, old.referent_component_index, old.referent_constructor_index
                 FROM scoped_term_name_lookup old
@@ -107,12 +106,15 @@ getRelevantTermsForDiff !_nameLookupReceipt oldBranchHashId newBranchHashId = do
               SELECT new.reversed_name, new.referent_builtin, new.referent_component_hash_id, new.referent_component_index, new.referent_constructor_index, true
                 FROM relevant_terms_in_new new
           |]
-      <&> fmap \(NamedRef {reversedSegments, ref} PG.:. PG.Only inNew) ->
-        if inNew
-          then Right (from @ReversedName @Name reversedSegments, ref)
-          else Left (from @ReversedName @Name reversedSegments, ref)
-  let (old, new) = Either.partitionEithers rows
-  pure $ (Rel.fromList old, Rel.fromList new)
+    <&> ( fmap \(NamedRef {reversedSegments, ref} PG.:. PG.Only inNew) ->
+            if inNew
+              then Right (from @ReversedName @Name reversedSegments, ref)
+              else
+                Left (from @ReversedName @Name reversedSegments, ref)
+        )
+    <&> \rows ->
+      let (old, new) = Either.partitionEithers rows
+       in (Rel.fromList old, Rel.fromList new)
 
 -- | Gets the types relevant for computing the diff between two branches.
 -- Where 'relevant' is defined as:
@@ -121,7 +123,7 @@ getRelevantTermsForDiff !_nameLookupReceipt oldBranchHashId newBranchHashId = do
 -- 2. Types that are in the new namespace but not the old namespace
 -- 3. Names that are in both namespaces, but have different refs
 -- 4. Refs that are in both namespaces, but have different names
-getRelevantTypesForDiff :: NameLookupReceipt -> BranchHashId -> BranchHashId -> Transaction e (Relation Name PGReference, Relation Name PGReference)
+getRelevantTypesForDiff :: (PG.QueryA m) => NameLookupReceipt -> BranchHashId -> BranchHashId -> m (Relation Name PGReference, Relation Name PGReference)
 getRelevantTypesForDiff !_nameLookupReceipt oldBranchHashId newBranchHashId = do
   -- This SQL query does the following:
   --
@@ -131,9 +133,8 @@ getRelevantTypesForDiff !_nameLookupReceipt oldBranchHashId newBranchHashId = do
   -- 4. Find (name, ref) pairs that are in both namespaces, but have different names
   -- 5. Return the results as a list of (ref, name, isNew) tuples. It's possible for the same
   --    (name, ref) pair to appear with both (isNew = true) and (isNew = false) in the result.
-  rows <-
-    PG.queryListRows @(NamedRef PGReference PG.:. PG.Only Bool)
-      [PG.sql|
+  PG.queryListRows @(NamedRef PGReference PG.:. PG.Only Bool)
+    [PG.sql|
             WITH only_in_old AS (
               ( SELECT old.reversed_name, old.reference_builtin, old.reference_component_hash_id, old.reference_component_index
                 FROM scoped_type_name_lookup old
@@ -192,9 +193,11 @@ getRelevantTypesForDiff !_nameLookupReceipt oldBranchHashId newBranchHashId = do
               SELECT new.reversed_name, new.reference_builtin, new.reference_component_hash_id, new.reference_component_index, true
                 FROM relevant_types_in_new new
           |]
-      <&> fmap \(NamedRef {reversedSegments, ref} PG.:. PG.Only inNew) ->
-        if inNew
-          then Right (from @ReversedName @Name reversedSegments, ref)
-          else Left (from @ReversedName @Name reversedSegments, ref)
-  let (old, new) = Either.partitionEithers rows
-  pure $ (Rel.fromList old, Rel.fromList new)
+    <&> ( fmap \(NamedRef {reversedSegments, ref} PG.:. PG.Only inNew) ->
+            if inNew
+              then Right (from @ReversedName @Name reversedSegments, ref)
+              else Left (from @ReversedName @Name reversedSegments, ref)
+        )
+    <&> \rows ->
+      let (old, new) = Either.partitionEithers rows
+       in (Rel.fromList old, Rel.fromList new)
