@@ -44,6 +44,7 @@ dependencies:
 - bytestring
 - bytes
 - case-insensitive
+- cborg
 - clock
 - containers
 - cookie
@@ -94,6 +95,7 @@ dependencies:
 - servant-auth
 - servant-client
 - servant-server
+- serialise
 - stm
 - text
 - these
