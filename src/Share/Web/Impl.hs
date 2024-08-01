@@ -24,6 +24,7 @@ import Share.Web.Support.Impl qualified as Support
 import Share.Web.Types
 import Share.Web.UCM.Projects.Impl qualified as UCMProjects
 import Share.Web.UCM.Sync.Impl qualified as Sync
+import Share.Web.UCM.SyncStream.API qualified as SyncStream
 
 discoveryEndpoint :: WebApp DiscoveryDocument
 discoveryEndpoint = do
@@ -73,3 +74,4 @@ server =
     :<|> Sync.server
     :<|> UCMProjects.server
     :<|> Admin.server
+    :<|> SyncStream.server
