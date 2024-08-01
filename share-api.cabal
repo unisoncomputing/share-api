@@ -210,6 +210,7 @@ library
     , case-insensitive
     , cborg
     , clock
+    , conduit
     , containers
     , cookie
     , cryptonite
@@ -257,6 +258,7 @@ library
     , servant
     , servant-auth
     , servant-client
+    , servant-conduit
     , servant-server
     , share-auth
     , share-utils
@@ -355,6 +357,7 @@ executable share-api
     , case-insensitive
     , cborg
     , clock
+    , conduit
     , containers
     , cookie
     , cryptonite
@@ -402,6 +405,7 @@ executable share-api
     , servant
     , servant-auth
     , servant-client
+    , servant-conduit
     , servant-server
     , share-api
     , share-auth
