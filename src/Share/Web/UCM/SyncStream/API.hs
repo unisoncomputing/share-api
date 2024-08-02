@@ -4,6 +4,7 @@
 module Share.Web.UCM.SyncStream.API (API, server) where
 
 import Conduit
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM qualified as STM
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
@@ -20,6 +21,7 @@ import Share.Utils.Servant.CBOR (CBOR)
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.UCM.SyncStream.Queries qualified as SSQ
+import UnliftIO qualified
 import UnliftIO.Async qualified as Async
 
 type API = "download-causal" :> DownloadCausalStreamEndpoint
@@ -39,14 +41,15 @@ downloadCausalStreamEndpointConduit callerUserId causalHash = do
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase callerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   q <- liftIO $ STM.newTBQueueIO 10
-  let streamResults = do
-        Codebase.runCodebaseTransaction codebase $ do
-          (_bhId, causalId) <- CausalQ.expectCausalIdsOf id causalHash
-          cursor <- SSQ.allHashDependenciesOfCausalCursor causalId
-          Cursor.foldBatched cursor 1000 \batch -> do
-            PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBQueue q batch
-  Async.withAsync streamResults \async -> do
-    pure $ conduitToSourceIO @IO (stream q async)
+  streamResults <- UnliftIO.toIO do
+    Codebase.runCodebaseTransaction codebase $ do
+      (_bhId, causalId) <- CausalQ.expectCausalIdsOf id causalHash
+      cursor <- SSQ.allHashDependenciesOfCausalCursor causalId
+      Cursor.foldBatched cursor 1000 \batch -> do
+        PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBQueue q batch
+  pure $ conduitToSourceIO do
+    handle <- liftIO $ Async.async streamResults
+    stream q handle
   where
     stream :: STM.TBQueue (NonEmpty Text) -> Async.Async () -> ConduitT () Text IO ()
     stream q async = do
@@ -62,5 +65,6 @@ downloadCausalStreamEndpointConduit callerUserId causalHash = do
               Nothing -> pure ()
               Just batch -> do
                 yieldMany batch
+                liftIO $ threadDelay 1000000
                 loop
       loop
