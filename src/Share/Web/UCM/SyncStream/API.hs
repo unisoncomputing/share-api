@@ -24,19 +24,26 @@ import Share.Web.UCM.SyncStream.Queries qualified as SSQ
 import UnliftIO qualified
 import UnliftIO.Async qualified as Async
 
-type API = "download-causal" :> DownloadCausalStreamEndpoint
+type API = NamedRoutes Routes
 
 type DownloadCausalStreamEndpoint =
   AuthenticatedUserId
     :> RequiredQueryParam "causalHash" CausalHash
     :> StreamGet NewlineFraming CBOR (SourceIO Text)
 
-server :: ServerT API WebApp
-server =
-  downloadCausalStreamEndpointConduit
+data Routes mode = Routes
+  { downloadCausalStreamEndpointConduit :: mode :- "download-causal" :> DownloadCausalStreamEndpoint
+  }
+  deriving stock (Generic)
 
-downloadCausalStreamEndpointConduit :: UserId -> CausalHash -> WebApp (SourceIO Text)
-downloadCausalStreamEndpointConduit callerUserId causalHash = do
+server :: Routes WebAppServer
+server =
+  Routes
+    { downloadCausalStreamEndpointConduit = downloadCausalStreamEndpointConduitImpl
+    }
+
+downloadCausalStreamEndpointConduitImpl :: UserId -> CausalHash -> WebApp (SourceIO Text)
+downloadCausalStreamEndpointConduitImpl callerUserId causalHash = do
   let authZReceipt = AuthZ.adminOverride
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase callerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
