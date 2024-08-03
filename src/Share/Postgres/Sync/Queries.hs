@@ -1,3 +1,6 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 -- | Queries related to sync and temp entities.
 module Share.Postgres.Sync.Queries
   ( expectEntity,
@@ -13,6 +16,10 @@ module Share.Postgres.Sync.Queries
   )
 where
 
+import Codec.CBOR.Encoding qualified as CBOR
+import Codec.CBOR.Write qualified as CBOR
+import Codec.Serialise (Serialise (..))
+import Codec.Serialise.Class qualified as CBOR
 import Control.Lens hiding (from)
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Foldable qualified as Foldable
@@ -21,6 +28,7 @@ import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Data.Vector qualified as Vector
+import Servant (ServerError (..), err500)
 import Share.Codebase.Types (CodebaseM)
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs
@@ -39,7 +47,6 @@ import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (InternalServerError (..), ToServerError (..), Unimplemented (Unimplemented))
 import Share.Web.UCM.Sync.Types
-import Servant (ServerError (..), err500)
 import U.Codebase.Branch qualified as V2
 import U.Codebase.Causal qualified as U
 import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes (LocalBranchBytes))
@@ -51,12 +58,14 @@ import U.Codebase.Sqlite.Decode qualified as Decoders
 import U.Codebase.Sqlite.Entity qualified as Entity
 import U.Codebase.Sqlite.LocalIds qualified as LocalIds
 import U.Codebase.Sqlite.LocalizeObject qualified as Localize
+import U.Codebase.Sqlite.Patch.Format (PatchLocalIds' (patchDefnLookup))
 import U.Codebase.Sqlite.Patch.Format qualified as PatchFormat
 import U.Codebase.Sqlite.Patch.Full qualified as PatchFull
 import U.Codebase.Sqlite.Queries qualified as Share
 import U.Codebase.Sqlite.TempEntity (TempEntity)
 import U.Codebase.Sqlite.TempEntityType (TempEntityType)
 import U.Codebase.Sqlite.Term.Format qualified as TermFormat
+import U.Util.Base32Hex (Base32Hex (..))
 import Unison.Hash32
 import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as Share
@@ -82,7 +91,7 @@ instance Logging.Loggable SyncQError where
   toLog = Logging.withSeverity Logging.Error . Logging.showLog
 
 -- | Read an entity out of the database that we know is in main storage.
-expectEntity :: HasCallStack => Hash32 -> CodebaseM e (Share.Entity Text Hash32 Hash32)
+expectEntity :: (HasCallStack) => Hash32 -> CodebaseM e (Share.Entity Text Hash32 Hash32)
 expectEntity hash = do
   expectEntityKindForHash hash >>= \case
     CausalEntity -> Share.C <$> expectCausalEntity (CausalHash . Hash32.toHash $ hash)
@@ -92,7 +101,7 @@ expectEntity hash = do
     PatchEntity -> Share.P <$> expectPatchEntity (PatchHash . Hash32.toHash $ hash)
   where
 
-expectCausalEntity :: HasCallStack => CausalHash -> CodebaseM e (Share.Causal Hash32)
+expectCausalEntity :: (HasCallStack) => CausalHash -> CodebaseM e (Share.Causal Hash32)
 expectCausalEntity hash = do
   causalId <- CausalQ.expectCausalIdByHash hash
   U.Causal {valueHash, parents} <- CausalQ.expectCausalNamespace causalId
@@ -103,7 +112,7 @@ expectCausalEntity hash = do
         }
     )
 
-expectNamespaceEntity :: HasCallStack => BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
+expectNamespaceEntity :: (HasCallStack) => BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
 expectNamespaceEntity bh = do
   bhId <- HashQ.expectBranchHashId bh
   v2Branch <- CausalQ.expectNamespace bhId
@@ -122,17 +131,17 @@ expectNamespaceEntity bh = do
             bytes = bytes
           }
 
-expectTermComponentEntity :: HasCallStack => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
+expectTermComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
 expectTermComponentEntity hash = do
   chId <- HashQ.expectComponentHashId hash
   DefnQ.expectShareTermComponent chId
 
-expectTypeComponentEntity :: HasCallStack => ComponentHash -> CodebaseM e (Share.DeclComponent Text Hash32)
+expectTypeComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.DeclComponent Text Hash32)
 expectTypeComponentEntity hash = do
   chId <- HashQ.expectComponentHashId hash
   DefnQ.expectShareTypeComponent chId
 
-expectPatchEntity :: HasCallStack => PatchHash -> CodebaseM e (Share.Patch Text Hash32 Hash32)
+expectPatchEntity :: (HasCallStack) => PatchHash -> CodebaseM e (Share.Patch Text Hash32 Hash32)
 expectPatchEntity patchHash = do
   patchId <- HashQ.expectPatchIdsOf id patchHash
   v2Patch <- PatchQ.expectPatch patchId
@@ -154,7 +163,7 @@ expectPatchEntity patchHash = do
         & pure
 
 -- | Determine the kind of an arbitrary hash.
-expectEntityKindForHash :: HasCallStack => Hash32 -> CodebaseM e EntityKind
+expectEntityKindForHash :: (HasCallStack) => Hash32 -> CodebaseM e EntityKind
 expectEntityKindForHash h =
   do
     queryExpect1Row
@@ -317,7 +326,7 @@ entityLocations sortedEntities = do
 -- | Save a temp entity to the temp entities table, also tracking its missing dependencies.
 -- You can pass ALL the dependencies of the temp entity, the query will determine which ones
 -- are missing.
-saveTempEntities :: Foldable f => f (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e ()
+saveTempEntities :: (Foldable f) => f (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e ()
 saveTempEntities entities = do
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   let tempEntities =
@@ -401,10 +410,12 @@ clearTempDependencies hash = do
 
 -- | Save a temp entity to main storage, and clear any missing dependency rows for it, and
 -- return the set of hashes which dependended on it and _might_ now be ready to flush.
-saveTempEntityInMain :: forall e. HasCallStack => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
+saveTempEntityInMain :: forall e. (HasCallStack) => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
 saveTempEntityInMain hash entity = do
   saveEntity entity
-  clearTempDependencies hash
+  dependencies <- clearTempDependencies hash
+  saveSerializedEntities [(hash, entity)]
+  pure dependencies
   where
     saveEntity :: TempEntity -> CodebaseM e ()
     saveEntity = \case
@@ -573,3 +584,104 @@ getEntitiesReadyToFlush = do
                             AND missing_dep.user_id = #{codebaseOwnerUserId}
                         )
     |]
+
+saveSerializedEntities :: (Foldable f) => f (Hash32, TempEntity) -> CodebaseM e ()
+saveSerializedEntities entities = do
+  for_ entities \(hash, entity) -> do
+    let serialised = CBOR.toStrictByteString (CBOR.encode hash <> CBOR.encode entity)
+    case entity of
+      Entity.TC {} -> saveSerializedComponent hash serialised
+      Entity.DC {} -> saveSerializedComponent hash serialised
+      Entity.P {} -> saveSerializedPatch hash serialised
+      Entity.C {} -> saveSerializedCausal hash serialised
+      Entity.N {} -> saveSerializedNamespace hash serialised
+
+saveSerializedComponent :: Hash32 -> ByteString -> CodebaseM e ()
+saveSerializedComponent hash serialised = do
+  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+  execute_
+    [sql|
+      INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
+        VALUES (#{codebaseOwnerUserId}, (SELECT ch.id FROM component_hashes where ch.base32 = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+saveSerializedPatch :: Hash32 -> ByteString -> CodebaseM e ()
+saveSerializedPatch hash serialised = do
+  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+  execute_
+    [sql|
+      INSERT INTO serialized_patches (patch_id, bytes_id)
+        VALUES ((SELECT p.id FROM patches where p.hash = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+saveSerializedCausal :: Hash32 -> ByteString -> CodebaseM e ()
+saveSerializedCausal hash serialised = do
+  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+  execute_
+    [sql|
+      INSERT INTO serialized_causals (causal_id, bytes_id)
+        VALUES ((SELECT c.id FROM causals where c.hash = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+saveSerializedNamespace :: Hash32 -> ByteString -> CodebaseM e ()
+saveSerializedNamespace hash serialised = do
+  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+  execute_
+    [sql|
+      INSERT INTO serialized_namespaces (namespace_hash_id, bytes_id)
+        VALUES ((SELECT nh.id FROM branch_hashes where nh.base32 = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+deriving via Text instance Serialise Hash32
+
+instance Serialise TempEntity where
+  encode = \case
+    Entity.TC (TermFormat.SyncTerm (TermFormat.SyncLocallyIndexedComponent elements)) ->
+      CBOR.encodeWord8 0
+        <> encodeFiniteListWith encodeElement elements
+    Entity.DC (DeclFormat.SyncDecl (DeclFormat.SyncLocallyIndexedComponent elements)) ->
+      CBOR.encodeWord8 1
+        <> encodeFiniteListWith encodeElement elements
+    Entity.P (PatchFormat.SyncDiff {}) -> error "Serializing Diffs are not supported"
+    Entity.P (PatchFormat.SyncFull (PatchFormat.LocalIds {patchTextLookup, patchHashLookup, patchDefnLookup}) bytes) ->
+      CBOR.encodeWord8 2
+        <> encodeVectorWith CBOR.encode patchTextLookup
+        <> encodeVectorWith CBOR.encode patchHashLookup
+        <> encodeVectorWith CBOR.encode patchDefnLookup
+        <> CBOR.encodeBytes bytes
+    Entity.N (BranchFormat.SyncDiff {}) -> error "Serializing Diffs are not supported"
+    Entity.N (BranchFormat.SyncFull (BranchFormat.LocalIds {branchTextLookup, branchDefnLookup, branchPatchLookup, branchChildLookup}) (LocalBranchBytes bytes)) ->
+      CBOR.encodeWord8 4
+        <> encodeVectorWith CBOR.encode branchTextLookup
+        <> encodeVectorWith CBOR.encode branchDefnLookup
+        <> encodeVectorWith CBOR.encode branchPatchLookup
+        <> encodeVectorWith CBOR.encode branchChildLookup
+        <> CBOR.encodeBytes bytes
+    Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) ->
+      CBOR.encodeWord8 6
+        <> CBOR.encode valueHash
+        <> ( CBOR.encodeVector parents
+           )
+    where
+      encodeElement :: (Serialise t, Serialise d) => (LocalIds.LocalIds' t d, ByteString) -> CBOR.Encoding
+      encodeElement (LocalIds.LocalIds {textLookup, defnLookup}, bytes) =
+        CBOR.encodeVector textLookup
+          <> CBOR.encodeVector defnLookup
+          <> CBOR.encodeBytes bytes
+
+  decode = error "Decoding Share.Entity not supported"
+
+encodeVectorWith :: (a -> CBOR.Encoding) -> Vector.Vector a -> CBOR.Encoding
+encodeVectorWith f xs =
+  CBOR.encodeListLen (fromIntegral $ Vector.length xs)
+    <> (foldr (\a b -> f a <> b) mempty xs)
+
+encodeFiniteListWith :: (Foldable t) => (a -> CBOR.Encoding) -> t a -> CBOR.Encoding
+encodeFiniteListWith f xs =
+  CBOR.encodeListLen (fromIntegral $ length xs)
+    <> (foldr (\a b -> f a <> b) mempty xs)
