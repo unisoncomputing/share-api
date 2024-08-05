@@ -4,7 +4,6 @@
 module Share.Web.UCM.SyncStream.API (API, server) where
 
 import Conduit
-import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM qualified as STM
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
@@ -17,7 +16,6 @@ import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.IDs (CausalHash)
 import Share.Prelude
 import Share.Utils.Servant (RequiredQueryParam)
-import Share.Utils.Servant.CBOR (CBOR)
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.UCM.SyncStream.Queries qualified as SSQ
@@ -29,7 +27,7 @@ type API = NamedRoutes Routes
 type DownloadCausalStreamEndpoint =
   AuthenticatedUserId
     :> RequiredQueryParam "causalHash" CausalHash
-    :> StreamGet NewlineFraming CBOR (SourceIO Text)
+    :> StreamGet NewlineFraming OctetStream (SourceIO ByteString)
 
 data Routes mode = Routes
   { downloadCausalStreamEndpointConduit :: mode :- "download-causal" :> DownloadCausalStreamEndpoint
@@ -42,7 +40,7 @@ server =
     { downloadCausalStreamEndpointConduit = downloadCausalStreamEndpointConduitImpl
     }
 
-downloadCausalStreamEndpointConduitImpl :: UserId -> CausalHash -> WebApp (SourceIO Text)
+downloadCausalStreamEndpointConduitImpl :: UserId -> CausalHash -> WebApp (SourceIO ByteString)
 downloadCausalStreamEndpointConduitImpl callerUserId causalHash = do
   let authZReceipt = AuthZ.adminOverride
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase callerUserId
@@ -51,16 +49,16 @@ downloadCausalStreamEndpointConduitImpl callerUserId causalHash = do
   streamResults <- UnliftIO.toIO do
     Codebase.runCodebaseTransaction codebase $ do
       (_bhId, causalId) <- CausalQ.expectCausalIdsOf id causalHash
-      cursor <- SSQ.allHashDependenciesOfCausalCursor causalId
+      cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId
       Cursor.foldBatched cursor 1000 \batch -> do
         PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBQueue q batch
   pure $ conduitToSourceIO do
     handle <- liftIO $ Async.async streamResults
     stream q handle
   where
-    stream :: STM.TBQueue (NonEmpty Text) -> Async.Async () -> ConduitT () Text IO ()
+    stream :: STM.TBQueue (NonEmpty ByteString) -> Async.Async () -> ConduitT () ByteString IO ()
     stream q async = do
-      let loop :: ConduitT () Text IO ()
+      let loop :: ConduitT () ByteString IO ()
           loop = do
             next <- liftIO . STM.atomically $ do
               STM.tryReadTBQueue q >>= \case
@@ -72,6 +70,5 @@ downloadCausalStreamEndpointConduitImpl callerUserId causalHash = do
               Nothing -> pure ()
               Just batch -> do
                 yieldMany batch
-                liftIO $ threadDelay 1000000
                 loop
       loop
