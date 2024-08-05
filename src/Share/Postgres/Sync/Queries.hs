@@ -1,5 +1,4 @@
 {-# LANGUAGE StandaloneDeriving #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | Queries related to sync and temp entities.
 module Share.Postgres.Sync.Queries
@@ -603,7 +602,7 @@ saveSerializedComponent hash serialised = do
   execute_
     [sql|
       INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
-        VALUES (#{codebaseOwnerUserId}, (SELECT ch.id FROM component_hashes where ch.base32 = #{hash}), #{bytesId})
+        VALUES (#{codebaseOwnerUserId}, (SELECT ch.id FROM component_hashes ch where ch.base32 = #{hash}), #{bytesId})
       ON CONFLICT DO NOTHING
     |]
 
@@ -613,7 +612,7 @@ saveSerializedPatch hash serialised = do
   execute_
     [sql|
       INSERT INTO serialized_patches (patch_id, bytes_id)
-        VALUES ((SELECT p.id FROM patches where p.hash = #{hash}), #{bytesId})
+        VALUES ((SELECT p.id FROM patches p where p.hash = #{hash}), #{bytesId})
       ON CONFLICT DO NOTHING
     |]
 
@@ -623,7 +622,7 @@ saveSerializedCausal hash serialised = do
   execute_
     [sql|
       INSERT INTO serialized_causals (causal_id, bytes_id)
-        VALUES ((SELECT c.id FROM causals where c.hash = #{hash}), #{bytesId})
+        VALUES ((SELECT c.id FROM causals c where c.hash = #{hash}), #{bytesId})
       ON CONFLICT DO NOTHING
     |]
 
@@ -633,55 +632,7 @@ saveSerializedNamespace hash serialised = do
   execute_
     [sql|
       INSERT INTO serialized_namespaces (namespace_hash_id, bytes_id)
-        VALUES ((SELECT nh.id FROM branch_hashes where nh.base32 = #{hash}), #{bytesId})
+        VALUES ((SELECT bh.id FROM branch_hashes bh where bh.base32 = #{hash}), #{bytesId})
       ON CONFLICT DO NOTHING
     |]
 
-deriving via Text instance Serialise Hash32
-
-instance Serialise TempEntity where
-  encode = \case
-    Entity.TC (TermFormat.SyncTerm (TermFormat.SyncLocallyIndexedComponent elements)) ->
-      CBOR.encodeWord8 0
-        <> encodeFiniteListWith encodeElement elements
-    Entity.DC (DeclFormat.SyncDecl (DeclFormat.SyncLocallyIndexedComponent elements)) ->
-      CBOR.encodeWord8 1
-        <> encodeFiniteListWith encodeElement elements
-    Entity.P (PatchFormat.SyncDiff {}) -> error "Serializing Diffs are not supported"
-    Entity.P (PatchFormat.SyncFull (PatchFormat.LocalIds {patchTextLookup, patchHashLookup, patchDefnLookup}) bytes) ->
-      CBOR.encodeWord8 2
-        <> encodeVectorWith CBOR.encode patchTextLookup
-        <> encodeVectorWith CBOR.encode patchHashLookup
-        <> encodeVectorWith CBOR.encode patchDefnLookup
-        <> CBOR.encodeBytes bytes
-    Entity.N (BranchFormat.SyncDiff {}) -> error "Serializing Diffs are not supported"
-    Entity.N (BranchFormat.SyncFull (BranchFormat.LocalIds {branchTextLookup, branchDefnLookup, branchPatchLookup, branchChildLookup}) (LocalBranchBytes bytes)) ->
-      CBOR.encodeWord8 4
-        <> encodeVectorWith CBOR.encode branchTextLookup
-        <> encodeVectorWith CBOR.encode branchDefnLookup
-        <> encodeVectorWith CBOR.encode branchPatchLookup
-        <> encodeVectorWith CBOR.encode branchChildLookup
-        <> CBOR.encodeBytes bytes
-    Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) ->
-      CBOR.encodeWord8 6
-        <> CBOR.encode valueHash
-        <> ( CBOR.encodeVector parents
-           )
-    where
-      encodeElement :: (Serialise t, Serialise d) => (LocalIds.LocalIds' t d, ByteString) -> CBOR.Encoding
-      encodeElement (LocalIds.LocalIds {textLookup, defnLookup}, bytes) =
-        CBOR.encodeVector textLookup
-          <> CBOR.encodeVector defnLookup
-          <> CBOR.encodeBytes bytes
-
-  decode = error "Decoding Share.Entity not supported"
-
-encodeVectorWith :: (a -> CBOR.Encoding) -> Vector.Vector a -> CBOR.Encoding
-encodeVectorWith f xs =
-  CBOR.encodeListLen (fromIntegral $ Vector.length xs)
-    <> (foldr (\a b -> f a <> b) mempty xs)
-
-encodeFiniteListWith :: (Foldable t) => (a -> CBOR.Encoding) -> t a -> CBOR.Encoding
-encodeFiniteListWith f xs =
-  CBOR.encodeListLen (fromIntegral $ length xs)
-    <> (foldr (\a b -> f a <> b) mempty xs)
