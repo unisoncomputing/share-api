@@ -1,3 +1,11 @@
+-- Some cleanup before the migration; some name lookups still exist for old unused branches which were never ported
+-- over from SQLite share, so we don't actually have the terms they refer to. We'll just delete them.
+BEGIN;
+-- Delete any name lookups which don't actually have the corresponding namespace saved.
+DELETE FROM name_lookups WHERE NOT EXISTS (SELECT namespace_hash_id FROM namespaces WHERE root_branch_hash_id = namespaces.namespace_hash_id);
+COMMIT;
+
+
 -- Name lookup tables were created before the new PG schema, so they don't actually link in term ids, type ids, or
 -- constructor ids. It'll help us join over things if we use the proper foreign keys here.
 
@@ -123,19 +131,25 @@ ALTER TABLE scoped_term_name_lookup
     (term_id IS NULL AND constructor_id IS NOT NULL AND referent_builtin IS NULL) OR
     (term_id IS NULL AND constructor_id IS NULL AND referent_builtin IS NOT NULL)
   );
+COMMIT;
 
 -- We should really have _some_ unique index for this table.
 -- Each root should only have a single row for a given name <-> definition pair
+BEGIN;
 CREATE UNIQUE INDEX scoped_term_name_lookup_unique ON scoped_term_name_lookup(root_branch_hash_id, reversed_name, term_id, constructor_id, referent_builtin) NULLS NOT DISTINCT;
+COMMIT;
 
 -- Each row must have a corresponding type_id set, OR it must be a builtin.
+BEGIN;
 ALTER TABLE scoped_type_name_lookup
   ADD CONSTRAINT type_or_builtin CHECK (
     (type_id IS NOT NULL AND reference_builtin IS NULL) OR
     (type_id IS NULL AND reference_builtin IS NOT NULL)
   );
+COMMIT;
 
 -- We should really have _some_ unique index for this table.
 -- Each root should only have a single row for a given name <-> definition pair
+BEGIN;
 CREATE UNIQUE INDEX scoped_type_name_lookup_key ON scoped_type_name_lookup(root_branch_hash_id, reversed_name, type_id, reference_builtin) NULLS NOT DISTINCT;
 COMMIT;
