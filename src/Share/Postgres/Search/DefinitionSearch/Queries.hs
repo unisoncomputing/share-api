@@ -339,7 +339,11 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         -- - Whether the return type of the query matches the type signature
         -- - Prefer shorter arities
         -- - Prefer less complex type signatures (by number of tokens)
-        ORDER BY (m.arity >= #{preferredArity}) DESC, (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ m.search_tokens)) DESC, m.arity ASC, length(m.search_tokens) ASC
+        ORDER BY (m.arity >= #{preferredArity}) DESC,
+                 (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ m.search_tokens)) DESC,
+                 m.arity ASC, 
+                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = m.project_id) DESC,
+                 length(m.search_tokens) ASC
         LIMIT #{limit}
   |]
   rows
@@ -376,10 +380,14 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
     ) SELECT m.project_id, m.release_id, m.name, m.metadata
         FROM matches_deduped_by_project m
         -- Score matches by:
+        -- - projects in the catalog
         -- - whether it contains the exact provided spelling
         -- - how close the query is to the END of the name (generally we want to match the last segment)
         -- - similarity, just in case the query is a bit off
-        ORDER BY m.name LIKE ('%' || #{query} || '%') DESC, length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC, word_similarity(#{query}, m.name) DESC
+        ORDER BY EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = m.project_id) DESC,
+                 m.name LIKE ('%' || #{query} || '%') DESC,
+                 length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC,
+                 word_similarity(#{query}, m.name) DESC
         LIMIT #{limit}
   |]
   rows
