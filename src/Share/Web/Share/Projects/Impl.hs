@@ -25,6 +25,7 @@ import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -311,7 +312,9 @@ favProjectEndpoint sess userHandle projectSlug (FavProjectRequest {isFaved}) = d
 
 projectReadmeEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp (Cached JSON ReadmeResponse)
 projectReadmeEndpoint session userHandle projectSlug = do
-  latestReleaseVersion <- PG.runTransaction $ Q.latestReleaseVersionByProjectShorthand (IDs.ProjectShortHand {userHandle, projectSlug})
+  latestReleaseVersion <- PG.runTransactionOrRespondError $ do
+    projectId <- Q.projectIDFromHandleAndSlug userHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+    RQ.latestReleaseVersionByProjectId projectId
   case latestReleaseVersion of
     Nothing -> getProjectBranchReadmeEndpoint session userHandle projectSlug defaultBranchShorthand Nothing
     Just releaseVersion -> getProjectReleaseReadmeEndpoint session userHandle projectSlug releaseVersion

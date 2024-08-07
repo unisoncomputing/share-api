@@ -2,6 +2,7 @@
 
 module Share.Postgres.Releases.Queries
   ( expectReleaseVersionsOf,
+    latestReleaseVersionByProjectId,
   )
 where
 
@@ -28,3 +29,18 @@ expectReleaseVersionsOf trav s = do
       if length results /= length releaseIds
         then error "expectReleaseVersionsOf: Missing expected release version"
         else pure results
+
+latestReleaseVersionByProjectId :: ProjectId -> Transaction e (Maybe ReleaseVersion)
+latestReleaseVersionByProjectId projectId = do
+  query1Row @(ReleaseVersion)
+    [sql|
+        SELECT
+          release.major_version,
+          release.minor_version,
+          release.patch_version
+        FROM project_releases AS release
+        WHERE release.project_id = #{projectId}
+              AND release.deleted_at IS NULL
+        ORDER BY release.major_version DESC, release.minor_version DESC, release.patch_version DESC
+        LIMIT 1
+      |]

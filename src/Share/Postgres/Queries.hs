@@ -1322,24 +1322,6 @@ updateRelease caller releaseId newStatus = do
             id = #{releaseId}
         |]
 
-latestReleaseVersionByProjectShorthand :: ProjectShortHand -> PG.Transaction e (Maybe ReleaseVersion)
-latestReleaseVersionByProjectShorthand ProjectShortHand {userHandle, projectSlug} = do
-  PG.query1Row
-    [PG.sql|
-        SELECT
-          release.major_version,
-          release.minor_version,
-          release.patch_version
-        FROM project_releases AS release
-             JOIN projects AS project ON project.id = release.project_id
-             JOIN users AS project_owner ON project_owner.id = project.owner_user_id
-        WHERE project_owner.handle = #{userHandle}
-              AND project.slug = #{projectSlug}
-              AND release.deleted_at IS NULL
-        ORDER BY release.major_version DESC, release.minor_version DESC, release.patch_version DESC
-        LIMIT 1
-      |]
-
 getOAuthConfigForClient :: OAuthClientId -> PG.Transaction e (Maybe OAuthClientConfig)
 getOAuthConfigForClient clientId = do
   PG.query1Row

@@ -8,6 +8,7 @@ import Control.Monad.Except
 import Data.Either (isRight)
 import Data.Generics.Product (HasField (..))
 import Data.List qualified as List
+import Data.List.NonEmpty qualified as NEL
 import Data.Map qualified as Map
 import Data.Map.Monoidal.Strict (MonoidalMap)
 import Data.Map.Monoidal.Strict qualified as MonMap
@@ -30,6 +31,7 @@ import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.Queries qualified as PG
+import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -45,6 +47,7 @@ import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
 import Unison.Name (Name)
 import Unison.Name qualified as Name
+import Unison.NameSegment (libSegment)
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
@@ -77,24 +80,38 @@ worker :: Ki.Scope -> Background ()
 worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
   newWorker scope "search:defn-sync" $ forever do
-    Logging.logInfoText "Syncing definitions..."
-    mayErrs <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      mayReleaseId <- DDQ.claimUnsyncedRelease
-      for mayReleaseId (syncRelease authZReceipt)
-    case mayErrs of
-      Just errs@(_ : _rrs) -> Logging.logErrorText $ "Definition sync errors: " <> Text.intercalate "," (tShow <$> errs)
-      _ -> pure ()
-
+    processReleases authZReceipt
     liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
+  where
+    processReleases authZReceipt = do
+      (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+        mayReleaseId <- DDQ.claimUnsyncedRelease
+        mayErrs <- for mayReleaseId (syncRelease authZReceipt)
+        pure (mayErrs, mayReleaseId)
+      case mayErrs of
+        Just errs@(_ : _rrs) -> Logging.logErrorText $ "Definition sync errors: " <> Text.intercalate "," (tShow <$> errs)
+        _ -> pure ()
+      case mayProcessedRelease of
+        Just releaseId -> do
+          Logging.textLog ("Built definition search index for " <> tShow releaseId)
+            & Logging.withTag ("release-id", tShow releaseId)
+            & Logging.withSeverity Logging.Info
+            & Logging.logMsg
+          -- Keep processing releases until we run out of them.
+          processReleases authZReceipt
+        Nothing -> pure ()
 
 syncRelease ::
   AuthZ.AuthZReceipt ->
   ReleaseId ->
   PG.Transaction e [DefnIndexingFailure]
 syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
-  Release {projectId, releaseId, squashedCausal} <- lift $ PG.expectReleaseById releaseId
+  Release {projectId, releaseId, squashedCausal, version} <- lift $ PG.expectReleaseById releaseId
   -- Wipe out any existing rows for this release. Normally there should be none, but this
   -- makes it easy to re-index later if we change how we tokenize things.
+  latestVersion <- MaybeT $ RQ.latestReleaseVersionByProjectId projectId
+  -- Only index the latest version of a release.
+  guard $ version == latestVersion
   lift $ DDQ.cleanIndexForRelease releaseId
   Project {ownerUserId} <- lift $ PG.expectProjectById projectId
   lift $ do
@@ -122,30 +139,37 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
     (errs, refDocs) <-
       PG.timeTransaction "Building terms" $
-        terms & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-          typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
-          let displayName =
-                fqn
-                  & Name.reverseSegments
-                  -- For now we treat the display name for search as just the last 2 segments of the name.
-                  & \case
-                    (ns :| rest) -> ns :| take 1 rest
-                  & Name.fromReverseSegments
-          termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) bhId Nothing Nothing
-          let sh = Referent.toShortHash ref
-          let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
-          let dd =
-                DefinitionDocument
-                  { project = projectId,
-                    release = releaseId,
-                    fqn,
-                    hash = sh,
-                    tokens = refTokens,
-                    arity = arity,
-                    tag = ToTTermTag (termSummary.tag),
-                    metadata = ToTTermSummary termSummary
-                  }
-          pure dd
+        terms
+          & NEL.toList
+          -- Most lib names are already filtered out by using the name lookup; but sometimes
+          -- when libs aren't at the project root some can slip through, so we remove them.
+          & List.filter
+            ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
+            )
+          & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
+            typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
+            let displayName =
+                  fqn
+                    & Name.reverseSegments
+                    -- For now we treat the display name for search as just the last 2 segments of the name.
+                    & \case
+                      (ns :| rest) -> ns :| take 1 rest
+                    & Name.fromReverseSegments
+            termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) bhId Nothing Nothing
+            let sh = Referent.toShortHash ref
+            let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
+            let dd =
+                  DefinitionDocument
+                    { project = projectId,
+                      release = releaseId,
+                      fqn,
+                      hash = sh,
+                      tokens = refTokens,
+                      arity = arity,
+                      tag = ToTTermTag (termSummary.tag),
+                      metadata = ToTTermSummary termSummary
+                    }
+            pure dd
 
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
@@ -292,27 +316,34 @@ syncTypes ::
 syncTypes namesPerspective projectId releaseId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
     (errs, refDocs) <-
-      types & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-        (declTokens, declArity) <- case ref of
-          Reference.Builtin _ -> pure (mempty, Arity 0)
-          Reference.DerivedId refId -> do
-            decl <- lift (Codebase.loadTypeDeclaration refId) `whenNothingM` throwError (NoDeclForType fqn ref)
-            pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
-        let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
-        typeSummary <- lift $ Summary.typeSummaryForReference ref (Just fqn) Nothing
-        let sh = Reference.toShortHash ref
-        let dd =
-              DefinitionDocument
-                { project = projectId,
-                  release = releaseId,
-                  fqn,
-                  hash = sh,
-                  tokens = declTokens <> basicTokens,
-                  arity = declArity,
-                  tag = ToTTypeTag (typeSummary.tag),
-                  metadata = ToTTypeSummary typeSummary
-                }
-        pure dd
+      types
+        & NEL.toList
+        -- Most lib names are already filtered out by using the name lookup; but sometimes
+        -- when libs aren't at the project root some can slip through, so we remove them.
+        & List.filter
+          ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
+          )
+        & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
+          (declTokens, declArity) <- case ref of
+            Reference.Builtin _ -> pure (mempty, Arity 0)
+            Reference.DerivedId refId -> do
+              decl <- lift (Codebase.loadTypeDeclaration refId) `whenNothingM` throwError (NoDeclForType fqn ref)
+              pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
+          let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
+          typeSummary <- lift $ Summary.typeSummaryForReference ref (Just fqn) Nothing
+          let sh = Reference.toShortHash ref
+          let dd =
+                DefinitionDocument
+                  { project = projectId,
+                    release = releaseId,
+                    fqn,
+                    hash = sh,
+                    tokens = declTokens <> basicTokens,
+                    arity = declArity,
+                    tag = ToTTypeTag (typeSummary.tag),
+                    metadata = ToTTypeSummary typeSummary
+                  }
+          pure dd
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
     pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
