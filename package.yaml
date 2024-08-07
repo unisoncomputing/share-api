@@ -95,8 +95,6 @@ dependencies:
 - servant-client
 - servant-server
 - stm
-- stm-chans
-- stm-conduit
 - text
 - these
 - time

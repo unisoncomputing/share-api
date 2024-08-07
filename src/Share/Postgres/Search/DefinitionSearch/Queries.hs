@@ -340,7 +340,7 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
           tsquery(#{tsQueryText}) @@ doc.search_tokens
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
-        ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
+        ORDER BY doc.project_id, doc.name ASC, r.major_version DESC, r.minor_version DESC, r.patch_version DESC
     ) SELECT m.project_id, m.release_id, m.name, m.metadata
         FROM matches_deduped_by_project m
         -- Score matches by:
