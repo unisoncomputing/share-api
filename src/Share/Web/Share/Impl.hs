@@ -384,8 +384,8 @@ searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit user
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <-
     (PG.runTransaction $ DDQ.defNameCompletionSearch callerUserId filter query limit)
-      <&> ordNubOn (view _3) . (mapMaybe $ traverseOf _3 (rewriteMatches queryText))
-  let response = matches <&> \(_projId, _releaseId, name, tag) -> DefinitionNameSearchResult name tag
+      <&> ordNubOn (view _1) . (mapMaybe $ traverseOf _1 (rewriteMatches queryText))
+  let response = matches <&> \(name, tag) -> DefinitionNameSearchResult name tag
   pure response
   where
     limit = fromMaybe (Limit 20) mayLimit

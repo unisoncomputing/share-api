@@ -270,48 +270,35 @@ data DefnNameSearchFilter
   | UserFilter UserId
 
 -- | Find names which would be valid completions for the given query.
-defNameCompletionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeTag)]
+defNameCompletionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
 defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
   let filters = case mayFilter of
         Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
         Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
-  queryListRows @(ProjectId, ReleaseId, Name, TermOrTypeTag)
+  queryListRows @(Name, TermOrTypeTag)
     [sql|
-    WITH matches_deduped_by_project(project_id, release_id, name, tag) AS (
-      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.tag FROM global_definition_search_docs doc
+    WITH results(name, tag) AS (
+      SELECT DISTINCT doc.name, doc.tag FROM global_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
-        JOIN project_releases r ON r.id = doc.release_id
         WHERE
           -- Find names which contain the query
           doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
-        ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
-    ),
-    -- Find the <limit> best matches
-    best_results(project_id, release_id, name, tag)  AS (
-      SELECT m.project_id, m.release_id, m.name, m.tag
-        FROM matches_deduped_by_project m
-        -- Prefer matches where the original query appears (case-matched),
+      ) SELECT r.name, r.tag FROM results r
+        -- Docs and tests to the bottom, then
+        -- prefer matches where the original query appears (case-matched),
         -- then matches where the query is near the end of the name,
         -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
-        ORDER BY m.name LIKE ('%' || #{query} || '%') DESC, length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC
+        ORDER BY r.tag <> 'doc'::definition_tag DESC, r.tag <> 'test'::definition_tag DESC,
+                 r.name LIKE ('%' || #{query} || '%') DESC, length(r.name) - position(LOWER(#{query}) in LOWER(r.name)) ASC
         LIMIT #{limit}
-    )
-    -- THEN sort docs to the bottom.
-    SELECT br.project_id, br.release_id, br.name, br.tag
-        FROM best_results br
-        -- docs and tests to the bottom, but otherwise sort by the quality of the match.
-        -- e.g. for query 'List', 'data.List' should come before 'data.List.map', and
-        -- we should prioritize the correct case, e.g. 'Text' should match 'Text' before 'text'.
-        ORDER BY br.tag <> 'doc'::definition_tag DESC, br.tag <> 'test'::definition_tag DESC,
-                 br.name LIKE ('%' || #{query} || '%') DESC,
-                 length(br.name) - position(LOWER(#{query}) in LOWER(br.name)) ASC
+
   |]
     -- Names are stored in absolute form, but we usually work with them in relative form.
-    <&> over (traversed . _3) Name.makeRelative
+    <&> over (traversed . _1) Name.makeRelative
 
 -- | Perform a type search for the given tokens.
 definitionTokenSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
@@ -381,7 +368,7 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
           #{query} <% doc.name
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
-        ORDER BY doc.project_id, doc.name, r.major_version, r.minor_version, r.patch_version
+        ORDER BY doc.project_id, doc.name ASC, r.major_version DESC, r.minor_version DESC, r.patch_version DESC
     ) SELECT m.project_id, m.release_id, m.name, m.metadata
         FROM matches_deduped_by_project m
         -- Score matches by:
