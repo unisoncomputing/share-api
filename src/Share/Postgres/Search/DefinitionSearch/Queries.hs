@@ -315,7 +315,10 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
           TypeVarToken _ ReturnPosition -> (mempty, Set.singleton token)
           _ -> (Set.singleton token, mempty)
   let tsQueryText = searchTokensToTsQuery regularTokens
-  let returnTokensText = searchTokensToTsQuery returnTokens
+  let mayReturnTokensText =
+        if Set.null returnTokens
+          then Nothing
+          else Just $ searchTokensToTsQuery returnTokens
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
@@ -336,7 +339,7 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         -- - Whether the return type of the query matches the type signature
         -- - Prefer shorter arities
         -- - Prefer less complex type signatures (by number of tokens)
-        ORDER BY (m.arity >= #{preferredArity}) DESC, tsquery(#{returnTokensText}) @@ m.search_tokens DESC, m.arity ASC, length(m.search_tokens) ASC
+        ORDER BY (m.arity >= #{preferredArity}) DESC, (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ m.search_tokens)) DESC, m.arity ASC, length(m.search_tokens) ASC
         LIMIT #{limit}
   |]
   rows
