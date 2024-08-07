@@ -112,7 +112,7 @@ syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
   latestVersion <- MaybeT $ RQ.latestReleaseVersionByProjectId projectId
   -- Only index the latest version of a release.
   guard $ version == latestVersion
-  lift $ DDQ.cleanIndexForRelease releaseId
+  lift $ DDQ.cleanIndexForProject projectId
   Project {ownerUserId} <- lift $ PG.expectProjectById projectId
   lift $ do
     bhId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausal

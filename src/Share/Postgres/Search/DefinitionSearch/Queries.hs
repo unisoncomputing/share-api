@@ -5,7 +5,7 @@ module Share.Postgres.Search.DefinitionSearch.Queries
   ( submitReleaseToBeSynced,
     claimUnsyncedRelease,
     insertDefinitionDocuments,
-    cleanIndexForRelease,
+    cleanIndexForProject,
     defNameCompletionSearch,
     definitionTokenSearch,
     definitionNameSearch,
@@ -116,13 +116,14 @@ insertDefinitionDocuments docs = pipelined $ do
             Hasql.Jsonb $ Aeson.toJSON metadata
           )
 
--- | Wipe out any rows for the given release, useful when re-indexing.
-cleanIndexForRelease :: ReleaseId -> Transaction e ()
-cleanIndexForRelease releaseId = do
+-- | Wipe out any rows for the given project, useful when re-indexing and we only want to
+-- have records for the latest release.
+cleanIndexForProject :: ProjectId -> Transaction e ()
+cleanIndexForProject projectId = do
   execute_
     [sql|
     DELETE FROM global_definition_search_docs
-    WHERE release_id = #{releaseId}
+    WHERE project_id = #{projectId}
     |]
 
 -- | Convert a search token to a TSVector.
