@@ -322,28 +322,23 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
-    WITH matches_deduped_by_project(project_id, release_id, name, arity, metadata, search_tokens) AS (
-      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.arity, doc.metadata, doc.search_tokens FROM global_definition_search_docs doc
+      SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
-        JOIN project_releases r ON r.id = doc.release_id
         WHERE
           -- match on search tokens using GIN index.
           tsquery(#{tsQueryText}) @@ doc.search_tokens
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
+        AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
           ^{filters}
-        ORDER BY doc.project_id, doc.name ASC, r.major_version DESC, r.minor_version DESC, r.patch_version DESC
-    ) SELECT m.project_id, m.release_id, m.name, m.metadata
-        FROM matches_deduped_by_project m
         -- Score matches by:
-        -- - Whether arity is equal or greater than the preferred arity
         -- - Whether the return type of the query matches the type signature
+        -- - Prefer projects in the catalog
         -- - Prefer shorter arities
         -- - Prefer less complex type signatures (by number of tokens)
-        ORDER BY (m.arity >= #{preferredArity}) DESC,
-                 (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ m.search_tokens)) DESC,
-                 m.arity ASC, 
-                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = m.project_id) DESC,
-                 length(m.search_tokens) ASC
+        ORDER BY (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ doc.search_tokens)) DESC,
+                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 doc.arity ASC,
+                 length(doc.search_tokens) ASC
         LIMIT #{limit}
   |]
   rows
@@ -367,27 +362,22 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
-    WITH matches_deduped_by_project(project_id, release_id, name, metadata) AS (
-      SELECT DISTINCT ON (doc.project_id, doc.name) doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
+      SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
-        JOIN project_releases r ON r.id = doc.release_id
         WHERE
           -- We may wish to adjust the similarity threshold before the query.
           #{query} <% doc.name
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
           ^{filters}
-        ORDER BY doc.project_id, doc.name ASC, r.major_version DESC, r.minor_version DESC, r.patch_version DESC
-    ) SELECT m.project_id, m.release_id, m.name, m.metadata
-        FROM matches_deduped_by_project m
         -- Score matches by:
         -- - projects in the catalog
         -- - whether it contains the exact provided spelling
         -- - how close the query is to the END of the name (generally we want to match the last segment)
         -- - similarity, just in case the query is a bit off
-        ORDER BY EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = m.project_id) DESC,
-                 m.name LIKE ('%' || #{query} || '%') DESC,
-                 length(m.name) - position(LOWER(#{query}) in LOWER(m.name)) ASC,
-                 word_similarity(#{query}, m.name) DESC
+        ORDER BY EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 doc.name LIKE ('%' || #{query} || '%') DESC,
+                 length(doc.name) - position(LOWER(#{query}) in LOWER(doc.name)) ASC,
+                 word_similarity(#{query}, doc.name) DESC
         LIMIT #{limit}
   |]
   rows
