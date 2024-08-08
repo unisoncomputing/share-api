@@ -309,11 +309,13 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
         Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
-  let (regularTokens, returnTokens) =
+  let (regularTokens, returnTokens, names) =
         searchTokens & foldMap \token -> case token of
-          TypeMentionToken _ ReturnPosition -> (mempty, Set.singleton token)
-          TypeVarToken _ ReturnPosition -> (mempty, Set.singleton token)
-          _ -> (Set.singleton token, mempty)
+          TypeMentionToken _ ReturnPosition -> (mempty, Set.singleton token, mempty)
+          TypeVarToken _ ReturnPosition -> (mempty, Set.singleton token, mempty)
+          NameToken name -> (mempty, mempty, Set.singleton $ Name.toText name)
+          _ -> (Set.singleton token, mempty, mempty)
+  let namesFilter = names & foldMap \name -> [sql| AND #{name} <% doc.name |]
   let tsQueryText = searchTokensToTsQuery regularTokens
   let mayReturnTokensText =
         if Set.null returnTokens
@@ -330,6 +332,7 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
         AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
           ^{filters}
+          ^{namesFilter}
         -- Score matches by:
         -- - Whether the return type of the query matches the type signature
         -- - Prefer projects in the catalog

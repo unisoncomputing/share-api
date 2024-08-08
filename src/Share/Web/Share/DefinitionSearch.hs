@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE MultiWayIf #-}
 
 -- | This module provides a lax parser for queries that are used to search for definitions.
 --
@@ -106,30 +107,19 @@ type P = MP.Parsec QueryError Text
 --
 -- Horribly misshapen query:
 -- >>> queryToTokens "[{ &Text !{𝕖} (Optional)"
--- WAS WAS WAS WAS WAS WAS WAS WAS WAS WAS Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Nothing)
--- WAS WAS WAS WAS WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS WAS WAS WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS WAS WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS WAS NOW Left "query:1:4:\n  |\n1 | [{ &Text !{} (Optional)\n  |    ^\nunexpected '&'\nexpecting \"->\", ']', '}', or white space\n"
--- WAS NOW Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Nothing)
--- NOW Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Nothing)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Optional"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Nothing)
 --
 -- >>> queryToTokens "e -> abilities.Exception"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Exception"} :| [NameSegment {toUnescapedText = "abilities"}]))) (Count 1),TypeVarToken 0 (Count 1)],Just 1)
 --
 -- >>> queryToTokens "Json.Text"
--- Right (fromList [NameToken (Name Relative (NameSegment {toUnescapedText = "Text"} :| [NameSegment {toUnescapedText = "Json"}]))],Nothing)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| [NameSegment {toUnescapedText = "Json"}]))) (Count 1)],Nothing)
 --
 -- >>> queryToTokens "Nat -> Text"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Nat"} :| []))) (Count 1),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Just 1)
 --
 -- >>> queryToTokens "(a, b) -> (a -> c) -> (c, b)"
--- WAS Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) (Count 2),TypeVarToken 0 (Count 1),TypeVarToken 1 (Count 1)],Just 2)
--- NOW Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) (Count 2),TypeVarToken 0 (Count 2),TypeVarToken 1 ReturnPosition,TypeVarToken 1 (Count 2),TypeVarToken 2 ReturnPosition,TypeVarToken 2 (Count 2)],Just 2)
+-- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) ReturnPosition,TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) (Count 2),TypeVarToken 0 (Count 2),TypeVarToken 1 ReturnPosition,TypeVarToken 1 (Count 2),TypeVarToken 2 ReturnPosition,TypeVarToken 2 (Count 2)],Just 2)
 --
 -- >>> queryToTokens "Text -> ()"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Text"} :| []))) (Count 1)],Just 1)
@@ -139,6 +129,11 @@ type P = MP.Parsec QueryError Text
 --
 -- >>> queryToTokens "Tuple a b -> a"
 -- Right (fromList [TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Tuple"} :| []))) (Count 1),TypeVarToken 0 (Count 1),TypeVarToken 1 ReturnPosition,TypeVarToken 1 (Count 2)],Just 1)
+--
+-- Allow a name search in the middle of a type query.
+-- Any name starting in lowercase that's not just a single letter is a name filter.
+-- >>> queryToTokens "Nat -> Nat plus"
+-- Right (fromList [NameToken (Name Relative (NameSegment {toUnescapedText = "plus"} :| [])),TypeMentionToken (Left (Name Relative (NameSegment {toUnescapedText = "Nat"} :| []))) (Count 2)],Just 1)
 queryToTokens :: Text -> Either Text (Set (DefnSearchToken (Either Name ShortHash)), Maybe Arity)
 queryToTokens query =
   let cleanQuery =
@@ -204,7 +199,6 @@ queryParser :: P (Maybe (Sum Arity), Tokens, ReturnTokens)
 queryParser = do
   MP.choice
     [ MP.try simpleHashQueryP <&> \(tokens, rTokens) -> (Nothing, tokens, rTokens),
-      MP.try simpleNameQueryP <&> \(tokens, rTokens) -> (Nothing, tokens, rTokens),
       typeQueryP <&> \(arity, tokens, rTokens) -> (Just arity, tokens, rTokens)
     ]
     <* MP.eof
@@ -219,12 +213,11 @@ simpleHashQueryP = do
   MP.eof
   pure $ (MonMap.singleton (HashMention possibleHash) 1, mempty)
 
-simpleNameQueryP :: P (Tokens, ReturnTokens)
+-- | Parse a simple name query, e.g. 'foldMap'
+simpleNameQueryP :: P (Tokens)
 simpleNameQueryP = do
   name <- initialNameP
-  -- Simple queries have ONLY the name
-  MP.eof
-  pure $ (MonMap.singleton (NameMention name) 1, mempty)
+  pure $ (MonMap.singleton (NameMention name) 1)
 
 -- | Parse a type query, returning the arity of the top-level type
 typeQueryP :: P (Sum Arity, Tokens, ReturnTokens)
@@ -234,7 +227,8 @@ typeQueryP = do
     tokens <-
       lexeme $
         MP.choice
-          [ typeQueryTokenP,
+          [ MP.try typeQueryTokenP,
+            MP.try simpleNameQueryP,
             listP,
             MP.try unitP,
             MP.try tupleP,
@@ -297,13 +291,15 @@ typeQueryTokenP = do
 typeMentionP :: P Tokens
 typeMentionP = do
   name <- nameP
-  case name of
-    n
-      | Just (c, _) <- Text.uncons . NameSegment.toEscapedText . Name.lastSegment $ n,
-        Char.isLower c,
-        Name.countSegments n == 1 ->
-          pure $ MonMap.singleton (TypeVarMention (Name.toText n)) 1
-      | otherwise -> pure $ MonMap.singleton (TypeNameMention name) 1
+  if
+    | -- Type var must be just a single letter
+      [c] <- Text.unpack . Name.toText $ name,
+      Char.isLower c ->
+        pure $ MonMap.singleton (TypeVarMention (Name.toText name)) 1
+    | Just (c, _) <- Text.uncons $ NameSegment.toEscapedText (Name.lastSegment name),
+      Char.isUpper c ->
+        pure $ MonMap.singleton (TypeNameMention name) 1
+    | otherwise -> fail "Invalid type mention"
 
 hashP :: P ShortHash
 hashP = do
