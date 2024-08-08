@@ -321,6 +321,27 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         if Set.null returnTokens
           then Nothing
           else Just $ searchTokensToTsQuery returnTokens
+  let orderClause =
+        names & Set.minView & \case
+          Nothing ->
+            -- Scoring for if there's no name search
+            [sql|
+                (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ doc.search_tokens)) DESC,
+                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 doc.arity ASC,
+                 length(doc.search_tokens) ASC
+            |]
+          Just (name, _) ->
+            -- Scoring for if there is a name search
+            [sql|
+                 -- Prefer names which contain the query exactly
+                 doc.name LIKE ('%' || #{name} || '%') DESC,
+                 -- Prefer names where the query is near the end of the name
+                 length(doc.name) - position(LOWER(#{name}) in LOWER(doc.name)) ASC,
+                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 doc.arity ASC,
+                 length(doc.search_tokens) ASC
+            |]
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
@@ -338,10 +359,7 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         -- - Prefer projects in the catalog
         -- - Prefer shorter arities
         -- - Prefer less complex type signatures (by number of tokens)
-        ORDER BY (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ doc.search_tokens)) DESC,
-                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
-                 doc.arity ASC,
-                 length(doc.search_tokens) ASC
+        ORDER BY ^{orderClause}
         LIMIT #{limit}
   |]
   rows
