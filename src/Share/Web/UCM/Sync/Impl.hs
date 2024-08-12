@@ -9,6 +9,7 @@ module Share.Web.UCM.Sync.Impl
     -- This export can be removed once we've migrated away from sqlite.
     insertEntitiesToCodebase,
     ensureCausalIsFlushed,
+    repoInfoKind,
   )
 where
 
@@ -48,7 +49,7 @@ import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
-import Share.Web.UCM.Sync.Types (EntityBunch (..), EntityKind (..), entityKind)
+import Share.Web.UCM.Sync.Types (EntityBunch (..), RepoInfoKind (..), entityKind)
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Codebase.Path qualified as Path
@@ -63,13 +64,8 @@ import Unison.Sync.EntityValidation qualified as Sync
 import Unison.Sync.Types (DownloadEntitiesError (..), DownloadEntitiesRequest (..), DownloadEntitiesResponse (..), GetCausalHashByPathRequest (..), GetCausalHashByPathResponse (..), NeedDependencies (..), RepoInfo (..), UploadEntitiesError (..), UploadEntitiesRequest (..), UploadEntitiesResponse (..))
 import Unison.Sync.Types qualified as Share
 import Unison.Sync.Types qualified as Sync
+import Unison.SyncV2.Types (EntityKind (..))
 import UnliftIO qualified
-
-data RepoInfoKind
-  = RepoInfoUser UserHandle
-  | RepoInfoProjectBranch ProjectBranchShortHand
-  | RepoInfoProjectRelease ProjectReleaseShortHand
-  deriving stock (Show)
 
 -- | Parse a `RepoInfo` into the correct codebase view, e.g.
 --

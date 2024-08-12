@@ -1,12 +1,14 @@
 module Share.Web.UCM.Sync.Types
   ( EntityBunch (..),
-    EntityKind (..),
     entityKind,
+    RepoInfoKind (..),
   )
 where
 
+import Share.IDs (ProjectBranchShortHand, ProjectReleaseShortHand, UserHandle)
 import Share.Prelude
 import Unison.Sync.Types qualified as Share
+import Unison.SyncV2.Types qualified as SyncV2
 
 -- | Helper type for handling entities of different types.
 data EntityBunch a = EntityBunch
@@ -25,20 +27,18 @@ instance Semigroup (EntityBunch a) where
 instance Monoid (EntityBunch a) where
   mempty = EntityBunch [] [] [] [] []
 
-data EntityKind
-  = CausalEntity
-  | NamespaceEntity
-  | TermEntity
-  | TypeEntity
-  | PatchEntity
-  deriving (Show, Eq, Ord)
-
-entityKind :: HasCallStack => Share.Entity text hash hash' -> EntityKind
+entityKind :: (HasCallStack) => Share.Entity text hash hash' -> SyncV2.EntityKind
 entityKind = \case
-  Share.C _ -> CausalEntity
-  Share.N _ -> NamespaceEntity
+  Share.C _ -> SyncV2.CausalEntity
+  Share.N _ -> SyncV2.NamespaceEntity
   Share.ND _ -> error "entityKind: Unsupported Entity Kind: NamespaceDiff"
-  Share.TC _ -> TermEntity
-  Share.DC _ -> TypeEntity
-  Share.P _ -> PatchEntity
+  Share.TC _ -> SyncV2.TermEntity
+  Share.DC _ -> SyncV2.TypeEntity
+  Share.P _ -> SyncV2.PatchEntity
   Share.PD _ -> error "entityKind: Unsupported Entity Kind: PatchDiff"
+
+data RepoInfoKind
+  = RepoInfoUser UserHandle
+  | RepoInfoProjectBranch ProjectBranchShortHand
+  | RepoInfoProjectRelease ProjectReleaseShortHand
+  deriving stock (Show)
