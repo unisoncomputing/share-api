@@ -24,13 +24,13 @@ module Share.Postgres.Definitions.Types
   )
 where
 
-import Share.Postgres qualified as PG
-import Share.Postgres.Serialization qualified as S
-import Share.Prelude
 import Hasql.Decoders qualified as Decoders
 import Hasql.Decoders qualified as Hasql
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate (DecodeValue (..), EncodeValue (..))
+import Share.Postgres.Serialization qualified as S
+import Share.Prelude
+import Share.Utils.Postgres qualified as PG
 import U.Codebase.Decl qualified as DD
 import U.Codebase.Decl qualified as Decl
 import U.Codebase.Reference qualified as Reference
