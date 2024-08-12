@@ -37,8 +37,8 @@ type API =
     :<|> ("sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
     :<|> ("ucm" :> "v1" :> "sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
     :<|> ("ucm" :> "v1" :> "projects" :> MaybeAuthenticatedSession :> UCMProjects.ProjectsAPI)
+    :<|> ("ucm" :> "v2" :> "sync" :> SyncStream.API)
     :<|> ("admin" :> Admin.API)
-    :<|> ("sync-stream" :> SyncStream.API)
 
 api :: Proxy API
 api = Proxy @API
