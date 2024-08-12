@@ -39,8 +39,7 @@ import UnliftIO.Async qualified as Async
 server :: Maybe UserId -> SyncV2.Routes WebAppServer
 server mayUserId =
   SyncV2.Routes
-    { downloadEntitiesStream = downloadEntitiesStreamImpl mayUserId,
-      uploadEntitiesStream = undefined
+    { downloadEntitiesStream = downloadEntitiesStreamImpl mayUserId
     }
 
 parseBranchRef :: SyncV2.BranchRef -> Either Text (Either ProjectReleaseShortHand ProjectBranchShortHand)
