@@ -154,6 +154,7 @@ library
       Share.Web.UCM.Sync.Impl
       Share.Web.UCM.Sync.Types
       Share.Web.UCM.SyncStream.API
+      Share.Web.UCM.SyncStream.Impl
       Share.Web.UCM.SyncStream.Queries
       Unison.PrettyPrintEnvDecl.Postgres
       Unison.Server.NameSearch.Postgres

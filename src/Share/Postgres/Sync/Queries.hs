@@ -15,9 +15,7 @@ module Share.Postgres.Sync.Queries
   )
 where
 
-import Codec.CBOR.Encoding qualified as CBOR
 import Codec.CBOR.Write qualified as CBOR
-import Codec.Serialise (Serialise (..))
 import Codec.Serialise.Class qualified as CBOR
 import Control.Lens hiding (from)
 import Data.ByteString.Lazy.Char8 qualified as BL
@@ -64,11 +62,11 @@ import U.Codebase.Sqlite.Queries qualified as Share
 import U.Codebase.Sqlite.TempEntity (TempEntity)
 import U.Codebase.Sqlite.TempEntityType (TempEntityType)
 import U.Codebase.Sqlite.Term.Format qualified as TermFormat
-import U.Util.Base32Hex (Base32Hex (..))
 import Unison.Hash32
 import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as Share
 import Unison.Sync.Types qualified as Share
+import Unison.SyncV2.Types (EntityKind (..))
 
 data SyncQError
   = InvalidNamespaceBytes
@@ -635,4 +633,3 @@ saveSerializedNamespace hash serialised = do
         VALUES ((SELECT bh.id FROM branch_hashes bh where bh.base32 = #{hash}), #{bytesId})
       ON CONFLICT DO NOTHING
     |]
-

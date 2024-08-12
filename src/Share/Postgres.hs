@@ -19,7 +19,6 @@ module Share.Postgres
     Interp.DecodeValue (..),
     Interp.DecodeRow (..),
     Interp.DecodeField,
-    RawBytes (..),
     Only (..),
     QueryA (..),
     QueryM (..),
@@ -468,17 +467,6 @@ cachedForOf trav s f = do
 -- | cachedForOf, but for traversables.
 cachedFor :: (Traversable t, Monad m, Ord a) => t a -> (a -> m b) -> m (t b)
 cachedFor = cachedForOf traversed
-
--- | Preferably you should use custom newtypes for your bytes, but you can use this with
--- deriving via to get the encoding/decoding instances.
-newtype RawBytes = RawBytes {unRawBytes :: ByteString}
-  deriving stock (Show, Eq, Ord)
-
-instance Interp.EncodeValue RawBytes where
-  encodeValue = contramap unRawBytes Encoders.bytea
-
-instance Interp.DecodeValue RawBytes where
-  decodeValue = RawBytes <$> Decoders.bytea
 
 -- | Useful when running queries using a join over `toTable` which may be empty.
 -- Without explicitly handling the empty case we'll waste time sending a query to PG

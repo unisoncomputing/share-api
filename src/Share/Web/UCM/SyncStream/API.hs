@@ -1,74 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Web.UCM.SyncStream.API (API, server) where
+module Share.Web.UCM.SyncStream.API (API) where
 
-import Conduit
-import Control.Concurrent.STM qualified as STM
 import Servant
-import Servant.Conduit (ConduitToSourceIO (..))
-import Share.Codebase qualified as Codebase
-import Share.IDs (UserId)
-import Share.OAuth.Session (AuthenticatedUserId)
-import Share.Postgres qualified as PG
-import Share.Postgres.Causal.Queries qualified as CausalQ
-import Share.Postgres.Cursors qualified as Cursor
-import Share.Postgres.IDs (CausalHash)
-import Share.Prelude
-import Share.Utils.Servant (RequiredQueryParam)
-import Share.Web.App
-import Share.Web.Authorization qualified as AuthZ
-import Share.Web.UCM.SyncStream.Queries qualified as SSQ
-import UnliftIO qualified
-import UnliftIO.Async qualified as Async
+import Share.OAuth.Session (MaybeAuthenticatedUserId)
+import Unison.SyncV2.API qualified as SyncV2
 
-type API = NamedRoutes Routes
-
-type DownloadCausalStreamEndpoint =
-  AuthenticatedUserId
-    :> RequiredQueryParam "causalHash" CausalHash
-    :> StreamGet NewlineFraming OctetStream (SourceIO ByteString)
-
-data Routes mode = Routes
-  { downloadCausalStreamEndpointConduit :: mode :- "download-causal" :> DownloadCausalStreamEndpoint
-  }
-  deriving stock (Generic)
-
-server :: Routes WebAppServer
-server =
-  Routes
-    { downloadCausalStreamEndpointConduit = downloadCausalStreamEndpointConduitImpl
-    }
-
-downloadCausalStreamEndpointConduitImpl :: UserId -> CausalHash -> WebApp (SourceIO ByteString)
-downloadCausalStreamEndpointConduitImpl callerUserId causalHash = do
-  let authZReceipt = AuthZ.adminOverride
-  let codebaseLoc = Codebase.codebaseLocationForUserCodebase callerUserId
-  let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  q <- liftIO $ STM.newTBQueueIO 10
-  streamResults <- UnliftIO.toIO do
-    Codebase.runCodebaseTransaction codebase $ do
-      (_bhId, causalId) <- CausalQ.expectCausalIdsOf id causalHash
-      cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId
-      Cursor.foldBatched cursor 1000 \batch -> do
-        PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBQueue q batch
-  pure $ conduitToSourceIO do
-    handle <- liftIO $ Async.async streamResults
-    stream q handle
-  where
-    stream :: STM.TBQueue (NonEmpty ByteString) -> Async.Async () -> ConduitT () ByteString IO ()
-    stream q async = do
-      let loop :: ConduitT () ByteString IO ()
-          loop = do
-            next <- liftIO . STM.atomically $ do
-              STM.tryReadTBQueue q >>= \case
-                Nothing -> do
-                  Async.waitSTM async $> Nothing
-                Just batch -> do
-                  pure $ Just batch
-            case next of
-              Nothing -> pure ()
-              Just batch -> do
-                yieldMany batch
-                loop
-      loop
+type API = MaybeAuthenticatedUserId :> NamedRoutes SyncV2.Routes
