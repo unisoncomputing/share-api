@@ -15,8 +15,6 @@ module Share.Postgres.Sync.Queries
   )
 where
 
-import Codec.CBOR.Write qualified as CBOR
-import Codec.Serialise.Class qualified as CBOR
 import Control.Lens hiding (from)
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Foldable qualified as Foldable
@@ -66,7 +64,8 @@ import Unison.Hash32
 import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as Share
 import Unison.Sync.Types qualified as Share
-import Unison.SyncV2.Types (EntityKind (..))
+import Unison.SyncV2.Types (CBORBytes (..), EntityKind (..))
+import Unison.SyncV2.Types qualified as SyncV2
 
 data SyncQError
   = InvalidNamespaceBytes
@@ -585,7 +584,7 @@ getEntitiesReadyToFlush = do
 saveSerializedEntities :: (Foldable f) => f (Hash32, TempEntity) -> CodebaseM e ()
 saveSerializedEntities entities = do
   for_ entities \(hash, entity) -> do
-    let serialised = CBOR.toStrictByteString (CBOR.encode hash <> CBOR.encode entity)
+    let serialised = SyncV2.serialiseCBORBytes entity
     case entity of
       Entity.TC {} -> saveSerializedComponent hash serialised
       Entity.DC {} -> saveSerializedComponent hash serialised
@@ -593,10 +592,10 @@ saveSerializedEntities entities = do
       Entity.C {} -> saveSerializedCausal hash serialised
       Entity.N {} -> saveSerializedNamespace hash serialised
 
-saveSerializedComponent :: Hash32 -> ByteString -> CodebaseM e ()
-saveSerializedComponent hash serialised = do
+saveSerializedComponent :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedComponent hash (CBORBytes bytes) = do
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
-  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
   execute_
     [sql|
       INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
@@ -604,9 +603,9 @@ saveSerializedComponent hash serialised = do
       ON CONFLICT DO NOTHING
     |]
 
-saveSerializedPatch :: Hash32 -> ByteString -> CodebaseM e ()
-saveSerializedPatch hash serialised = do
-  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+saveSerializedPatch :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedPatch hash (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
   execute_
     [sql|
       INSERT INTO serialized_patches (patch_id, bytes_id)
@@ -614,9 +613,9 @@ saveSerializedPatch hash serialised = do
       ON CONFLICT DO NOTHING
     |]
 
-saveSerializedCausal :: Hash32 -> ByteString -> CodebaseM e ()
-saveSerializedCausal hash serialised = do
-  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+saveSerializedCausal :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedCausal hash (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
   execute_
     [sql|
       INSERT INTO serialized_causals (causal_id, bytes_id)
@@ -624,9 +623,9 @@ saveSerializedCausal hash serialised = do
       ON CONFLICT DO NOTHING
     |]
 
-saveSerializedNamespace :: Hash32 -> ByteString -> CodebaseM e ()
-saveSerializedNamespace hash serialised = do
-  bytesId <- DefnQ.ensureBytesIdsOf id serialised
+saveSerializedNamespace :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedNamespace hash (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
   execute_
     [sql|
       INSERT INTO serialized_namespaces (namespace_hash_id, bytes_id)
