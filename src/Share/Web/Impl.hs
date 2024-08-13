@@ -73,5 +73,5 @@ server =
     :<|> Sync.server -- Deprecated path
     :<|> Sync.server
     :<|> UCMProjects.server
-    :<|> Admin.server
     :<|> SyncStream.server
+    :<|> Admin.server
