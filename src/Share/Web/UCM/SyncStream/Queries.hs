@@ -312,24 +312,37 @@ allSerializedDependenciesOfCausalCursor cid = do
                     JOIN types typ ON atc.component_hash_id = typ.component_hash_id
                     JOIN type_local_component_references ref ON typ.id = ref.type_id
             )
-        ) SELECT bytes.bytes, tc.causal_hash
-             FROM transitive_causals tc
-               JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
-               JOIN bytes ON sc.bytes_id = bytes.id
-           UNION ALL
-           SELECT bytes.bytes, an.namespace_hash
-             FROM all_namespaces an
-               JOIN serialized_namespaces sn ON an.namespace_hash_id = sn.namespace_hash_id
-               JOIN bytes ON sn.bytes_id = bytes.id
-           UNION ALL
-           SELECT bytes.bytes, ap.patch_hash
-             FROM all_patches ap
-               JOIN serialized_patches sp ON ap.patch_id = sp.patch_id
-               JOIN bytes ON sp.bytes_id = bytes.id
-           UNION ALL
-           SELECT bytes.bytes, ch.base32
+        )
+           (SELECT bytes.bytes, ch.base32
              FROM transitive_components tc
                JOIN serialized_components sc ON tc.component_hash_id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_hashes ch ON tc.component_hash_id = ch.id
+               -- Reverse the ordering so deeper components come first
+               ORDER BY row_number() OVER () DESC
+           )
+           UNION ALL
+           (SELECT bytes.bytes, ap.patch_hash
+             FROM all_patches ap
+               JOIN serialized_patches sp ON ap.patch_id = sp.patch_id
+               JOIN bytes ON sp.bytes_id = bytes.id
+               -- Reverse the ordering so deeper components come first
+               ORDER BY row_number() OVER () DESC
+           )
+           UNION ALL
+           (SELECT bytes.bytes, an.namespace_hash
+             FROM all_namespaces an
+               JOIN serialized_namespaces sn ON an.namespace_hash_id = sn.namespace_hash_id
+               JOIN bytes ON sn.bytes_id = bytes.id
+               -- Reverse the ordering so deeper components come first
+               ORDER BY row_number() OVER () DESC
+           )
+           UNION ALL
+           (SELECT bytes.bytes, tc.causal_hash
+             FROM transitive_causals tc
+               JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
+               JOIN bytes ON sc.bytes_id = bytes.id
+               -- Reverse the ordering so deeper components come first
+               ORDER BY row_number() OVER () DESC
+           )
   |]
