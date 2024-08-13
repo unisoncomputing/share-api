@@ -5,9 +5,10 @@ module Share.Web.UCM.SyncStream.Impl (server) where
 
 import Conduit
 import Control.Concurrent.STM qualified as STM
+import Control.Concurrent.STM.TBMQueue qualified as STM
 import Control.Monad.Except (ExceptT (ExceptT))
 import Control.Monad.Trans.Except (runExceptT)
-import Data.ByteString.Lazy qualified as BL
+import Data.Conduit.Combinators qualified as Conduit
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
 import Servant.Types.SourceT qualified as SourceT
@@ -28,6 +29,8 @@ import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.SyncStream.Queries qualified as SSQ
 import U.Codebase.Sqlite.Orphans ()
+import U.Codebase.Sqlite.TempEntity (TempEntity)
+import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.SyncV2.API qualified as SyncV2
@@ -78,34 +81,44 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
           authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (SyncV2.DownloadEntitiesNoReadPermission branchRef)
           let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
-    q <- liftIO $ STM.newTBQueueIO 10
+    q <- liftIO $ STM.newTBMQueueIO 10
     streamResults <- lift $ UnliftIO.toIO do
+      Debug.debugLogM Debug.Temp "Starting source Stream"
       Codebase.runCodebaseTransaction codebase $ do
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
         cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId
         Cursor.foldBatched cursor 1000 \batch -> do
-          PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBQueue q batch
+          Debug.debugLogM Debug.Temp "Source stream batch"
+          PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q batch
+        PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
     pure $ conduitToSourceIO do
       handle <- liftIO $ Async.async streamResults
       stream q handle
+        Conduit..| ( Conduit.iterM \case
+                       EntityChunk {hash} -> Debug.debugM Debug.Temp "Chunk " hash
+                       ErrorChunk err -> Debug.debugM Debug.Temp "Error " err
+                   )
   where
-    stream :: STM.TBQueue (NonEmpty (Hash32, ByteString)) -> Async.Async () -> ConduitT () DownloadEntitiesChunk IO ()
-    stream q async = do
+    stream :: STM.TBMQueue (NonEmpty (SyncV2.CBORBytes TempEntity, Hash32)) -> (Async.Async a) -> ConduitT () DownloadEntitiesChunk IO ()
+    stream q handle = do
       let loop :: ConduitT () DownloadEntitiesChunk IO ()
           loop = do
-            next <- liftIO . STM.atomically $ do
-              STM.tryReadTBQueue q >>= \case
-                Nothing -> do
-                  Async.waitSTM async $> Nothing
-                Just batch -> do
-                  pure $ Just batch
-            case next of
-              Nothing -> pure ()
+            Debug.debugLogM Debug.Temp "Waiting for batch..."
+            liftIO (STM.atomically (STM.readTBMQueue q)) >>= \case
+              -- The queue is closed.
+              Nothing -> do
+                Debug.debugLogM Debug.Temp "Queue closed. finishing up!"
+                pure ()
               Just batch -> do
-                let chunks = batch <&> \(hash, bytes) -> EntityChunk {hash, entityCBOR = SyncV2.CBORBytes $ BL.fromStrict bytes}
+                let chunks = batch <&> \(entityCBOR, hash) -> EntityChunk {hash, entityCBOR}
+                Debug.debugLogM Debug.Temp $ "Emitting chunk of " <> show (length chunks) <> " entities"
                 yieldMany chunks
                 loop
       loop
+      Debug.debugLogM Debug.Temp "Waiting for worker thread to finish"
+      -- It _should_ have terminated by now, but just in case, cancel it.
+      Async.cancel handle
+      Debug.debugLogM Debug.Temp "Done!"
 
     emitErr :: SyncV2.DownloadEntitiesError -> SourceIO SyncV2.DownloadEntitiesChunk
     emitErr err = SourceT.source [ErrorChunk err]

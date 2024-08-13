@@ -11,7 +11,9 @@ import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as PGCursor
 import Share.Postgres.IDs
 import Share.Prelude
+import U.Codebase.Sqlite.TempEntity (TempEntity)
 import Unison.Hash32 (Hash32)
+import Unison.SyncV2.Types (CBORBytes)
 
 allHashDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor Text)
 allHashDependenciesOfCausalCursor cid = do
@@ -180,7 +182,7 @@ allHashDependenciesOfCausalCursor cid = do
                JOIN component_hashes ON tc.component_hash_id = component_hashes.id
   |]
 
-allSerializedDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (Hash32, ByteString))
+allSerializedDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
 allSerializedDependenciesOfCausalCursor cid = do
   ownerUserId <- asks codebaseOwner
   PGCursor.newRowCursor
@@ -217,7 +219,7 @@ allSerializedDependenciesOfCausalCursor cid = do
             JOIN branch_hashes bh ON tc.causal_namespace_hash_id = bh.id
             -- WHERE NOT EXISTS (SELECT FROM namespace_ownership no WHERE no.user_id = to_codebase_user_id AND no.namespace_hash_id = tc.causal_namespace_hash_id)
         ), all_patches(patch_id, patch_hash) AS (
-            SELECT DISTINCT patch.id
+            SELECT DISTINCT patch.id, patch.hash
             FROM all_namespaces an
                 JOIN namespace_patches np ON an.namespace_hash_id = np.namespace_hash_id
                 JOIN patches patch ON np.patch_id = patch.id
