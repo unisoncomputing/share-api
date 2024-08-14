@@ -28,7 +28,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE VIEW debug_project_branches AS
-SELECT ('@' || po.handle || '/' || p.slug || '/' || pb.name) AS shorthand,
+SELECT CASE WHEN contributor.id IS NULL THEN ('@' || po.handle || '/' || p.slug || '/' || pb.name)
+            ELSE ('@' || po.handle || '/' || p.slug || '/@' || contributor.handle || '/' || pb.name)
+       END AS shorthand,
        po.handle AS handle,
        p.slug AS slug,
        contributor.handle contributor_handle,
