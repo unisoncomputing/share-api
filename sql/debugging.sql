@@ -328,18 +328,26 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION debug_history_of_causal(causal_id INTEGER)
-RETURNS TABLE (causal_id INTEGER, causal_hash TEXT, namespace_hash_id INTEGER, namespace_hash TEXT, depth INTEGER) 
+RETURNS TABLE (causal_id INTEGER, causal_hash TEXT, namespace_hash_id INTEGER, namespace_hash TEXT) 
 AS $$
-  WITH RECURSIVE history(causal_id, causal_hash, namespace_hash_id, namespace_hash, depth) AS (
-      SELECT causal.id, causal.hash, causal.namespace_hash_id, bh.base32, 0
+  WITH RECURSIVE history(causal_id, causal_hash, namespace_hash_id, namespace_hash) AS (
+      SELECT causal.id, causal.hash, causal.namespace_hash_id, bh.base32
       FROM causals causal
           JOIN branch_hashes bh ON causal.namespace_hash_id = bh.id
           WHERE causal.id = causal_id
       UNION
-      SELECT c.id, c.hash, c.namespace_hash_id, bh.base32, h.depth + 1
+      SELECT c.id, c.hash, c.namespace_hash_id, bh.base32
       FROM history h
           JOIN causal_ancestors ca ON h.causal_id = ca.causal_id
           JOIN causals c ON ca.ancestor_id = c.id
           JOIN branch_hashes bh ON c.namespace_hash_id = bh.id
   ) SELECT * FROM history;
+$$ LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION debug_is_fast_forward(old_causal_id INTEGER, new_causal_id INTEGER)
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT FROM debug_history_of_causal(new_causal_id) history
+      WHERE history.causal_id = old_causal_id
+  );
 $$ LANGUAGE sql;
