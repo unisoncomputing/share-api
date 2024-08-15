@@ -43,6 +43,8 @@ library
       Share.Metrics
       Share.Monitoring
       Share.NamespaceDiffs
+      Share.NamespaceDiffs.Types
+      Share.NamespaceDiffs2
       Share.Postgres
       Share.Postgres.Admin
       Share.Postgres.Authorization.Queries
@@ -269,6 +271,7 @@ library
     , unison-core1
     , unison-hash
     , unison-hashing-v2
+    , unison-merge
     , unison-parser-typechecker
     , unison-prelude
     , unison-pretty-printer
@@ -411,6 +414,7 @@ executable share-api
     , unison-core1
     , unison-hash
     , unison-hashing-v2
+    , unison-merge
     , unison-parser-typechecker
     , unison-prelude
     , unison-pretty-printer
