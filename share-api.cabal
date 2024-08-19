@@ -42,6 +42,7 @@ library
       Share.IDs
       Share.Metrics
       Share.Monitoring
+      Share.Names.Postgres
       Share.NamespaceDiffs
       Share.NamespaceDiffs.Types
       Share.NamespaceDiffs2
