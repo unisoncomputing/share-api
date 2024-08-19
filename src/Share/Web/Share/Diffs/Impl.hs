@@ -17,6 +17,7 @@ import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Prelude
+import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Web.App
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors (EntityMissing (..), ErrorID (..), respondError)
@@ -25,7 +26,6 @@ import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Path qualified as Path
 import Unison.Name (Name)
 import Unison.PrettyPrintEnvDecl qualified as PPED
-import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Server.Backend.DefinitionDiff qualified as DefinitionDiff
 import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
 import Unison.Server.Share.Definitions qualified as Definitions

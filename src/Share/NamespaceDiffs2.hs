@@ -45,7 +45,7 @@ makeThreeWayHydratedDefinitions = undefined
 
 mergeblob1ToDiff :: Merge.Mergeblob1 LibDep -> WebApp (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference, Map NameSegment (LibdepDiffOp LibDep))
 mergeblob1ToDiff blob1 = do
-  let Mergeblob1 {conflicts = TwoWay {bob = bobsConflicts}, diffs = TwoWay {bob = defnDiffs}, libdepsDiff} = blob1
+  let Mergeblob1 {conflicts = TwoWay {bob = bobsConflicts}, diffsFromLCA = TwoWay {bob = defnDiffs}, libdepsDiff} = blob1
   let setOfConflicts = bimap Map.keysSet Map.keysSet bobsConflicts
   let namespaceDiff = _ defnDiffs
   pure (setOfConflicts, namespaceDiff, libdepsDiff)
@@ -62,10 +62,14 @@ computeNamespaceDiff diffFrom diffTo = do
     Left err -> pure $ Left err
     Right blob1 -> Right <$> mergeblob1ToDiff blob1
 
+-- | Get  a names object for all the hydrated definitions AND their direct dependencies
+namesForHydratedDefns :: DefnsF (Map Name) Referent TypeReference -> WebApp (ThreeWay Names)
+namesForHydratedDefns = undefined
+
 computeMergeblob1 :: ThreeWay CausalId -> WebApp (Either (EitherWay IncoherentDeclReason) (Merge.Mergeblob1 LibDep))
 computeMergeblob1 causals = do
   nametrees <- makeThreeWayNametree causals
   libdeps <- makeThreeWayLibdeps causals
   let blob0 = Merge.makeMergeblob0 nametrees libdeps
   threeWayDefns <- makeThreeWayHydratedDefinitions
-  pure $ Merge.makeMergeblob1 blob0 threeWayDefns
+  pure $ Merge.makeMergeblob1 names3 blob0 threeWayDefns

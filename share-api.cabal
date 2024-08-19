@@ -82,6 +82,7 @@ library
       Share.Postgres.Users.Queries
       Share.Prelude
       Share.Prelude.Orphans
+      Share.PrettyPrintEnvDecl.Postgres
       Share.Project
       Share.Redis
       Share.Release
@@ -152,7 +153,6 @@ library
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
       Share.Web.UCM.Sync.Types
-      Unison.PrettyPrintEnvDecl.Postgres
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
       Unison.Server.Share.DefinitionSummary
