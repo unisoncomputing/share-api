@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Logic for computing the differerences between two namespaces,
 -- typically used when showing the differences caused by a contribution.
 module Share.NamespaceDiffs2
@@ -54,7 +56,9 @@ import Unison.Symbol (Symbol)
 import Unison.Syntax.NameSegment qualified as NameSegment
 import Unison.Syntax.Parser qualified as Parser
 import Unison.Term (Term)
+import Unison.Term qualified as Term
 import Unison.Type (Type)
+import Unison.Type qualified as Type
 import Unison.Typechecker.TypeLookup qualified as TL
 import Unison.Util.Defns (Defns (..), DefnsF)
 import Unison.Util.Nametree (Nametree)
@@ -182,8 +186,22 @@ typeLookupFromHydratedDefs hydratedDefns@(Defns {terms, types}) = do
 
 -- | Find the references for every dependent on a core dependency which is within
 -- alice/bob. These definitions will be loaded into the Unison File to be re-parsed.
-coreDependencyTransitiveDependents :: (DefnsF Set TermReference TypeReference) -> m (DefnsF Set TermReferenceId TypeReferenceId)
-coreDependencyTransitiveDependents = undefined
+coreDependencyTransitiveDependents ::
+  (DefnsF Set TermReference TypeReference) ->
+  ( DefnsF
+      (Map Name)
+      (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
+      (TypeReferenceId, Decl Symbol Ann)
+  ) ->
+  (DefnsF Set TermReferenceId TypeReferenceId)
+coreDependencyTransitiveDependents core@(Defns {terms = coreTerms, types = coreTypes}) hydratedDefns@(Defns {terms = hydratedTerms, types = hydratedTypes}) = undefined
+  where
+    defnDependencies :: (Map TermReferenceId (Set TermReferenceId, Set TypeReferenceId), Map TypeReferenceId (Set TypeReferenceId))
+    defnDependencies =
+      hydratedTerms
+        & ifoldMap \refId (trm, typ) ->
+          Term.dependencies trm
+            & over (field @"types") <>~ Type.dependencies typ
 
 causalFromMergeBlob5 :: Mergeblob5.Mergeblob5 -> m CausalId
 causalFromMergeBlob5 = undefined
@@ -193,7 +211,7 @@ mergeCausals causals3 codebases3 = runExceptT do
   (names3, mergeBlob1) <- computeMergeblob1 causals3
   mergeBlob2 <- except . mapLeft MergeBlob2Error $ Mergeblob2.makeMergeblob2 mergeBlob1
 
-  transitiveDependents2 <- for mergeBlob2.coreDependencies coreDependencyTransitiveDependents
+  let transitiveDependents2 = Zip.zipWith coreDependencyTransitiveDependents mergeBlob2.coreDependencies mergeBlob2.hydratedDefns
   -- These names are garbage, but just need to have a unique name for every reference in
   -- scope so we can round-trip through a file, no user should ever see them.
   let combinedNames =
