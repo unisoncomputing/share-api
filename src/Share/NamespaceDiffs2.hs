@@ -1,6 +1,10 @@
 -- | Logic for computing the differerences between two namespaces,
 -- typically used when showing the differences caused by a contribution.
-module Share.NamespaceDiffs2 (computeNamespaceDiff) where
+module Share.NamespaceDiffs2
+  ( computeNamespaceDiff,
+    mergeCausals,
+  )
+where
 
 import Control.Lens
 import Control.Monad.Except
@@ -17,9 +21,13 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NL
+import Share.Postgres.NameLookups.Types (NameLookupReceipt)
+import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Prelude
 import U.Codebase.Referent qualified as V2
 import Unison.Builtin qualified as Builtin
+import Unison.Codebase.Path (Path)
+import Unison.Codebase.Path qualified as Path
 import Unison.ConstructorReference (GConstructorReference (..))
 import Unison.DataDeclaration (DataDeclaration, Decl, EffectDeclaration)
 import Unison.LabeledDependency qualified as LD
@@ -34,6 +42,7 @@ import Unison.Merge.ThreeWay qualified as ThreeWay
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment (NameSegment (..))
+import Unison.NameSegment qualified as NameSegment
 import Unison.Names (Names)
 import Unison.Names qualified as Names
 import Unison.Parser.Ann (Ann)
@@ -56,14 +65,26 @@ data MergeError
   | -- | This indicates a round-trip error on Share, since the user isn't manually editing the file.
     ParseErr (Parser.Err Symbol)
   | TypeCheckErr (Seq (Result.Note Symbol Ann))
+  | LibFoundAtUnexpectedPath Path
 
-makeThreeWayNametree :: ThreeWay CausalId -> m (ThreeWay (Nametree (DefnsF (Map NameSegment) Referent TypeReference)))
-makeThreeWayNametree = undefined
+makeThreeWayNametree :: (PG.QueryM m) => ThreeWay (BranchHashId, NameLookupReceipt) -> m (ThreeWay (Nametree (DefnsF (Map NameSegment) Referent TypeReference)))
+makeThreeWayNametree roots3 = do
+  for roots3 \(bhId, nlReceipt) -> do
+    names <- NL.projectNamesWithoutLib nlReceipt bhId
+    pure $ Names.lenientToNametree names
 
-type LibDep = CausalId
+type LibDep = BranchHashId
 
-makeThreeWayLibdeps :: ThreeWay CausalId -> m (ThreeWay (Map NameSegment LibDep))
-makeThreeWayLibdeps = undefined
+makeThreeWayLibdeps :: (PG.QueryM m) => ThreeWay (BranchHashId, NameLookupReceipt) -> m (Either MergeError (ThreeWay (Map NameSegment LibDep)))
+makeThreeWayLibdeps roots3 = runExceptT do
+  for roots3 \(bhId, nlReceipt) -> do
+    mounts <- lift $ NL.listNameLookupMounts nlReceipt bhId
+    libDepsList <- for mounts \(NL.PathSegments path, libBhId) -> do
+      case NameSegment.unsafeParseText <$> path of
+        [NameSegment.LibSegment, dep] -> pure (dep, libBhId)
+        p -> do
+          throwError $ LibFoundAtUnexpectedPath (Path.fromList p)
+    pure $ Map.fromList libDepsList
 
 makeThreeWayHydratedDefinitions ::
   m
@@ -80,33 +101,35 @@ computeNamespaceDiff ::
   (PG.QueryM m) =>
   CausalId ->
   CausalId ->
-  m ((Either (EitherWay IncoherentDeclReason) (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference, Map NameSegment (LibdepDiffOp LibDep))))
+  ExceptT MergeError m (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference, Map NameSegment (LibdepDiffOp LibDep))
 computeNamespaceDiff diffFrom diffTo = do
   -- We use the diffFrom as both the LCA and alice, we're just going to ignore the
   -- alice <-> bob diff in this case.
   let threeWay = (ThreeWay {lca = diffFrom, alice = diffFrom, bob = diffTo})
-  computeMergeblob1 threeWay <&> \case
-    Left err -> Left err
-    Right (_names, _tl, blob1) -> Right $ mergeblob1ToDiff blob1
+  computeMergeblob1 threeWay <&> \(_names, blob1) -> mergeblob1ToDiff blob1
   where
     mergeblob1ToDiff :: Merge.Mergeblob1 LibDep -> (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference, Map NameSegment (LibdepDiffOp LibDep))
     mergeblob1ToDiff blob1 =
       let Mergeblob1 {conflicts = TwoWay {bob = bobsConflicts}, diffsFromLCA = TwoWay {bob = defnDiffs}, libdepsDiff} = blob1
           setOfConflicts = bimap Map.keysSet Map.keysSet bobsConflicts
-          namespaceDiff = _ defnDiffs
+          namespaceDiff = error "unimplemented" defnDiffs
        in (setOfConflicts, namespaceDiff, libdepsDiff)
 
-computeMergeblob1 :: (PG.QueryM m) => ThreeWay CausalId -> m (Either (EitherWay IncoherentDeclReason) (ThreeWay Names, Merge.Mergeblob1 LibDep))
+computeMergeblob1 :: (PG.QueryM m) => ThreeWay CausalId -> ExceptT MergeError m ((ThreeWay Names, Merge.Mergeblob1 LibDep))
 computeMergeblob1 causals3 = do
-  branchHashIds3 <- HashQ.expectNamespaceIdsByCausalIdsOf traversed causals3
-  nametrees3 <- makeThreeWayNametree causals3
-  libdeps3 <- makeThreeWayLibdeps causals3
+  branchHashIds3 <- lift $ HashQ.expectNamespaceIdsByCausalIdsOf traversed causals3
+  projectRoots3 <- for branchHashIds3 \bhId -> do
+    nlr <- lift $ NL.ensureNameLookupForBranchId bhId
+    pure (bhId, nlr)
+  nametrees3 <- lift $ makeThreeWayNametree projectRoots3
+  libdeps3 <- ExceptT $ makeThreeWayLibdeps projectRoots3
   let blob0 = Merge.makeMergeblob0 nametrees3 libdeps3
   hydratedDefns3 <- makeThreeWayHydratedDefinitions
   let labeledDeps3 = Mergeblob1.hydratedDefnsLabeledDependencies <$> hydratedDefns3
-  namesPerspectives3 <- for branchHashIds3 \bhId -> NL.namesPerspectiveForRootAndPath bhId mempty
-  names3 <- sequenceA $ Zip.zipWith PGNames.namesForReferences namesPerspectives3 labeledDeps3
-  pure $ (names3,) <$> Merge.makeMergeblob1 blob0 names3 hydratedDefns3
+  namesPerspectives3 <- lift $ for branchHashIds3 \bhId -> NL.namesPerspectiveForRootAndPath bhId mempty
+  names3 <- lift $ sequenceA $ Zip.zipWith PGNames.namesForReferences namesPerspectives3 labeledDeps3
+  blob <- except . mapLeft IncoherentDecl $ Merge.makeMergeblob1 blob0 names3 hydratedDefns3
+  pure (names3, blob)
 
 -- Normally computing a type lookup is more involved (e.g. including types transitively
 -- because of pattern-matching, etc.), but in this case we know it ONLY needs
@@ -165,12 +188,12 @@ coreDependencyTransitiveDependents = undefined
 causalFromMergeBlob5 :: Mergeblob5.Mergeblob5 -> m CausalId
 causalFromMergeBlob5 = undefined
 
-mergeCausals :: (PG.QueryM m) => ThreeWay CausalId -> ThreeWay CodebaseEnv -> m (Either MergeError CausalId)
+mergeCausals :: ThreeWay CausalId -> ThreeWay CodebaseEnv -> PG.Transaction e (Either MergeError CausalId)
 mergeCausals causals3 codebases3 = runExceptT do
-  (names3, mergeBlob1) <- withExceptT IncoherentDecl . ExceptT $ computeMergeblob1 causals3
+  (names3, mergeBlob1) <- computeMergeblob1 causals3
   mergeBlob2 <- except . mapLeft MergeBlob2Error $ Mergeblob2.makeMergeblob2 mergeBlob1
 
-  transitiveDependents2 <- for (mergeBlob2.coreDependencies) coreDependencyTransitiveDependents
+  transitiveDependents2 <- for mergeBlob2.coreDependencies coreDependencyTransitiveDependents
   -- These names are garbage, but just need to have a unique name for every reference in
   -- scope so we can round-trip through a file, no user should ever see them.
   let combinedNames =
@@ -178,9 +201,9 @@ mergeCausals causals3 codebases3 = runExceptT do
           `Names.unionLeftName` (prefixNames "bob" names3.bob)
   let mergeBlob3 = Mergeblob3.makeMergeblob3 mergeBlob2 transitiveDependents2 combinedNames (TwoWay {alice = "alice", bob = "bob"})
   mergeBlob4 <- except . mapLeft ParseErr $ Mergeblob4.makeMergeblob4 mergeBlob3
-  let mkTypeLookup codebase defns = Codebase.runCodebaseTransaction codebase $ typeLookupFromHydratedDefs defns
+  let mkTypeLookup codebase defns = Codebase.codebaseMToTransaction codebase $ typeLookupFromHydratedDefs defns
   -- Lookup all the types we need in the respective codebases.
-  typeLookup <- sequenceA $ Zip.zipWith mkTypeLookup (ThreeWay.forgetLca codebases3) (ThreeWay.forgetLca mergeBlob1.hydratedDefns)
+  typeLookup <- lift . sequenceA $ Zip.zipWith mkTypeLookup (ThreeWay.forgetLca codebases3) (ThreeWay.forgetLca mergeBlob1.hydratedDefns)
   mergeBlob5 <- except . mapLeft TypeCheckErr $ Mergeblob5.makeMergeblob5 mergeBlob4 (fold typeLookup)
   lift $ causalFromMergeBlob5 mergeBlob5
   where

@@ -9,8 +9,10 @@ module Share.Postgres.NameLookups.Ops
     checkBranchHashNameLookupExists,
     deleteNameLookupsExceptFor,
     ensureNameLookupForBranchId,
-    Q.termsWithinNamespace,
-    Q.typesWithinNamespace,
+    Q.projectTermsWithinRoot,
+    Q.projectTypesWithinRoot,
+    Q.listNameLookupMounts,
+    projectNamesWithoutLib,
   )
 where
 
@@ -20,6 +22,7 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
 import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
+import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Conversions qualified as CV
@@ -38,6 +41,8 @@ import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.NameSegment.Internal qualified as NameSegment
+import Unison.Names (Names)
+import Unison.Names qualified as Names
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 import Unison.Util.List qualified as List
@@ -187,3 +192,13 @@ ensureNameLookupForBranchId :: (QueryM m) => BranchHashId -> m NameLookupReceipt
 ensureNameLookupForBranchId branchHashId = do
   PG.execute_ [PG.sql| SELECT ensure_name_lookup(#{branchHashId}) |]
   pure $ UnsafeNameLookupReceipt
+
+-- | Build a 'Names' for all definitions within the given root, without any dependencies.
+-- Note: This loads everything into memory at once, so avoid this and prefer streaming when possible.
+projectNamesWithoutLib :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m Names
+projectNamesWithoutLib !nlr rootBranchHashId = do
+  termNamesCursor <- Q.projectTermsWithinRootV1 nlr rootBranchHashId
+  allTerms <- Cursor.foldBatched termNamesCursor 1000 (pure . toList)
+  typesCursor <- (Q.projectTypesWithinRoot nlr rootBranchHashId)
+  allTypes <- Cursor.foldBatched typesCursor 1000 (pure . toList)
+  pure $ Names.fromTermsAndTypes allTerms allTypes

@@ -121,10 +121,10 @@ syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
     let codebaseLoc = Codebase.codebaseLocationForProjectRelease ownerUserId
     let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
     Codebase.codebaseMToTransaction codebase $ do
-      termsCursor <- lift $ NLOps.termsWithinNamespace nlReceipt bhId
+      termsCursor <- lift $ NLOps.projectTermsWithinRoot nlReceipt bhId
 
       termErrs <- syncTerms namesPerspective bhId projectId releaseId termsCursor
-      typesCursor <- lift $ NLOps.typesWithinNamespace nlReceipt bhId
+      typesCursor <- lift $ NLOps.projectTypesWithinRoot nlReceipt bhId
       typeErrs <- syncTypes namesPerspective projectId releaseId typesCursor
       pure (termErrs <> typeErrs)
 
