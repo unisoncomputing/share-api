@@ -41,12 +41,18 @@ data TimelineRoutes mode = TimelineRoutes
   }
   deriving stock (Generic)
 
+data MergeRoutes mode = MergeRoutes
+  { mergeContribution :: mode :- MergeContributionEndpoint,
+    checkMergeContribution :: mode :- "check" :> CheckMergeContributionEndpoint
+  }
+  deriving stock (Generic)
+
 data ContributionResourceRoutes mode
   = ContributionResourceRoutes
   { getContributionByNumber :: mode :- GetContributionByNumber,
     updateContributionByNumber :: mode :- UpdateContributionByNumber,
     diff :: mode :- "diff" :> NamedRoutes DiffRoutes,
-    merge :: mode :- "merge" :> MergeContribution,
+    merge :: mode :- "merge" :> NamedRoutes MergeRoutes,
     timeline :: mode :- "timeline" :> NamedRoutes TimelineRoutes
   }
   deriving stock (Generic)
@@ -96,8 +102,13 @@ type UpdateContributionByNumber =
   ReqBody '[JSON] UpdateContributionRequest
     :> Patch '[JSON] (ShareContribution UserDisplayInfo)
 
-type MergeContribution =
-  Post '[JSON] ()
+-- | Merged a contribution
+type MergeContributionEndpoint =
+  Post '[JSON] MergeContributionResponse
+
+-- | Check if a contribution can be merged
+type CheckMergeContributionEndpoint =
+  Post '[JSON] CheckMergeContributionResponse
 
 type ContributionTimelineCursor = UTCTime
 

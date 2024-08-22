@@ -24,6 +24,8 @@ import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
+import Share.Postgres.NameLookups.Ops qualified as NL
+import Share.Postgres.Queries qualified as BranchQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
@@ -41,6 +43,7 @@ import Share.Web.Share.Comments.Impl qualified as Comments
 import Share.Web.Share.Comments.Types
 import Share.Web.Share.Contributions.API
 import Share.Web.Share.Contributions.API qualified as API
+import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
@@ -80,13 +83,20 @@ timelineServer session handle projectSlug contributionNumber =
       Comments.updateCommentEndpoint session handle projectSlug commentId
         :<|> Comments.deleteCommentEndpoint session handle projectSlug commentId
 
+mergeServer :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.MergeRoutes (AsServerT WebApp)
+mergeServer session handle projectSlug contributionNumber =
+  API.MergeRoutes
+    { mergeContribution = mergeContributionEndpoint session handle projectSlug contributionNumber,
+      checkMergeContribution = checkMergeContributionEndpoint session handle projectSlug contributionNumber
+    }
+
 contributionsResourceServer :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.ContributionResourceRoutes (AsServerT WebApp)
 contributionsResourceServer session handle projectSlug contributionNumber =
   API.ContributionResourceRoutes
     { getContributionByNumber = getContributionByNumberEndpoint session handle projectSlug contributionNumber,
       updateContributionByNumber = updateContributionByNumberEndpoint session handle projectSlug contributionNumber,
       diff = diffResourceServer session handle projectSlug contributionNumber,
-      merge = mergeContributionEndpoint session handle projectSlug contributionNumber,
+      merge = mergeServer session handle projectSlug contributionNumber,
       timeline = timelineServer session handle projectSlug contributionNumber
     }
 
@@ -371,7 +381,7 @@ mergeContributionEndpoint ::
   UserHandle ->
   ProjectSlug ->
   IDs.ContributionNumber ->
-  WebApp ()
+  WebApp MergeContributionResponse
 mergeContributionEndpoint session userHandle projectSlug contributionNumber = do
   callerUserId <- AuthN.requireAuthenticatedUser session
   contribution <- PG.runTransactionOrRespondError $ do
@@ -379,6 +389,44 @@ mergeContributionEndpoint session userHandle projectSlug contributionNumber = do
     contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     pure (contribution)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
-  respondError Unimplemented
+  (isFastForward, sourceBranch, targetBranch) <- PG.runTransactionOrRespondError do
+    sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    isFastForward <- CausalQ.isFastForward targetBranch.causal sourceBranch.causal
+    pure (isFastForward, sourceBranch, targetBranch)
+
+  if isFastForward
+    then PG.runTransaction $ do
+      let description = "Merged Contribution #" <> (IDs.toText contributionNumber) <> "\n" <> contribution.title
+      newNamespaceId <- CausalQ.expectNamespaceIdsByCausalIdsOf id sourceBranch.causal
+      nlReceipt <- NL.ensureNameLookupForBranchId newNamespaceId
+      BranchQ.setBranchCausalHash nlReceipt description callerUserId targetBranch.branchId sourceBranch.causal
+      -- Update any affected contributions to reflect the result of updating this branch.
+      MergeDetection.updateContributionsFromBranchUpdate callerUserId targetBranch.branchId
+      pure $ MergeContributionResponse MergeSuccess
+    else pure $ MergeContributionResponse $ MergeFailed "Share only supports fast forward merges for now."
+  where
+    projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
+
+checkMergeContributionEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  IDs.ContributionNumber ->
+  WebApp CheckMergeContributionResponse
+checkMergeContributionEndpoint session userHandle projectSlug contributionNumber = do
+  callerUserId <- AuthN.requireAuthenticatedUser session
+  contribution <- PG.runTransactionOrRespondError $ do
+    Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+    contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    pure contribution
+  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
+  isFastForward <- PG.runTransactionOrRespondError do
+    sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    CausalQ.isFastForward targetBranch.causal sourceBranch.causal
+  if isFastForward
+    then pure CheckMergeContributionResponse {mergability = CanFastForward}
+    else pure CheckMergeContributionResponse {mergability = CantMerge "Share only supports fast forward merges for now."}
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}

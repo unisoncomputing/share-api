@@ -98,7 +98,7 @@ data StatusChangeEvent user = StatusChangeEvent
   }
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-instance PG.DecodeField user => PG.DecodeRow (StatusChangeEvent user) where
+instance (PG.DecodeField user) => PG.DecodeRow (StatusChangeEvent user) where
   decodeRow = do
     oldStatus <- PG.decodeField
     newStatus <- PG.decodeField
@@ -116,7 +116,7 @@ eventTimestamp = \case
   ContributionTimelineStatusChange StatusChangeEvent {timestamp} -> timestamp
   ContributionTimelineComment commentEvent -> commentEventTimestamp commentEvent
 
-instance ToJSON user => ToJSON (ContributionTimelineEvent user) where
+instance (ToJSON user) => ToJSON (ContributionTimelineEvent user) where
   toJSON = \case
     ContributionTimelineStatusChange StatusChangeEvent {..} ->
       object
@@ -163,3 +163,50 @@ instance FromJSON UpdateContributionRequest where
     sourceBranchSH <- o .:? "sourceBranchRef"
     targetBranchSH <- o .:? "targetBranchRef"
     pure UpdateContributionRequest {..}
+
+data Mergability
+  = CanFastForward
+  | CanMerge
+  | Conflicted
+  | -- We can presumably remove this once proper server-side merge is implemented
+    CantMerge Text
+  deriving (Show)
+
+data CheckMergeContributionResponse = CheckMergeContributionResponse
+  { mergability :: Mergability
+  }
+  deriving (Show)
+
+instance ToJSON CheckMergeContributionResponse where
+  toJSON CheckMergeContributionResponse {..} =
+    object
+      [ "mergability" .= case mergability of
+          CanFastForward -> object ["kind" .= ("fast_forward" :: Text)]
+          CanMerge -> object ["kind" .= ("merge" :: Text)]
+          Conflicted -> object ["kind" .= ("conflicted" :: Text)]
+          CantMerge msg -> object ["kind" .= ("cant_merge" :: Text), "reason" .= msg]
+      ]
+
+data MergeResult
+  = MergeSuccess
+  | SourceBranchUpdated
+  | TargetBranchUpdated
+  | MergeConflicted
+  | MergeFailed Text
+  deriving (Show)
+
+data MergeContributionResponse = MergeContributionResponse
+  { result :: MergeResult
+  }
+  deriving (Show)
+
+instance ToJSON MergeContributionResponse where
+  toJSON MergeContributionResponse {..} =
+    object
+      [ "result" .= case result of
+          MergeSuccess -> object ["kind" .= ("success" :: Text)]
+          SourceBranchUpdated -> object ["kind" .= ("source_branch_updated" :: Text)]
+          TargetBranchUpdated -> object ["kind" .= ("target_branch_updated" :: Text)]
+          MergeConflicted -> object ["kind" .= ("conflicted" :: Text)]
+          MergeFailed msg -> object ["kind" .= ("failed" :: Text), "reason" .= msg]
+      ]
