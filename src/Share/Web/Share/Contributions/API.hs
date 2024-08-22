@@ -4,6 +4,7 @@
 module Share.Web.Share.Contributions.API where
 
 import Data.Time (UTCTime)
+import GHC.Generics (Generic)
 import Servant
 import Share.Contribution (ContributionStatus)
 import Share.IDs
@@ -18,27 +19,37 @@ import Unison.Name (Name)
 
 type ContributionsByUserAPI = ListContributionsByUserEndpoint
 
-type ContributionsByProjectAPI =
-  ListContributionsByProjectEndpoint
-    :<|> CreateContribution
-    :<|> (Capture "contribution_number" ContributionNumber :> ContributionResourceServer)
+type ContributionsByProjectAPI = NamedRoutes ContributionsByProjectRoutes
 
-type ContributionResourceServer =
-  ( GetContributionByNumber
-      :<|> UpdateContributionByNumber
-      :<|> ( "diff"
-               :> ( ("terms" :> ContributionDiffTermsEndpoint)
-                      :<|> ("types" :> ContributionDiffTypesEndpoint)
-                      :<|> ContributionDiffEndpoint
-                  )
-           )
-      :<|> ("merge" :> MergeContribution)
-      :<|> ( "timeline"
-               :> ( GetContributionTimeline
-                      :<|> ("comments" :> Comments.CommentsServer)
-                  )
-           )
-  )
+data ContributionsByProjectRoutes mode = ContributionsByProjectRoutes
+  { listContributions :: mode :- ListContributionsByProjectEndpoint,
+    createContribution :: mode :- CreateContribution,
+    contributionResource :: mode :- Capture "contribution_number" ContributionNumber :> NamedRoutes ContributionResourceRoutes
+  }
+  deriving stock (Generic)
+
+data DiffRoutes mode = DiffRoutes
+  { diffTerms :: mode :- "terms" :> ContributionDiffTermsEndpoint,
+    diffTypes :: mode :- "types" :> ContributionDiffTypesEndpoint,
+    diffContribution :: mode :- ContributionDiffEndpoint
+  }
+  deriving stock (Generic)
+
+data TimelineRoutes mode = TimelineRoutes
+  { getTimeline :: mode :- GetContributionTimeline,
+    comments :: mode :- "comments" :> Comments.CommentsServer
+  }
+  deriving stock (Generic)
+
+data ContributionResourceRoutes mode
+  = ContributionResourceRoutes
+  { getContributionByNumber :: mode :- GetContributionByNumber,
+    updateContributionByNumber :: mode :- UpdateContributionByNumber,
+    diff :: mode :- "diff" :> NamedRoutes DiffRoutes,
+    merge :: mode :- "merge" :> MergeContribution,
+    timeline :: mode :- "timeline" :> NamedRoutes TimelineRoutes
+  }
+  deriving stock (Generic)
 
 type ContributionDiffEndpoint =
   Get '[JSON] (Cached JSON ShareNamespaceDiffResponse)

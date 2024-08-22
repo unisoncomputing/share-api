@@ -14,6 +14,7 @@ where
 
 import Control.Lens
 import Servant
+import Servant.Server.Generic (AsServerT)
 import Share.Branch (Branch (..))
 import Share.Codebase qualified as Codebase
 import Share.Contribution
@@ -47,32 +48,47 @@ import Share.Web.Share.Types (UserDisplayInfo)
 import Unison.Name (Name)
 import Unison.Syntax.Name qualified as Name
 
-contributionsByProjectServer :: Maybe Session -> UserHandle -> ProjectSlug -> ServerT API.ContributionsByProjectAPI WebApp
+contributionsByProjectServer :: Maybe Session -> UserHandle -> ProjectSlug -> API.ContributionsByProjectRoutes (AsServerT WebApp)
 contributionsByProjectServer session handle projectSlug =
-  let commentResourceServer session commentId =
-        Comments.updateCommentEndpoint session handle projectSlug commentId
-          :<|> Comments.deleteCommentEndpoint session handle projectSlug commentId
-      commentsServer contributionNumber =
-        createCommentOnContributionEndpoint session handle projectSlug contributionNumber
-          :<|> commentResourceServer session
+  API.ContributionsByProjectRoutes
+    { listContributions = listContributionsByProjectEndpoint session handle projectSlug,
+      createContribution = createContributionEndpoint session handle projectSlug,
+      contributionResource = \contributionNumber ->
+        addServerTag (Proxy @(NamedRoutes API.ContributionResourceRoutes)) "contribution-number" (IDs.toText contributionNumber) $
+          contributionsResourceServer session handle projectSlug contributionNumber
+    }
 
-      timelineServer contributionNumber =
-        ( getContributionTimelineEndpoint session handle projectSlug contributionNumber
-            :<|> commentsServer contributionNumber
-        )
-      contributionResourceServer contributionNumber =
-        addServerTag (Proxy @API.ContributionResourceServer) "contribution-number" (IDs.toText contributionNumber) $
-          getContributionByNumberEndpoint session handle projectSlug contributionNumber
-            :<|> updateContributionByNumberEndpoint session handle projectSlug contributionNumber
-            :<|> ( contributionDiffTermsEndpoint session handle projectSlug contributionNumber
-                     :<|> contributionDiffTypesEndpoint session handle projectSlug contributionNumber
-                     :<|> contributionDiffEndpoint session handle projectSlug contributionNumber
-                 )
-            :<|> mergeContributionEndpoint session handle projectSlug contributionNumber
-            :<|> timelineServer contributionNumber
-   in listContributionsByProjectEndpoint session handle projectSlug
-        :<|> createContributionEndpoint session handle projectSlug
-        :<|> contributionResourceServer
+diffResourceServer :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.DiffRoutes (AsServerT WebApp)
+diffResourceServer session handle projectSlug contributionNumber =
+  API.DiffRoutes
+    { diffTerms = contributionDiffTermsEndpoint session handle projectSlug contributionNumber,
+      diffTypes = contributionDiffTypesEndpoint session handle projectSlug contributionNumber,
+      diffContribution = contributionDiffEndpoint session handle projectSlug contributionNumber
+    }
+
+timelineServer :: (Maybe Session) -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.TimelineRoutes (AsServerT WebApp)
+timelineServer session handle projectSlug contributionNumber =
+  API.TimelineRoutes
+    { getTimeline = getContributionTimelineEndpoint session handle projectSlug contributionNumber,
+      comments = commentsServer contributionNumber
+    }
+  where
+    commentsServer contributionNumber =
+      createCommentOnContributionEndpoint session handle projectSlug contributionNumber
+        :<|> commentResourceServer
+    commentResourceServer commentId =
+      Comments.updateCommentEndpoint session handle projectSlug commentId
+        :<|> Comments.deleteCommentEndpoint session handle projectSlug commentId
+
+contributionsResourceServer :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.ContributionResourceRoutes (AsServerT WebApp)
+contributionsResourceServer session handle projectSlug contributionNumber =
+  API.ContributionResourceRoutes
+    { getContributionByNumber = getContributionByNumberEndpoint session handle projectSlug contributionNumber,
+      updateContributionByNumber = updateContributionByNumberEndpoint session handle projectSlug contributionNumber,
+      diff = diffResourceServer session handle projectSlug contributionNumber,
+      merge = mergeContributionEndpoint session handle projectSlug contributionNumber,
+      timeline = timelineServer session handle projectSlug contributionNumber
+    }
 
 contributionsByUserServer :: Maybe Session -> UserHandle -> ServerT API.ContributionsByUserAPI WebApp
 contributionsByUserServer session handle =
