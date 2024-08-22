@@ -25,6 +25,7 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Prelude
+import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
 import Unison.ConstructorReference qualified as ConstructorReference
@@ -38,7 +39,6 @@ import Unison.Name (Name)
 import Unison.Parser.Ann (Ann)
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
-import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Reference (TermReference, TypeReference)
 import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1

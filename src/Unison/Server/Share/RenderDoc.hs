@@ -18,11 +18,11 @@ import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (PathSegments (..))
 import Share.Prelude
+import Share.PrettyPrintEnvDecl.Postgres qualified as PostgresPPE
 import U.Codebase.Causal qualified as V2Causal
 import Unison.Codebase.Path qualified as Path
 import Unison.LabeledDependency qualified as LD
 import Unison.NameSegment.Internal (NameSegment (..))
-import Unison.PrettyPrintEnvDecl.Postgres qualified as PostgresPPE
 import Unison.Server.Doc (Doc)
 import Unison.Server.Doc qualified as Doc
 import Unison.Util.Pretty (Width)

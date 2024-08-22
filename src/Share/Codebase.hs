@@ -31,6 +31,7 @@ module Share.Codebase
     expectTypeOfTerms,
     expectTypeOfReferent,
     expectTypeOfReferents,
+    expectTypeOfConstructor,
     loadTypeOfConstructor,
     loadTypeOfReferent,
     loadTypeDeclaration,

@@ -32,13 +32,13 @@ import Share.Postgres.NameLookups.Queries qualified as Q
 import Share.Postgres.NameLookups.Types (NamedRef (..), NamesPerspective (..), PathSegments (..))
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Prelude
+import Share.PrettyPrintEnvDecl.Postgres qualified as PPED
 import Unison.Codebase.Editor.DisplayObject
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.ShortCausalHash qualified as SCH
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.PrettyPrintEnvDecl qualified as PPED
-import Unison.PrettyPrintEnvDecl.Postgres qualified as PPED
 import Unison.Server.Backend (termEntryLabeledDependencies, typeEntryLabeledDependencies)
 import Unison.Server.Syntax (SyntaxText)
 import Unison.Server.Types
