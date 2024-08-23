@@ -385,17 +385,23 @@ mergeContributionEndpoint ::
   UserHandle ->
   ProjectSlug ->
   IDs.ContributionNumber ->
+  (AtKey key ContributionStateToken) ->
   WebApp MergeContributionResponse
-mergeContributionEndpoint session userHandle projectSlug contributionNumber = do
+mergeContributionEndpoint session userHandle projectSlug contributionNumber (AtKey contributionStateToken) = do
   callerUserId <- AuthN.requireAuthenticatedUser session
-  contribution <- PG.runTransactionOrRespondError $ do
+  (contribution, projectId) <- PG.runTransactionOrRespondError $ do
     Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-    pure (contribution)
+    pure (contribution, projectId)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
   (isFastForward, sourceBranch, targetBranch) <- PG.runTransactionOrRespondError do
-    sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-    targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    -- Refetch the contribution within the transaction
+    contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    currentContributionStateToken <- ContributionsQ.contributionStateTokenById contribution.contributionId
+    when (currentContributionStateToken /= contributionStateToken) do
+      throwSomeServerError (ContributionStateChangedError contributionStateToken currentContributionStateToken)
+    sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     isFastForward <- CausalQ.isFastForward targetBranch.causal sourceBranch.causal
     pure (isFastForward, sourceBranch, targetBranch)
 

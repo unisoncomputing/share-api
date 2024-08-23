@@ -104,7 +104,8 @@ type UpdateContributionByNumber =
 
 -- | Merged a contribution
 type MergeContributionEndpoint =
-  Post '[JSON] MergeContributionResponse
+  ReqBody '[JSON] (AtKey "contributionStateToken" ContributionStateToken)
+    :> Post '[JSON] MergeContributionResponse
 
 -- | Check if a contribution can be merged
 type CheckMergeContributionEndpoint =

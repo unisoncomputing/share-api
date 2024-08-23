@@ -17,6 +17,8 @@ import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.Logging qualified as Logging
+import Share.Web.Errors qualified as Err
 import Share.Web.Share.Comments (CommentEvent (..), commentEventTimestamp)
 import Share.Web.Share.Types (UserDisplayInfo)
 import U.Codebase.HashTags (CausalHash (..))
@@ -284,3 +286,11 @@ instance PG.DecodeRow ContributionStateToken where
     sourceCausalHash <- PG.decodeField
     targetCausalHash <- PG.decodeField
     pure ContributionStateToken {..}
+
+data ContributionStateChangedError = ContributionStateChangedError
+  { expectedStateToken :: ContributionStateToken,
+    actualStateToken :: ContributionStateToken
+  }
+  deriving stock (Show)
+  deriving (Logging.Loggable) via (Logging.ShowLoggable 'Logging.Error ContributionStateChangedError)
+  deriving (Err.ToServerError) via Err.SimpleServerError 417 "contribution:state-changed" "Contribution state changed from what was expected" ContributionStateChangedError
