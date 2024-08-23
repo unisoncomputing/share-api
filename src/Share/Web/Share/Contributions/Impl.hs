@@ -17,7 +17,9 @@ import Control.Lens
 import Servant
 import Servant.Server.Generic (AsServerT)
 import Share.Branch (Branch (..))
+import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
+import Share.Codebase qualified as PG
 import Share.Contribution
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle)
 import Share.IDs qualified as IDs
@@ -389,32 +391,32 @@ mergeContributionEndpoint ::
   WebApp MergeContributionResponse
 mergeContributionEndpoint session userHandle projectSlug contributionNumber (AtKey contributionStateToken) = do
   callerUserId <- AuthN.requireAuthenticatedUser session
-  (contribution, projectId) <- PG.runTransactionOrRespondError $ do
-    Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-    contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-    pure (contribution, projectId)
-  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
-  (isFastForward, sourceBranch, targetBranch) <- PG.runTransactionOrRespondError do
+  (contribution, project) <- PG.runTransactionOrRespondError $ do
+    project <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+    contribution <- ContributionsQ.contributionByProjectIdAndNumber project.projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    pure (contribution, project)
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
+  PG.runTransactionOrRespondError do
     -- Refetch the contribution within the transaction
-    contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    contribution <- ContributionsQ.contributionByProjectIdAndNumber project.projectId contributionNumber `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     currentContributionStateToken <- ContributionsQ.contributionStateTokenById contribution.contributionId
     when (currentContributionStateToken /= contributionStateToken) do
       throwSomeServerError (ContributionStateChangedError contributionStateToken currentContributionStateToken)
     sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
     targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     isFastForward <- CausalQ.isFastForward targetBranch.causal sourceBranch.causal
-    pure (isFastForward, sourceBranch, targetBranch)
-
-  if isFastForward
-    then PG.runTransaction $ do
-      let description = "Merged Contribution #" <> (IDs.toText contributionNumber) <> "\n" <> contribution.title
-      newNamespaceId <- CausalQ.expectNamespaceIdsByCausalIdsOf id sourceBranch.causal
-      nlReceipt <- NL.ensureNameLookupForBranchId newNamespaceId
-      BranchQ.setBranchCausalHash nlReceipt description callerUserId targetBranch.branchId sourceBranch.causal
-      -- Update any affected contributions to reflect the result of updating this branch.
-      MergeDetection.updateContributionsFromBranchUpdate callerUserId targetBranch.branchId
-      pure $ MergeContributionResponse MergeSuccess
-    else pure $ MergeContributionResponse $ MergeFailed "Share only supports fast forward merges for now."
+    if isFastForward
+      then do
+        let description = "Merged Contribution #" <> (IDs.toText contributionNumber) <> "\n" <> contribution.title
+        newNamespaceId <- CausalQ.expectNamespaceIdsByCausalIdsOf id sourceBranch.causal
+        nlReceipt <- NL.ensureNameLookupForBranchId newNamespaceId
+        let projectCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForProjectBranchCodebase project.ownerUserId targetBranch.contributorId
+        PG.codebaseMToTransaction projectCodebase $ Codebase.importCausalIntoCodebase (Branch.branchCodebaseUser sourceBranch) sourceBranch.causal
+        BranchQ.setBranchCausalHash nlReceipt description callerUserId targetBranch.branchId sourceBranch.causal
+        -- Update any affected contributions to reflect the result of updating this branch.
+        MergeDetection.updateContributionsFromBranchUpdate callerUserId targetBranch.branchId
+        pure $ MergeContributionResponse MergeSuccess
+      else pure $ MergeContributionResponse $ MergeFailed "Share only supports fast forward merges for now."
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
 

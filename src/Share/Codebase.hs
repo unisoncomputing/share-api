@@ -165,7 +165,7 @@ instance Logging.Loggable CodebaseError where
 shorthashLength :: Int
 shorthashLength = 10
 
--- | Construct a CodebaseEnv allowsing you to run transactions against a given codebase.
+-- | Construct a CodebaseEnv allowing you to run transactions against a given codebase.
 codebaseEnv :: AuthZReceipt -> CodebaseLocation -> CodebaseEnv
 codebaseEnv !_authZReceipt codebaseLoc = do
   let codebaseOwner = Codebase.codebaseOwnerUserId codebaseLoc
