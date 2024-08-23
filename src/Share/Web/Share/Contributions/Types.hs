@@ -7,16 +7,21 @@
 module Share.Web.Share.Contributions.Types where
 
 import Data.Aeson
+import Data.Text qualified as Text
 import Data.Time (UTCTime)
-import Servant (FromHttpApiData)
-import Servant.API (FromHttpApiData (..))
+import Hasql.Interpolate qualified as Hasql
+import Servant (FromHttpApiData (..), ToHttpApiData)
 import Share.Contribution (ContributionStatus)
 import Share.IDs
+import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Web.Share.Comments (CommentEvent (..), commentEventTimestamp)
 import Share.Web.Share.Types (UserDisplayInfo)
+import U.Codebase.HashTags (CausalHash (..))
+import Unison.Hash qualified as Hash
+import Web.HttpApiData (ToHttpApiData (..))
 
 data ShareContribution user = ShareContribution
   { contributionId :: ContributionId,
@@ -195,6 +200,18 @@ data MergeResult
   | MergeFailed Text
   deriving (Show)
 
+data MergeContributionRequest = MergeContributionRequest
+  { contributionStateToken :: ContributionStateToken
+  }
+  deriving (Show)
+
+instance FromJSON MergeContributionRequest where
+  parseJSON = withObject "MergeContributionRequest" \o -> do
+    contributionStateToken <- o .: "contributionStateToken"
+    case parseQueryParam contributionStateToken of
+      Left err -> fail (Text.unpack err)
+      Right stateToken -> pure MergeContributionRequest {contributionStateToken = stateToken}
+
 data MergeContributionResponse = MergeContributionResponse
   { result :: MergeResult
   }
@@ -210,3 +227,42 @@ instance ToJSON MergeContributionResponse where
           MergeConflicted -> object ["kind" .= ("conflicted" :: Text)]
           MergeFailed msg -> object ["kind" .= ("failed" :: Text), "reason" .= msg]
       ]
+
+-- | Token used to ensure that the state of a contribution hasn't changed between
+-- rendering the page and the user taking a given action.
+--
+-- We don't bother signing these, so don't use it for Auth or w/e
+--
+-- E.g. A new commit is pushed in between loading the page and clicking 'merge'
+data ContributionStateToken
+  = ContributionStateToken
+  { contributionId :: ContributionId,
+    sourceBranchId :: BranchId,
+    targetBranchId :: BranchId,
+    sourceCausalHash :: CausalHash,
+    targetCausalHash :: CausalHash
+  }
+  deriving (Show, Eq, Ord)
+
+instance ToHttpApiData ContributionStateToken where
+  toQueryParam ContributionStateToken {..} =
+    Text.intercalate
+      ":"
+      [ IDs.toText contributionId,
+        IDs.toText sourceBranchId,
+        IDs.toText targetBranchId,
+        into @Text sourceCausalHash,
+        into @Text targetCausalHash
+      ]
+
+instance FromHttpApiData ContributionStateToken where
+  parseQueryParam token =
+    case Text.splitOn ":" token of
+      [contributionId, sourceBranchId, targetBranchId, sourceCausalHash, targetCausalHash] -> do
+        contributionId <- IDs.fromText contributionId
+        sourceBranchId <- IDs.fromText sourceBranchId
+        targetBranchId <- IDs.fromText targetBranchId
+        sourceCausalHash <- CausalHash <$> maybeToEither "Invalid source causal hash" (Hash.fromBase32HexText sourceCausalHash)
+        targetCausalHash <- CausalHash <$> maybeToEither "Invalid target causal hash" (Hash.fromBase32HexText targetCausalHash)
+        pure ContributionStateToken {..}
+      _ -> Left "Invalid contribution state token"

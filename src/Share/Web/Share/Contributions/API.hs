@@ -108,7 +108,7 @@ type MergeContributionEndpoint =
 
 -- | Check if a contribution can be merged
 type CheckMergeContributionEndpoint =
-  Post '[JSON] CheckMergeContributionResponse
+  Get '[JSON] CheckMergeContributionResponse
 
 type ContributionTimelineCursor = UTCTime
 
