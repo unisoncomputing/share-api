@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -7,6 +8,7 @@ module Share.Web.Errors
   ( respondError,
     reportError,
     ToServerError (..),
+    SimpleServerError (..),
     ErrorRedirect (..),
     InternalServerError (..),
     EntityMissing (..),
@@ -27,6 +29,9 @@ module Share.Web.Errors
     someServerError,
     withCallstack,
     throwSomeServerError,
+
+    -- * Error types
+    StatusExpectationFailed,
   )
 where
 
@@ -44,6 +49,7 @@ import Data.Text (pack)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import GHC.Stack qualified as GHC
+import GHC.TypeLits qualified as TL
 import Servant
 import Servant.Client
 import Share.Env qualified as Env
@@ -65,6 +71,28 @@ newtype ErrorID = ErrorID Text
 
 class ToServerError e where
   toServerError :: e -> (ErrorID, ServerError)
+
+type StatusExpectationFailed = 417
+
+-- | newtype wrapper for deriving errors.
+newtype SimpleServerError (errStatus :: TL.Nat) (errorId :: TL.Symbol) (errorMsg :: TL.Symbol) a = SimpleServerError a
+
+instance (TL.KnownSymbol errorId, TL.KnownSymbol errorMsg, TL.KnownNat errStatus) => ToServerError (SimpleServerError errStatus errorId errorMsg a) where
+  toServerError _ =
+    ( ErrorID $ Text.pack $ TL.symbolVal (Proxy @errorId),
+      case TL.natVal (Proxy @errStatus) of
+        400 -> err400 {errBody = errorBody}
+        401 -> err401 {errBody = errorBody}
+        403 -> err403 {errBody = errorBody}
+        404 -> err404 {errBody = errorBody}
+        409 -> err409 {errBody = errorBody}
+        417 -> err417 {errBody = errorBody}
+        500 -> err500 {errBody = errorBody}
+        502 -> err502 {errBody = errorBody}
+        n -> err500 {errHTTPCode = fromInteger n, errBody = errorBody}
+    )
+    where
+      errorBody = BL.fromStrict $ Text.encodeUtf8 $ Text.pack $ TL.symbolVal (Proxy @errorMsg)
 
 -- Helpful for cases where an error is specialized to Void.
 instance ToServerError Void where
