@@ -236,8 +236,7 @@ instance ToJSON MergeContributionResponse where
 -- We don't bother signing these, so don't use it for Auth or w/e
 --
 -- E.g. A new commit is pushed in between loading the page and clicking 'merge'
-data ContributionStateToken
-  = ContributionStateToken
+data ContributionStateToken = ContributionStateToken
   { contributionId :: ContributionId,
     sourceBranchId :: BranchId,
     targetBranchId :: BranchId,
