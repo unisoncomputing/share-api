@@ -96,7 +96,7 @@ type CreateContribution =
   ReqBody '[JSON] CreateContributionRequest
     :> Post '[JSON] (ShareContribution UserDisplayInfo)
 
-type GetContributionByNumber = Get '[JSON] (ShareContribution UserDisplayInfo)
+type GetContributionByNumber = Get '[JSON] (ShareContribution UserDisplayInfo :++ AtKey "contributionStateToken" ContributionStateToken)
 
 type UpdateContributionByNumber =
   ReqBody '[JSON] UpdateContributionRequest

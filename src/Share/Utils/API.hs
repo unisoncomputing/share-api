@@ -1,3 +1,4 @@
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -15,6 +16,7 @@ module Share.Utils.API
     Query (..),
     Limit (..),
     (:++) (..),
+    AtKey (..),
   )
 where
 
@@ -26,10 +28,13 @@ import Data.ByteString.Base64.URL.Lazy qualified as Base64URL
 import Data.Foldable qualified as Foldable
 import Data.Map qualified as Map
 import Data.Set qualified as Set
+import Data.String qualified as String
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Typeable (typeRep)
+import GHC.TypeLits (Symbol)
+import GHC.TypeLits qualified as TypeLits
 import Servant
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -259,3 +264,13 @@ instance (Typeable a, Typeable b, ToJSON a, ToJSON b) => ToJSON (a :++ b) where
       (Null, Object b') -> Object b'
       -- If either is not an object, error, showing the type of the non-object value
       _ -> error $ "Cannot merge JSON representation of " <> show (typeRep (Proxy @a)) <> " with " <> show (typeRep (Proxy @b))
+
+-- | Wrapper useful in combination with `:++` to include the given payload at a specific key.
+newtype AtKey (key :: Symbol) a = AtKey a
+
+instance (ToJSON a, TypeLits.KnownSymbol key) => ToJSON (AtKey key a) where
+  toJSON (AtKey a) = object [String.fromString (TypeLits.symbolVal (Proxy @key)) .= a]
+
+instance (FromJSON a, TypeLits.KnownSymbol key) => FromJSON (AtKey key a) where
+  parseJSON = withObject "AtKey" $ \obj -> do
+    obj .: String.fromString (TypeLits.symbolVal (Proxy @key))

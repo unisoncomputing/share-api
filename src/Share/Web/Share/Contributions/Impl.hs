@@ -3,6 +3,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Share.Web.Share.Contributions.Impl
   ( contributionsByProjectServer,
@@ -164,13 +165,16 @@ getContributionByNumberEndpoint ::
   UserHandle ->
   ProjectSlug ->
   IDs.ContributionNumber ->
-  WebApp (ShareContribution UserDisplayInfo)
+  WebApp (ShareContribution UserDisplayInfo :++ AtKey "contributionStateToken" ContributionStateToken)
 getContributionByNumberEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber = do
   (project, shareContribution) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     shareContribution <-
       ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
         >>= UsersQ.userDisplayInfoOf traversed
+        >>= \(shareContribution@ShareContribution {contributionId}) -> do
+          contributionStateToken <- ContributionsQ.contributionStateTokenById contributionId
+          pure $ shareContribution :++ AtKey contributionStateToken
     pure (project, shareContribution)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
   pure shareContribution

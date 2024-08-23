@@ -266,3 +266,21 @@ instance FromHttpApiData ContributionStateToken where
         targetCausalHash <- CausalHash <$> maybeToEither "Invalid target causal hash" (Hash.fromBase32HexText targetCausalHash)
         pure ContributionStateToken {..}
       _ -> Left "Invalid contribution state token"
+
+instance ToJSON ContributionStateToken where
+  toJSON ContributionStateToken {..} = String (toQueryParam ContributionStateToken {..})
+
+instance FromJSON ContributionStateToken where
+  parseJSON = withText "ContributionStateToken" \t ->
+    case parseQueryParam t of
+      Left err -> fail (Text.unpack err)
+      Right token -> pure token
+
+instance PG.DecodeRow ContributionStateToken where
+  decodeRow = do
+    contributionId <- PG.decodeField
+    sourceBranchId <- PG.decodeField
+    targetBranchId <- PG.decodeField
+    sourceCausalHash <- PG.decodeField
+    targetCausalHash <- PG.decodeField
+    pure ContributionStateToken {..}
