@@ -5,20 +5,30 @@ set -e
 source "../../transcript_helpers.sh"
 
 # Create a main branch and feature branch to merge into it.
-transcript_ucm transcript contribution-setup.md
+
+login_user_for_ucm 'transcripts'
+transcript_ucm transcript 'project-setup.md'
+
+fetch "$transcript_user" PATCH make-project-public '/users/transcripts/projects/merge' '{
+    "summary": null,
+    "visibility": "public"
+}'
+
+login_user_for_ucm 'test'
+transcript_ucm transcript 'contribution-setup.md'
 
 ## Create a contribution
-fetch "$transcript_user" POST contribution-create-contribution '/users/transcripts/projects/merge/contributions' '{
+fetch "$test_user" POST contribution-create-contribution '/users/transcripts/projects/merge/contributions' '{
     "title": "Fast Forward Contribution",
     "description": "My description",
     "status": "in_review",
-    "sourceBranchRef": "fast-forward-feature",
+    "sourceBranchRef": "@test/fast-forward-feature",
     "targetBranchRef": "main"
 }'
 
 # And the main branch should be set to the branch's head
 fetch "$transcript_user" GET 'main-before-merge' '/users/transcripts/projects/merge/branches/main'
-fetch_data "$transcript_user" GET 'feature-branch' '/users/transcripts/projects/merge/branches/fast-forward-feature'
+fetch_data "$transcript_user" GET 'feature-branch' '/users/transcripts/projects/merge/branches/%40test%2Ffast-forward-feature'
 
 # Get the contribution and its contribution state token
 contribution_state_token=$(fetch_data "$transcript_user" GET 'contribution' '/users/transcripts/projects/merge/contributions/1' 2>/dev/null | jq -r '.contributionStateToken')
@@ -38,3 +48,6 @@ fetch "$transcript_user" GET 'contribution-after-merge' '/users/transcripts/proj
 
 # And the main branch should be set to the branch's head
 fetch "$transcript_user" GET 'main-after-merge' '/users/transcripts/projects/merge/branches/main'
+
+login_user_for_ucm 'transcripts'
+transcript_ucm transcript 'pull-after-merge.md'
