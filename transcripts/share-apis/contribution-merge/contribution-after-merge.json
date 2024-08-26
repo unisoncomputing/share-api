@@ -1,0 +1,27 @@
+{
+  "body": {
+    "author": {
+      "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+      "handle": "transcripts",
+      "name": "Transcript User",
+      "userId": "U-<UUID>"
+    },
+    "contributionStateToken": "C-<UUID>:B-<UUID>:B-<UUID>:glncbgqvg94ktnvdddlk96osvlnfi62dnm8u70vit40gk9htt683s2a4afcl13k2t14ah0ks02gp7qu4q6l1bapspju5eiu8q81ova8:glncbgqvg94ktnvdddlk96osvlnfi62dnm8u70vit40gk9htt683s2a4afcl13k2t14ah0ks02gp7qu4q6l1bapspju5eiu8q81ova8",
+    "createdAt": "<TIMESTAMP>",
+    "description": "My description",
+    "id": "C-<UUID>",
+    "numComments": 0,
+    "number": 1,
+    "projectRef": "@transcripts/merge",
+    "sourceBranchRef": "fast-forward-feature",
+    "status": "merged",
+    "targetBranchRef": "main",
+    "title": "Fast Forward Contribution",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

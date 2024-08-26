@@ -1,0 +1,27 @@
+{
+  "body": {
+    "branchRef": "main",
+    "causalHash": "#rl08e4s9jm58fhj7uslg0qlndg2qhlp6gdd2thjicgpakqbkeumgeo220hgrh27jcd3kqh1o9b24dimpssr9eq2pe2icdu7nffkabsg",
+    "contributions": [],
+    "createdAt": "<TIMESTAMP>",
+    "project": {
+      "createdAt": "<TIMESTAMP>",
+      "owner": {
+        "handle": "@transcripts",
+        "name": "Transcript User",
+        "type": "user"
+      },
+      "slug": "merge",
+      "summary": null,
+      "tags": [],
+      "updatedAt": "<TIMESTAMP>",
+      "visibility": "private"
+    },
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

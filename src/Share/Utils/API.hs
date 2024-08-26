@@ -273,4 +273,5 @@ instance (ToJSON a, TypeLits.KnownSymbol key) => ToJSON (AtKey key a) where
 
 instance (FromJSON a, TypeLits.KnownSymbol key) => FromJSON (AtKey key a) where
   parseJSON = withObject "AtKey" $ \obj -> do
-    obj .: String.fromString (TypeLits.symbolVal (Proxy @key))
+    (innerVal :: a) <- (obj .: String.fromString (TypeLits.symbolVal (Proxy @key)))
+    pure $ AtKey innerVal
