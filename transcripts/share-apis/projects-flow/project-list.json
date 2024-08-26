@@ -14,21 +14,6 @@
       "tags": [],
       "updatedAt": "<TIMESTAMP>",
       "visibility": "private"
-    },
-    {
-      "createdAt": "<TIMESTAMP>",
-      "isFaved": false,
-      "numFavs": 0,
-      "owner": {
-        "handle": "@transcripts",
-        "name": "Transcript User",
-        "type": "user"
-      },
-      "slug": "transcriptproject",
-      "summary": null,
-      "tags": [],
-      "updatedAt": "<TIMESTAMP>",
-      "visibility": "private"
     }
   ],
   "status": [

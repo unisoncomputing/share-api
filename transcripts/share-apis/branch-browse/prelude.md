@@ -17,11 +17,11 @@ some.other.thing = 3
 
 
 ```ucm
-.> add
+@transcripts/branch-browse/main> add
 ```
 
 ```ucm
-.> push @transcripts/branch-browse/main
+@transcripts/branch-browse/main> push @transcripts/branch-browse/main
 ```
 
 Update a few things so we can verify that pushing to an existing branch works.
@@ -33,7 +33,7 @@ some.other.thing = 30
 ```
 
 ```ucm
-.> update
-.> history
-.> push @transcripts/branch-browse/main
+@transcripts/branch-browse/main> update
+@transcripts/branch-browse/main> history
+@transcripts/branch-browse/main> push @transcripts/branch-browse/main
 ```
