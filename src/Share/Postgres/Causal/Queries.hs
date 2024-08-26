@@ -890,9 +890,6 @@ isFastForward fromCausalId toCausalId = do
   -- though...
   WITH RECURSIVE causal_history(causal_id) AS (
       SELECT #{toCausalId}
-      FROM causals causal
-          JOIN branch_hashes bh ON causal.namespace_hash_id = bh.id
-          WHERE causal.id = causal_id
       UNION
       SELECT ca.ancestor_id
       FROM causal_history h

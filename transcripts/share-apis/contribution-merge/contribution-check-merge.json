@@ -1,8 +1,12 @@
 {
-  "body": "Something went wrong, please try again later",
+  "body": {
+    "mergability": {
+      "kind": "fast_forward"
+    }
+  },
   "status": [
     {
-      "status_code": 500
+      "status_code": 200
     }
   ]
 }
