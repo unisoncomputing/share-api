@@ -396,6 +396,8 @@ mergeContributionEndpoint session userHandle projectSlug contributionNumber (AtK
     contribution <- ContributionsQ.contributionByProjectIdAndNumber project.projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     pure (contribution, project)
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
+  when (contribution.status == Merged) do
+    respondError $ SimpleServerError @417 @"contribution:already-merged" @"Contribution already merged." contribution
   PG.runTransactionOrRespondError do
     -- Refetch the contribution within the transaction
     contribution <- ContributionsQ.contributionByProjectIdAndNumber project.projectId contributionNumber `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
@@ -433,12 +435,15 @@ checkMergeContributionEndpoint session userHandle projectSlug contributionNumber
     contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     pure contribution
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
-  isFastForward <- PG.runTransactionOrRespondError do
-    sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-    targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
-    CausalQ.isFastForward targetBranch.causal sourceBranch.causal
-  if isFastForward
-    then pure CheckMergeContributionResponse {mergability = CanFastForward}
-    else pure CheckMergeContributionResponse {mergability = CantMerge "Share only supports fast forward merges for now."}
+  case contribution.status of
+    Merged -> pure $ CheckMergeContributionResponse {mergeability = AlreadyMerged}
+    _ -> do
+      isFastForward <- PG.runTransactionOrRespondError do
+        sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+        targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+        CausalQ.isFastForward targetBranch.causal sourceBranch.causal
+      if isFastForward
+        then pure CheckMergeContributionResponse {mergeability = CanFastForward}
+        else pure CheckMergeContributionResponse {mergeability = CantMerge "Share only supports fast forward merges for now."}
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}

@@ -499,7 +499,8 @@ contributionStateTokenById contributionId = do
           contribution.source_branch,
           contribution.target_branch,
           source_causal.hash,
-          target_causal.hash
+          target_causal.hash,
+          contribution.status
         FROM contributions contribution
           JOIN project_branches AS source_branch ON source_branch.id = contribution.source_branch
           JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch

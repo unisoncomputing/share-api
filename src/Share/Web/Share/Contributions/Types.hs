@@ -171,26 +171,28 @@ instance FromJSON UpdateContributionRequest where
     targetBranchSH <- o .:? "targetBranchRef"
     pure UpdateContributionRequest {..}
 
-data Mergability
+data Mergeability
   = CanFastForward
   | CanMerge
   | Conflicted
+  | AlreadyMerged
   | -- We can presumably remove this once proper server-side merge is implemented
     CantMerge Text
   deriving (Show)
 
 data CheckMergeContributionResponse = CheckMergeContributionResponse
-  { mergability :: Mergability
+  { mergeability :: Mergeability
   }
   deriving (Show)
 
 instance ToJSON CheckMergeContributionResponse where
   toJSON CheckMergeContributionResponse {..} =
     object
-      [ "mergability" .= case mergability of
+      [ "mergeability" .= case mergeability of
           CanFastForward -> object ["kind" .= ("fast_forward" :: Text)]
           CanMerge -> object ["kind" .= ("merge" :: Text)]
           Conflicted -> object ["kind" .= ("conflicted" :: Text)]
+          AlreadyMerged -> object ["kind" .= ("already_merged" :: Text)]
           CantMerge msg -> object ["kind" .= ("cant_merge" :: Text), "reason" .= msg]
       ]
 
@@ -241,7 +243,8 @@ data ContributionStateToken = ContributionStateToken
     sourceBranchId :: BranchId,
     targetBranchId :: BranchId,
     sourceCausalHash :: CausalHash,
-    targetCausalHash :: CausalHash
+    targetCausalHash :: CausalHash,
+    contributionStatus :: ContributionStatus
   }
   deriving (Show, Eq, Ord)
 
@@ -253,18 +256,20 @@ instance ToHttpApiData ContributionStateToken where
         IDs.toText sourceBranchId,
         IDs.toText targetBranchId,
         into @Text sourceCausalHash,
-        into @Text targetCausalHash
+        into @Text targetCausalHash,
+        into @Text contributionStatus
       ]
 
 instance FromHttpApiData ContributionStateToken where
   parseQueryParam token =
     case Text.splitOn ":" token of
-      [contributionId, sourceBranchId, targetBranchId, sourceCausalHash, targetCausalHash] -> do
+      [contributionId, sourceBranchId, targetBranchId, sourceCausalHash, targetCausalHash, contributionStatus] -> do
         contributionId <- IDs.fromText contributionId
         sourceBranchId <- IDs.fromText sourceBranchId
         targetBranchId <- IDs.fromText targetBranchId
         sourceCausalHash <- CausalHash <$> maybeToEither "Invalid source causal hash" (Hash.fromBase32HexText sourceCausalHash)
         targetCausalHash <- CausalHash <$> maybeToEither "Invalid target causal hash" (Hash.fromBase32HexText targetCausalHash)
+        contributionStatus <- parseQueryParam contributionStatus
         pure ContributionStateToken {..}
       _ -> Left "Invalid contribution state token"
 
@@ -284,6 +289,7 @@ instance PG.DecodeRow ContributionStateToken where
     targetBranchId <- PG.decodeField
     sourceCausalHash <- PG.decodeField
     targetCausalHash <- PG.decodeField
+    contributionStatus <- PG.decodeField
     pure ContributionStateToken {..}
 
 data ContributionStateChangedError = ContributionStateChangedError

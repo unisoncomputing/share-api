@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -58,6 +59,7 @@ import Share.OAuth.Errors (OAuth2Error (..), OAuth2ErrorCode (..), OAuth2ErrorRe
 import Share.OAuth.Types (AuthenticationRequest (..), RedirectReceiverErr (..))
 import Share.Prelude
 import Share.Utils.Logging
+import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
 import Unison.Server.Backend qualified as Backend
@@ -76,6 +78,19 @@ type StatusExpectationFailed = 417
 
 -- | newtype wrapper for deriving errors.
 newtype SimpleServerError (errStatus :: TL.Nat) (errorId :: TL.Symbol) (errorMsg :: TL.Symbol) a = SimpleServerError a
+
+instance (Show a, TL.KnownNat errStatus, TL.KnownSymbol errorMsg) => Loggable (SimpleServerError errStatus errorId errorMsg a) where
+  toLog (SimpleServerError err) =
+    let severity =
+          if
+            | status < 400 -> Info
+            | status < 500 -> UserFault
+            | otherwise -> Error
+     in Logging.textLog (errMsg <> ": " <> tShow err)
+          & withSeverity severity
+    where
+      status = TL.natVal (Proxy @errStatus)
+      errMsg = Text.pack $ TL.symbolVal (Proxy @errorMsg)
 
 instance (TL.KnownSymbol errorId, TL.KnownSymbol errorMsg, TL.KnownNat errStatus) => ToServerError (SimpleServerError errStatus errorId errorMsg a) where
   toServerError _ =

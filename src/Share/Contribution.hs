@@ -61,6 +61,13 @@ instance Hasql.DecodeValue ContributionStatus where
       "merged" -> Right Merged
       _ -> Left "Invalid contribution status"
 
+instance From ContributionStatus Text where
+  from = \case
+    Draft -> "draft"
+    InReview -> "in_review"
+    Closed -> "closed"
+    Merged -> "merged"
+
 data Contribution = Contribution
   { contributionId :: ContributionId,
     projectId :: ProjectId,
