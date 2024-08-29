@@ -1,9 +1,9 @@
-```unison
+``` unison
 stuff = 300
 ```
 
-```ucm
-.> project.create-empty proj
+``` ucm
+scratch/main> project.create-empty proj
 
   🎉 I've created the project proj.
 

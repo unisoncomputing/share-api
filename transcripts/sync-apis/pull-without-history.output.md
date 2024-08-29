@@ -1,8 +1,8 @@
-```unison
+``` unison
 x = 1
 ```
 
-```ucm
+``` ucm
 
   Loading changes detected in scratch.u.
 
@@ -17,8 +17,8 @@ x = 1
 ```
 Create a project, add some history, then push it.
 
-```ucm
-.> project.create-empty myproject
+``` ucm
+scratch/main> project.create-empty myproject
 
   🎉 I've created the project myproject.
 

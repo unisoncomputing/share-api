@@ -1,5 +1,5 @@
 ```ucm:hide
-.> project.create-empty contribution-diff
+scratch/main> project.create-empty contribution-diff
 contribution-diff/main> branch /diff-start
 contribution-diff/diff-start> builtins.mergeio
 ```

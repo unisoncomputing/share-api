@@ -1,11 +1,11 @@
-```ucm
-.> clone @transcripts/bca-updates/main
+``` ucm
+scratch/main> clone @transcripts/bca-updates/main
 
   Downloaded 3 entities.
 
   Cloned @transcripts/bca-updates/main.
 
-.> clone @transcripts/bca-updates/feature-one
+scratch/main> clone @transcripts/bca-updates/feature-one
 
   Downloaded 3 entities.
 

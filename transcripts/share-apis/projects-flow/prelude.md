@@ -8,7 +8,7 @@ someTerm = lib.someLib.depNum
 ```
 
 ```ucm
-.> project.create-empty transcriptproject
+scratch/main> project.create-empty transcriptproject
 transcriptproject/main> add
 transcriptproject/main> push
 ```

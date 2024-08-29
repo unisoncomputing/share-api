@@ -1,5 +1,5 @@
 ```ucm:hide
-.> project.create-empty code-browse
+scratch/main> project.create-empty code-browse
 code-browse/main> builtins.mergeio
 ```
 

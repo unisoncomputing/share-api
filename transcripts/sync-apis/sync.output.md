@@ -1,6 +1,6 @@
 Create some types and values with deep-dependencies and cycles to ensure we have non-trivial components.
 
-```unison
+``` unison
 unique type A = SomeNat Nat | SomeB B
 
 unique type B = SomeA A | SomeString Text
@@ -16,7 +16,7 @@ xs = [a, b]
 ys = [!a, !b] :+ 3
 ```
 
-```ucm
+``` ucm
 
   Loading changes detected in scratch.u.
 
@@ -35,7 +35,8 @@ ys = [!a, !b] :+ 3
 
 ```
 Push and pull it back.
-```ucm
+
+``` ucm
 proj/main> push @transcripts/proj/main
 
   Uploaded 358 entities.
@@ -69,12 +70,13 @@ proj/pulled> ls
   9. ys       ([Nat])
 
 ```
-```unison
+``` unison
 newValue = 99
 ```
 
 Do a fast-forward push.
-```ucm
+
+``` ucm
 proj/main> add
 
   ⍟ I've added these definitions:
@@ -90,7 +92,7 @@ proj/main> push
 ```
 Do a non-fast-forward push.
 
-```ucm
+``` ucm
 proj/main> branch /diverge 
 
   Done. I've created the diverge branch based off of main.
@@ -99,11 +101,11 @@ proj/main> branch /diverge
        `switch /main` then `merge /diverge`.
 
 ```
-```unison
+``` unison
 diverge = 100
 ```
 
-```ucm
+``` ucm
 proj/main> add
 
   ⍟ I've added these definitions:
@@ -117,11 +119,11 @@ proj/main> push @transcripts/proj/main
   View it here: @transcripts/proj/main on http://localhost:5424
 
 ```
-```unison
+``` unison
 diverge = 200
 ```
 
-```ucm
+``` ucm
 proj/diverge> add
 
   ⍟ I've added these definitions:
@@ -136,7 +138,7 @@ proj/diverge> push @transcripts/proj/main
 ```
 Pull to trigger local merge
 
-```ucm
+``` ucm
 proj/diverge> pull @transcripts/proj/main
 
   Merging...
@@ -158,7 +160,7 @@ proj/diverge> pull @transcripts/proj/main
   to delete the temporary branch and switch back to diverge.
 
 ```
-```unison:added-by-ucm scratch.u
+``` unison:added-by-ucm scratch.u
 -- proj/diverge
 diverge : Nat
 diverge = 200
@@ -166,7 +168,6 @@ diverge = 200
 -- @transcripts/proj/main
 diverge : Nat
 diverge = 100
-
 
 ```
 

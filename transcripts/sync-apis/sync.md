@@ -1,5 +1,5 @@
 ```ucm:hide
-.> project.create-empty proj
+scratch/main> project.create-empty proj
 proj/main> builtins.merge
 ```
 

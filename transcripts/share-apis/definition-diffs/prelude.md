@@ -3,7 +3,7 @@
 Uses state from above as well 👆
 
 ```ucm:hide
-.> project.create-empty definition-diff
+scratch/main> project.create-empty definition-diff
 definition-diff/main> branch /before
 definition-diff/before> builtins.mergeio
 ```
