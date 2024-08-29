@@ -32,6 +32,7 @@ module Share.Utils.Logging
     runLoggerTEnv,
 
     -- * Other
+    ShowLoggable (..),
     module X,
   )
 where
@@ -81,6 +82,15 @@ runLoggerT minSeverity l reqTags ft (LoggerT m) = runReaderT m (l, ft, minSeveri
 runLoggerTEnv :: Env.Env reqCtx -> Map Text Text -> LoggerT m a -> m a
 runLoggerTEnv (Env.Env {Env.timeCache, Env.logger, Env.minLogSeverity}) tags m =
   runLoggerT minLogSeverity logger tags timeCache $ m
+
+newtype ShowLoggable (severity :: Severity) a = ShowLoggable a
+
+instance (Show a, GetSeverity severity) => Loggable (ShowLoggable severity a) where
+  toLog (ShowLoggable a) =
+    a
+      & tShow
+      & textLog
+      & withSeverity (getSeverity $ Proxy @severity)
 
 class Loggable msg where
   toLog :: msg -> LogMsg

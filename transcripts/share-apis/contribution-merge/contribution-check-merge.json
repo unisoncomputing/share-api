@@ -1,0 +1,12 @@
+{
+  "body": {
+    "mergeability": {
+      "kind": "fast_forward"
+    }
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "body": {
+    "result": {
+      "kind": "success"
+    }
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

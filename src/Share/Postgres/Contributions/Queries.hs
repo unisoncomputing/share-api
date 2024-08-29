@@ -16,6 +16,7 @@ module Share.Postgres.Contributions.Queries
     getPagedShareContributionTimelineByProjectIdAndNumber,
     performMergesAndBCAUpdatesFromBranchPush,
     rebaseContributionsFromMergedBranches,
+    contributionStateTokenById,
   )
 where
 
@@ -488,3 +489,22 @@ rebaseContributionsFromMergedBranches mergedContributions = do
         RETURNING contr.id
     |]
     <&> Set.fromList
+
+contributionStateTokenById :: ContributionId -> PG.Transaction e ContributionStateToken
+contributionStateTokenById contributionId = do
+  PG.queryExpect1Row @ContributionStateToken
+    [PG.sql|
+        SELECT
+          contribution.id,
+          contribution.source_branch,
+          contribution.target_branch,
+          source_causal.hash,
+          target_causal.hash,
+          contribution.status
+        FROM contributions contribution
+          JOIN project_branches AS source_branch ON source_branch.id = contribution.source_branch
+          JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch
+          JOIN causals source_causal ON source_causal.id = source_branch.causal_id
+          JOIN causals target_causal ON target_causal.id = target_branch.causal_id
+        WHERE contribution.id = #{contributionId}
+      |]

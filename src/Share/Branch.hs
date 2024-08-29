@@ -5,14 +5,16 @@ module Share.Branch
     defaultBranchName,
     defaultBranchShorthand,
     branchCausals_,
+    branchCodebaseUser,
   )
 where
 
 import Control.Lens
 import Data.Time (UTCTime)
+import Hasql.Interpolate qualified as Hasql
 import Share.IDs
 import Share.Postgres qualified as PG
-import Hasql.Interpolate qualified as Hasql
+import Share.Prelude
 
 -- | We don't track default branches in the database at the moment,
 -- and haven't decided yet whether we will.
@@ -55,3 +57,6 @@ instance (Hasql.DecodeValue causal) => Hasql.DecodeRow (Branch causal) where
 
 branchCausals_ :: Traversal (Branch causal) (Branch causal') causal causal'
 branchCausals_ f Branch {..} = (\causal -> Branch {causal, ..}) <$> f causal
+
+branchCodebaseUser :: Branch causal -> UserId
+branchCodebaseUser Branch {..} = fromMaybe creatorId contributorId

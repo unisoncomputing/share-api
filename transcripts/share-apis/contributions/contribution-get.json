@@ -6,6 +6,7 @@
       "name": "Transcript User",
       "userId": "U-<UUID>"
     },
+    "contributionStateToken": "C-<UUID>:B-<UUID>:B-<UUID>:sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg:sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg:closed",
     "createdAt": "<TIMESTAMP>",
     "description": "Updated description",
     "id": "C-<UUID>",

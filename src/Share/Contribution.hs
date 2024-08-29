@@ -4,13 +4,13 @@ module Share.Contribution where
 
 import Data.Aeson qualified as Aeson
 import Data.Time (UTCTime)
+import Hasql.Decoders qualified as Hasql
+import Hasql.Interpolate qualified as Hasql
+import Servant (FromHttpApiData (..))
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
 import Share.Prelude
-import Hasql.Decoders qualified as Hasql
-import Hasql.Interpolate qualified as Hasql
-import Servant (FromHttpApiData (..))
 
 data ContributionStatus
   = Draft
@@ -60,6 +60,13 @@ instance Hasql.DecodeValue ContributionStatus where
       "closed" -> Right Closed
       "merged" -> Right Merged
       _ -> Left "Invalid contribution status"
+
+instance From ContributionStatus Text where
+  from = \case
+    Draft -> "draft"
+    InReview -> "in_review"
+    Closed -> "closed"
+    Merged -> "merged"
 
 data Contribution = Contribution
   { contributionId :: ContributionId,
