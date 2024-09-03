@@ -75,12 +75,16 @@ packages:
   original:
     hackage: hasql-1.8
 - completed:
-    hackage: hasql-pool-1.2.0.2@sha256:621e3997d701b424a777fc6cd0218e385c89dff9417a933305d19b03820deb3f,2389
+    name: hasql-pool
     pantry-tree:
-      sha256: 8dd1ee8e3a41894266708e28076a902c8d51b275af22c3f182d6bfe219ea7fa7
-      size: 982
+      sha256: 3f2da91d2be6c2dfb082d0454ca0571dcb5e56ff76cef919f3800f62f26f0da6
+      size: 1518
+    sha256: 293b48e94da99a2fb218c136d026e84414a8994506f09b1021e503ed622a4390
+    size: 30457
+    url: https://github.com/ChrisPenner/hasql-pool/archive/3910e71505c80f944c201e2b981e9830494e1dbb.tar.gz
+    version: 1.2.0.2
   original:
-    hackage: hasql-pool-1.2.0.2
+    url: https://github.com/ChrisPenner/hasql-pool/archive/3910e71505c80f944c201e2b981e9830494e1dbb.tar.gz
 - completed:
     hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
     pantry-tree:

@@ -176,10 +176,10 @@ mkShareServer env = do
           -- Individual endpoints my specify a shorter timeout if they like, but we
           -- shouldn't compromise our global limit.
           -- Admin/local endpoints have a longer timeout to accomodate things like migrations.
-          timeoutSeconds =
+          _timeoutSeconds =
             case (Wai.pathInfo req) of
               -- Very long timeouts on local or admin routes
-              ("admin" : _) -> (24 * 60 * 60)
+              ("admin" : _) -> (24 * 60 * 60) :: Int
               ("local" : _) -> (24 * 60 * 60)
               -- Temporary timeout extension for UCM until I can get on top of some of the new
               -- perf issues.
@@ -191,11 +191,11 @@ mkShareServer env = do
               _ | reqMethod == HTTP.methodGet -> 30
               -- All other requests (POST, PUT, PATCH, etc.) have a 120 second timeout.
               _ -> 120
-       in hoistServerWithContext Web.api ctxType (addReqCtx . reportExceptions . withTimeoutSeconds (timeoutSeconds * localMultiplier)) (Web.server)
+       in hoistServerWithContext Web.api ctxType (addReqCtx . reportExceptions . withTimeoutSeconds (10)) (Web.server)
 
     -- Bigger timeouts on local
-    localMultiplier :: NominalDiffTime
-    localMultiplier = if Deployment.onLocal then 10 else 1
+    _localMultiplier :: NominalDiffTime
+    _localMultiplier = if Deployment.onLocal then 10 else 1
 
     showBool :: Bool -> Text
     showBool True = "true"

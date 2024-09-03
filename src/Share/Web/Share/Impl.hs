@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -62,6 +63,8 @@ import Unison.Server.Share.NamespaceListing qualified as NL
 import Unison.Server.Types (DefinitionDisplayResults, NamespaceDetails (..), Suffixify (..))
 import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty qualified as Pretty
+import UnliftIO.Async qualified as Async
+import UnliftIO.Concurrent qualified as UnliftIO
 
 userCodebaseServer :: ServerT Share.UserPublicCodebaseAPI WebApp
 userCodebaseServer session handle =
@@ -278,22 +281,34 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
   where
     cacheParams = [tShow path]
 
+data MyException = MyException
+  deriving (Show)
+  deriving anyclass (Exception)
+
 getUserProfileEndpoint :: UserHandle -> WebApp DescribeUserProfile
 getUserProfileEndpoint userHandle = do
-  UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <- PG.runTransactionOrRespondError do
+  -- UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <-
+  thread <- Async.async $ PG.runTransactionOrRespondError do
+    -- Delay by 60s to trigger timeout
+    PG.transactionUnsafeIO $ throwIO MyException
+    PG.transactionUnsafeIO $ UnliftIO.threadDelay 60000000
     User {user_id} <- Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
     UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-  pure $
-    DescribeUserProfile
-      { handle = userHandle,
-        name = user_name,
-        avatarUrl = avatar_url,
-        bio = bio,
-        website = website,
-        location = location,
-        twitterHandle = twitterHandle,
-        pronouns = pronouns
-      }
+    pure ()
+  -- pure $
+  --   DescribeUserProfile
+  --     { handle = userHandle,
+  --       name = user_name,
+  --       avatarUrl = avatar_url,
+  --       bio = bio,
+  --       website = website,
+  --       location = location,
+  --       twitterHandle = twitterHandle,
+  --       pronouns = pronouns
+  --     }
+  UnliftIO.threadDelay 2000000
+  Async.cancel thread
+  pure undefined
 
 updateUserEndpoint :: UserHandle -> UserId -> UpdateUserRequest -> WebApp DescribeUserProfile
 updateUserEndpoint userHandle callerUserId (UpdateUserRequest {name, avatarUrl, bio, website, location, twitterHandle, pronouns}) = do
