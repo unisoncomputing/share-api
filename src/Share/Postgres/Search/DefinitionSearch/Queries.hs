@@ -294,7 +294,9 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
         -- then matches where the query is near the end of the name,
         -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
         ORDER BY r.tag <> 'doc'::definition_tag DESC, r.tag <> 'test'::definition_tag DESC,
-                 r.name LIKE ('%' || #{query} || '%') DESC, length(r.name) - position(LOWER(#{query}) in LOWER(r.name)) ASC
+                 r.name LIKE ('%' || #{query} || '%') DESC, length(r.name) - position(LOWER(#{query}) in LOWER(r.name)) ASC,
+                 -- tie break by name, this just helps keep things deterministic for tests
+                 r.name
         LIMIT #{limit}
 
   |]
@@ -329,7 +331,9 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
                 (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ doc.search_tokens)) DESC,
                  EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
                  doc.arity ASC,
-                 length(doc.search_tokens) ASC
+                 length(doc.search_tokens) ASC,
+                 -- tie break by name, this just helps keep things deterministic for tests
+                 doc.name
             |]
           Just (name, _) ->
             -- Scoring for if there is a name search
@@ -340,7 +344,9 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
                  length(doc.name) - position(LOWER(#{name}) in LOWER(doc.name)) ASC,
                  EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
                  doc.arity ASC,
-                 length(doc.search_tokens) ASC
+                 length(doc.search_tokens) ASC,
+                 -- tie break by name, this just helps keep things deterministic for tests
+                 doc.name
             |]
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
@@ -398,7 +404,10 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
         ORDER BY EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
                  doc.name LIKE ('%' || #{query} || '%') DESC,
                  length(doc.name) - position(LOWER(#{query}) in LOWER(doc.name)) ASC,
-                 word_similarity(#{query}, doc.name) DESC
+                 word_similarity(#{query}, doc.name) DESC,
+                 -- Tiebreak by name, this just helps keep things deterministic for tests and
+                 -- such.
+                 doc.name
         LIMIT #{limit}
   |]
   rows

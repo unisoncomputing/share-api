@@ -50,7 +50,14 @@ extra-deps:
 
 # Bumping hasql up to get Pipelining mode
 - hasql-1.8
-- hasql-pool-1.2.0.2
+# Forked version of hasql-pool which doesn't return
+# connections to the pool when an exception occurs.
+# This is the `reset-connections-on-exception` branch.
+#
+# See: https://github.com/nikita-volkov/hasql-pool/issues/46
+# Previously: - hasql-pool-1.2.0.2
+- github: ChrisPenner/hasql-pool
+  commit: 3910e71505c80f944c201e2b981e9830494e1dbb
 - hasql-interpolate-1.0.1.0
 - postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
 - postgresql-libpq-0.10.1.0@sha256:6a45edff0a9e30b32cda6e443107950492322622c4fbefc8fb4dcf6452dcf0b4,3203
