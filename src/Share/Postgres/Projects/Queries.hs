@@ -33,6 +33,8 @@ listProjectMaintainers projId = do
     SELECT pm.user_id, pm.can_view, pm.can_maintain, pm.can_admin
         FROM project_maintainers pm
           WHERE pm.project_id = #{projId}
+      -- Just need some order to make tests deterministic
+      ORDER BY pm.user_id ASC
     |]
   results
     & fmap \case

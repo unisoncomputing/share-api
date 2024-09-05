@@ -4,12 +4,12 @@
       {
         "permissions": {
           "canAdmin": false,
-          "canMaintain": false,
+          "canMaintain": true,
           "canView": true
         },
         "user": {
           "avatarUrl": null,
-          "handle": "read-maintainer",
+          "handle": "maintain-maintainer",
           "name": null,
           "userId": "U-<UUID>"
         }
@@ -17,12 +17,12 @@
       {
         "permissions": {
           "canAdmin": false,
-          "canMaintain": true,
+          "canMaintain": false,
           "canView": true
         },
         "user": {
           "avatarUrl": null,
-          "handle": "maintain-maintainer",
+          "handle": "read-maintainer",
           "name": null,
           "userId": "U-<UUID>"
         }
