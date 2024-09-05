@@ -299,7 +299,7 @@ searchProjects caller userIdFilter (Query query) limit = do
           & \case
             -- Empty prefix searches are invalid, Nullify the prefix search.
             "" -> Nothing
-            txt -> Just txt
+            txt -> Just $ "'" <> txt <> "'" <> ":*"
   results <-
     PG.queryListRows
       [PG.sql|
