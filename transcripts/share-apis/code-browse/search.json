@@ -5,12 +5,6 @@
       "handle": "test",
       "name": null,
       "tag": "User"
-    },
-    {
-      "projectRef": "@test/publictestproject",
-      "summary": "test project summary",
-      "tag": "Project",
-      "visibility": "public"
     }
   ],
   "status": 200
