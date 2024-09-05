@@ -3,13 +3,13 @@
     "maintainers": [
       {
         "permissions": {
-          "canAdmin": false,
+          "canAdmin": true,
           "canMaintain": true,
           "canView": true
         },
         "user": {
           "avatarUrl": null,
-          "handle": "maintain-maintainer",
+          "handle": "admin-maintainer",
           "name": null,
           "userId": "U-<UUID>"
         }
@@ -29,13 +29,13 @@
       },
       {
         "permissions": {
-          "canAdmin": true,
+          "canAdmin": false,
           "canMaintain": true,
           "canView": true
         },
         "user": {
           "avatarUrl": null,
-          "handle": "admin-maintainer",
+          "handle": "maintain-maintainer",
           "name": null,
           "userId": "U-<UUID>"
         }
