@@ -4,19 +4,6 @@
     "maintainers": [
       {
         "permissions": {
-          "canAdmin": true,
-          "canMaintain": true,
-          "canView": true
-        },
-        "user": {
-          "avatarUrl": null,
-          "handle": "admin-maintainer",
-          "name": null,
-          "userId": "U-<UUID>"
-        }
-      },
-      {
-        "permissions": {
           "canAdmin": false,
           "canMaintain": false,
           "canView": true
@@ -37,6 +24,19 @@
         "user": {
           "avatarUrl": null,
           "handle": "maintain-maintainer",
+          "name": null,
+          "userId": "U-<UUID>"
+        }
+      },
+      {
+        "permissions": {
+          "canAdmin": true,
+          "canMaintain": true,
+          "canView": true
+        },
+        "user": {
+          "avatarUrl": null,
+          "handle": "admin-maintainer",
           "name": null,
           "userId": "U-<UUID>"
         }
