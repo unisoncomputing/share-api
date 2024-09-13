@@ -290,7 +290,7 @@ getUserProfileEndpoint userHandle = do
   -- UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <-
   thread <- Async.async $ PG.runTransactionOrRespondError do
     -- Delay by 60s to trigger timeout
-    PG.transactionUnsafeIO $ throwIO MyException
+    -- PG.transactionUnsafeIO $ throwIO MyException
     PG.transactionUnsafeIO $ UnliftIO.threadDelay 60000000
     User {user_id} <- Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
     UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
