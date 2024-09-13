@@ -68,23 +68,19 @@ packages:
   original:
     hackage: recover-rtti-0.5.0@sha256:7d598b0c89dac9e170b488a7a50b322fcae06342fbd2da18cb8a7f93a0b44e68,4913
 - completed:
-    hackage: hasql-1.8@sha256:52b61231259a79733428a4b51f5661c0eb7934001f6a3b3b637203a4a745c951,5642
+    hackage: hasql-1.8.1.1@sha256:fca990145dcb255a769248452b160edc5381b930f9739c1cb6ad9dd83a52e4cb,5674
     pantry-tree:
-      sha256: 3aea9d8e5f3eccd419ba31336d0f2d737e0cc23b82fc0306cdc8975c281a272f
+      sha256: ee285302e2c9ac4b148ec4f35b1ff01fb4604d1d02d362a54f646b5b74c491d3
       size: 3438
   original:
-    hackage: hasql-1.8
+    hackage: hasql-1.8.1.1
 - completed:
-    name: hasql-pool
+    hackage: hasql-pool-1.2.0.2@sha256:621e3997d701b424a777fc6cd0218e385c89dff9417a933305d19b03820deb3f,2389
     pantry-tree:
-      sha256: 3f2da91d2be6c2dfb082d0454ca0571dcb5e56ff76cef919f3800f62f26f0da6
-      size: 1518
-    sha256: 293b48e94da99a2fb218c136d026e84414a8994506f09b1021e503ed622a4390
-    size: 30457
-    url: https://github.com/ChrisPenner/hasql-pool/archive/3910e71505c80f944c201e2b981e9830494e1dbb.tar.gz
-    version: 1.2.0.2
+      sha256: 8dd1ee8e3a41894266708e28076a902c8d51b275af22c3f182d6bfe219ea7fa7
+      size: 982
   original:
-    url: https://github.com/ChrisPenner/hasql-pool/archive/3910e71505c80f944c201e2b981e9830494e1dbb.tar.gz
+    hackage: hasql-pool-1.2.0.2
 - completed:
     hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
     pantry-tree:
