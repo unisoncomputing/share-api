@@ -26,11 +26,13 @@ packages:
 - unison/lib/unison-util-bytes
 - unison/lib/unison-util-cache
 - unison/lib/unison-util-file-embed
+- unison/lib/unison-util-recursion
 - unison/lib/unison-util-relation
 - unison/lib/unison-util-rope
 - unison/parser-typechecker
 - unison/unison-core
 - unison/unison-hashing-v2
+- unison/unison-runtime
 - unison/unison-share-api
 - unison/unison-share-projects-api
 - unison/unison-syntax
