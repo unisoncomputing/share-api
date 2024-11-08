@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -272,12 +272,14 @@ library
     , unison-parser-typechecker
     , unison-prelude
     , unison-pretty-printer
+    , unison-runtime
     , unison-share-api
     , unison-share-projects-api
     , unison-sqlite
     , unison-syntax
     , unison-util-base32hex
     , unison-util-cache
+    , unison-util-recursion
     , unison-util-relation
     , unison-util-serialization
     , unliftio
@@ -414,12 +416,14 @@ executable share-api
     , unison-parser-typechecker
     , unison-prelude
     , unison-pretty-printer
+    , unison-runtime
     , unison-share-api
     , unison-share-projects-api
     , unison-sqlite
     , unison-syntax
     , unison-util-base32hex
     , unison-util-cache
+    , unison-util-recursion
     , unison-util-relation
     , unison-util-serialization
     , unliftio
