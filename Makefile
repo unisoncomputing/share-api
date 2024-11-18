@@ -52,8 +52,8 @@ docker_staging_push: $(docker_server_release)
 	docker push $(docker_registry)/share-staging:$(DRONE_BUILD_NUMBER)
 
 serve: $(installed_share)
-	trap 'docker-compose -f docker/docker-compose.yml down' EXIT INT TERM
-	docker-compose -f docker/docker-compose.yml up postgres redis &
+	trap 'docker compose -f docker/docker-compose.yml down' EXIT INT TERM
+	docker compose -f docker/docker-compose.yml up postgres redis &
 	while  ! (  pg_isready --host localhost -U postgres -p 5432 && redis-cli -p 6379 ping)  do \
 		echo "Waiting for postgres and redis..."; \
 	  sleep 1; \
