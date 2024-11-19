@@ -46,6 +46,7 @@ module Share.Prelude
     Exception (..),
     MaybeT (..),
     hoistMaybe,
+    traverseFirst,
   )
 where
 
@@ -209,3 +210,6 @@ partitionMap f xs =
 
 unifyEither :: Either a a -> a
 unifyEither = either id id
+
+traverseFirst :: (Bitraversable t, Applicative f) => (a -> f b) -> t a x -> f (t b x)
+traverseFirst f = bitraverse f pure

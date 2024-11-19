@@ -52,6 +52,7 @@ import Share.Web.Share.Diffs.Impl qualified as Diffs
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
 import Share.Web.Share.Types (UserDisplayInfo)
 import Unison.Name (Name)
+import Unison.Server.Types
 import Unison.Syntax.Name qualified as Name
 
 contributionsByProjectServer :: Maybe Session -> UserHandle -> ProjectSlug -> API.ContributionsByProjectRoutes (AsServerT WebApp)
@@ -275,7 +276,7 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
   let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId]
   Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
-    namespaceDiff <- Diffs.diffCausals authZReceipt oldCausalId newBranchCausalId
+    namespaceDiff <- Diffs.diffCausals authZReceipt (oldCodebase, oldCausalId) (newCodebase, newBranchCausalId)
     (newBranchCausalHash, oldCausalHash) <- PG.runTransaction $ do
       newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
       oldCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldCausalId
@@ -323,15 +324,15 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
       (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      (oldTerm, newTerm, displayObjDiff) <- Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName)
+      termDiff <- Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName)
       pure $
         ShareTermDiffResponse
           { project = projectShorthand,
             oldBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
             newBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-            oldTerm = oldTerm,
-            newTerm = newTerm,
-            diff = displayObjDiff
+            oldTerm = termDiff.left,
+            newTerm = termDiff.right,
+            diff = termDiff.diff
           }
   where
     projectShorthand :: IDs.ProjectShortHand
@@ -368,15 +369,15 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "contribution-diff-types" cacheKeys do
       (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      (oldType, newType, displayObjDiff) <- Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName)
+      typeDiff <- Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName)
       pure $
         ShareTypeDiffResponse
           { project = projectShorthand,
             oldBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
             newBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-            oldType = oldType,
-            newType = newType,
-            diff = displayObjDiff
+            oldType = typeDiff.left,
+            newType = typeDiff.right,
+            diff = typeDiff.diff
           }
   where
     projectShorthand :: IDs.ProjectShortHand

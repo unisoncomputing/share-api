@@ -29,7 +29,7 @@ import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Server.Backend.DefinitionDiff qualified as DefinitionDiff
 import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
 import Unison.Server.Share.Definitions qualified as Definitions
-import Unison.Server.Types (DisplayObjectDiff, TermDefinition (..), TermTag, TypeDefinition (..), TypeTag)
+import Unison.Server.Types (TermDefinition (..), TermDefinitionDiff (..), TermTag, TypeDefinition (..), TypeDefinitionDiff (..), TypeTag)
 import Unison.ShortHash (ShortHash)
 import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty (Width)
@@ -39,7 +39,7 @@ diffNamespaces ::
   AuthZReceipt ->
   (BranchHashId, NameLookupReceipt) ->
   (BranchHashId, NameLookupReceipt) ->
-  WebApp (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash))
+  WebApp (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) Name Name)
 diffNamespaces !_authZReceipt oldNamespacePair newNamespacePair = do
   PG.runTransactionOrRespondError $ do
     diff <- NamespaceDiffs.diffTreeNamespaces oldNamespacePair newNamespacePair `whenLeftM` throwError
@@ -61,10 +61,10 @@ diffNamespaces !_authZReceipt oldNamespacePair newNamespacePair = do
 -- | Find the common ancestor between two causals, then diff
 diffCausals ::
   AuthZReceipt ->
-  CausalId ->
-  CausalId ->
-  WebApp (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash))
-diffCausals !_authZReceipt oldCausalId newCausalId = do
+  (Codebase.CodebaseEnv, CausalId) ->
+  (Codebase.CodebaseEnv, CausalId) ->
+  WebApp (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff)
+diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) = do
   -- Ensure name lookups for each thing we're diffing.
   -- We do this in two separate transactions to ensure we can still make progress even if we need to build name lookups.
   let getOldBranch = PG.runTransaction $ do
@@ -77,7 +77,7 @@ diffCausals !_authZReceipt oldCausalId newCausalId = do
         newNLReceipt <- NLOps.ensureNameLookupForBranchId newBranchHashId
         pure (newBranchHashId, newNLReceipt)
   ((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newNLReceipt)) <- getOldBranch `UnliftIO.concurrently` getNewBranch
-  PG.runTransactionOrRespondError $ do
+  diffWithTags <- PG.runTransactionOrRespondError $ do
     diff <- NamespaceDiffs.diffTreeNamespaces (oldBranchHashId, oldBranchNLReceipt) (newBranchHashId, newNLReceipt) `whenLeftM` throwError
     withTermTags <-
       ( diff
@@ -87,44 +87,59 @@ diffCausals !_authZReceipt oldCausalId newCausalId = do
                     pure $ zip termTags (refs <&> V2Referent.toShortHash)
                 )
         )
-    diffWithTags <-
-      withTermTags
-        & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
-          %%~ ( \refs -> do
-                  typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-                  pure $ zip typeTags (refs <&> V2Reference.toShortHash)
-              )
-    pure diffWithTags
+    withTermTags
+      & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
+        %%~ ( \refs -> do
+                typeTags <- Codebase.typeTagsByReferencesOf traversed refs
+                pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+            )
+  computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
+
+computeUpdatedDefinitionDiffs ::
+  (Ord a, Ord b) =>
+  AuthZReceipt ->
+  (Codebase.CodebaseEnv, BranchHashId) ->
+  (Codebase.CodebaseEnv, BranchHashId) ->
+  (NamespaceDiffs.NamespaceTreeDiff a b Name Name) ->
+  WebApp (NamespaceDiffs.NamespaceTreeDiff a b TermDefinitionDiff TypeDefinitionDiff)
+computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff = do
+  withTermDiffs <-
+    diff
+      & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %%~ \name ->
+        diffTerms authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
+  withTermDiffs
+    & NamespaceDiffs.namespaceTreeDiffTypeDiffs_ %%~ \name ->
+      diffTypes authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
 
 diffTerms ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  WebApp (TermDefinition, TermDefinition, DisplayObjectDiff)
+  WebApp TermDefinitionDiff
 diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
   let getOldTerm = getTermDefinition old `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
   let getNewTerm = getTermDefinition new `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
   (oldTerm, newTerm) <- getOldTerm `UnliftIO.concurrently` getNewTerm
   let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
-  pure $ (oldTerm, newTerm, termDiffDisplayObject)
+  pure $ TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject}
   where
     renderWidth :: Width
     renderWidth = 80
     getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> WebApp (Maybe TermDefinition)
     getTermDefinition (codebase, bhId, name) = do
       let perspective = Path.empty
-      (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+      (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
       let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
       let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
       rt <- Codebase.codebaseRuntime codebase
-      Codebase.runCodebaseTransaction codebase do
+      Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
         Definitions.termDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
 
 diffTypes ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  WebApp (TypeDefinition, TypeDefinition, DisplayObjectDiff)
+  WebApp TypeDefinitionDiff
 diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
   let getOldType =
         getTypeDefinition old
@@ -134,16 +149,16 @@ diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
           `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
   (sourceType, newType) <- getOldType `UnliftIO.concurrently` getNewType
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition sourceType) (typeDefinition newType)
-  pure $ (sourceType, newType, typeDiffDisplayObject)
+  pure $ TypeDefinitionDiff {left = sourceType, right = newType, diff = typeDiffDisplayObject}
   where
     renderWidth :: Width
     renderWidth = 80
     getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> WebApp (Maybe TypeDefinition)
     getTypeDefinition (codebase, bhId, name) = do
       let perspective = Path.empty
-      (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+      (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
       let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
       let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
       rt <- Codebase.codebaseRuntime codebase
-      Codebase.runCodebaseTransaction codebase do
+      Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
         Definitions.typeDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName

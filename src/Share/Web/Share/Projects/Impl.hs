@@ -50,6 +50,7 @@ import Share.Web.Share.Tickets.Impl (ticketsByProjectServer)
 import Share.Web.Share.Types
 import Unison.Name (Name)
 import Unison.Server.Orphans ()
+import Unison.Server.Types
 import Unison.Syntax.Name qualified as Name
 
 data ProjectErrors
@@ -152,8 +153,8 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
   project@Project {projectId} <- PG.runTransactionOrRespondError do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
-  (_, oldCausalId, _oldBranchId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
-  (_, newCausalId, _newBranchId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
+  (oldCodebase, oldCausalId, _oldBranchId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
+  (newCodebase, newCausalId, _newBranchId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
 
   let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.causalIdCacheKey oldCausalId, Caching.causalIdCacheKey newCausalId]
   Caching.cachedResponse authZReceipt "project-diff-namespaces" cacheKeys do
@@ -161,7 +162,7 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
       ancestorCausalId <- fromMaybe oldCausalId <$> CausalQ.bestCommonAncestor oldCausalId newCausalId
       (ancestorCausalHash, newCausalHash) <- CausalQ.expectCausalHashesByIdsOf both (ancestorCausalId, newCausalId)
       pure (ancestorCausalId, ancestorCausalHash, newCausalHash)
-    namespaceDiff <- Diffs.diffCausals authZReceipt ancestorCausalId newCausalId
+    namespaceDiff <- Diffs.diffCausals authZReceipt (oldCodebase, ancestorCausalId) (newCodebase, newCausalId)
     pure $
       ShareNamespaceDiffResponse
         { project = projectShortHand,
@@ -194,15 +195,15 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "project-diff-terms" cacheKeys do
-      (oldTerm, newTerm, displayObjectDiff) <- Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName)
+      termDiff <- Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName)
       pure $
         ShareTermDiffResponse
           { project = projectShortHand,
             oldBranch = oldShortHand,
             newBranch = newShortHand,
-            oldTerm = oldTerm,
-            newTerm = newTerm,
-            diff = displayObjectDiff
+            oldTerm = termDiff.left,
+            newTerm = termDiff.right,
+            diff = termDiff.diff
           }
   where
     projectShortHand :: IDs.ProjectShortHand
@@ -228,15 +229,15 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "project-diff-types" cacheKeys do
-      (oldType, newType, typeDiffDisplayObject) <- Diffs.diffTypes authZReceipt (oldCodebase, oldBhId, oldTypeName) (newCodebase, newBhId, newTypeName)
+      typeDiff <- Diffs.diffTypes authZReceipt (oldCodebase, oldBhId, oldTypeName) (newCodebase, newBhId, newTypeName)
       pure $
         ShareTypeDiffResponse
           { project = projectShortHand,
             oldBranch = oldShortHand,
             newBranch = newShortHand,
-            oldType = oldType,
-            newType = newType,
-            diff = typeDiffDisplayObject
+            oldType = typeDiff.left,
+            newType = typeDiff.right,
+            diff = typeDiff.diff
           }
   where
     projectShortHand :: IDs.ProjectShortHand

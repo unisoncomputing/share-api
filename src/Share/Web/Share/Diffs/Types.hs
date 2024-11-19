@@ -12,10 +12,10 @@ import Share.Postgres.IDs (CausalHash)
 import Share.Prelude
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
-import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermTag, TypeDefinition, TypeTag)
+import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermDefinitionDiff (..), TermTag, TypeDefinition, TypeDefinitionDiff (..), TypeTag)
 import Unison.ShortHash (ShortHash)
 
-type ShareNamespaceDiff = NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash)
+type ShareNamespaceDiff = NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff
 
 data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
   { project :: ProjectShortHand,
@@ -42,15 +42,15 @@ instance ToJSON ShareNamespaceDiffResponse where
       hqNameJSON :: Name -> NameSegment -> ShortHash -> Value
       hqNameJSON fqn name sh = object ["hash" .= sh, "shortName" .= name, "fullName" .= fqn]
       -- The preferred frontend format is a bit clunky to calculate here:
-      diffDataJSON :: (ToJSON tag) => NameSegment -> DefinitionDiff (tag, ShortHash) -> (tag, Value)
+      diffDataJSON :: (ToJSON tag) => NameSegment -> DefinitionDiff (tag, ShortHash) Value -> (tag, Value)
       diffDataJSON shortName (DefinitionDiff {fqn, kind}) = case kind of
         Added (defnTag, r) -> (defnTag, object ["tag" .= text "Added", "contents" .= hqNameJSON fqn shortName r])
         NewAlias (defnTag, r) existingNames ->
           let contents = object ["hash" .= r, "aliasShortName" .= shortName, "aliasFullName" .= fqn, "otherNames" .= toList existingNames]
            in (defnTag, object ["tag" .= text "Aliased", "contents" .= contents])
         Removed (defnTag, r) -> (defnTag, object ["tag" .= text "Removed", "contents" .= hqNameJSON fqn shortName r])
-        Updated (oldTag, oldRef) (newTag, newRef) ->
-          let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag]
+        Updated (oldTag, oldRef) (newTag, newRef) diffVal ->
+          let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
            in (newTag, object ["tag" .= text "Updated", "contents" .= contents])
         RenamedTo (defnTag, r) newNames ->
           let contents = object ["oldShortName" .= shortName, "oldFullName" .= fqn, "newNames" .= newNames, "hash" .= r]
@@ -59,7 +59,19 @@ instance ToJSON ShareNamespaceDiffResponse where
           let contents = object ["oldNames" .= oldNames, "newShortName" .= shortName, "newFullName" .= fqn, "hash" .= r]
            in (defnTag, object ["tag" .= text "RenamedFrom", "contents" .= contents])
 
-      namespaceTreeDiffJSON :: NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) -> Value
+      displayObjectDiffToJSON :: DisplayObjectDiff -> Value
+      displayObjectDiffToJSON = \case
+        DisplayObjectDiff dispDiff ->
+          object ["diff" .= dispDiff, "diffKind" .= ("diff" :: Text)]
+        MismatchedDisplayObjects {} ->
+          object ["diffKind" .= ("mismatched" :: Text)]
+
+      termDefinitionDiffToJSON :: TermDefinitionDiff -> Value
+      termDefinitionDiffToJSON (TermDefinitionDiff {left, right, diff}) = object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
+
+      typeDefinitionDiffToJSON :: TypeDefinitionDiff -> Value
+      typeDefinitionDiffToJSON (TypeDefinitionDiff {left, right, diff}) = object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
+      namespaceTreeDiffJSON :: NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff -> Value
       namespaceTreeDiffJSON (diffs Cofree.:< children) =
         let changesJSON =
               diffs
@@ -67,10 +79,12 @@ instance ToJSON ShareNamespaceDiffResponse where
                 & foldMap
                   ( \(name, DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) ->
                       ( Foldable.toList termDiffsAtPath
+                          <&> fmap termDefinitionDiffToJSON
                           & fmap (diffDataJSON name)
                           & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
                       )
                         <> ( Foldable.toList typeDiffsAtPath
+                               <&> fmap typeDefinitionDiffToJSON
                                & fmap (diffDataJSON name)
                                & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
                            )
