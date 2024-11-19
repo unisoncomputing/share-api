@@ -12,6 +12,7 @@ import Share.Codebase qualified as Codebase
 import Share.NamespaceDiffs qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
@@ -77,23 +78,27 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
         newNLReceipt <- NLOps.ensureNameLookupForBranchId newBranchHashId
         pure (newBranchHashId, newNLReceipt)
   ((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newNLReceipt)) <- getOldBranch `UnliftIO.concurrently` getNewBranch
-  diffWithTags <- PG.runTransactionOrRespondError $ do
-    diff <- NamespaceDiffs.diffTreeNamespaces (oldBranchHashId, oldBranchNLReceipt) (newBranchHashId, newNLReceipt) `whenLeftM` throwError
-    withTermTags <-
-      ( diff
-          & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferents_
-            %%~ ( \refs -> do
-                    termTags <- Codebase.termTagsByReferentsOf traversed refs
-                    pure $ zip termTags (refs <&> V2Referent.toShortHash)
-                )
-        )
-    withTermTags
-      & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
-        %%~ ( \refs -> do
-                typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-                pure $ zip typeTags (refs <&> V2Reference.toShortHash)
-            )
-  computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
+  (PG.runTransaction $ ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId))
+    >>= \case
+      Just diff -> pure (Cached diff)
+      Nothing -> do
+        diffWithTags <- PG.runTransactionOrRespondError $ do
+          diff <- NamespaceDiffs.diffTreeNamespaces (oldBranchHashId, oldBranchNLReceipt) (newBranchHashId, newNLReceipt) `whenLeftM` throwError
+          withTermTags <-
+            ( diff
+                & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferents_
+                  %%~ ( \refs -> do
+                          termTags <- Codebase.termTagsByReferentsOf traversed refs
+                          pure $ zip termTags (refs <&> V2Referent.toShortHash)
+                      )
+              )
+          withTermTags
+            & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
+              %%~ ( \refs -> do
+                      typeTags <- Codebase.typeTagsByReferencesOf traversed refs
+                      pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+                  )
+        computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
 
 computeUpdatedDefinitionDiffs ::
   (Ord a, Ord b) =>

@@ -12,6 +12,10 @@ module Share.Utils.Caching
   )
 where
 
+import Data.Aeson (FromJSON, ToJSON (..))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Encoding qualified as Aeson
+import Data.Binary.Builder qualified as Builder
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Text.Encoding qualified as Text
@@ -30,6 +34,11 @@ data Cached ct a
 instance MimeRender JSON (Cached JSON a) where
   mimeRender _proxy = \case
     Cached bs -> BL.fromStrict bs
+
+instance (FromJSON a, ToJSON a) => ToJSON (Cached JSON a) where
+  toJSON (Cached bs) = toJSON $ Aeson.decode @a $ BL.fromStrict bs
+
+  toEncoding (Cached bs) = Aeson.unsafeToEncoding $ Builder.fromLazyByteString $ BL.fromStrict bs
 
 -- | Wrap a response in caching.
 -- This combinator knows whether a given access is privileged or not and will _not_ cache

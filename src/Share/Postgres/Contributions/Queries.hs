@@ -17,6 +17,7 @@ module Share.Postgres.Contributions.Queries
     performMergesAndBCAUpdatesFromBranchPush,
     rebaseContributionsFromMergedBranches,
     contributionStateTokenById,
+    getPrecomputedNamespaceDiff,
   )
 where
 
@@ -26,6 +27,7 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Time (UTCTime)
 import Safe (lastMay)
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -508,3 +510,20 @@ contributionStateTokenById contributionId = do
           JOIN causals target_causal ON target_causal.id = target_branch.causal_id
         WHERE contribution.id = #{contributionId}
       |]
+
+getPrecomputedNamespaceDiff ::
+  (CodebaseEnv, BranchHashId) ->
+  (CodebaseEnv, BranchHashId) ->
+  PG.Transaction e (Maybe Text)
+getPrecomputedNamespaceDiff
+  (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftBHId)
+  (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightBHId) = do
+    PG.query1Col @Text
+      [PG.sql|
+          SELECT (diff :: text)
+          FROM namespace_diffs nd
+          WHERE nd.left_namespace_id = #{leftBHId}
+            AND nd.right_namespace_id = #{rightBHId}
+            AND nd.left_codebase_owner_user_id = #{leftCodebaseUser}
+            AND nd.right_codebase_owner_user_id = #{rightCodebaseUser}
+        |]
