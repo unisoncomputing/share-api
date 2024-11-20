@@ -5,8 +5,8 @@ CREATE TABLE namespace_diffs (
     right_namespace_id INTEGER NOT NULL REFERENCES branch_hashes(id) ON DELETE CASCADE,
 
     -- Since different codebases can have different variable names and such we also need to sandbox diffs by codebase owner
-    left_codebase_owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    right_codebase_owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+    left_codebase_owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    right_codebase_owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
     diff JSONB NOT NULL,
 
