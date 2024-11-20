@@ -13,7 +13,7 @@ module Share.Web.Share.Contributions.Impl
   )
 where
 
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Servant
 import Servant.Server.Generic (AsServerT)
 import Share.Branch (Branch (..))

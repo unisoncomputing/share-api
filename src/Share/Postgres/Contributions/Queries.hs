@@ -18,6 +18,7 @@ module Share.Postgres.Contributions.Queries
     rebaseContributionsFromMergedBranches,
     contributionStateTokenById,
     getPrecomputedNamespaceDiff,
+    savePrecomputedNamespaceDiff,
   )
 where
 
@@ -527,3 +528,16 @@ getPrecomputedNamespaceDiff
             AND nd.left_codebase_owner_user_id = #{leftCodebaseUser}
             AND nd.right_codebase_owner_user_id = #{rightCodebaseUser}
         |]
+
+savePrecomputedNamespaceDiff ::
+  (CodebaseEnv, BranchHashId) ->
+  (CodebaseEnv, BranchHashId) ->
+  Text ->
+  PG.Transaction e ()
+savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftBHId) (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightBHId) diff = do
+  PG.execute_
+    [PG.sql|
+        INSERT INTO namespace_diffs (left_namespace_id, right_namespace_id, left_codebase_owner_user_id, right_codebase_owner_user_id, diff)
+        VALUES (#{leftBHId}, #{rightBHId}, #{leftCodebaseUser}, #{rightCodebaseUser}, #{diff}::jsonb)
+        ON CONFLICT DO NOTHING
+      |]
