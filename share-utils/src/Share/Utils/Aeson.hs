@@ -13,7 +13,7 @@ import GHC.Stack (HasCallStack)
 data MaybeEncoded a
   = IsEncoded TL.Text
   | NotEncoded a
-  deriving stock (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 instance (ToJSON a) => ToJSON (MaybeEncoded a) where
   toJSON :: (HasCallStack) => MaybeEncoded a -> Aeson.Value

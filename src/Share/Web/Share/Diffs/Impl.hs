@@ -8,6 +8,7 @@ where
 
 import Control.Lens
 import Control.Monad.Except
+import Data.Text.Lazy qualified as TL
 import Share.Codebase qualified as Codebase
 import Share.NamespaceDiffs qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
@@ -18,6 +19,7 @@ import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Prelude
+import Share.Utils.Aeson (MaybeEncoded (..))
 import Share.Web.App
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors (EntityMissing (..), ErrorID (..), respondError)
@@ -64,7 +66,7 @@ diffCausals ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, CausalId) ->
   (Codebase.CodebaseEnv, CausalId) ->
-  WebApp (Either Text (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff))
+  WebApp (MaybeEncoded (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff))
 diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) = do
   -- Ensure name lookups for each thing we're diffing.
   -- We do this in two separate transactions to ensure we can still make progress even if we need to build name lookups.
@@ -80,7 +82,7 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
   ((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newNLReceipt)) <- getOldBranch `UnliftIO.concurrently` getNewBranch
   (PG.runTransaction $ ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId))
     >>= \case
-      Just diff -> pure $ Left diff
+      Just diff -> pure $ IsEncoded $ TL.fromStrict diff
       Nothing -> do
         diffWithTags <- PG.runTransactionOrRespondError $ do
           diff <- NamespaceDiffs.diffTreeNamespaces (oldBranchHashId, oldBranchNLReceipt) (newBranchHashId, newNLReceipt) `whenLeftM` throwError
@@ -98,7 +100,7 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
                       typeTags <- Codebase.typeTagsByReferencesOf traversed refs
                       pure $ zip typeTags (refs <&> V2Reference.toShortHash)
                   )
-        Right <$> computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
+        NotEncoded <$> computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
 
 computeUpdatedDefinitionDiffs ::
   (Ord a, Ord b) =>

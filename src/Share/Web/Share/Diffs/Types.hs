@@ -10,6 +10,7 @@ import Share.IDs
 import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceTreeDiff)
 import Share.Postgres.IDs (CausalHash)
 import Share.Prelude
+import Share.Utils.Aeson (MaybeEncoded)
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermDefinitionDiff (..), TermTag, TypeDefinition, TypeDefinitionDiff (..), TypeTag)
@@ -23,13 +24,13 @@ data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
     oldRefHash :: Maybe (PrefixedHash "#" CausalHash),
     newRef :: BranchOrReleaseShortHand,
     newRefHash :: Maybe (PrefixedHash "#" CausalHash),
-    diff :: ShareNamespaceDiff
+    diff :: MaybeEncoded ShareNamespaceDiff
   }
 
 instance ToJSON ShareNamespaceDiffResponse where
   toJSON (ShareNamespaceDiffResponse {diff, project, oldRef, newRef, oldRefHash, newRefHash}) =
     object
-      [ "diff" .= namespaceTreeDiffJSON diff,
+      [ "diff" .= (namespaceTreeDiffJSON <$> diff),
         "project" .= project,
         "oldRef" .= oldRef,
         "oldRefHash" .= oldRefHash,

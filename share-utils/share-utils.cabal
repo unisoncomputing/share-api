@@ -51,6 +51,7 @@ library
       FlexibleContexts
       FlexibleInstances
       GeneralizedNewtypeDeriving
+      InstanceSigs
       LambdaCase
       MultiParamTypeClasses
       NamedFieldPuns
