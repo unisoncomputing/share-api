@@ -12,3 +12,14 @@ CREATE TABLE namespace_diffs (
 
     PRIMARY KEY (left_namespace_id, right_namespace_id, left_codebase_owner_user_id, right_codebase_owner_user_id)
 );
+
+
+-- New table for coordinating background job for pre-computing diffs
+
+-- Table of all contributions which have been updated and may need their diffs re-computed
+CREATE TABLE contribution_diff_queue (
+  contribution_id UUID PRIMARY KEY REFERENCES contributions(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  PRIMARY KEY (contribution_id)
+);

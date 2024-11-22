@@ -10,6 +10,7 @@ module Share.Metrics
     tickUserSignup,
     recordBackgroundImportDuration,
     recordDefinitionSearchIndexDuration,
+    recordContributionDiffDuration,
   )
 where
 
@@ -398,6 +399,18 @@ definitionSearchIndexDurationSeconds =
         "definition_search_indexing_duration_seconds"
         "The time it took to index a release for definition search"
 
+{-# NOINLINE contributionDiffDurationSeconds #-}
+contributionDiffDurationSeconds :: Prom.Vector Prom.Label2 Prom.Histogram
+contributionDiffDurationSeconds =
+  Prom.unsafeRegister $
+    Prom.vector ("deployment", "service") $
+      Prom.histogram info Prom.defaultBuckets
+  where
+    info =
+      Prom.Info
+        "contribution_diff_duration_seconds"
+        "The time it took to compute a contribution diff"
+
 timeActionIntoHistogram :: (Prom.Label l, MonadUnliftIO m) => (Prom.Vector l Prom.Histogram) -> l -> m c -> m c
 timeActionIntoHistogram histogram l m = do
   UnliftIO.bracket start end \_ -> m
@@ -416,3 +429,6 @@ recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDuratio
 -- | Record the duration of a background import.
 recordDefinitionSearchIndexDuration :: (MonadUnliftIO m) => m r -> m r
 recordDefinitionSearchIndexDuration = timeActionIntoHistogram definitionSearchIndexDurationSeconds (deployment, service)
+
+recordContributionDiffDuration :: (MonadUnliftIO m) => m r -> m r
+recordContributionDiffDuration = timeActionIntoHistogram contributionDiffDurationSeconds (deployment, service)

@@ -8,3 +8,4 @@ import Share.BackgroundJobs.Search.DefinitionSync qualified as DefnSearch
 startWorkers :: Ki.Scope -> Background ()
 startWorkers scope = do
   DefnSearch.worker scope
+  ContributionDiffs.worker scope

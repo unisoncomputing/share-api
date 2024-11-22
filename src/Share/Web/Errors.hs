@@ -68,7 +68,7 @@ import Unison.Sync.Types qualified as Sync
 import UnliftIO qualified
 
 newtype ErrorID = ErrorID Text
-  deriving stock (Show)
+  deriving stock (Show, Eq, Ord)
   deriving (IsString) via Text
 
 class ToServerError e where
@@ -208,7 +208,7 @@ instance ToServerError (InternalServerError a) where
   toServerError InternalServerError {errorId} = (ErrorID errorId, internalServerError)
 
 data EntityMissing = EntityMissing {entityMissingErrorID :: ErrorID, errorMsg :: Text}
-  deriving stock (Show)
+  deriving stock (Show, Eq, Ord)
 
 instance Loggable EntityMissing where
   toLog EntityMissing {errorMsg} = withSeverity UserFault $ textLog errorMsg

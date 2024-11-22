@@ -16,8 +16,9 @@ import Data.Foldable qualified as Foldable
 import Data.Map qualified as Map
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
+import Share.App (AppM)
 import Share.Codebase qualified as Codebase
-import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceTreeDiff)
+import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceDiffError, NamespaceTreeDiff)
 import Share.NamespaceDiffs qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
@@ -28,7 +29,6 @@ import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Prelude
 import Share.Utils.Aeson (PreEncoded (PreEncoded))
-import Share.Web.App
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
@@ -51,9 +51,9 @@ diffNamespaces ::
   AuthZReceipt ->
   (BranchHashId, NameLookupReceipt) ->
   (BranchHashId, NameLookupReceipt) ->
-  WebApp (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) Name Name)
+  AppM r (Either NamespaceDiffs.NamespaceDiffError (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) Name Name))
 diffNamespaces !_authZReceipt oldNamespacePair newNamespacePair = do
-  PG.runTransactionOrRespondError $ do
+  PG.tryRunTransaction $ do
     diff <- NamespaceDiffs.diffTreeNamespaces oldNamespacePair newNamespacePair `whenLeftM` throwError
     withTermTags <-
       ( diff
@@ -75,8 +75,8 @@ diffCausals ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, CausalId) ->
   (Codebase.CodebaseEnv, CausalId) ->
-  WebApp (PreEncoded (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff))
-diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) = do
+  AppM r (Either NamespaceDiffs.NamespaceDiffError (PreEncoded (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff)))
+diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) = runExceptT $ do
   -- Ensure name lookups for each thing we're diffing.
   -- We do this in two separate transactions to ensure we can still make progress even if we need to build name lookups.
   let getOldBranch = PG.runTransaction $ do
@@ -93,7 +93,7 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
     >>= \case
       Just diff -> pure $ PreEncoded $ TL.encodeUtf8 $ TL.fromStrict diff
       Nothing -> do
-        diffWithTags <- PG.runTransactionOrRespondError $ do
+        diffWithTags <- ExceptT $ PG.tryRunTransaction $ do
           diff <- NamespaceDiffs.diffTreeNamespaces (oldBranchHashId, oldBranchNLReceipt) (newBranchHashId, newNLReceipt) `whenLeftM` throwError
           withTermTags <-
             ( diff
@@ -109,7 +109,7 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
                       typeTags <- Codebase.typeTagsByReferencesOf traversed refs
                       pure $ zip typeTags (refs <&> V2Reference.toShortHash)
                   )
-        diff <- computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
+        diff <- lift $ computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
         let encoded = Aeson.encode . RenderedNamespaceDiff $ diff
         PG.runTransaction $ ContributionQ.savePrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) (TL.toStrict $ TL.decodeUtf8 encoded)
         pure $ PreEncoded encoded
@@ -120,7 +120,7 @@ computeUpdatedDefinitionDiffs ::
   (Codebase.CodebaseEnv, BranchHashId) ->
   (Codebase.CodebaseEnv, BranchHashId) ->
   (NamespaceDiffs.NamespaceTreeDiff a b Name Name) ->
-  WebApp (NamespaceDiffs.NamespaceTreeDiff a b TermDefinitionDiff TypeDefinitionDiff)
+  AppM r (NamespaceDiffs.NamespaceTreeDiff a b TermDefinitionDiff TypeDefinitionDiff)
 computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff = do
   withTermDiffs <-
     diff
@@ -134,17 +134,17 @@ diffTerms ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  WebApp TermDefinitionDiff
+  ExceptT NamespaceDiffError (AppM r) TermDefinitionDiff
 diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
-  let getOldTerm = getTermDefinition old `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
-  let getNewTerm = getTermDefinition new `whenNothingM` respondError (EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
+  let getOldTerm = getTermDefinition old `whenNothingM` throwError (EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
+  let getNewTerm = getTermDefinition new `whenNothingM` throwError (EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
   (oldTerm, newTerm) <- getOldTerm `UnliftIO.concurrently` getNewTerm
   let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
   pure $ TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject}
   where
     renderWidth :: Width
     renderWidth = 80
-    getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> WebApp (Maybe TermDefinition)
+    getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TermDefinition)
     getTermDefinition (codebase, bhId, name) = do
       let perspective = Path.empty
       (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
@@ -158,21 +158,21 @@ diffTypes ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  WebApp TypeDefinitionDiff
+  AppM r TypeDefinitionDiff
 diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
   let getOldType =
         getTypeDefinition old
-          `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
+          `whenNothingM` throwError (EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
   let getNewType =
         getTypeDefinition new
-          `whenNothingM` respondError (EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
+          `whenNothingM` throwError (EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
   (sourceType, newType) <- getOldType `UnliftIO.concurrently` getNewType
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition sourceType) (typeDefinition newType)
   pure $ TypeDefinitionDiff {left = sourceType, right = newType, diff = typeDiffDisplayObject}
   where
     renderWidth :: Width
     renderWidth = 80
-    getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> WebApp (Maybe TypeDefinition)
+    getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TypeDefinition)
     getTypeDefinition (codebase, bhId, name) = do
       let perspective = Path.empty
       (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId

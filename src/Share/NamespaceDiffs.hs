@@ -215,7 +215,9 @@ namespaceTreeDiffTermDiffs_ = traversed . traversed . diffAtPathTermDiffs_
 namespaceTreeDiffTypeDiffs_ :: (Ord typeDiff', Ord reference) => Traversal (NamespaceTreeDiff referent reference termDiff typeDiff) (NamespaceTreeDiff referent reference termDiff typeDiff') typeDiff typeDiff'
 namespaceTreeDiffTypeDiffs_ = traversed . traversed . diffAtPathTypeDiffs_
 
-data NamespaceDiffError = ImpossibleError Text
+data NamespaceDiffError
+  = ImpossibleError Text
+  | MissingEntityError EntityMissing
   deriving stock (Eq, Show)
 
 instance ToServerError NamespaceDiffError where
