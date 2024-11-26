@@ -93,16 +93,14 @@
           ]
         },
         {
-          "annotation": {
-            "tag": "DelimiterChar"
-          },
-          "diffTag": "segmentChange",
-          "fromSegment": " }",
-          "toSegment": ","
-        },
-        {
           "diffTag": "new",
           "elements": [
+            {
+              "annotation": {
+                "tag": "DelimiterChar"
+              },
+              "segment": ","
+            },
             {
               "annotation": null,
               "segment": " "
@@ -130,7 +128,12 @@
                 "tag": "TypeReference"
               },
               "segment": "Text"
-            },
+            }
+          ]
+        },
+        {
+          "diffTag": "both",
+          "elements": [
             {
               "annotation": {
                 "tag": "DelimiterChar"

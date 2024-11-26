@@ -53,12 +53,26 @@
           ]
         },
         {
-          "annotation": {
-            "tag": "TextLiteral"
-          },
-          "diffTag": "segmentChange",
-          "fromSegment": "\"original\"",
-          "toSegment": "\"updated\""
+          "diffTag": "old",
+          "elements": [
+            {
+              "annotation": {
+                "tag": "TextLiteral"
+              },
+              "segment": "\"original\""
+            }
+          ]
+        },
+        {
+          "diffTag": "new",
+          "elements": [
+            {
+              "annotation": {
+                "tag": "TextLiteral"
+              },
+              "segment": "\"updated\""
+            }
+          ]
         }
       ],
       "tag": "UserObject"
