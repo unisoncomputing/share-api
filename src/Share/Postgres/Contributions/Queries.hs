@@ -19,6 +19,7 @@ module Share.Postgres.Contributions.Queries
     contributionStateTokenById,
     getPrecomputedNamespaceDiff,
     savePrecomputedNamespaceDiff,
+    contributionsRelatedToBranches,
   )
 where
 
@@ -540,4 +541,19 @@ savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, le
         INSERT INTO namespace_diffs (left_namespace_id, right_namespace_id, left_codebase_owner_user_id, right_codebase_owner_user_id, diff)
         VALUES (#{leftBHId}, #{rightBHId}, #{leftCodebaseUser}, #{rightCodebaseUser}, #{diff}::jsonb)
         ON CONFLICT DO NOTHING
+      |]
+
+-- | Get all contribution IDs for contributions which have a source or target branch in the
+-- provided set.
+contributionsRelatedToBranches :: Set BranchId -> PG.Transaction e [ContributionId]
+contributionsRelatedToBranches branchIds = do
+  PG.queryListCol @ContributionId
+    [PG.sql|
+      WITH related_branches(branch_id) AS (
+        SELECT * FROM ^{PG.singleColumnTable $ Set.toList branchIds}
+      )
+        SELECT contr.id FROM contributions contr
+          WHERE
+            contr.source_branch IN (SELECT branch_id FROM related_branches)
+            OR contr.target_branch IN (SELECT branch_id FROM related_branches)
       |]

@@ -21,6 +21,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..), ErrorID (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
+import Unison.Debug qualified as Debug
 import UnliftIO.Concurrent qualified as UnliftIO
 
 pollingIntervalSeconds :: Int
@@ -37,8 +38,10 @@ worker scope = do
 
 processDiffs :: AuthZ.AuthZReceipt -> Background (Either NamespaceDiffError ())
 processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT $ do
+  Debug.debugLogM Debug.Temp "Background: Getting contributions to be diffed"
   mayContributionId <- PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
     DQ.claimContributionToDiff
+  Debug.debugM Debug.Temp "Background: contribution to be diffed: " mayContributionId
   for_ mayContributionId (diffContribution authZReceipt)
   case mayContributionId of
     Just contributionId -> do
