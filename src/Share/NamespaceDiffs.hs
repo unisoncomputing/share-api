@@ -13,6 +13,12 @@ module Share.NamespaceDiffs
     namespaceTreeDiffReferents_,
     namespaceTreeDiffTermDiffs_,
     namespaceTreeDiffTypeDiffs_,
+    definitionDiffRendered_,
+    definitionDiffRefs_,
+    definitionDiffDiffs_,
+    definitionDiffKindRefs_,
+    definitionDiffKindDiffs_,
+    definitionDiffKindRendered_,
   )
 where
 
@@ -20,7 +26,6 @@ import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens hiding ((:<))
 import Data.Align (Semialign (..))
-import Data.Bifoldable (Bifoldable (..))
 import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
 import Data.List.NonEmpty qualified as NEList
@@ -69,59 +74,60 @@ data DefinitionDiffs name r = DefinitionDiffs
   }
   deriving stock (Eq, Show)
 
-data DefinitionDiff r diff = DefinitionDiff
-  { kind :: DefinitionDiffKind r diff,
+data DefinitionDiff r rendered diff = DefinitionDiff
+  { kind :: DefinitionDiffKind r rendered diff,
     -- The fully qualified name of the definition we're concerned with.
     fqn :: Name
   }
-  deriving stock (Eq, Show, Ord, Functor, Foldable, Traversable)
+  deriving stock (Eq, Show, Ord)
 
-instance Bifunctor DefinitionDiff where
-  bimap f g (DefinitionDiff k n) = DefinitionDiff (bimap f g k) n
+definitionDiffRefs_ :: Traversal (DefinitionDiff r rendered diff) (DefinitionDiff r' rendered diff) r r'
+definitionDiffRefs_ f (DefinitionDiff k n) = DefinitionDiff <$> definitionDiffKindRefs_ f k <*> pure n
 
-instance Bifoldable DefinitionDiff where
-  bifoldMap f g (DefinitionDiff k _n) = bifoldMap f g k
+definitionDiffDiffs_ :: Traversal (DefinitionDiff r rendered diff) (DefinitionDiff r rendered diff') diff diff'
+definitionDiffDiffs_ f (DefinitionDiff k n) = DefinitionDiff <$> definitionDiffKindDiffs_ f k <*> pure n
 
-instance Bitraversable DefinitionDiff where
-  bitraverse f g (DefinitionDiff k n) = DefinitionDiff <$> bitraverse f g k <*> pure n
+definitionDiffRendered_ :: Traversal (DefinitionDiff r rendered diff) (DefinitionDiff r rendered' diff) rendered rendered'
+definitionDiffRendered_ f (DefinitionDiff k n) = DefinitionDiff <$> definitionDiffKindRendered_ f k <*> pure n
 
 -- | Information about a single definition which is different.
-data DefinitionDiffKind r diff
-  = Added r
-  | NewAlias r (NESet Name {- existing names -})
-  | Removed r
+data DefinitionDiffKind r rendered diff
+  = Added r rendered
+  | NewAlias r (NESet Name {- existing names -}) rendered
+  | Removed r rendered
   | Updated r {- old -} r {- new -} diff
   | -- This definition was removed away from this location and added at the provided names.
-    RenamedTo r (NESet Name)
+    RenamedTo r (NESet Name) rendered
   | -- This definition was added at this location and removed from the provided names.
-    RenamedFrom r (NESet Name)
-  deriving stock (Eq, Show, Ord, Functor, Foldable, Traversable)
+    RenamedFrom r (NESet Name) rendered
+  deriving stock (Eq, Show, Ord)
 
-definitionDiffKindRefs_ :: Traversal (DefinitionDiffKind r diff) (DefinitionDiffKind r' diff) r r'
-definitionDiffKindRefs_ f = traverseOf (\f -> bitraverse f pure) f
+definitionDiffKindRefs_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r' rendered diff) r r'
+definitionDiffKindRefs_ f = \case
+  Added r rendered -> Added <$> f r <*> pure rendered
+  NewAlias r ns rendered -> NewAlias <$> f r <*> pure ns <*> pure rendered
+  Removed r rendered -> Removed <$> f r <*> pure rendered
+  Updated old new diff -> Updated <$> f old <*> f new <*> pure diff
+  RenamedTo r old rendered -> RenamedTo <$> f r <*> pure old <*> pure rendered
+  RenamedFrom r old rendered -> RenamedFrom <$> f r <*> pure old <*> pure rendered
 
-definitionDiffKindDiffs_ :: Traversal (DefinitionDiffKind r diff) (DefinitionDiffKind r diff') diff diff'
-definitionDiffKindDiffs_ = traverse
+definitionDiffKindDiffs_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r rendered diff') diff diff'
+definitionDiffKindDiffs_ f = \case
+  Added r rendered -> Added r <$> pure rendered
+  NewAlias r ns rendered -> NewAlias r ns <$> pure rendered
+  Removed r rendered -> Removed r <$> pure rendered
+  Updated old new diff -> Updated old new <$> f diff
+  RenamedTo r old rendered -> RenamedTo r old <$> pure rendered
+  RenamedFrom r old rendered -> RenamedFrom r old <$> pure rendered
 
-instance Bifunctor DefinitionDiffKind where
-  bimap f g v =
-    v
-      & definitionDiffKindRefs_ %~ f
-      & definitionDiffKindDiffs_ %~ g
-
-instance Bifoldable DefinitionDiffKind where
-  bifoldMap f g v =
-    foldMapOf definitionDiffKindRefs_ f v
-      <> foldMapOf definitionDiffKindDiffs_ g v
-
-instance Bitraversable DefinitionDiffKind where
-  bitraverse f g = \case
-    Added r -> Added <$> f r
-    NewAlias r ns -> NewAlias <$> f r <*> pure ns
-    Removed r -> Removed <$> f r
-    Updated r1 r2 d -> Updated <$> f r1 <*> f r2 <*> g d
-    RenamedTo r ns -> RenamedTo <$> f r <*> pure ns
-    RenamedFrom r ns -> RenamedFrom <$> f r <*> pure ns
+definitionDiffKindRendered_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r rendered' diff) rendered rendered'
+definitionDiffKindRendered_ f = \case
+  Added r rendered -> Added r <$> f rendered
+  NewAlias r ns rendered -> NewAlias r ns <$> f rendered
+  Removed r rendered -> Removed r <$> f rendered
+  Updated old new diff -> Updated old new <$> pure diff
+  RenamedTo r old rendered -> RenamedTo r old <$> f rendered
+  RenamedFrom r old rendered -> RenamedFrom r old <$> f rendered
 
 instance (Ord r) => Semigroup (DefinitionDiffs Name r) where
   d1 <> d2 =
@@ -164,56 +170,56 @@ instance (Ord r) => Monoid (DefinitionDiffs Name r) where
 --    ├── c = DiffAtPath
 --    └── x = DiffAtPath
 -- @@
-type NamespaceTreeDiff referent reference termDiff typeDiff = Cofree (Map Path) (Map NameSegment (DiffAtPath referent reference termDiff typeDiff))
+type NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff = Cofree (Map Path) (Map NameSegment (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff))
 
 -- | The differences at a specific path in the namespace tree.
-data DiffAtPath referent reference termDiff typeDiff = DiffAtPath
-  { termDiffsAtPath :: Set (DefinitionDiff referent termDiff),
-    typeDiffsAtPath :: Set (DefinitionDiff reference typeDiff)
+data DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff = DiffAtPath
+  { termDiffsAtPath :: Set (DefinitionDiff referent renderedTerm termDiff),
+    typeDiffsAtPath :: Set (DefinitionDiff reference renderedType typeDiff)
   }
   deriving stock (Eq, Show)
 
 -- | A traversal over all the referents in a `DiffAtPath`.
-diffAtPathReferents_ :: (Ord referent', Ord termDiff) => Traversal (DiffAtPath referent reference termDiff typeDiff) (DiffAtPath referent' reference termDiff typeDiff) referent referent'
+diffAtPathReferents_ :: (Ord referent', Ord termDiff, Ord renderedTerm) => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent' reference renderedTerm renderedType termDiff typeDiff) referent referent'
 diffAtPathReferents_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
   termDiffsAtPath
-    & (Set.traverse . traverseFirst) %%~ f
+    & (Set.traverse . definitionDiffRefs_) %%~ f
     & fmap \termDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 -- | A traversal over all the references in a `DiffAtPath`.
-diffAtPathReferences_ :: (Ord reference', Ord typeDiff) => Traversal (DiffAtPath referent reference termDiff typeDiff) (DiffAtPath referent reference' termDiff typeDiff) reference reference'
+diffAtPathReferences_ :: (Ord reference', Ord typeDiff, Ord renderedType) => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference' renderedTerm renderedType termDiff typeDiff) reference reference'
 diffAtPathReferences_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
   typeDiffsAtPath
-    & (Set.traverse . traverseFirst) %%~ f
+    & (Set.traverse . definitionDiffRefs_) %%~ f
     & fmap \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 -- | A traversal over all the term diffs in a `DiffAtPath`.
-diffAtPathTermDiffs_ :: (Ord termDiff', Ord referent) => Traversal (DiffAtPath referent reference termDiff typeDiff) (DiffAtPath referent reference termDiff' typeDiff) termDiff termDiff'
+diffAtPathTermDiffs_ :: (Ord termDiff', Ord referent, Ord renderedTerm) => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference renderedTerm renderedType termDiff' typeDiff) termDiff termDiff'
 diffAtPathTermDiffs_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
   termDiffsAtPath
-    & (Set.traverse . traverse) %%~ f
+    & (Set.traverse . definitionDiffDiffs_) %%~ f
     <&> \termDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 -- | A traversal over all the type diffs in a `DiffAtPath`.
-diffAtPathTypeDiffs_ :: (Ord typeDiff', Ord reference) => Traversal (DiffAtPath referent reference termDiff typeDiff) (DiffAtPath referent reference termDiff typeDiff') typeDiff typeDiff'
+diffAtPathTypeDiffs_ :: (Ord typeDiff', Ord reference, Ord renderedType) => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff') typeDiff typeDiff'
 diffAtPathTypeDiffs_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
   typeDiffsAtPath
-    & (Set.traverse . traverse) %%~ f
+    & (Set.traverse . definitionDiffDiffs_) %%~ f
     <&> \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 -- | Traversal over all the referents in a `NamespaceTreeDiff`.
-namespaceTreeDiffReferents_ :: (Ord referent', Ord termDiff) => Traversal (NamespaceTreeDiff referent reference termDiff typeDiff) (NamespaceTreeDiff referent' reference termDiff typeDiff) referent referent'
+namespaceTreeDiffReferents_ :: (Ord referent', Ord termDiff, Ord renderedTerm) => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent' reference renderedTerm renderedType termDiff typeDiff) referent referent'
 namespaceTreeDiffReferents_ =
   traversed . traversed . diffAtPathReferents_
 
 -- | Traversal over all the references in a `NamespaceTreeDiff`.
-namespaceTreeDiffReferences_ :: (Ord reference', Ord typeDiff) => Traversal (NamespaceTreeDiff referent reference termDiff typeDiff) (NamespaceTreeDiff referent reference' termDiff typeDiff) reference reference'
+namespaceTreeDiffReferences_ :: (Ord reference', Ord typeDiff, Ord renderedType) => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference' renderedTerm renderedType termDiff typeDiff) reference reference'
 namespaceTreeDiffReferences_ = traversed . traversed . diffAtPathReferences_
 
-namespaceTreeDiffTermDiffs_ :: (Ord termDiff', Ord referent) => Traversal (NamespaceTreeDiff referent reference termDiff typeDiff) (NamespaceTreeDiff referent reference termDiff' typeDiff) termDiff termDiff'
+namespaceTreeDiffTermDiffs_ :: (Ord termDiff', Ord referent, Ord renderedTerm) => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff' typeDiff) termDiff termDiff'
 namespaceTreeDiffTermDiffs_ = traversed . traversed . diffAtPathTermDiffs_
 
-namespaceTreeDiffTypeDiffs_ :: (Ord typeDiff', Ord reference) => Traversal (NamespaceTreeDiff referent reference termDiff typeDiff) (NamespaceTreeDiff referent reference termDiff typeDiff') typeDiff typeDiff'
+namespaceTreeDiffTypeDiffs_ :: (Ord typeDiff', Ord reference, Ord renderedType) => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff') typeDiff typeDiff'
 namespaceTreeDiffTypeDiffs_ = traversed . traversed . diffAtPathTypeDiffs_
 
 data NamespaceDiffError
@@ -235,7 +241,7 @@ instance Logging.Loggable NamespaceDiffError where
 
 -- | Compute the tree of differences between two namespace hashes.
 -- Note: This ignores all dependencies in the lib namespace.
-diffTreeNamespaces :: (BranchHashId, NameLookupReceipt) -> (BranchHashId, NameLookupReceipt) -> (PG.Transaction e (Either NamespaceDiffError (NamespaceTreeDiff V2.Referent V2.Reference Name Name)))
+diffTreeNamespaces :: (BranchHashId, NameLookupReceipt) -> (BranchHashId, NameLookupReceipt) -> (PG.Transaction e (Either NamespaceDiffError (NamespaceTreeDiff V2.Referent V2.Reference Name Name Name Name)))
 diffTreeNamespaces (oldBHId, oldNLReceipt) (newBHId, newNLReceipt) = do
   ((oldTerms, newTerms), (oldTypes, newTypes)) <- PG.pipelined do
     terms <- ND.getRelevantTermsForDiff oldNLReceipt oldBHId newBHId
@@ -256,7 +262,7 @@ diffTreeNamespacesHelper ::
   (Ord referent, Ord reference) =>
   (Relation Name referent, Relation Name referent) ->
   (Relation Name reference, Relation Name reference) ->
-  Either NamespaceDiffError (NamespaceTreeDiff referent reference Name Name)
+  Either NamespaceDiffError (NamespaceTreeDiff referent reference Name Name Name Name)
 diffTreeNamespacesHelper (oldTerms, newTerms) (oldTypes, newTypes) = do
   termTree <- computeDefinitionDiff oldTerms newTerms <&> definitionDiffsToTree
   typeTree <- computeDefinitionDiff oldTypes newTypes <&> definitionDiffsToTree
@@ -265,12 +271,12 @@ diffTreeNamespacesHelper (oldTerms, newTerms) (oldTypes, newTypes) = do
           & compressNameTree
   pure compressed
   where
-    combineTermsAndTypes :: These (Map NameSegment (Set (DefinitionDiff referent Name))) (Map NameSegment (Set (DefinitionDiff reference Name))) -> Map NameSegment (DiffAtPath referent reference Name Name)
+    combineTermsAndTypes :: These (Map NameSegment (Set (DefinitionDiff referent Name Name))) (Map NameSegment (Set (DefinitionDiff reference Name Name))) -> Map NameSegment (DiffAtPath referent reference Name Name Name Name)
     combineTermsAndTypes = \case
       This termsMap -> termsMap <&> \termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
       That typesMap -> typesMap <&> \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
       These trms typs -> alignWith combineNode trms typs
-    combineNode :: These (Set (DefinitionDiff referent Name)) (Set (DefinitionDiff reference Name)) -> DiffAtPath referent reference Name Name
+    combineNode :: These (Set (DefinitionDiff referent Name Name)) (Set (DefinitionDiff reference Name Name)) -> DiffAtPath referent reference Name Name Name Name
     combineNode = \case
       This termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
       That typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
@@ -395,21 +401,21 @@ computeDefinitionDiff old new =
       )
 
 -- | Convert a `DefinitionDiffs` into a tree of differences.
-definitionDiffsToTree :: forall ref. (Ord ref) => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref Name)))
+definitionDiffsToTree :: forall ref. (Ord ref) => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref Name Name)))
 definitionDiffsToTree dd =
   let DefinitionDiffs {added, removed, updated, renamed, newAliases} = dd
-      expandedAliases :: Map Name (Set (DefinitionDiffKind ref Name))
+      expandedAliases :: Map Name (Set (DefinitionDiffKind ref Name Name))
       expandedAliases =
         newAliases
           & Map.toList
           & foldMap
             ( \(r, (existingNames, newNames)) ->
                 ( Foldable.toList newNames
-                    <&> \newName -> Map.singleton newName (Set.singleton (NewAlias r existingNames))
+                    <&> \newName -> Map.singleton newName (Set.singleton (NewAlias r existingNames newName))
                 )
             )
           & Map.unionsWith (<>)
-      expandedRenames :: Map Name (Set (DefinitionDiffKind ref Name))
+      expandedRenames :: Map Name (Set (DefinitionDiffKind ref Name Name))
       expandedRenames =
         renamed
           & Map.toList
@@ -421,21 +427,21 @@ definitionDiffsToTree dd =
               --   )
               -- <>
               ( Foldable.toList newNames
-                  <&> \newName -> Map.singleton newName (Set.singleton (RenamedFrom r oldNames))
+                  <&> \newName -> Map.singleton newName (Set.singleton (RenamedFrom r oldNames newName))
               )
             )
               & Map.unionsWith (<>)
-      diffTree :: Map Name (Set (DefinitionDiffKind ref Name))
+      diffTree :: Map Name (Set (DefinitionDiffKind ref Name Name))
       diffTree =
         Map.unionsWith
           (<>)
-          [ (added <&> Set.singleton . Added),
+          [ (added & Map.mapWithKey \n r -> Set.singleton $ Added r n),
             expandedAliases,
-            (removed <&> Set.singleton . Removed),
+            (removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
             (updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
             expandedRenames
           ]
-      includeFQNs :: Map Name (Set (DefinitionDiffKind ref Name)) -> Map Name (Set (DefinitionDiff ref Name))
+      includeFQNs :: Map Name (Set (DefinitionDiffKind ref Name Name)) -> Map Name (Set (DefinitionDiff ref Name Name))
       includeFQNs m = m & imap \n ds -> (ds & Set.map \d -> DefinitionDiff {kind = d, fqn = n})
    in diffTree
         & includeFQNs

@@ -11,7 +11,7 @@ import Share.Utils.Aeson (PreEncoded)
 import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermDefinitionDiff (..), TermTag, TypeDefinition, TypeDefinitionDiff (..), TypeTag)
 import Unison.ShortHash (ShortHash)
 
-type ShareNamespaceDiff = NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff
+type ShareNamespaceDiff = NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff
 
 data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
   { project :: ProjectShortHand,
