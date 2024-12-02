@@ -13,6 +13,10 @@ module Share.NamespaceDiffs
     namespaceTreeDiffReferents_,
     namespaceTreeDiffTermDiffs_,
     namespaceTreeDiffTypeDiffs_,
+    namespaceTreeDiffRenderedTerms_,
+    namespaceTreeDiffRenderedTypes_,
+    namespaceTreeTermDiffKinds_,
+    namespaceTreeTypeDiffKinds_,
     definitionDiffRendered_,
     definitionDiffRefs_,
     definitionDiffDiffs_,
@@ -80,6 +84,12 @@ data DefinitionDiff r rendered diff = DefinitionDiff
     fqn :: Name
   }
   deriving stock (Eq, Show, Ord)
+
+definitionDiffKind_ :: Lens (DefinitionDiff r rendered diff) (DefinitionDiff r' rendered' diff') (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r' rendered' diff')
+definitionDiffKind_ = lens getter setter
+  where
+    getter (DefinitionDiff k _) = k
+    setter (DefinitionDiff _ n) k = DefinitionDiff k n
 
 definitionDiffRefs_ :: Traversal (DefinitionDiff r rendered diff) (DefinitionDiff r' rendered diff) r r'
 definitionDiffRefs_ f (DefinitionDiff k n) = DefinitionDiff <$> definitionDiffKindRefs_ f k <*> pure n
@@ -207,6 +217,30 @@ diffAtPathTypeDiffs_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
     & (Set.traverse . definitionDiffDiffs_) %%~ f
     <&> \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
+diffAtPathTermDiffKinds_ :: (Ord renderedTerm', Ord termDiff', Ord referent') => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent' reference renderedTerm' renderedType termDiff' typeDiff) (DefinitionDiffKind referent renderedTerm termDiff) (DefinitionDiffKind referent' renderedTerm' termDiff')
+diffAtPathTermDiffKinds_ f (DiffAtPath terms types) = do
+  newTerms <- terms & Set.traverse . definitionDiffKind_ %%~ f
+  pure $ DiffAtPath newTerms types
+
+diffAtPathTypeDiffKinds_ :: (Ord renderedType', Ord typeDiff', Ord reference') => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference' renderedTerm renderedType' termDiff typeDiff') (DefinitionDiffKind reference renderedType typeDiff) (DefinitionDiffKind reference' renderedType' typeDiff')
+diffAtPathTypeDiffKinds_ f (DiffAtPath terms types) = do
+  newTypes <- types & Set.traverse . definitionDiffKind_ %%~ f
+  pure $ DiffAtPath terms newTypes
+
+-- | A traversal over all the rendered terms in a `DiffAtPath`.
+diffAtPathRenderedTerms_ :: (Ord termDiff, Ord referent, Ord renderedTerm') => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference renderedTerm' renderedType termDiff typeDiff) renderedTerm renderedTerm'
+diffAtPathRenderedTerms_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
+  termDiffsAtPath
+    & (Set.traverse . definitionDiffRendered_) %%~ f
+    <&> \termDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
+
+-- | A traversal over all the rendered types in a `DiffAtPath`.
+diffAtPathRenderedTypes_ :: (Ord typeDiff, Ord reference, Ord renderedType') => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference renderedTerm renderedType' termDiff typeDiff) renderedType renderedType'
+diffAtPathRenderedTypes_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
+  typeDiffsAtPath
+    & (Set.traverse . definitionDiffRendered_) %%~ f
+    <&> \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
+
 -- | Traversal over all the referents in a `NamespaceTreeDiff`.
 namespaceTreeDiffReferents_ :: (Ord referent', Ord termDiff, Ord renderedTerm) => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent' reference renderedTerm renderedType termDiff typeDiff) referent referent'
 namespaceTreeDiffReferents_ =
@@ -221,6 +255,18 @@ namespaceTreeDiffTermDiffs_ = traversed . traversed . diffAtPathTermDiffs_
 
 namespaceTreeDiffTypeDiffs_ :: (Ord typeDiff', Ord reference, Ord renderedType) => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff') typeDiff typeDiff'
 namespaceTreeDiffTypeDiffs_ = traversed . traversed . diffAtPathTypeDiffs_
+
+namespaceTreeTermDiffKinds_ :: (Ord renderedTerm', Ord termDiff', Ord referent') => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent' reference renderedTerm' renderedType termDiff' typeDiff) (DefinitionDiffKind referent renderedTerm termDiff) (DefinitionDiffKind referent' renderedTerm' termDiff')
+namespaceTreeTermDiffKinds_ = traversed . traversed . diffAtPathTermDiffKinds_
+
+namespaceTreeTypeDiffKinds_ :: (Ord renderedType', Ord typeDiff', Ord reference') => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference' renderedTerm renderedType' termDiff typeDiff') (DefinitionDiffKind reference renderedType typeDiff) (DefinitionDiffKind reference' renderedType' typeDiff')
+namespaceTreeTypeDiffKinds_ = traversed . traversed . diffAtPathTypeDiffKinds_
+
+namespaceTreeDiffRenderedTerms_ :: (Ord termDiff, Ord referent, Ord renderedTerm') => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm' renderedType termDiff typeDiff) renderedTerm renderedTerm'
+namespaceTreeDiffRenderedTerms_ = traversed . traversed . diffAtPathRenderedTerms_
+
+namespaceTreeDiffRenderedTypes_ :: (Ord typeDiff, Ord reference, Ord renderedType') => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm renderedType' termDiff typeDiff) renderedType renderedType'
+namespaceTreeDiffRenderedTypes_ = traversed . traversed . diffAtPathRenderedTypes_
 
 data NamespaceDiffError
   = ImpossibleError Text

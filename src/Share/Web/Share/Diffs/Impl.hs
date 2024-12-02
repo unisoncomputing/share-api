@@ -125,11 +125,26 @@ computeUpdatedDefinitionDiffs ::
 computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff = do
   withTermDiffs <-
     diff
-      & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %%~ \name ->
-        diffTerms authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
+      & NamespaceDiffs.namespaceTreeDiffTermDiffs_
+        %%~ ( \name ->
+                diffTerms authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
+            )
+      >>= NamespaceDiffs.namespaceTreeTermDiffKinds_ %%~ renderDiffKind getTermDefinition
   withTermDiffs
-    & NamespaceDiffs.namespaceTreeDiffTypeDiffs_ %%~ \name ->
-      diffTypes authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
+    & NamespaceDiffs.namespaceTreeDiffTypeDiffs_
+      %%~ ( \name ->
+              diffTypes authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
+          )
+    >>= NamespaceDiffs.namespaceTreeTypeDiffKinds_ %%~ renderDiffKind getTypeDefinition
+  where
+    notFound name t = MissingEntityError $ EntityMissing (ErrorID "definition-not-found") (t <> ": Definition not found: " <> Name.toText name)
+    renderDiffKind getter = \case
+      Added r name -> Added r <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "Added"))
+      NewAlias r existingNames name -> NewAlias r existingNames <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "NewAlias"))
+      Removed r name -> Removed r <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "Removed"))
+      Updated oldRef newRef diff -> pure $ Updated oldRef newRef diff
+      RenamedTo r names name -> RenamedTo r names <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "RenamedTo"))
+      RenamedFrom r names name -> RenamedFrom r names <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "RenamedFrom"))
 
 diffTerms ::
   AuthZReceipt ->
@@ -142,18 +157,19 @@ diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
   (oldTerm, newTerm) <- getOldTerm `concurrentExceptT` getNewTerm
   let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
   pure $ TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject}
+
+getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TermDefinition)
+getTermDefinition (codebase, bhId, name) = do
+  let perspective = Path.empty
+  (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+  let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+  let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+  rt <- Codebase.codebaseRuntime codebase
+  Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
+    Definitions.termDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width
     renderWidth = 80
-    getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TermDefinition)
-    getTermDefinition (codebase, bhId, name) = do
-      let perspective = Path.empty
-      (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
-      let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
-      let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-      rt <- Codebase.codebaseRuntime codebase
-      Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
-        Definitions.termDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
 
 diffTypes ::
   AuthZReceipt ->
@@ -170,18 +186,19 @@ diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
   (sourceType, newType) <- getOldType `concurrentExceptT` getNewType
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition sourceType) (typeDefinition newType)
   pure $ TypeDefinitionDiff {left = sourceType, right = newType, diff = typeDiffDisplayObject}
+
+getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TypeDefinition)
+getTypeDefinition (codebase, bhId, name) = do
+  let perspective = Path.empty
+  (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+  let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+  let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+  rt <- Codebase.codebaseRuntime codebase
+  Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
+    Definitions.typeDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width
     renderWidth = 80
-    getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TypeDefinition)
-    getTypeDefinition (codebase, bhId, name) = do
-      let perspective = Path.empty
-      (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
-      let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
-      let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-      rt <- Codebase.codebaseRuntime codebase
-      Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
-        Definitions.typeDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
 
 newtype RenderedNamespaceDiff = RenderedNamespaceDiff (NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
 
@@ -190,7 +207,7 @@ instance ToJSON RenderedNamespaceDiff where
     where
       text :: Text -> Text
       text t = t
-      hqNameJSON :: Name -> NameSegment -> ShortHash -> Value
+      hqNameJSON :: Name -> NameSegment -> ShortHash -> Value -> Value
       hqNameJSON fqn name sh rendered = object ["hash" .= sh, "shortName" .= name, "fullName" .= fqn, "rendered" .= rendered]
       -- The preferred frontend format is a bit clunky to calculate here:
       diffDataJSON :: (ToJSON tag) => NameSegment -> DefinitionDiff (tag, ShortHash) Value Value -> (tag, Value)
@@ -199,7 +216,7 @@ instance ToJSON RenderedNamespaceDiff where
         NewAlias (defnTag, r) existingNames rendered ->
           let contents = object ["hash" .= r, "aliasShortName" .= shortName, "aliasFullName" .= fqn, "otherNames" .= toList existingNames, "rendered" .= rendered]
            in (defnTag, object ["tag" .= text "Aliased", "contents" .= contents])
-        Removed (defnTag, r) rendered -> (defnTag, object ["tag" .= text "Removed", "contents" .= hqNameJSON fqn shortName r, "rendered" .= rendered])
+        Removed (defnTag, r) rendered -> (defnTag, object ["tag" .= text "Removed", "contents" .= hqNameJSON fqn shortName r rendered])
         Updated (oldTag, oldRef) (newTag, newRef) diffVal ->
           let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
            in (newTag, object ["tag" .= text "Updated", "contents" .= contents])
@@ -229,13 +246,14 @@ instance ToJSON RenderedNamespaceDiff where
                 & foldMap
                   ( \(name, DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) ->
                       ( Foldable.toList termDiffsAtPath
-                          <&> fmap termDefinitionDiffToJSON
-                          <&> over definitionDiffRendered_ toJSON
+                          <&> over NamespaceDiffs.definitionDiffDiffs_ termDefinitionDiffToJSON
+                          <&> over NamespaceDiffs.definitionDiffRendered_ toJSON
                           & fmap (diffDataJSON name)
                           & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
                       )
                         <> ( Foldable.toList typeDiffsAtPath
-                               <&> fmap typeDefinitionDiffToJSON
+                               <&> over NamespaceDiffs.definitionDiffDiffs_ typeDefinitionDiffToJSON
+                               <&> over NamespaceDiffs.definitionDiffRendered_ toJSON
                                & fmap (diffDataJSON name)
                                & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
                            )
