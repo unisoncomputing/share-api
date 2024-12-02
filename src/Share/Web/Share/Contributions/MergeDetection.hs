@@ -3,6 +3,7 @@ module Share.Web.Share.Contributions.MergeDetection
   )
 where
 
+import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
@@ -13,4 +14,5 @@ updateContributionsFromBranchUpdate :: UserId -> BranchId -> PG.Transaction e ()
 updateContributionsFromBranchUpdate callerUserId branchId = do
   updatedContributions <- ContributionQ.performMergesAndBCAUpdatesFromBranchPush callerUserId branchId
   _rebasedContributions <- ContributionQ.rebaseContributionsFromMergedBranches updatedContributions
+  DiffsQ.submitContributionsToBeDiffed updatedContributions
   pure ()

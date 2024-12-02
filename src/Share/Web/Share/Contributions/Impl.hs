@@ -14,8 +14,10 @@ module Share.Web.Share.Contributions.Impl
 where
 
 import Control.Lens hiding ((.=))
+import Data.Set qualified as Set
 import Servant
 import Servant.Server.Generic (AsServerT)
+import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
 import Share.Branch (Branch (..))
 import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
@@ -157,7 +159,8 @@ createContributionEndpoint session userHandle projectSlug (CreateContributionReq
     pure (project, sourceBranch, targetBranch)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionCreate callerUserId project
   PG.runTransactionOrRespondError $ do
-    (_, contributionNumber) <- ContributionsQ.createContribution callerUserId projectId title description status sourceBranchId targetBranchId
+    (contributionId, contributionNumber) <- ContributionsQ.createContribution callerUserId projectId title description status sourceBranchId targetBranchId
+    DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
     ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (InternalServerError "create-contribution-error" internalServerError)
       >>= UsersQ.userDisplayInfoOf traversed
   where
@@ -202,6 +205,7 @@ updateContributionByNumberEndpoint session handle projectSlug contributionNumber
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionUpdate callerUserId contribution updateRequest
   PG.runTransactionOrRespondError $ do
     _ <- ContributionsQ.updateContribution callerUserId contributionId title description status (branchId <$> maySourceBranch) (branchId <$> mayTargetBranch)
+    DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
     ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
       >>= UsersQ.userDisplayInfoOf traversed
   where

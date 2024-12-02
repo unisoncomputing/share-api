@@ -63,5 +63,6 @@ diffContribution authZReceipt contributionId = do
     pure (project, newBranch, oldBranch)
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
+  -- This method saves the diff so it'll be there when we need it, so we don't need to do anything with it.
   _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
   pure ()

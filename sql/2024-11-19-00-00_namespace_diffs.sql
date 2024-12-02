@@ -19,7 +19,5 @@ CREATE TABLE namespace_diffs (
 -- Table of all contributions which have been updated and may need their diffs re-computed
 CREATE TABLE contribution_diff_queue (
   contribution_id UUID PRIMARY KEY REFERENCES contributions(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  PRIMARY KEY (contribution_id)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -1,18 +1,24 @@
 module Share.BackgroundJobs.Diffs.Queries
-  ( submitContributionToBeDiffed,
+  ( submitContributionsToBeDiffed,
     claimContributionToDiff,
   )
 where
 
+import Data.Foldable (toList)
+import Data.Set (Set)
 import Share.IDs
 import Share.Postgres
 
-submitContributionToBeDiffed :: (QueryM m) => ContributionId -> m ()
-submitContributionToBeDiffed contributionId = do
+submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
+submitContributionsToBeDiffed contributions = do
   execute_
     [sql|
+    WITH new_contributions(contribution_id) AS (
+      SELECT * FROM ^{singleColumnTable (toList contributions)}
+    )
     INSERT INTO contribution_diff_queue (contribution_id)
-    VALUES (#{contributionId})
+      SELECT nc.contribution_id FROM new_contributions nc
+      ON CONFLICT DO NOTHING
     |]
 
 -- | Claim the oldest contribution in the queue to be diffed.
