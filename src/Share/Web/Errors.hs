@@ -7,6 +7,7 @@
 
 module Share.Web.Errors
   ( respondError,
+    respondExceptT,
     reportError,
     ToServerError (..),
     SimpleServerError (..),
@@ -165,6 +166,9 @@ respondError e = do
   let (_, serverErr) = toServerError e
   reportError e
   UnliftIO.throwIO serverErr
+
+respondExceptT :: (HasCallStack, ToServerError e, Loggable e) => ExceptT e WebApp a -> WebApp a
+respondExceptT m = runExceptT m >>= either respondError pure
 
 -- | Logs the error with a call stack, but doesn't abort the request or render an error to the client.
 reportError :: (HasCallStack, ToServerError e, Loggable e) => e -> WebApp ()

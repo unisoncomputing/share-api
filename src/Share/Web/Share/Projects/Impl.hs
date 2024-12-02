@@ -162,7 +162,7 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
       ancestorCausalId <- fromMaybe oldCausalId <$> CausalQ.bestCommonAncestor oldCausalId newCausalId
       (ancestorCausalHash, newCausalHash) <- CausalQ.expectCausalHashesByIdsOf both (ancestorCausalId, newCausalId)
       pure (ancestorCausalId, ancestorCausalHash, newCausalHash)
-    namespaceDiff <- Diffs.diffCausals authZReceipt (oldCodebase, ancestorCausalId) (newCodebase, newCausalId)
+    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, ancestorCausalId) (newCodebase, newCausalId))
     pure $
       ShareNamespaceDiffResponse
         { project = projectShortHand,
@@ -195,7 +195,7 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "project-diff-terms" cacheKeys do
-      termDiff <- Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName)
+      termDiff <- respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName))
       pure $
         ShareTermDiffResponse
           { project = projectShortHand,
@@ -229,7 +229,7 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "project-diff-types" cacheKeys do
-      typeDiff <- Diffs.diffTypes authZReceipt (oldCodebase, oldBhId, oldTypeName) (newCodebase, newBhId, newTypeName)
+      typeDiff <- respondExceptT (Diffs.diffTypes authZReceipt (oldCodebase, oldBhId, oldTypeName) (newCodebase, newBhId, newTypeName))
       pure $
         ShareTypeDiffResponse
           { project = projectShortHand,

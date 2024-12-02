@@ -276,7 +276,7 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
   let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId]
   Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
-    namespaceDiff <- Diffs.diffCausals authZReceipt (oldCodebase, oldCausalId) (newCodebase, newBranchCausalId)
+    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldCausalId) (newCodebase, newBranchCausalId))
     (newBranchCausalHash, oldCausalHash) <- PG.runTransaction $ do
       newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
       oldCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldCausalId
@@ -324,7 +324,7 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
       (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      termDiff <- Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName)
+      termDiff <- respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName))
       pure $
         ShareTermDiffResponse
           { project = projectShorthand,
@@ -369,7 +369,7 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "contribution-diff-types" cacheKeys do
       (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      typeDiff <- Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName)
+      typeDiff <- respondExceptT (Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName))
       pure $
         ShareTypeDiffResponse
           { project = projectShorthand,

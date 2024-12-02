@@ -10,7 +10,7 @@ module Share.Postgres.Projects.Queries
 where
 
 import Control.Lens
-import Control.Monad.Except (MonadError (..), runExceptT)
+import Control.Monad.Except (runExceptT)
 import Share.IDs
 import Share.Postgres
 import Share.Prelude

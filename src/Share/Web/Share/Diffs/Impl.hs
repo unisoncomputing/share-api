@@ -9,6 +9,7 @@ where
 import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens hiding ((.=))
 import Control.Monad.Except
+import Control.Monad.Trans.Except (except)
 import Data.Aeson (ToJSON (..), Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (object)
@@ -18,7 +19,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Share.App (AppM)
 import Share.Codebase qualified as Codebase
-import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceDiffError, NamespaceTreeDiff)
+import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceDiffError (..), NamespaceTreeDiff)
 import Share.NamespaceDiffs qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
@@ -75,8 +76,8 @@ diffCausals ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, CausalId) ->
   (Codebase.CodebaseEnv, CausalId) ->
-  AppM r (Either NamespaceDiffs.NamespaceDiffError (PreEncoded (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff)))
-diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) = runExceptT $ do
+  ExceptT NamespaceDiffs.NamespaceDiffError (AppM r) (PreEncoded (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinitionDiff TypeDefinitionDiff))
+diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) = do
   -- Ensure name lookups for each thing we're diffing.
   -- We do this in two separate transactions to ensure we can still make progress even if we need to build name lookups.
   let getOldBranch = PG.runTransaction $ do
@@ -88,7 +89,7 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
         newBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id newCausalId
         newNLReceipt <- NLOps.ensureNameLookupForBranchId newBranchHashId
         pure (newBranchHashId, newNLReceipt)
-  ((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newNLReceipt)) <- getOldBranch `UnliftIO.concurrently` getNewBranch
+  ((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newNLReceipt)) <- getOldBranch `concurrentExceptT` getNewBranch
   (PG.runTransaction $ ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId))
     >>= \case
       Just diff -> pure $ PreEncoded $ TL.encodeUtf8 $ TL.fromStrict diff
@@ -109,7 +110,7 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
                       typeTags <- Codebase.typeTagsByReferencesOf traversed refs
                       pure $ zip typeTags (refs <&> V2Reference.toShortHash)
                   )
-        diff <- lift $ computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
+        diff <- computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
         let encoded = Aeson.encode . RenderedNamespaceDiff $ diff
         PG.runTransaction $ ContributionQ.savePrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) (TL.toStrict $ TL.decodeUtf8 encoded)
         pure $ PreEncoded encoded
@@ -120,7 +121,7 @@ computeUpdatedDefinitionDiffs ::
   (Codebase.CodebaseEnv, BranchHashId) ->
   (Codebase.CodebaseEnv, BranchHashId) ->
   (NamespaceDiffs.NamespaceTreeDiff a b Name Name) ->
-  AppM r (NamespaceDiffs.NamespaceTreeDiff a b TermDefinitionDiff TypeDefinitionDiff)
+  ExceptT NamespaceDiffError (AppM r) (NamespaceDiffs.NamespaceTreeDiff a b TermDefinitionDiff TypeDefinitionDiff)
 computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff = do
   withTermDiffs <-
     diff
@@ -136,9 +137,9 @@ diffTerms ::
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   ExceptT NamespaceDiffError (AppM r) TermDefinitionDiff
 diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
-  let getOldTerm = getTermDefinition old `whenNothingM` throwError (EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
-  let getNewTerm = getTermDefinition new `whenNothingM` throwError (EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
-  (oldTerm, newTerm) <- getOldTerm `UnliftIO.concurrently` getNewTerm
+  let getOldTerm = lift (getTermDefinition old) `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
+  let getNewTerm = lift (getTermDefinition new) `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
+  (oldTerm, newTerm) <- getOldTerm `concurrentExceptT` getNewTerm
   let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
   pure $ TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject}
   where
@@ -158,15 +159,15 @@ diffTypes ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  AppM r TypeDefinitionDiff
+  ExceptT NamespaceDiffError (AppM r) TypeDefinitionDiff
 diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
   let getOldType =
-        getTypeDefinition old
-          `whenNothingM` throwError (EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
+        lift (getTypeDefinition old)
+          `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
   let getNewType =
-        getTypeDefinition new
-          `whenNothingM` throwError (EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
-  (sourceType, newType) <- getOldType `UnliftIO.concurrently` getNewType
+        lift (getTypeDefinition new)
+          `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
+  (sourceType, newType) <- getOldType `concurrentExceptT` getNewType
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition sourceType) (typeDefinition newType)
   pure $ TypeDefinitionDiff {left = sourceType, right = newType, diff = typeDiffDisplayObject}
   where
@@ -250,3 +251,10 @@ instance ToJSON RenderedNamespaceDiff where
               [ "changes" .= changesJSON,
                 "children" .= childrenJSON
               ]
+
+concurrentExceptT :: (MonadUnliftIO m) => ExceptT e m a -> ExceptT e m b -> ExceptT e m (a, b)
+concurrentExceptT a b = do
+  (ea, eb) <- lift $ UnliftIO.concurrently (runExceptT a) (runExceptT b)
+  ra <- except ea
+  rb <- except eb
+  pure (ra, rb)

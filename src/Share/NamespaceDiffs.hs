@@ -28,13 +28,14 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
-import Servant (err500)
+import Servant (err404, err500)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Conversions qualified as Cv
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NamespaceDiffs qualified as ND
 import Share.Prelude
+import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
 import U.Codebase.Reference qualified as V2
@@ -221,12 +222,16 @@ data NamespaceDiffError
   deriving stock (Eq, Show)
 
 instance ToServerError NamespaceDiffError where
-  toServerError ImpossibleError {} = (ErrorID "namespace-diff:impossible-error", err500)
+  toServerError = \case
+    ImpossibleError {} -> (ErrorID "namespace-diff:impossible-error", err500)
+    MissingEntityError (EntityMissing eId _msg) -> (eId, err404)
 
 instance Logging.Loggable NamespaceDiffError where
-  toLog (ImpossibleError t) =
-    Logging.textLog t
-      & Logging.withSeverity Logging.Error
+  toLog = \case
+    (ImpossibleError t) ->
+      Logging.textLog t
+        & Logging.withSeverity Logging.Error
+    (MissingEntityError e) -> Logging.toLog e
 
 -- | Compute the tree of differences between two namespace hashes.
 -- Note: This ignores all dependencies in the lib namespace.
