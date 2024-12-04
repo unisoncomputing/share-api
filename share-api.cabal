@@ -267,6 +267,7 @@ library
     , share-auth
     , share-utils
     , stm
+    , stm-chans
     , text
     , these
     , time
@@ -415,6 +416,7 @@ executable share-api
     , share-auth
     , share-utils
     , stm
+    , stm-chans
     , text
     , these
     , time

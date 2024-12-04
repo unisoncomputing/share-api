@@ -99,6 +99,7 @@ dependencies:
 - servant-conduit
 - serialise
 - stm
+- stm-chans
 - text
 - these
 - time

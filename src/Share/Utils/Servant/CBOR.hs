@@ -12,8 +12,7 @@ import Servant
 -- | Content-type for encoding and decoding objects as their CBOR representations
 data CBOR
 
--- | Mime-type for CBOR and additional ones using the word "hackage" and the
--- name of the package "serialise".
+-- | Mime-type for CBOR
 instance Accept CBOR where
   contentTypes Proxy =
     NonEmpty.singleton ("application" MediaType.// "cbor")
