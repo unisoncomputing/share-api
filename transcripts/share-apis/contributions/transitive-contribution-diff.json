@@ -5,6 +5,234 @@
         {
           "contents": {
             "contents": {
+              "diff": {
+                "diff": {
+                  "diff": {
+                    "contents": [
+                      {
+                        "diffTag": "both",
+                        "elements": [
+                          {
+                            "annotation": {
+                              "contents": "term",
+                              "tag": "HashQualifier"
+                            },
+                            "segment": "term"
+                          },
+                          {
+                            "annotation": {
+                              "tag": "TypeAscriptionColon"
+                            },
+                            "segment": " :"
+                          },
+                          {
+                            "annotation": null,
+                            "segment": " "
+                          },
+                          {
+                            "annotation": {
+                              "contents": "##Text",
+                              "tag": "HashQualifier"
+                            },
+                            "segment": "##Text"
+                          },
+                          {
+                            "annotation": null,
+                            "segment": "\n"
+                          },
+                          {
+                            "annotation": {
+                              "contents": "term",
+                              "tag": "HashQualifier"
+                            },
+                            "segment": "term"
+                          },
+                          {
+                            "annotation": {
+                              "tag": "BindingEquals"
+                            },
+                            "segment": " ="
+                          },
+                          {
+                            "annotation": null,
+                            "segment": " "
+                          }
+                        ]
+                      },
+                      {
+                        "diffTag": "old",
+                        "elements": [
+                          {
+                            "annotation": {
+                              "tag": "TextLiteral"
+                            },
+                            "segment": "\"feature-one\""
+                          }
+                        ]
+                      },
+                      {
+                        "diffTag": "new",
+                        "elements": [
+                          {
+                            "annotation": {
+                              "tag": "TextLiteral"
+                            },
+                            "segment": "\"feature-two\""
+                          }
+                        ]
+                      }
+                    ],
+                    "tag": "UserObject"
+                  },
+                  "diffKind": "diff"
+                },
+                "left": {
+                  "bestTermName": "term",
+                  "defnTermTag": "Plain",
+                  "signature": [
+                    {
+                      "annotation": {
+                        "contents": "##Text",
+                        "tag": "HashQualifier"
+                      },
+                      "segment": "##Text"
+                    }
+                  ],
+                  "termDefinition": {
+                    "contents": [
+                      {
+                        "annotation": {
+                          "contents": "term",
+                          "tag": "HashQualifier"
+                        },
+                        "segment": "term"
+                      },
+                      {
+                        "annotation": {
+                          "tag": "TypeAscriptionColon"
+                        },
+                        "segment": " :"
+                      },
+                      {
+                        "annotation": null,
+                        "segment": " "
+                      },
+                      {
+                        "annotation": {
+                          "contents": "##Text",
+                          "tag": "HashQualifier"
+                        },
+                        "segment": "##Text"
+                      },
+                      {
+                        "annotation": null,
+                        "segment": "\n"
+                      },
+                      {
+                        "annotation": {
+                          "contents": "term",
+                          "tag": "HashQualifier"
+                        },
+                        "segment": "term"
+                      },
+                      {
+                        "annotation": {
+                          "tag": "BindingEquals"
+                        },
+                        "segment": " ="
+                      },
+                      {
+                        "annotation": null,
+                        "segment": " "
+                      },
+                      {
+                        "annotation": {
+                          "tag": "TextLiteral"
+                        },
+                        "segment": "\"feature-one\""
+                      }
+                    ],
+                    "tag": "UserObject"
+                  },
+                  "termDocs": [],
+                  "termNames": [
+                    "term"
+                  ]
+                },
+                "right": {
+                  "bestTermName": "term",
+                  "defnTermTag": "Plain",
+                  "signature": [
+                    {
+                      "annotation": {
+                        "contents": "##Text",
+                        "tag": "HashQualifier"
+                      },
+                      "segment": "##Text"
+                    }
+                  ],
+                  "termDefinition": {
+                    "contents": [
+                      {
+                        "annotation": {
+                          "contents": "term",
+                          "tag": "HashQualifier"
+                        },
+                        "segment": "term"
+                      },
+                      {
+                        "annotation": {
+                          "tag": "TypeAscriptionColon"
+                        },
+                        "segment": " :"
+                      },
+                      {
+                        "annotation": null,
+                        "segment": " "
+                      },
+                      {
+                        "annotation": {
+                          "contents": "##Text",
+                          "tag": "HashQualifier"
+                        },
+                        "segment": "##Text"
+                      },
+                      {
+                        "annotation": null,
+                        "segment": "\n"
+                      },
+                      {
+                        "annotation": {
+                          "contents": "term",
+                          "tag": "HashQualifier"
+                        },
+                        "segment": "term"
+                      },
+                      {
+                        "annotation": {
+                          "tag": "BindingEquals"
+                        },
+                        "segment": " ="
+                      },
+                      {
+                        "annotation": null,
+                        "segment": " "
+                      },
+                      {
+                        "annotation": {
+                          "tag": "TextLiteral"
+                        },
+                        "segment": "\"feature-two\""
+                      }
+                    ],
+                    "tag": "UserObject"
+                  },
+                  "termDocs": [],
+                  "termNames": [
+                    "term"
+                  ]
+                }
+              },
               "fullName": "term",
               "newHash": "#918iukm79ii0jll0m3qtsrcqjp1sqe5rdpf1kochqp52a52s9ciil7mu6m3t4l39pdk60imhj5be1d9rat2lgdmr6u0jn93v7v8o6rg",
               "newTag": "Plain",

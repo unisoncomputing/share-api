@@ -7,6 +7,7 @@
 
 module Share.Web.Errors
   ( respondError,
+    respondExceptT,
     reportError,
     ToServerError (..),
     SimpleServerError (..),
@@ -68,7 +69,7 @@ import Unison.Sync.Types qualified as Sync
 import UnliftIO qualified
 
 newtype ErrorID = ErrorID Text
-  deriving stock (Show)
+  deriving stock (Show, Eq, Ord)
   deriving (IsString) via Text
 
 class ToServerError e where
@@ -166,6 +167,9 @@ respondError e = do
   reportError e
   UnliftIO.throwIO serverErr
 
+respondExceptT :: (HasCallStack, ToServerError e, Loggable e) => ExceptT e WebApp a -> WebApp a
+respondExceptT m = runExceptT m >>= either respondError pure
+
 -- | Logs the error with a call stack, but doesn't abort the request or render an error to the client.
 reportError :: (HasCallStack, ToServerError e, Loggable e) => e -> WebApp ()
 reportError e = do
@@ -208,7 +212,7 @@ instance ToServerError (InternalServerError a) where
   toServerError InternalServerError {errorId} = (ErrorID errorId, internalServerError)
 
 data EntityMissing = EntityMissing {entityMissingErrorID :: ErrorID, errorMsg :: Text}
-  deriving stock (Show)
+  deriving stock (Show, Eq, Ord)
 
 instance Loggable EntityMissing where
   toLog EntityMissing {errorMsg} = withSeverity UserFault $ textLog errorMsg

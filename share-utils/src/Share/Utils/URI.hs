@@ -22,12 +22,12 @@ import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
-import Share.Utils.Show (tShow)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Interpolate qualified as Hasql
 import Network.HTTP.Types (parseQuery, renderQuery)
 import Network.URI qualified as URI
 import Servant
+import Share.Utils.Show (tShow)
 
 -- | Helper type to provide additional instances for URIs.
 newtype URIParam = URIParam {unpackURI :: URI}

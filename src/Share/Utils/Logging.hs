@@ -37,6 +37,7 @@ module Share.Utils.Logging
   )
 where
 
+import Control.Monad.Except (ExceptT)
 import Control.Monad.Reader
 import Data.Char qualified as Char
 import Data.Map qualified as Map
@@ -115,6 +116,12 @@ class (Monad m) => MonadLogger m where
   logMsg :: LogMsg -> m ()
 
 instance (MonadLogger m) => MonadLogger (ReaderT r m) where
+  logMsg = lift . logMsg
+
+instance (MonadLogger m) => MonadLogger (ExceptT e m) where
+  logMsg = lift . logMsg
+
+instance (MonadLogger m) => MonadLogger (MaybeT m) where
   logMsg = lift . logMsg
 
 textLog :: Text -> LogMsg

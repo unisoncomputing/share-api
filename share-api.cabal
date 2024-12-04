@@ -28,6 +28,8 @@ library
       Share.App
       Share.Backend
       Share.BackgroundJobs
+      Share.BackgroundJobs.Diffs.ContributionDiffs
+      Share.BackgroundJobs.Diffs.Queries
       Share.BackgroundJobs.Errors
       Share.BackgroundJobs.Monad
       Share.BackgroundJobs.Search.DefinitionSync

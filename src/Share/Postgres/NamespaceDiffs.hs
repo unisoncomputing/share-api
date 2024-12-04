@@ -13,6 +13,7 @@ import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Types (NameLookupReceipt, NamedRef (..), ReversedName)
 import Share.Postgres.Refs.Types (PGReference, PGReferent)
 import Share.Prelude
+import U.Codebase.Referent qualified as V2
 import Unison.Name (Name)
 import Unison.Util.Relation (Relation)
 import Unison.Util.Relation qualified as Rel
@@ -106,6 +107,21 @@ getRelevantTermsForDiff !_nameLookupReceipt oldBranchHashId newBranchHashId = do
               SELECT new.reversed_name, new.referent_builtin, new.referent_component_hash_id, new.referent_component_index, new.referent_constructor_index, true
                 FROM relevant_terms_in_new new
           |]
+    -- NOTE: For now we filter out all diffs on constructors.
+    -- This is because:
+    --   1. We don't have a good way to construct a reasonable looking diff if a constructor
+    --      is updated into a term
+    --   2. It's silly to render a change in a type in both the type itself AND all of its
+    --      constructors
+    --
+    -- The downside is that this means if a constructor is only _renamed_ but not otherwise
+    -- changed, it won't show up in the diff at all :'( , but we plan to fix this with the new
+    -- synhash based diffing system.
+    <&> filter
+      ( \(NamedRef {ref} PG.:. _) -> case ref of
+          V2.Ref {} -> True
+          V2.Con {} -> False
+      )
     <&> ( fmap \(NamedRef {reversedSegments, ref} PG.:. PG.Only inNew) ->
             if inNew
               then Right (from @ReversedName @Name reversedSegments, ref)
