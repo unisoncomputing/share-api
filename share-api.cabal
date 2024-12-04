@@ -92,6 +92,7 @@ library
       Share.Utils.Logging.Types
       Share.Utils.Postgres
       Share.Utils.Servant
+      Share.Utils.Servant.CBOR
       Share.Utils.Servant.Client
       Share.Utils.Servant.PathInfo
       Share.Utils.Servant.RawRequest
@@ -150,6 +151,9 @@ library
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
       Share.Web.UCM.Sync.Types
+      Share.Web.UCM.SyncStream.API
+      Share.Web.UCM.SyncStream.Impl
+      Share.Web.UCM.SyncStream.Queries
       Unison.PrettyPrintEnvDecl.Postgres
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
@@ -206,7 +210,9 @@ library
     , bytes
     , bytestring
     , case-insensitive
+    , cborg
     , clock
+    , conduit
     , containers
     , cookie
     , cryptonite
@@ -250,13 +256,16 @@ library
     , raven-haskell
     , safe
     , semialign
+    , serialise
     , servant
     , servant-auth
     , servant-client
+    , servant-conduit
     , servant-server
     , share-auth
     , share-utils
     , stm
+    , stm-chans
     , text
     , these
     , time
@@ -349,7 +358,9 @@ executable share-api
     , bytes
     , bytestring
     , case-insensitive
+    , cborg
     , clock
+    , conduit
     , containers
     , cookie
     , cryptonite
@@ -393,14 +404,17 @@ executable share-api
     , raven-haskell
     , safe
     , semialign
+    , serialise
     , servant
     , servant-auth
     , servant-client
+    , servant-conduit
     , servant-server
     , share-api
     , share-auth
     , share-utils
     , stm
+    , stm-chans
     , text
     , these
     , time
