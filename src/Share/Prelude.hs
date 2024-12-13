@@ -46,6 +46,8 @@ module Share.Prelude
     Exception (..),
     MaybeT (..),
     hoistMaybe,
+    traverseFirst,
+    throwError,
   )
 where
 
@@ -53,6 +55,7 @@ import Control.Applicative as X
 import Control.Arrow ((&&&))
 import Control.Category hiding (id, (.))
 import Control.Monad as X
+import Control.Monad.Except (throwError)
 import Control.Monad.Reader as X
 import Control.Monad.State as X
 import Control.Monad.Trans.Maybe
@@ -209,3 +212,6 @@ partitionMap f xs =
 
 unifyEither :: Either a a -> a
 unifyEither = either id id
+
+traverseFirst :: (Bitraversable t, Applicative f) => (a -> f b) -> t a x -> f (t b x)
+traverseFirst f = bitraverse f pure

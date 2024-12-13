@@ -21,7 +21,6 @@ import Share.Web.Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Comments.Types
 import Share.Web.Share.Types
-import Servant
 
 createCommentEndpoint ::
   Maybe Session ->
