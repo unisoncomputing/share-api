@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Web.UCM.SyncStream.API (API) where
+module Share.Web.UCM.SyncV2.API (API) where
 
 import Servant
 import Share.OAuth.Session (MaybeAuthenticatedUserId)

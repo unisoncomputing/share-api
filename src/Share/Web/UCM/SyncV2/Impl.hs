@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Web.UCM.SyncStream.Impl (server) where
+module Share.Web.UCM.SyncV2.Impl (server) where
 
 import Conduit
 import Control.Concurrent.STM qualified as STM
@@ -27,7 +27,7 @@ import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
-import Share.Web.UCM.SyncStream.Queries qualified as SSQ
+import Share.Web.UCM.SyncV2.Queries qualified as SSQ
 import U.Codebase.Sqlite.Orphans ()
 import U.Codebase.Sqlite.TempEntity (TempEntity)
 import Unison.Debug qualified as Debug

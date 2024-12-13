@@ -153,9 +153,9 @@ library
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
       Share.Web.UCM.Sync.Types
-      Share.Web.UCM.SyncStream.API
-      Share.Web.UCM.SyncStream.Impl
-      Share.Web.UCM.SyncStream.Queries
+      Share.Web.UCM.SyncV2.API
+      Share.Web.UCM.SyncV2.Impl
+      Share.Web.UCM.SyncV2.Queries
       Unison.PrettyPrintEnvDecl.Postgres
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions

@@ -13,7 +13,7 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Projects.API qualified as Projects
 import Share.Web.Support.API qualified as Support
 import Share.Web.Types
-import Share.Web.UCM.SyncStream.API qualified as SyncStream
+import Share.Web.UCM.SyncV2.API qualified as SyncV2
 import Unison.Share.API.Projects qualified as UCMProjects
 import Unison.Sync.API qualified as Unison.Sync
 
@@ -37,7 +37,7 @@ type API =
     :<|> ("sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
     :<|> ("ucm" :> "v1" :> "sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
     :<|> ("ucm" :> "v1" :> "projects" :> MaybeAuthenticatedSession :> UCMProjects.ProjectsAPI)
-    :<|> ("ucm" :> "v2" :> "sync" :> SyncStream.API)
+    :<|> ("ucm" :> "v2" :> "sync" :> SyncV2.API)
     :<|> ("admin" :> Admin.API)
 
 api :: Proxy API

@@ -1,4 +1,4 @@
-module Share.Web.UCM.SyncStream.Queries
+module Share.Web.UCM.SyncV2.Queries
   ( allHashDependenciesOfCausalCursor,
     allSerializedDependenciesOfCausalCursor,
   )
