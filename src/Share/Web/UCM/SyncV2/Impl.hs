@@ -11,6 +11,7 @@ import Control.Monad.Trans.Except (runExceptT)
 import Data.Conduit.Combinators qualified as Conduit
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
+import Servant.Types.SourceT (SourceT (..))
 import Servant.Types.SourceT qualified as SourceT
 import Share.Codebase qualified as Codebase
 import Share.IDs (ProjectBranchShortHand (..), ProjectReleaseShortHand (..), ProjectShortHand (..), UserHandle, UserId)
@@ -22,6 +23,7 @@ import Share.Postgres.Queries qualified as PGQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.User (User (..))
+import Share.Utils.Logging qualified as Logging
 import Share.Utils.Unison (hash32ToCausalHash)
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
@@ -34,7 +36,7 @@ import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.SyncV2.API qualified as SyncV2
-import Unison.SyncV2.Types (DownloadEntitiesChunk (..))
+import Unison.SyncV2.Types (DownloadEntitiesChunk (..), EntityChunk (..), ErrorChunk (..))
 import Unison.SyncV2.Types qualified as SyncV2
 import UnliftIO qualified
 import UnliftIO.Async qualified as Async
@@ -57,7 +59,7 @@ parseBranchRef (SyncV2.BranchRef branchRef) =
     parseRelease = fmap Left . eitherToMaybe $ IDs.fromText @ProjectReleaseShortHand branchRef
 
 downloadEntitiesStreamImpl :: Maybe UserId -> SyncV2.DownloadEntitiesRequest -> WebApp (SourceIO SyncV2.DownloadEntitiesChunk)
-downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {causalHash = causalHashJWT, branchRef}) = do
+downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {causalHash = causalHashJWT, branchRef, knownHashes= _todo}) = do
   either emitErr id <$> runExceptT do
     addRequestTag "branch-ref" (SyncV2.unBranchRef branchRef)
     HashJWTClaims {hash = causalHash} <- lift (HashJWT.verifyHashJWT mayCallerUserId causalHashJWT >>= either respondError pure)
@@ -83,24 +85,23 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
     q <- liftIO $ STM.newTBMQueueIO 10
     streamResults <- lift $ UnliftIO.toIO do
-      Debug.debugLogM Debug.Temp "Starting source Stream"
+      Logging.logInfoText "Starting download entities stream"
       Codebase.runCodebaseTransaction codebase $ do
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
         cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId
         Cursor.foldBatched cursor 1000 \batch -> do
-          Debug.debugLogM Debug.Temp "Source stream batch"
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q batch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
-    pure $ conduitToSourceIO do
-      handle <- liftIO $ Async.async streamResults
-      stream q handle
+    pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
+      stream q
         Conduit..| ( Conduit.iterM \case
-                       EntityChunk {hash} -> Debug.debugM Debug.Temp "Chunk " hash
-                       ErrorChunk err -> Debug.debugM Debug.Temp "Error " err
+                       InitialC init -> Debug.debugM Debug.Temp "Initial " init
+                       EntityC ec -> Debug.debugM Debug.Temp "Chunk " ec
+                       ErrorC err -> Debug.debugM Debug.Temp "Error " err
                    )
   where
-    stream :: STM.TBMQueue (NonEmpty (SyncV2.CBORBytes TempEntity, Hash32)) -> (Async.Async a) -> ConduitT () DownloadEntitiesChunk IO ()
-    stream q handle = do
+    stream :: STM.TBMQueue (NonEmpty (SyncV2.CBORBytes TempEntity, Hash32)) -> ConduitT () DownloadEntitiesChunk IO ()
+    stream q = do
       let loop :: ConduitT () DownloadEntitiesChunk IO ()
           loop = do
             Debug.debugLogM Debug.Temp "Waiting for batch..."
@@ -110,15 +111,18 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
                 Debug.debugLogM Debug.Temp "Queue closed. finishing up!"
                 pure ()
               Just batch -> do
-                let chunks = batch <&> \(entityCBOR, hash) -> EntityChunk {hash, entityCBOR}
+                let chunks = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
                 Debug.debugLogM Debug.Temp $ "Emitting chunk of " <> show (length chunks) <> " entities"
                 yieldMany chunks
                 loop
       loop
-      Debug.debugLogM Debug.Temp "Waiting for worker thread to finish"
-      -- It _should_ have terminated by now, but just in case, cancel it.
-      Async.cancel handle
       Debug.debugLogM Debug.Temp "Done!"
 
     emitErr :: SyncV2.DownloadEntitiesError -> SourceIO SyncV2.DownloadEntitiesChunk
-    emitErr err = SourceT.source [ErrorChunk err]
+    emitErr err = SourceT.source [ErrorC (ErrorChunk err)]
+
+-- | Run an IO action in the background while streaming the results.
+sourceIOWithAsync :: IO a -> SourceIO r -> SourceIO r
+sourceIOWithAsync action (SourceT k) =
+  SourceT \k' ->
+    Async.withAsync action \_ -> k k'
