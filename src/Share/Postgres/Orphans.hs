@@ -18,6 +18,7 @@ import Servant (err500)
 import Servant.API
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Postgres (RawLazyBytes (..))
 import Share.Web.Errors (ErrorID (..), ToServerError (..))
 import U.Codebase.HashTags (BranchHash (..), CausalHash (..), ComponentHash (..), PatchHash (..))
 import U.Codebase.Reference (Id' (Id), Reference' (..))
@@ -34,6 +35,7 @@ import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
 import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
+import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
 
 -- Orphans for 'Hash'
@@ -214,6 +216,8 @@ instance Hasql.DecodeValue SqliteTermEdit.Typing where
           "different" -> Just SqliteTermEdit.Different
           _ -> Nothing
       )
+
+deriving via RawLazyBytes instance Hasql.DecodeValue (CBORBytes t)
 
 instance ToServerError Hasql.SessionError where
   toServerError _ = (ErrorID "query-error", err500)

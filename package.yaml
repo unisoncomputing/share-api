@@ -44,7 +44,9 @@ dependencies:
 - bytestring
 - bytes
 - case-insensitive
+- cborg
 - clock
+- conduit
 - containers
 - cookie
 - cryptonite
@@ -94,7 +96,10 @@ dependencies:
 - servant-auth
 - servant-client
 - servant-server
+- servant-conduit
+- serialise
 - stm
+- stm-chans
 - text
 - these
 - time
