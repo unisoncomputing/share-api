@@ -19,7 +19,7 @@ CREATE TABLE namespace_depth (
   namespace_hash_id INTEGER PRIMARY KEY REFERENCES branch_hashes (id) ON DELETE CASCADE,
   depth INTEGER NOT NULL
 );
-WHERE nc.namespace_hash_id = NEW.namespace_hash_id
+
 CREATE TABLE patch_depth (
   patch_id INTEGER PRIMARY KEY REFERENCES patches (id) ON DELETE CASCADE,
   depth INTEGER NOT NULL
@@ -35,16 +35,16 @@ DECLARE
   namespace_id INTEGER;
 BEGIN
   -- If there's already a depth entry for this causal, we're done.
-  IF EXISTS (SELECT FROM causal_depth WHERE causal_id = NEW.id) THEN
+  IF EXISTS (SELECT FROM causal_depth cd WHERE cd.causal_id = NEW.id) THEN
     RETURN NEW;
   END IF;
   -- Find the max depth of the associated namespace
   -- Find the max depth of any child causal
   -- Set the depth of this causal to the max of those two plus one
-  SELECT max(nd.depth) INTO max_namespace_depth
+  SELECT COALESCE(MAX(nd.depth), -1) INTO max_namespace_depth
     FROM namespace_depth nd
     WHERE nd.namespace_hash_id = NEW.namespace_hash_id;
-  SELECT max(cd.depth) INTO max_child_causal_depth
+  SELECT COALESCE(MAX(cd.depth), -1) INTO max_child_causal_depth
     FROM causal_depth cd
       JOIN causal_ancestors ca ON cd.causal_id = ca.ancestor_id
     WHERE ca.causal_id = NEW.id;
@@ -59,35 +59,48 @@ CREATE TRIGGER causals_update_causal_depth_trig AFTER INSERT OR UPDATE ON causal
     FOR EACH ROW EXECUTE FUNCTION update_causal_depth();
 
 
-CREATE OR REPLACE FUNCTION update_component_depth() RETURNS TRIGGER AS $$
+CREATE FUNCTION update_component_depth() RETURNS TRIGGER AS $$
 DECLARE
   max_referenced_component_depth INTEGER;
 BEGIN
+  RAISE NOTICE 'Updating component depth for %', NEW.component_hash_id;
   -- If there's already a depth entry for this component, we're done.
   IF EXISTS (SELECT FROM component_depth WHERE component_hash_id = NEW.component_hash_id) THEN
     RETURN NEW;
   END IF;
   -- Find the max depth of any component referenced by this component
   -- Set the depth of this component to that plus one
-  SELECT max(refs.depth) INTO max_referenced_component_depth
+  SELECT COALESCE(MAX(refs.depth), -1) INTO max_referenced_component_depth
     FROM (
       ( SELECT cd.depth AS depth
-        FROM component_depth cd
+        FROM terms t 
         JOIN term_local_component_references cr
+          ON cr.term_id = t.id
+        JOIN component_depth cd
           ON cd.component_hash_id = cr.component_hash_id
-        WHERE cr.component_hash_id = NEW.component_hash_id
+        WHERE t.component_hash_id = NEW.component_hash_id
       ) UNION
       ( SELECT cd.depth AS depth
-        FROM component_depth cd
+        FROM types t
         JOIN type_local_component_references cr
+          ON cr.type_id = t.id
+        JOIN component_depth cd
           ON cd.component_hash_id = cr.component_hash_id
-        WHERE cr.component_hash_id = NEW.component_hash_id
+        WHERE t.component_hash_id = NEW.component_hash_id
       )
   ) AS refs;
+  INSERT INTO component_depth (component_hash_id, depth)
+    VALUES (NEW.component_hash_id, max_referenced_component_depth + 1)
+    ON CONFLICT (component_hash_id) DO UPDATE 
+      SET depth = max_referenced_component_depth + 1;
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER component_hashes_update_component_depth_trig AFTER INSERT OR UPDATE ON component_hashes
+CREATE TRIGGER terms_update_component_depth_trig AFTER INSERT OR UPDATE ON terms
+    FOR EACH ROW EXECUTE FUNCTION update_component_depth();
+
+CREATE TRIGGER types_update_component_depth_trig AFTER INSERT OR UPDATE ON types
     FOR EACH ROW EXECUTE FUNCTION update_component_depth();
 
 CREATE OR REPLACE FUNCTION update_namespace_depth() RETURNS TRIGGER AS $$
@@ -104,15 +117,15 @@ BEGIN
   -- Find the max depth of any patch
   -- Find the max depth of any component referenced by a term, type, or term metadata in this namespace
   -- Set the depth of this namespace to the max of those plus one
-  SELECT max(cd.depth) INTO max_child_causal_depth
+  SELECT COALESCE(MAX(cd.depth), -1) INTO max_child_causal_depth
     FROM causal_depth cd
       JOIN namespace_children nc ON cd.causal_id = nc.child_causal_id
     WHERE nc.parent_namespace_hash_id = NEW.namespace_hash_id;
-  SELECT max(pd.depth) INTO max_patch_depth
+  SELECT COALESCE(MAX(pd.depth), -1) INTO max_patch_depth
     FROM patch_depth pd
       JOIN namespace_patches np ON pd.patch_id = np.patch_id
     WHERE np.namespace_hash_id = NEW.namespace_hash_id;
-  SELECT max(depth) INTO max_referenced_component_depth
+  SELECT COALESCE(MAX(depth), -1) INTO max_referenced_component_depth
     FROM (
       -- direct term references
       ( SELECT cd.depth AS depth
@@ -191,7 +204,7 @@ BEGIN
   -- Find the max depth of any type component referenced by a patch
   -- Set the depth of this patch to that plus one
 
-  SELECT max(cd.depth) INTO max_referenced_component_depth
+  SELECT COALESCE(MAX(cd.depth), -1) INTO max_referenced_component_depth
     FROM (
       -- term references
       ( SELECT from_term_component_hash_id AS component_hash_id
