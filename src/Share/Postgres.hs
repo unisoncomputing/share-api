@@ -100,6 +100,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
+import Unison.Debug qualified as UDebug
 
 data TransactionError e
   = Unrecoverable SomeServerError
@@ -333,7 +334,9 @@ instance QueryA (Transaction e) where
   statement q s = do
     transactionStatement q s
 
-  unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
+  unrecoverableError e = do
+    UDebug.debugM UDebug.Temp "Unrecoverable error in transaction: " e
+    Transaction (pure (Left (Unrecoverable (someServerError e))))
 
 instance QueryM (Transaction e) where
   transactionUnsafeIO io = Transaction (Right <$> liftIO io)
@@ -342,7 +345,9 @@ instance QueryA (Session e) where
   statement q s = do
     lift $ Session.statement q s
 
-  unrecoverableError e = throwError (Unrecoverable (someServerError e))
+  unrecoverableError e = do
+    UDebug.debugM UDebug.Temp "Unrecoverable error in transaction: " e
+    throwError (Unrecoverable (someServerError e))
 
 instance QueryM (Session e) where
   transactionUnsafeIO io = lift $ liftIO io
@@ -355,7 +360,8 @@ instance QueryA (Pipeline e) where
 instance (QueryM m) => QueryA (ReaderT e m) where
   statement q s = lift $ statement q s
 
-  unrecoverableError e = lift $ unrecoverableError e
+  unrecoverableError e = do
+    lift $ unrecoverableError e
 
 instance (QueryM m) => QueryM (ReaderT e m) where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
