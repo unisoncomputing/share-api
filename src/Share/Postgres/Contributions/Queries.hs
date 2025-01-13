@@ -16,6 +16,10 @@ module Share.Postgres.Contributions.Queries
     getPagedShareContributionTimelineByProjectIdAndNumber,
     performMergesAndBCAUpdatesFromBranchPush,
     rebaseContributionsFromMergedBranches,
+    contributionStateTokenById,
+    getPrecomputedNamespaceDiff,
+    savePrecomputedNamespaceDiff,
+    contributionsRelatedToBranches,
   )
 where
 
@@ -25,6 +29,7 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Time (UTCTime)
 import Safe (lastMay)
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -488,3 +493,67 @@ rebaseContributionsFromMergedBranches mergedContributions = do
         RETURNING contr.id
     |]
     <&> Set.fromList
+
+contributionStateTokenById :: ContributionId -> PG.Transaction e ContributionStateToken
+contributionStateTokenById contributionId = do
+  PG.queryExpect1Row @ContributionStateToken
+    [PG.sql|
+        SELECT
+          contribution.id,
+          contribution.source_branch,
+          contribution.target_branch,
+          source_causal.hash,
+          target_causal.hash,
+          contribution.status
+        FROM contributions contribution
+          JOIN project_branches AS source_branch ON source_branch.id = contribution.source_branch
+          JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch
+          JOIN causals source_causal ON source_causal.id = source_branch.causal_id
+          JOIN causals target_causal ON target_causal.id = target_branch.causal_id
+        WHERE contribution.id = #{contributionId}
+      |]
+
+getPrecomputedNamespaceDiff ::
+  (CodebaseEnv, BranchHashId) ->
+  (CodebaseEnv, BranchHashId) ->
+  PG.Transaction e (Maybe Text)
+getPrecomputedNamespaceDiff
+  (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftBHId)
+  (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightBHId) = do
+    PG.query1Col @Text
+      [PG.sql|
+          SELECT (diff :: text)
+          FROM namespace_diffs nd
+          WHERE nd.left_namespace_id = #{leftBHId}
+            AND nd.right_namespace_id = #{rightBHId}
+            AND nd.left_codebase_owner_user_id = #{leftCodebaseUser}
+            AND nd.right_codebase_owner_user_id = #{rightCodebaseUser}
+        |]
+
+savePrecomputedNamespaceDiff ::
+  (CodebaseEnv, BranchHashId) ->
+  (CodebaseEnv, BranchHashId) ->
+  Text ->
+  PG.Transaction e ()
+savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftBHId) (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightBHId) diff = do
+  PG.execute_
+    [PG.sql|
+        INSERT INTO namespace_diffs (left_namespace_id, right_namespace_id, left_codebase_owner_user_id, right_codebase_owner_user_id, diff)
+        VALUES (#{leftBHId}, #{rightBHId}, #{leftCodebaseUser}, #{rightCodebaseUser}, #{diff}::jsonb)
+        ON CONFLICT DO NOTHING
+      |]
+
+-- | Get all contribution IDs for contributions which have a source or target branch in the
+-- provided set.
+contributionsRelatedToBranches :: Set BranchId -> PG.Transaction e [ContributionId]
+contributionsRelatedToBranches branchIds = do
+  PG.queryListCol @ContributionId
+    [PG.sql|
+      WITH related_branches(branch_id) AS (
+        SELECT * FROM ^{PG.singleColumnTable $ Set.toList branchIds}
+      )
+        SELECT contr.id FROM contributions contr
+          WHERE
+            contr.source_branch IN (SELECT branch_id FROM related_branches)
+            OR contr.target_branch IN (SELECT branch_id FROM related_branches)
+      |]

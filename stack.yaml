@@ -26,12 +26,14 @@ packages:
 - unison/lib/unison-util-bytes
 - unison/lib/unison-util-cache
 - unison/lib/unison-util-file-embed
+- unison/lib/unison-util-recursion
 - unison/lib/unison-util-relation
 - unison/lib/unison-util-rope
 - unison/parser-typechecker
 - unison/unison-core
 - unison/unison-hashing-v2
 - unison/unison-merge
+- unison/unison-runtime
 - unison/unison-share-api
 - unison/unison-share-projects-api
 - unison/unison-syntax
@@ -50,7 +52,7 @@ extra-deps:
 - recover-rtti-0.5.0@sha256:7d598b0c89dac9e170b488a7a50b322fcae06342fbd2da18cb8a7f93a0b44e68,4913
 
 # Bumping hasql up to get Pipelining mode
-- hasql-1.8
+- hasql-1.8.1.1
 - hasql-pool-1.2.0.2
 - hasql-interpolate-1.0.1.0
 - postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025

@@ -60,6 +60,7 @@ import Unison.ShortHash (ShortHash)
 import Unison.Type qualified as Type
 import Unison.Util.Monoid qualified as Monoid
 import Unison.Util.Set qualified as Set
+import Unison.Util.Recursion qualified as Rec
 import Unison.Var qualified as Var
 import UnliftIO.Concurrent qualified as UnliftIO
 
@@ -213,7 +214,7 @@ typeSigTokens :: forall v ann. (Var.Var v) => Type.Type v ann -> (Set (DefnSearc
 typeSigTokens typ =
   let occMap :: MonoidalMap (Either VarId TypeReference) (Occurrence, Any)
       arity :: Arity
-      (occMap, Sum arity) = flip evalState initState . flip runReaderT (TokenGenEnv mempty) $ ABT.cata alg typ
+      (occMap, Sum arity) = flip evalState initState . flip runReaderT (TokenGenEnv mempty) $ Rec.cata alg typ
       (varIds, typeRefs) =
         MonMap.toList occMap & foldMap \case
           (Left vId, (occ, ret)) -> ([(vId, (occ, ret))], [])
@@ -254,10 +255,9 @@ typeSigTokens typ =
     initState = TokenGenState 0
     -- Algebra for collecting type reference tokens and arity from a type signature.
     alg ::
-      ann ->
-      ABT.ABT Type.F v (TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)) ->
+      ABT.Term' Type.F v ann (TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)) ->
       TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)
-    alg _ann = \case
+    alg = ABT.out' >>> \case
       -- Type Var usage
       ABT.Var v -> do
         vId <- varIdFor v

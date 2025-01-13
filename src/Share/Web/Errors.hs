@@ -1,12 +1,16 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Share.Web.Errors
   ( respondError,
+    respondExceptT,
     reportError,
     ToServerError (..),
+    SimpleServerError (..),
     ErrorRedirect (..),
     InternalServerError (..),
     EntityMissing (..),
@@ -27,6 +31,9 @@ module Share.Web.Errors
     someServerError,
     withCallstack,
     throwSomeServerError,
+
+    -- * Error types
+    StatusExpectationFailed,
   )
 where
 
@@ -44,6 +51,7 @@ import Data.Text (pack)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import GHC.Stack qualified as GHC
+import GHC.TypeLits qualified as TL
 import Servant
 import Servant.Client
 import Share.Env qualified as Env
@@ -52,6 +60,7 @@ import Share.OAuth.Errors (OAuth2Error (..), OAuth2ErrorCode (..), OAuth2ErrorRe
 import Share.OAuth.Types (AuthenticationRequest (..), RedirectReceiverErr (..))
 import Share.Prelude
 import Share.Utils.Logging
+import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
 import Unison.Server.Backend qualified as Backend
@@ -60,11 +69,46 @@ import Unison.Sync.Types qualified as Sync
 import UnliftIO qualified
 
 newtype ErrorID = ErrorID Text
-  deriving stock (Show)
+  deriving stock (Show, Eq, Ord)
   deriving (IsString) via Text
 
 class ToServerError e where
   toServerError :: e -> (ErrorID, ServerError)
+
+type StatusExpectationFailed = 417
+
+-- | newtype wrapper for deriving errors.
+newtype SimpleServerError (errStatus :: TL.Nat) (errorId :: TL.Symbol) (errorMsg :: TL.Symbol) a = SimpleServerError a
+
+instance (Show a, TL.KnownNat errStatus, TL.KnownSymbol errorMsg) => Loggable (SimpleServerError errStatus errorId errorMsg a) where
+  toLog (SimpleServerError err) =
+    let severity =
+          if
+            | status < 400 -> Info
+            | status < 500 -> UserFault
+            | otherwise -> Error
+     in Logging.textLog (errMsg <> ": " <> tShow err)
+          & withSeverity severity
+    where
+      status = TL.natVal (Proxy @errStatus)
+      errMsg = Text.pack $ TL.symbolVal (Proxy @errorMsg)
+
+instance (TL.KnownSymbol errorId, TL.KnownSymbol errorMsg, TL.KnownNat errStatus) => ToServerError (SimpleServerError errStatus errorId errorMsg a) where
+  toServerError _ =
+    ( ErrorID $ Text.pack $ TL.symbolVal (Proxy @errorId),
+      case TL.natVal (Proxy @errStatus) of
+        400 -> err400 {errBody = errorBody}
+        401 -> err401 {errBody = errorBody}
+        403 -> err403 {errBody = errorBody}
+        404 -> err404 {errBody = errorBody}
+        409 -> err409 {errBody = errorBody}
+        417 -> err417 {errBody = errorBody}
+        500 -> err500 {errBody = errorBody}
+        502 -> err502 {errBody = errorBody}
+        n -> err500 {errHTTPCode = fromInteger n, errBody = errorBody}
+    )
+    where
+      errorBody = BL.fromStrict $ Text.encodeUtf8 $ Text.pack $ TL.symbolVal (Proxy @errorMsg)
 
 -- Helpful for cases where an error is specialized to Void.
 instance ToServerError Void where
@@ -123,6 +167,9 @@ respondError e = do
   reportError e
   UnliftIO.throwIO serverErr
 
+respondExceptT :: (HasCallStack, ToServerError e, Loggable e) => ExceptT e WebApp a -> WebApp a
+respondExceptT m = runExceptT m >>= either respondError pure
+
 -- | Logs the error with a call stack, but doesn't abort the request or render an error to the client.
 reportError :: (HasCallStack, ToServerError e, Loggable e) => e -> WebApp ()
 reportError e = do
@@ -165,7 +212,7 @@ instance ToServerError (InternalServerError a) where
   toServerError InternalServerError {errorId} = (ErrorID errorId, internalServerError)
 
 data EntityMissing = EntityMissing {entityMissingErrorID :: ErrorID, errorMsg :: Text}
-  deriving stock (Show)
+  deriving stock (Show, Eq, Ord)
 
 instance Loggable EntityMissing where
   toLog EntityMissing {errorMsg} = withSeverity UserFault $ textLog errorMsg

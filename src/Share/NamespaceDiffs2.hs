@@ -105,14 +105,14 @@ computeNamespaceDiff ::
   (PG.QueryM m) =>
   CausalId ->
   CausalId ->
-  ExceptT MergeError m (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference, Map NameSegment (LibdepDiffOp LibDep))
+  ExceptT MergeError m (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference Name Name Name Name, Map NameSegment (LibdepDiffOp LibDep))
 computeNamespaceDiff diffFrom diffTo = do
   -- We use the diffFrom as both the LCA and alice, we're just going to ignore the
   -- alice <-> bob diff in this case.
   let threeWay = (ThreeWay {lca = diffFrom, alice = diffFrom, bob = diffTo})
   computeMergeblob1 threeWay <&> \(_names, blob1) -> mergeblob1ToDiff blob1
   where
-    mergeblob1ToDiff :: Merge.Mergeblob1 LibDep -> (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference, Map NameSegment (LibdepDiffOp LibDep))
+    mergeblob1ToDiff :: Merge.Mergeblob1 LibDep -> (Defns (Set Name) (Set Name), NamespaceTreeDiff V2.Referent Reference Name Name Name Name, Map NameSegment (LibdepDiffOp LibDep))
     mergeblob1ToDiff blob1 =
       let Mergeblob1 {conflicts = TwoWay {bob = bobsConflicts}, diffsFromLCA = TwoWay {bob = defnDiffs}, libdepsDiff} = blob1
           setOfConflicts = bimap Map.keysSet Map.keysSet bobsConflicts
@@ -198,10 +198,11 @@ coreDependencyTransitiveDependents core@(Defns {terms = coreTerms, types = coreT
   where
     defnDependencies :: (Map TermReferenceId (Set TermReferenceId, Set TypeReferenceId), Map TypeReferenceId (Set TypeReferenceId))
     defnDependencies =
-      hydratedTerms
-        & ifoldMap \refId (trm, typ) ->
-          Term.dependencies trm
-            & over (field @"types") <>~ Type.dependencies typ
+      -- hydratedTerms
+      --   & ifoldMap \refId (trm, typ) ->
+      --     Term.dependencies trm
+      --       & over (field @"types") <>~ Type.dependencies typ
+      wundefined
 
 causalFromMergeBlob5 :: Mergeblob5.Mergeblob5 -> m CausalId
 causalFromMergeBlob5 = undefined
@@ -211,14 +212,14 @@ mergeCausals causals3 codebases3 = runExceptT do
   (names3, mergeBlob1) <- computeMergeblob1 causals3
   mergeBlob2 <- except . mapLeft MergeBlob2Error $ Mergeblob2.makeMergeblob2 mergeBlob1
 
-  let transitiveDependents2 = Zip.zipWith coreDependencyTransitiveDependents mergeBlob2.coreDependencies mergeBlob2.hydratedDefns
+  let transitiveDependents2 = Zip.zipWith coreDependencyTransitiveDependents mergeBlob2.coreDependencies wundefined -- mergeBlob2.hydratedDefns
   -- These names are garbage, but just need to have a unique name for every reference in
   -- scope so we can round-trip through a file, no user should ever see them.
   let combinedNames =
         (prefixNames "alice" names3.alice)
-          `Names.unionLeftName` (prefixNames "bob" names3.bob)
-  let mergeBlob3 = Mergeblob3.makeMergeblob3 mergeBlob2 transitiveDependents2 combinedNames (TwoWay {alice = "alice", bob = "bob"})
-  mergeBlob4 <- except . mapLeft ParseErr $ Mergeblob4.makeMergeblob4 mergeBlob3
+          `Names.preferring` (prefixNames "bob" names3.bob)
+  let mergeBlob3 = Mergeblob3.makeMergeblob3 mergeBlob2 transitiveDependents2 combinedNames wundefined -- (TwoWay {alice = "alice", bob = "bob"})
+  mergeBlob4 <- except . mapLeft ParseErr $ Mergeblob4.makeMergeblob4 wundefined -- mergeBlob3
   let mkTypeLookup codebase defns = Codebase.codebaseMToTransaction codebase $ typeLookupFromHydratedDefs defns
   -- Lookup all the types we need in the respective codebases.
   typeLookup <- lift . sequenceA $ Zip.zipWith mkTypeLookup (ThreeWay.forgetLca codebases3) (ThreeWay.forgetLca mergeBlob1.hydratedDefns)

@@ -11,6 +11,18 @@ module Share.NamespaceDiffs
     diffTreeNamespaces,
     namespaceTreeDiffReferences_,
     namespaceTreeDiffReferents_,
+    namespaceTreeDiffTermDiffs_,
+    namespaceTreeDiffTypeDiffs_,
+    namespaceTreeDiffRenderedTerms_,
+    namespaceTreeDiffRenderedTypes_,
+    namespaceTreeTermDiffKinds_,
+    namespaceTreeTypeDiffKinds_,
+    definitionDiffRendered_,
+    definitionDiffRefs_,
+    definitionDiffDiffs_,
+    definitionDiffKindRefs_,
+    definitionDiffKindDiffs_,
+    definitionDiffKindRendered_,
   )
 where
 
@@ -44,7 +56,7 @@ import Unison.Util.Relation qualified as Rel
 
 -- | Compute the tree of differences between two namespace hashes.
 -- Note: This ignores all dependencies in the lib namespace.
-diffTreeNamespaces :: (BranchHashId, NameLookupReceipt) -> (BranchHashId, NameLookupReceipt) -> (PG.Transaction e (Either NamespaceDiffError (NamespaceTreeDiff V2.Referent V2.Reference)))
+diffTreeNamespaces :: (BranchHashId, NameLookupReceipt) -> (BranchHashId, NameLookupReceipt) -> (PG.Transaction e (Either NamespaceDiffError (NamespaceTreeDiff V2.Referent V2.Reference Name Name Name Name)))
 diffTreeNamespaces (oldBHId, oldNLReceipt) (newBHId, newNLReceipt) = do
   ((oldTerms, newTerms), (oldTypes, newTypes)) <- PG.pipelined do
     terms <- ND.getRelevantTermsForDiff oldNLReceipt oldBHId newBHId
@@ -65,7 +77,7 @@ diffTreeNamespacesHelper ::
   (Ord referent, Ord reference) =>
   (Relation Name referent, Relation Name referent) ->
   (Relation Name reference, Relation Name reference) ->
-  Either NamespaceDiffError (NamespaceTreeDiff referent reference)
+  Either NamespaceDiffError (NamespaceTreeDiff referent reference Name Name Name Name)
 diffTreeNamespacesHelper (oldTerms, newTerms) (oldTypes, newTypes) = do
   termTree <- computeDefinitionDiff oldTerms newTerms <&> definitionDiffsToTree
   typeTree <- computeDefinitionDiff oldTypes newTypes <&> definitionDiffsToTree
@@ -74,12 +86,12 @@ diffTreeNamespacesHelper (oldTerms, newTerms) (oldTypes, newTypes) = do
           & compressNameTree
   pure compressed
   where
-    combineTermsAndTypes :: These (Map NameSegment (Set (DefinitionDiff referent))) (Map NameSegment (Set (DefinitionDiff reference))) -> Map NameSegment (DiffAtPath referent reference)
+    combineTermsAndTypes :: These (Map NameSegment (Set (DefinitionDiff referent Name Name))) (Map NameSegment (Set (DefinitionDiff reference Name Name))) -> Map NameSegment (DiffAtPath referent reference Name Name Name Name)
     combineTermsAndTypes = \case
       This termsMap -> termsMap <&> \termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
       That typesMap -> typesMap <&> \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
       These trms typs -> alignWith combineNode trms typs
-    combineNode :: These (Set (DefinitionDiff referent)) (Set (DefinitionDiff reference)) -> DiffAtPath referent reference
+    combineNode :: These (Set (DefinitionDiff referent Name Name)) (Set (DefinitionDiff reference Name Name)) -> DiffAtPath referent reference Name Name Name Name
     combineNode = \case
       This termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
       That typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
@@ -204,21 +216,21 @@ computeDefinitionDiff old new =
       )
 
 -- | Convert a `DefinitionDiffs` into a tree of differences.
-definitionDiffsToTree :: forall ref. (Ord ref) => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref)))
+definitionDiffsToTree :: forall ref. (Ord ref) => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref Name Name)))
 definitionDiffsToTree dd =
   let DefinitionDiffs {added, removed, updated, renamed, newAliases} = dd
-      expandedAliases :: Map Name (Set (DefinitionDiffKind ref))
+      expandedAliases :: Map Name (Set (DefinitionDiffKind ref Name Name))
       expandedAliases =
         newAliases
           & Map.toList
           & foldMap
             ( \(r, (existingNames, newNames)) ->
                 ( Foldable.toList newNames
-                    <&> \newName -> Map.singleton newName (Set.singleton (NewAlias r existingNames))
+                    <&> \newName -> Map.singleton newName (Set.singleton (NewAlias r existingNames newName))
                 )
             )
           & Map.unionsWith (<>)
-      expandedRenames :: Map Name (Set (DefinitionDiffKind ref))
+      expandedRenames :: Map Name (Set (DefinitionDiffKind ref Name Name))
       expandedRenames =
         renamed
           & Map.toList
@@ -230,21 +242,21 @@ definitionDiffsToTree dd =
               --   )
               -- <>
               ( Foldable.toList newNames
-                  <&> \newName -> Map.singleton newName (Set.singleton (RenamedFrom r oldNames))
+                  <&> \newName -> Map.singleton newName (Set.singleton (RenamedFrom r oldNames newName))
               )
             )
               & Map.unionsWith (<>)
-      diffTree :: Map Name (Set (DefinitionDiffKind ref))
+      diffTree :: Map Name (Set (DefinitionDiffKind ref Name Name))
       diffTree =
         Map.unionsWith
           (<>)
-          [ (added <&> Set.singleton . Added),
+          [ (added & Map.mapWithKey \n r -> Set.singleton $ Added r n),
             expandedAliases,
-            (removed <&> Set.singleton . Removed),
-            (updated <&> \(oldR, newR) -> Set.singleton $ Updated oldR newR),
+            (removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
+            (updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
             expandedRenames
           ]
-      includeFQNs :: Map Name (Set (DefinitionDiffKind ref)) -> Map Name (Set (DefinitionDiff ref))
+      includeFQNs :: Map Name (Set (DefinitionDiffKind ref Name Name)) -> Map Name (Set (DefinitionDiff ref Name Name))
       includeFQNs m = m & imap \n ds -> (ds & Set.map \d -> DefinitionDiff {kind = d, fqn = n})
    in diffTree
         & includeFQNs

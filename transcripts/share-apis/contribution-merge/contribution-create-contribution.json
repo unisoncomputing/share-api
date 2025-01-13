@@ -1,0 +1,26 @@
+{
+  "body": {
+    "author": {
+      "avatarUrl": null,
+      "handle": "test",
+      "name": null,
+      "userId": "U-<UUID>"
+    },
+    "createdAt": "<TIMESTAMP>",
+    "description": "My description",
+    "id": "C-<UUID>",
+    "numComments": 0,
+    "number": 1,
+    "projectRef": "@transcripts/merge",
+    "sourceBranchRef": "@test/fast-forward-feature",
+    "status": "in_review",
+    "targetBranchRef": "main",
+    "title": "Fast Forward Contribution",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

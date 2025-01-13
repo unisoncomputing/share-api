@@ -1,17 +1,17 @@
 ## Best Common Ancestor updates
 
-In order to provide relevant diffs, Share finds the best common ancestor of the two branches being compared. 
+In order to provide relevant diffs, Share finds the best common ancestor of the two branches being compared.
 I.e. The most recent commit that is an ancestor of both branches.
 
-Let's set up a main branch with two feature branches: 
+Let's set up a main branch with two feature branches:
 
 `main <- feature-one <- feature-two`
 
-```unison
+``` unison
 term = "start"
 ```
 
-```ucm
+``` ucm
 bca-updates/main> add
 
   ⍟ I've added these definitions:
@@ -35,11 +35,11 @@ bca-updates/main> branch /feature-one
        `switch /main` then `merge /feature-one`.
 
 ```
-```unison
+``` unison
 term = "feature-one"
 ```
 
-```ucm
+``` ucm
 bca-updates/feature-one> update
 
   Okay, I'm searching the branch for code that needs to be
@@ -65,11 +65,11 @@ bca-updates/feature-one> branch /feature-two
        first `switch /feature-one` then `merge /feature-two`.
 
 ```
-```unison
+``` unison
 term = "feature-two"
 ```
 
-```ucm
+``` ucm
 bca-updates/feature-two> update
 
   Okay, I'm searching the branch for code that needs to be
@@ -88,3 +88,4 @@ bca-updates/feature-two> push @transcripts/bca-updates/feature-two
 
 ```
 See the script, we will create a contribution, then will merge and push branches to see how things change.
+

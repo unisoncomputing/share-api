@@ -7,16 +7,23 @@
 module Share.Web.Share.Contributions.Types where
 
 import Data.Aeson
+import Data.Text qualified as Text
 import Data.Time (UTCTime)
-import Servant (FromHttpApiData)
-import Servant.API (FromHttpApiData (..))
+import Hasql.Interpolate qualified as Hasql
+import Servant (FromHttpApiData (..), ToHttpApiData)
 import Share.Contribution (ContributionStatus)
 import Share.IDs
+import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.Logging qualified as Logging
+import Share.Web.Errors qualified as Err
 import Share.Web.Share.Comments (CommentEvent (..), commentEventTimestamp)
 import Share.Web.Share.Types (UserDisplayInfo)
+import U.Codebase.HashTags (CausalHash (..))
+import Unison.Hash qualified as Hash
+import Web.HttpApiData (ToHttpApiData (..))
 
 data ShareContribution user = ShareContribution
   { contributionId :: ContributionId,
@@ -98,7 +105,7 @@ data StatusChangeEvent user = StatusChangeEvent
   }
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-instance PG.DecodeField user => PG.DecodeRow (StatusChangeEvent user) where
+instance (PG.DecodeField user) => PG.DecodeRow (StatusChangeEvent user) where
   decodeRow = do
     oldStatus <- PG.decodeField
     newStatus <- PG.decodeField
@@ -116,7 +123,7 @@ eventTimestamp = \case
   ContributionTimelineStatusChange StatusChangeEvent {timestamp} -> timestamp
   ContributionTimelineComment commentEvent -> commentEventTimestamp commentEvent
 
-instance ToJSON user => ToJSON (ContributionTimelineEvent user) where
+instance (ToJSON user) => ToJSON (ContributionTimelineEvent user) where
   toJSON = \case
     ContributionTimelineStatusChange StatusChangeEvent {..} ->
       object
@@ -163,3 +170,132 @@ instance FromJSON UpdateContributionRequest where
     sourceBranchSH <- o .:? "sourceBranchRef"
     targetBranchSH <- o .:? "targetBranchRef"
     pure UpdateContributionRequest {..}
+
+data Mergeability
+  = CanFastForward
+  | CanMerge
+  | Conflicted
+  | AlreadyMerged
+  | -- We can presumably remove this once proper server-side merge is implemented
+    CantMerge Text
+  deriving (Show)
+
+data CheckMergeContributionResponse = CheckMergeContributionResponse
+  { mergeability :: Mergeability
+  }
+  deriving (Show)
+
+instance ToJSON CheckMergeContributionResponse where
+  toJSON CheckMergeContributionResponse {..} =
+    object
+      [ "mergeability" .= case mergeability of
+          CanFastForward -> object ["kind" .= ("fast_forward" :: Text)]
+          CanMerge -> object ["kind" .= ("merge" :: Text)]
+          Conflicted -> object ["kind" .= ("conflicted" :: Text)]
+          AlreadyMerged -> object ["kind" .= ("already_merged" :: Text)]
+          CantMerge msg -> object ["kind" .= ("cant_merge" :: Text), "reason" .= msg]
+      ]
+
+data MergeResult
+  = MergeSuccess
+  | SourceBranchUpdated
+  | TargetBranchUpdated
+  | MergeConflicted
+  | MergeFailed Text
+  deriving (Show)
+
+data MergeContributionRequest = MergeContributionRequest
+  { contributionStateToken :: ContributionStateToken
+  }
+  deriving (Show)
+
+instance FromJSON MergeContributionRequest where
+  parseJSON = withObject "MergeContributionRequest" \o -> do
+    contributionStateToken <- o .: "contributionStateToken"
+    case parseQueryParam contributionStateToken of
+      Left err -> fail (Text.unpack err)
+      Right stateToken -> pure MergeContributionRequest {contributionStateToken = stateToken}
+
+data MergeContributionResponse = MergeContributionResponse
+  { result :: MergeResult
+  }
+  deriving (Show)
+
+instance ToJSON MergeContributionResponse where
+  toJSON MergeContributionResponse {..} =
+    object
+      [ "result" .= case result of
+          MergeSuccess -> object ["kind" .= ("success" :: Text)]
+          SourceBranchUpdated -> object ["kind" .= ("source_branch_updated" :: Text)]
+          TargetBranchUpdated -> object ["kind" .= ("target_branch_updated" :: Text)]
+          MergeConflicted -> object ["kind" .= ("conflicted" :: Text)]
+          MergeFailed msg -> object ["kind" .= ("failed" :: Text), "reason" .= msg]
+      ]
+
+-- | Token used to ensure that the state of a contribution hasn't changed between
+-- rendering the page and the user taking a given action.
+--
+-- We don't bother signing these, so don't use it for Auth or w/e
+--
+-- E.g. A new commit is pushed in between loading the page and clicking 'merge'
+data ContributionStateToken = ContributionStateToken
+  { contributionId :: ContributionId,
+    sourceBranchId :: BranchId,
+    targetBranchId :: BranchId,
+    sourceCausalHash :: CausalHash,
+    targetCausalHash :: CausalHash,
+    contributionStatus :: ContributionStatus
+  }
+  deriving (Show, Eq, Ord)
+
+instance ToHttpApiData ContributionStateToken where
+  toQueryParam ContributionStateToken {..} =
+    Text.intercalate
+      ":"
+      [ IDs.toText contributionId,
+        IDs.toText sourceBranchId,
+        IDs.toText targetBranchId,
+        into @Text sourceCausalHash,
+        into @Text targetCausalHash,
+        into @Text contributionStatus
+      ]
+
+instance FromHttpApiData ContributionStateToken where
+  parseQueryParam token =
+    case Text.splitOn ":" token of
+      [contributionId, sourceBranchId, targetBranchId, sourceCausalHash, targetCausalHash, contributionStatus] -> do
+        contributionId <- IDs.fromText contributionId
+        sourceBranchId <- IDs.fromText sourceBranchId
+        targetBranchId <- IDs.fromText targetBranchId
+        sourceCausalHash <- CausalHash <$> maybeToEither "Invalid source causal hash" (Hash.fromBase32HexText sourceCausalHash)
+        targetCausalHash <- CausalHash <$> maybeToEither "Invalid target causal hash" (Hash.fromBase32HexText targetCausalHash)
+        contributionStatus <- parseQueryParam contributionStatus
+        pure ContributionStateToken {..}
+      _ -> Left "Invalid contribution state token"
+
+instance ToJSON ContributionStateToken where
+  toJSON ContributionStateToken {..} = String (toQueryParam ContributionStateToken {..})
+
+instance FromJSON ContributionStateToken where
+  parseJSON = withText "ContributionStateToken" \t ->
+    case parseQueryParam t of
+      Left err -> fail (Text.unpack err)
+      Right token -> pure token
+
+instance PG.DecodeRow ContributionStateToken where
+  decodeRow = do
+    contributionId <- PG.decodeField
+    sourceBranchId <- PG.decodeField
+    targetBranchId <- PG.decodeField
+    sourceCausalHash <- PG.decodeField
+    targetCausalHash <- PG.decodeField
+    contributionStatus <- PG.decodeField
+    pure ContributionStateToken {..}
+
+data ContributionStateChangedError = ContributionStateChangedError
+  { expectedStateToken :: ContributionStateToken,
+    actualStateToken :: ContributionStateToken
+  }
+  deriving stock (Show)
+  deriving (Logging.Loggable) via (Logging.ShowLoggable 'Logging.Error ContributionStateChangedError)
+  deriving (Err.ToServerError) via Err.SimpleServerError 417 "contribution:state-changed" "Contribution state changed from what was expected" ContributionStateChangedError

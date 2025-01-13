@@ -24,6 +24,7 @@ module Share.Postgres.Causal.Queries
     importCausalIntoCodebase,
     hashCausal,
     bestCommonAncestor,
+    isFastForward,
   )
 where
 
@@ -878,3 +879,23 @@ bestCommonAncestor a b = do
   query1Col
     [sql| SELECT best_common_causal_ancestor(#{a}, #{b}) as causal_id
     |]
+
+isFastForward :: (QueryM m) => CausalId -> CausalId -> m Bool
+isFastForward fromCausalId toCausalId = do
+  queryExpect1Col
+    [sql|
+  -- It's probably faster in _most_ situations to actually check FORWARDS from the old causal
+  -- to find the new one, but in the worst case there are ANY number of descendents from a
+  -- given causal so it's a bit riskier. Still probably fine to try if this gets slow
+  -- though...
+  WITH RECURSIVE causal_history(causal_id) AS (
+      SELECT #{toCausalId}
+      UNION
+      SELECT ca.ancestor_id
+      FROM causal_history h
+          JOIN causal_ancestors ca ON h.causal_id = ca.causal_id
+  ) SELECT EXISTS (
+      SELECT FROM causal_history history
+        WHERE history.causal_id = #{fromCausalId}
+  );
+  |]

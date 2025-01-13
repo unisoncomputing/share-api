@@ -3,6 +3,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Share.Web.Share.Contributions.Impl
   ( contributionsByProjectServer,
@@ -12,10 +13,15 @@ module Share.Web.Share.Contributions.Impl
   )
 where
 
-import Control.Lens
+import Control.Lens hiding ((.=))
+import Data.Set qualified as Set
 import Servant
+import Servant.Server.Generic (AsServerT)
+import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
 import Share.Branch (Branch (..))
+import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
+import Share.Codebase qualified as PG
 import Share.Contribution
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle)
 import Share.IDs qualified as IDs
@@ -23,6 +29,8 @@ import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
+import Share.Postgres.NameLookups.Ops qualified as NL
+import Share.Postgres.Queries qualified as BranchQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
@@ -40,39 +48,63 @@ import Share.Web.Share.Comments.Impl qualified as Comments
 import Share.Web.Share.Comments.Types
 import Share.Web.Share.Contributions.API
 import Share.Web.Share.Contributions.API qualified as API
+import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
 import Share.Web.Share.Types (UserDisplayInfo)
 import Unison.Name (Name)
+import Unison.Server.Types
 import Unison.Syntax.Name qualified as Name
 
-contributionsByProjectServer :: Maybe Session -> UserHandle -> ProjectSlug -> ServerT API.ContributionsByProjectAPI WebApp
+contributionsByProjectServer :: Maybe Session -> UserHandle -> ProjectSlug -> API.ContributionsByProjectRoutes (AsServerT WebApp)
 contributionsByProjectServer session handle projectSlug =
-  let commentResourceServer session commentId =
-        Comments.updateCommentEndpoint session handle projectSlug commentId
-          :<|> Comments.deleteCommentEndpoint session handle projectSlug commentId
-      commentsServer contributionNumber =
-        createCommentOnContributionEndpoint session handle projectSlug contributionNumber
-          :<|> commentResourceServer session
+  API.ContributionsByProjectRoutes
+    { listContributions = listContributionsByProjectEndpoint session handle projectSlug,
+      createContribution = createContributionEndpoint session handle projectSlug,
+      contributionResource = \contributionNumber ->
+        addServerTag (Proxy @(NamedRoutes API.ContributionResourceRoutes)) "contribution-number" (IDs.toText contributionNumber) $
+          contributionsResourceServer session handle projectSlug contributionNumber
+    }
 
-      timelineServer contributionNumber =
-        ( getContributionTimelineEndpoint session handle projectSlug contributionNumber
-            :<|> commentsServer contributionNumber
-        )
-      contributionResourceServer contributionNumber =
-        addServerTag (Proxy @API.ContributionResourceServer) "contribution-number" (IDs.toText contributionNumber) $
-          getContributionByNumberEndpoint session handle projectSlug contributionNumber
-            :<|> updateContributionByNumberEndpoint session handle projectSlug contributionNumber
-            :<|> ( contributionDiffTermsEndpoint session handle projectSlug contributionNumber
-                     :<|> contributionDiffTypesEndpoint session handle projectSlug contributionNumber
-                     :<|> contributionDiffEndpoint session handle projectSlug contributionNumber
-                 )
-            :<|> mergeContributionEndpoint session handle projectSlug contributionNumber
-            :<|> timelineServer contributionNumber
-   in listContributionsByProjectEndpoint session handle projectSlug
-        :<|> createContributionEndpoint session handle projectSlug
-        :<|> contributionResourceServer
+diffResourceServer :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.DiffRoutes (AsServerT WebApp)
+diffResourceServer session handle projectSlug contributionNumber =
+  API.DiffRoutes
+    { diffTerms = contributionDiffTermsEndpoint session handle projectSlug contributionNumber,
+      diffTypes = contributionDiffTypesEndpoint session handle projectSlug contributionNumber,
+      diffContribution = contributionDiffEndpoint session handle projectSlug contributionNumber
+    }
+
+timelineServer :: (Maybe Session) -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.TimelineRoutes (AsServerT WebApp)
+timelineServer session handle projectSlug contributionNumber =
+  API.TimelineRoutes
+    { getTimeline = getContributionTimelineEndpoint session handle projectSlug contributionNumber,
+      comments = commentsServer contributionNumber
+    }
+  where
+    commentsServer contributionNumber =
+      createCommentOnContributionEndpoint session handle projectSlug contributionNumber
+        :<|> commentResourceServer
+    commentResourceServer commentId =
+      Comments.updateCommentEndpoint session handle projectSlug commentId
+        :<|> Comments.deleteCommentEndpoint session handle projectSlug commentId
+
+mergeServer :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.MergeRoutes (AsServerT WebApp)
+mergeServer session handle projectSlug contributionNumber =
+  API.MergeRoutes
+    { mergeContribution = mergeContributionEndpoint session handle projectSlug contributionNumber,
+      checkMergeContribution = checkMergeContributionEndpoint session handle projectSlug contributionNumber
+    }
+
+contributionsResourceServer :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.ContributionNumber -> API.ContributionResourceRoutes (AsServerT WebApp)
+contributionsResourceServer session handle projectSlug contributionNumber =
+  API.ContributionResourceRoutes
+    { getContributionByNumber = getContributionByNumberEndpoint session handle projectSlug contributionNumber,
+      updateContributionByNumber = updateContributionByNumberEndpoint session handle projectSlug contributionNumber,
+      diff = diffResourceServer session handle projectSlug contributionNumber,
+      merge = mergeServer session handle projectSlug contributionNumber,
+      timeline = timelineServer session handle projectSlug contributionNumber
+    }
 
 contributionsByUserServer :: Maybe Session -> UserHandle -> ServerT API.ContributionsByUserAPI WebApp
 contributionsByUserServer session handle =
@@ -127,7 +159,8 @@ createContributionEndpoint session userHandle projectSlug (CreateContributionReq
     pure (project, sourceBranch, targetBranch)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionCreate callerUserId project
   PG.runTransactionOrRespondError $ do
-    (_, contributionNumber) <- ContributionsQ.createContribution callerUserId projectId title description status sourceBranchId targetBranchId
+    (contributionId, contributionNumber) <- ContributionsQ.createContribution callerUserId projectId title description status sourceBranchId targetBranchId
+    DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
     ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (InternalServerError "create-contribution-error" internalServerError)
       >>= UsersQ.userDisplayInfoOf traversed
   where
@@ -138,13 +171,16 @@ getContributionByNumberEndpoint ::
   UserHandle ->
   ProjectSlug ->
   IDs.ContributionNumber ->
-  WebApp (ShareContribution UserDisplayInfo)
+  WebApp (ShareContribution UserDisplayInfo :++ AtKey "contributionStateToken" ContributionStateToken)
 getContributionByNumberEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber = do
   (project, shareContribution) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     shareContribution <-
       ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
         >>= UsersQ.userDisplayInfoOf traversed
+        >>= \(shareContribution@ShareContribution {contributionId}) -> do
+          contributionStateToken <- ContributionsQ.contributionStateTokenById contributionId
+          pure $ shareContribution :++ AtKey contributionStateToken
     pure (project, shareContribution)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
   pure shareContribution
@@ -169,6 +205,7 @@ updateContributionByNumberEndpoint session handle projectSlug contributionNumber
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionUpdate callerUserId contribution updateRequest
   PG.runTransactionOrRespondError $ do
     _ <- ContributionsQ.updateContribution callerUserId contributionId title description status (branchId <$> maySourceBranch) (branchId <$> mayTargetBranch)
+    DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
     ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
       >>= UsersQ.userDisplayInfoOf traversed
   where
@@ -243,7 +280,7 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
   let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId]
   Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
-    namespaceDiff <- Diffs.diffCausals authZReceipt oldCausalId newBranchCausalId
+    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldCausalId) (newCodebase, newBranchCausalId))
     (newBranchCausalHash, oldCausalHash) <- PG.runTransaction $ do
       newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
       oldCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldCausalId
@@ -291,15 +328,15 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
       (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      (oldTerm, newTerm, displayObjDiff) <- Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName)
+      termDiff <- respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName))
       pure $
         ShareTermDiffResponse
           { project = projectShorthand,
             oldBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
             newBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-            oldTerm = oldTerm,
-            newTerm = newTerm,
-            diff = displayObjDiff
+            oldTerm = termDiff.left,
+            newTerm = termDiff.right,
+            diff = termDiff.diff
           }
   where
     projectShorthand :: IDs.ProjectShortHand
@@ -336,15 +373,15 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "contribution-diff-types" cacheKeys do
       (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      (oldType, newType, displayObjDiff) <- Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName)
+      typeDiff <- respondExceptT (Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName))
       pure $
         ShareTypeDiffResponse
           { project = projectShorthand,
             oldBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
             newBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-            oldType = oldType,
-            newType = newType,
-            diff = displayObjDiff
+            oldType = typeDiff.left,
+            newType = typeDiff.right,
+            diff = typeDiff.diff
           }
   where
     projectShorthand :: IDs.ProjectShortHand
@@ -355,14 +392,63 @@ mergeContributionEndpoint ::
   UserHandle ->
   ProjectSlug ->
   IDs.ContributionNumber ->
-  WebApp ()
-mergeContributionEndpoint session userHandle projectSlug contributionNumber = do
+  (AtKey key ContributionStateToken) ->
+  WebApp MergeContributionResponse
+mergeContributionEndpoint session userHandle projectSlug contributionNumber (AtKey contributionStateToken) = do
+  callerUserId <- AuthN.requireAuthenticatedUser session
+  (contribution, project) <- PG.runTransactionOrRespondError $ do
+    project <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+    contribution <- ContributionsQ.contributionByProjectIdAndNumber project.projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    pure (contribution, project)
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
+  when (contribution.status == Merged) do
+    respondError $ SimpleServerError @417 @"contribution:already-merged" @"Contribution already merged." contribution
+  PG.runTransactionOrRespondError do
+    -- Refetch the contribution within the transaction
+    contribution <- ContributionsQ.contributionByProjectIdAndNumber project.projectId contributionNumber `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    currentContributionStateToken <- ContributionsQ.contributionStateTokenById contribution.contributionId
+    when (currentContributionStateToken /= contributionStateToken) do
+      throwSomeServerError (ContributionStateChangedError contributionStateToken currentContributionStateToken)
+    sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    isFastForward <- CausalQ.isFastForward targetBranch.causal sourceBranch.causal
+    if isFastForward
+      then do
+        let description = "Merged Contribution #" <> (IDs.toText contributionNumber) <> "\n" <> contribution.title
+        newNamespaceId <- CausalQ.expectNamespaceIdsByCausalIdsOf id sourceBranch.causal
+        nlReceipt <- NL.ensureNameLookupForBranchId newNamespaceId
+        let projectCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForProjectBranchCodebase project.ownerUserId targetBranch.contributorId
+        PG.codebaseMToTransaction projectCodebase $ Codebase.importCausalIntoCodebase (Branch.branchCodebaseUser sourceBranch) sourceBranch.causal
+        BranchQ.setBranchCausalHash nlReceipt description callerUserId targetBranch.branchId sourceBranch.causal
+        -- Update any affected contributions to reflect the result of updating this branch.
+        MergeDetection.updateContributionsFromBranchUpdate callerUserId targetBranch.branchId
+        pure $ MergeContributionResponse MergeSuccess
+      else pure $ MergeContributionResponse $ MergeFailed "Share only supports fast forward merges for now."
+  where
+    projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
+
+checkMergeContributionEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  IDs.ContributionNumber ->
+  WebApp CheckMergeContributionResponse
+checkMergeContributionEndpoint session userHandle projectSlug contributionNumber = do
   callerUserId <- AuthN.requireAuthenticatedUser session
   contribution <- PG.runTransactionOrRespondError $ do
     Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-    pure (contribution)
+    pure contribution
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionMerge callerUserId contribution
-  respondError Unimplemented
+  case contribution.status of
+    Merged -> pure $ CheckMergeContributionResponse {mergeability = AlreadyMerged}
+    _ -> do
+      isFastForward <- PG.runTransactionOrRespondError do
+        sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+        targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+        CausalQ.isFastForward targetBranch.causal sourceBranch.causal
+      if isFastForward
+        then pure CheckMergeContributionResponse {mergeability = CanFastForward}
+        else pure CheckMergeContributionResponse {mergeability = CantMerge "Share only supports fast forward merges for now."}
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}

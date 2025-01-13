@@ -74,6 +74,43 @@ It details Share's required environment variables and shows how it expects to be
 
 If you have any questions about self hosting, feel free to ask in our [Discord server](https://unison-lang.org/discord).
 
+### Dependencies
+
+Share currently requires a Postgres instance and access to a Redis server.
+
+### Environment Variables
+
+There are a number of environment variables Share requires.
+See `local.env` for example values which are used for local development.
+
+- `SHARE_API_ORIGIN`: The URL where the share server is accessible on the web.
+- `SHARE_SERVER_PORT`: Which port the server should bind to on startup. This may differ from `SHARE_API_ORIGIN` if you're using a reverse proxy.
+- `SHARE_REDIS`: The URL of the redis server.
+- `SHARE_POSTGRES`: The URL of the postgres server.
+- `SHARE_HMAC_KEY`: A secret key used for cryptographic signing. This should be at least 32 characters long.
+- `SHARE_DEPLOYMENT`: The deployment environment. One of: `local`, `staging`, `prod`.
+- `SHARE_POSTGRES_CONN_TTL`: The maximum time a connection to the postgres server should be kept alive.
+- `SHARE_POSTGRES_CONN_MAX`: The maximum number of connections to the postgres server.
+- `SHARE_SHARE_UI_ORIGIN`: The URL where the Share UI is publicly accessible.
+- `SHARE_CLOUD_UI_ORIGIN`: The URL where the Unison Cloud UI is publicly accessible.
+- `SHARE_HOMEPAGE_ORIGIN`: The URL where the Unison homepage is publicly accessible. If you are self-hosting you can set this to any URL you like.
+- `SHARE_CLOUD_HOMEPAGE_ORIGIN`: The URL where the Unison Cloud homepage is publicly accessible. If you are self-hosting you can set this to any URL you like.
+- `SHARE_LOG_LEVEL`: Minimum level of logging to emit, One of: `DEBUG`, `INFO`, `ERROR`, `USERERROR`.
+- `SHARE_COMMIT`: The git commit hash the share server was built from. This is passed along in error reports
+- `SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST`: How many concurrent workers may serve a single UCM pull. The recommended value for this will depend on the number of cores on your machine, but between 5-8 is a reasonable number.
+- `SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST`: How many concurrent workers may serve a single UCM push. The recommended value for this will depend on the number of cores on your machine, but between 5-8 is a reasonable number.
+- `SHARE_ZENDESK_API_USER`: The username to use for the Zendesk API.
+- `SHARE_ZENDESK_API_TOKEN`: The token to use for the Zendesk API.
+- `SHARE_GITHUB_CLIENTID`: The client ID for the GitHub OAuth application which will be used to authenticate users with the Share server.
+- `SHARE_GITHUB_CLIENT_SECRET`: The client secret for the GitHub OAuth application which will be used to authenticate users with the Share server.
+- (optional) `SHARE_SENTRY_DSN`: The URL of the Sentry instance to send error reports to. You may leave this unset.
+
+### Database initialization
+
+Share doesn't currently use any tools for managing database migrations (sorry). To initialize your database, you must run all the **timestamped** migration files inside `./sql`.
+
+We plan to transition to a more robust solution in the future.
+
 ## Updating unison dependencies
 
 ```sh

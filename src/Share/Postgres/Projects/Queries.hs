@@ -10,7 +10,7 @@ module Share.Postgres.Projects.Queries
 where
 
 import Control.Lens
-import Control.Monad.Except (MonadError (..), runExceptT)
+import Control.Monad.Except (runExceptT)
 import Share.IDs
 import Share.Postgres
 import Share.Prelude
@@ -31,8 +31,11 @@ listProjectMaintainers projId = do
     queryListRows @(UserId, Bool, Bool, Bool)
       [sql|
     SELECT pm.user_id, pm.can_view, pm.can_maintain, pm.can_admin
-        FROM project_maintainers pm
+        FROM project_maintainers pm 
+          JOIN users u ON pm.user_id = u.id
           WHERE pm.project_id = #{projId}
+      -- Just need some order to make tests deterministic
+      ORDER BY u.handle ASC
     |]
   results
     & fmap \case

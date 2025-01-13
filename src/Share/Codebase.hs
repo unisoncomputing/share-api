@@ -166,7 +166,7 @@ instance Logging.Loggable CodebaseError where
 shorthashLength :: Int
 shorthashLength = 10
 
--- | Construct a CodebaseEnv allowsing you to run transactions against a given codebase.
+-- | Construct a CodebaseEnv allowing you to run transactions against a given codebase.
 codebaseEnv :: AuthZReceipt -> CodebaseLocation -> CodebaseEnv
 codebaseEnv !_authZReceipt codebaseLoc = do
   let codebaseOwner = Codebase.codebaseOwnerUserId codebaseLoc
@@ -372,7 +372,7 @@ expectTypeOfConstructor ref conId =
     Nothing -> lift (unrecoverableError (MissingTypeForConstructor ref conId))
 
 data CodeLookupCache = CodeLookupCache
-  { termCache :: Map Reference.Id (V1.Term Symbol Ann),
+  { termCache :: Map Reference.Id (V1.Term Symbol Ann, V1.Type Symbol Ann),
     typeCache :: Map Reference.Id (V1.Decl Symbol Ann)
   }
 
@@ -381,19 +381,21 @@ codeLookupForUser codebaseOwner = do
   -- A simple append-only cache that lives for the duration of the request.
   cacheVar <- UnliftIO.newTVarIO (CodeLookupCache mempty mempty)
   unlift <- askUnliftIO
-  let getTerm r = do
+  let getTermAndType :: Reference.Id -> IO (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+      getTermAndType r = do
         let UnliftIO.UnliftIO toIO = unlift
         CodeLookupCache {termCache} <- UnliftIO.atomically $ UnliftIO.readTVar cacheVar
         case Map.lookup r termCache of
-          Just term -> pure (Just term)
+          Just termAndType -> pure (Just termAndType)
           Nothing -> do
             mayTermAndType <- toIO . PG.runTransaction $ loadTermForCodeLookup codebaseOwner r
             case mayTermAndType of
-              Just (term, _) -> do
+              Just termAndType -> do
                 UnliftIO.atomically $ UnliftIO.modifyTVar cacheVar $ \CodeLookupCache {termCache, ..} ->
-                  CodeLookupCache {termCache = Map.insert r term termCache, ..}
-                pure (Just term)
+                  CodeLookupCache {termCache = Map.insert r termAndType termCache, ..}
+                pure (Just termAndType)
               Nothing -> pure Nothing
+
   let getTypeDecl r = do
         let UnliftIO.UnliftIO toIO = unlift
         CodeLookupCache {typeCache} <- UnliftIO.atomically $ UnliftIO.readTVar cacheVar
@@ -408,7 +410,7 @@ codeLookupForUser codebaseOwner = do
                 pure (Just typ)
               Nothing -> pure Nothing
   pure $
-    CL.CodeLookup getTerm getTypeDecl
+    CL.CodeLookup (\r -> fmap fst <$> getTermAndType r) (\r -> fmap snd <$> getTermAndType r) getTypeDecl
       <> Builtin.codeLookup
       <> IOSource.codeLookupM
 

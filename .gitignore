@@ -14,6 +14,7 @@ docker/tmp
 # Stack profiling
 *.prof
 *.prof.html
+*.profiterole.*
 prelude.output.md
 /dist-newstyle
 

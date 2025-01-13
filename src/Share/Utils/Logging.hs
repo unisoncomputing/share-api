@@ -32,10 +32,12 @@ module Share.Utils.Logging
     runLoggerTEnv,
 
     -- * Other
+    ShowLoggable (..),
     module X,
   )
 where
 
+import Control.Monad.Except (ExceptT)
 import Control.Monad.Reader
 import Data.Char qualified as Char
 import Data.Map qualified as Map
@@ -82,6 +84,15 @@ runLoggerTEnv :: Env.Env reqCtx -> Map Text Text -> LoggerT m a -> m a
 runLoggerTEnv (Env.Env {Env.timeCache, Env.logger, Env.minLogSeverity}) tags m =
   runLoggerT minLogSeverity logger tags timeCache $ m
 
+newtype ShowLoggable (severity :: Severity) a = ShowLoggable a
+
+instance (Show a, GetSeverity severity) => Loggable (ShowLoggable severity a) where
+  toLog (ShowLoggable a) =
+    a
+      & tShow
+      & textLog
+      & withSeverity (getSeverity $ Proxy @severity)
+
 class Loggable msg where
   toLog :: msg -> LogMsg
 
@@ -105,6 +116,12 @@ class (Monad m) => MonadLogger m where
   logMsg :: LogMsg -> m ()
 
 instance (MonadLogger m) => MonadLogger (ReaderT r m) where
+  logMsg = lift . logMsg
+
+instance (MonadLogger m) => MonadLogger (ExceptT e m) where
+  logMsg = lift . logMsg
+
+instance (MonadLogger m) => MonadLogger (MaybeT m) where
   logMsg = lift . logMsg
 
 textLog :: Text -> LogMsg

@@ -8,7 +8,7 @@ Let's set up a main branch with two feature branches:
 `main <- feature-one <- feature-two`
 
 ```ucm:hide
-.> project.create-empty bca-updates
+scratch/main> project.create-empty bca-updates
 bca-updates/main>
 ```
 

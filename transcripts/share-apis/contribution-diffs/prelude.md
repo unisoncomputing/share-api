@@ -1,5 +1,5 @@
 ```ucm:hide
-.> project.create-empty contribution-diff
+scratch/main> project.create-empty contribution-diff
 contribution-diff/main> branch /diff-start
 contribution-diff/diff-start> builtins.mergeio
 ```
@@ -54,9 +54,11 @@ contribution-diff/diff-start> branch /diff-end
 contribution-diff/diff-end> alias.term termAliasMe aTermAlias
 contribution-diff/diff-end> delete.term termDeleteMe
 contribution-diff/diff-end> alias.type DataAliasMe ATypeAlias
+contribution-diff/diff-end> alias.term DataAliasMe.B ATypeAlias.B
 contribution-diff/diff-end> delete.type DataDeleteMe
 contribution-diff/diff-end> delete.namespace DataDeleteMe
 contribution-diff/diff-end> alias.type AbilityAliasMe AbilityAlias
+contribution-diff/diff-end> alias.term AbilityAliasMe.abilityAliasMe AbilityAlias.abilityAliasMe
 contribution-diff/diff-end> delete.type AbilityDeleteMe
 contribution-diff/diff-end> delete.namespace AbilityDeleteMe
 contribution-diff/diff-end> delete.term a.definition.at.path1
