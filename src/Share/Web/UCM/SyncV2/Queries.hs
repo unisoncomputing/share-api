@@ -6,6 +6,7 @@ where
 import Control.Monad.Reader
 import Share.Codebase (CodebaseM, codebaseOwner)
 import Share.Postgres
+import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as PGCursor
 import Share.Postgres.IDs
@@ -183,11 +184,14 @@ import Unison.SyncV2.Types (CBORBytes)
 allSerializedDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
 allSerializedDependenciesOfCausalCursor cid = do
   ownerUserId <- asks codebaseOwner
+  libSegmentTextId <- queryExpect1Col @Int64 [sql| SELECT text.text_id FROM text WHERE content_hash = text_hash('lib') |]
   PGCursor.newRowCursor
     "causal_dependencies"
     [sql|
-        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id) AS (
-            SELECT causal.id, causal.hash, causal.namespace_hash_id
+    -- is_lib_causal indicates the causl itself is the library, whereas is_lib_root indicates
+    -- the causal is the root of a library INSIDE 'lib'
+        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id, is_spine, is_lib_causal, is_lib_root, is_in_lib) AS (
+            SELECT causal.id, causal.hash, causal.namespace_hash_id, true AS is_spine, false AS is_lib_causal, false AS is_lib_root,  false AS is_in_lib
             FROM causals causal
                 WHERE causal.id = #{cid}
                   AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
@@ -195,15 +199,15 @@ allSerializedDependenciesOfCausalCursor cid = do
             -- This nested CTE is required because RECURSIVE CTEs can't refer
             -- to the recursive table more than once.
             ( WITH rec AS (
-                SELECT causal_id, causal_namespace_hash_id
+                SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root, tc.is_in_lib
                 FROM transitive_causals tc
             )
-                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id
+                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_root, rec.is_in_lib
                 FROM causal_ancestors ca
                     JOIN rec tc ON ca.causal_id = tc.causal_id
                     JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
                 UNION
-                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id
+                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id, false AS is_spine, nc.name_segment_id = #{libSegmentTextId} AS is_lib_causal, rec.is_lib_causal AS is_lib_root, tc.is_in_lib OR nc.name_segment_id = #{libSegmentTextId} AS is_in_lib
                 FROM rec tc
                     JOIN namespace_children nc ON tc.causal_namespace_hash_id = nc.parent_namespace_hash_id
                     JOIN causals child_causal ON nc.child_causal_id = child_causal.id
