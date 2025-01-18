@@ -10,6 +10,7 @@ import Control.Concurrent.STM.TBMQueue qualified as STM
 import Control.Monad.Except (ExceptT (ExceptT))
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Binary.Builder qualified as Builder
+import Data.Set qualified as Set
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Servant
@@ -66,7 +67,7 @@ parseBranchRef (SyncV2.BranchRef branchRef) =
     parseRelease = fmap Left . eitherToMaybe $ IDs.fromText @ProjectReleaseShortHand branchRef
 
 downloadEntitiesStreamImpl :: Maybe UserId -> SyncV2.DownloadEntitiesRequest -> WebApp (SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk))
-downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {causalHash = causalHashJWT, branchRef, knownHashes = _todo}) = do
+downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {causalHash = causalHashJWT, branchRef, knownHashes}) = do
   either emitErr id <$> runExceptT do
     addRequestTag "branch-ref" (SyncV2.unBranchRef branchRef)
     HashJWTClaims {hash = causalHash} <- lift (HashJWT.verifyHashJWT mayCallerUserId causalHashJWT >>= either respondError pure)
@@ -98,7 +99,8 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
       Logging.logInfoText "Starting download entities stream"
       Codebase.runCodebaseTransaction codebase $ do
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
-        cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId
+        let knownCausalHashes = Set.map hash32ToCausalHash knownHashes
+        cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId knownCausalHashes
         Cursor.foldBatched cursor batchSize \batch -> do
           let entityChunkBatch = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch

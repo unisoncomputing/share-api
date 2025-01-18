@@ -1,15 +1,17 @@
 module Share.Web.UCM.SyncV2.Queries
   ( allSerializedDependenciesOfCausalCursor,
+    spineAndLibDependenciesOfCausalCursor,
   )
 where
 
 import Control.Monad.Reader
 import Share.Codebase (CodebaseM, codebaseOwner)
 import Share.Postgres
-import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as PGCursor
 import Share.Postgres.IDs
+import Share.Prelude
+import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.TempEntity (TempEntity)
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
@@ -181,36 +183,48 @@ import Unison.SyncV2.Types (CBORBytes)
 --                JOIN component_hashes ON tc.component_hash_id = component_hashes.id
 --   |]
 
-allSerializedDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
-allSerializedDependenciesOfCausalCursor cid = do
+allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
+allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   ownerUserId <- asks codebaseOwner
-  libSegmentTextId <- queryExpect1Col @Int64 [sql| SELECT text.text_id FROM text WHERE content_hash = text_hash('lib') |]
-  PGCursor.newRowCursor
-    "causal_dependencies"
+  execute_ [sql| CREATE TEMP TABLE except_causals ( causal_id INTEGER NOT NULL REFERENCES causals(id) ) |]
+  execute_
+    [sql| INSERT INTO except_causals (causal_id)
+    WITH the_causal_hashes(hash) AS (SELECT * FROM ^{singleColumnTable (toList exceptCausalHashes)})
+    SELECT c.id
+      FROM the_causal_hashes tch
+        JOIN causals c ON tch.hash = c.hash
+    |]
+  execute_
     [sql|
-    -- is_lib_causal indicates the causl itself is the library, whereas is_lib_root indicates
-    -- the causal is the root of a library INSIDE 'lib'
-        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id, is_spine, is_lib_causal, is_lib_root, is_in_lib) AS (
-            SELECT causal.id, causal.hash, causal.namespace_hash_id, true AS is_spine, false AS is_lib_causal, false AS is_lib_root,  false AS is_in_lib
+    |]
+  cursor <-
+    PGCursor.newRowCursor
+      "serialized_entities"
+      [sql|
+        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id) AS (
+            SELECT causal.id, causal.hash, causal.namespace_hash_id
             FROM causals causal
                 WHERE causal.id = #{cid}
                   AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
+                  AND NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = causal.id)
             UNION
             -- This nested CTE is required because RECURSIVE CTEs can't refer
             -- to the recursive table more than once.
             ( WITH rec AS (
-                SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root, tc.is_in_lib
+                SELECT tc.causal_id, tc.causal_namespace_hash_id
                 FROM transitive_causals tc
             )
-                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_root, rec.is_in_lib
+                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id
                 FROM causal_ancestors ca
                     JOIN rec tc ON ca.causal_id = tc.causal_id
                     JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
+                    WHERE NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = ancestor_causal.id)
                 UNION
-                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id, false AS is_spine, nc.name_segment_id = #{libSegmentTextId} AS is_lib_causal, rec.is_lib_causal AS is_lib_root, tc.is_in_lib OR nc.name_segment_id = #{libSegmentTextId} AS is_in_lib
+                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id
                 FROM rec tc
                     JOIN namespace_children nc ON tc.causal_namespace_hash_id = nc.parent_namespace_hash_id
                     JOIN causals child_causal ON nc.child_causal_id = child_causal.id
+                    WHERE NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = child_causal.id)
             )
         ), all_namespaces(namespace_hash_id, namespace_hash) AS (
             SELECT DISTINCT tc.causal_namespace_hash_id AS namespace_hash_id, bh.base32 as namespace_hash
@@ -321,9 +335,56 @@ allSerializedDependenciesOfCausalCursor cid = do
                JOIN bytes ON sn.bytes_id = bytes.id
            )
            UNION ALL
-           (SELECT bytes.bytes, tc.causal_hash
+           (SELECT bytes.bytes, tc.causal_hash, tc.is_spine, tc.is_lib_root
              FROM transitive_causals tc
                JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
                JOIN bytes ON sc.bytes_id = bytes.id
            )
   |]
+  execute_ [sql| DROP TABLE except_causals |]
+  pure cursor
+
+spineAndLibDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
+spineAndLibDependenciesOfCausalCursor cid = do
+  ownerUserId <- asks codebaseOwner
+  libSegmentTextId <- queryExpect1Col @Int64 [sql| SELECT text.id FROM text WHERE content_hash = text_hash('lib') |]
+  PGCursor.newRowCursor
+    "causal_dependencies"
+    [sql|
+    -- is_lib_causal indicates the causal itself is the library, whereas is_lib_root indicates
+    -- the causal is the root of a library INSIDE 'lib'
+        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id, is_spine, is_lib_causal, is_lib_root) AS (
+            SELECT causal.id, causal.hash, causal.namespace_hash_id, true AS is_spine, false AS is_lib_causal, false AS is_lib_root
+            FROM causals causal
+                WHERE causal.id = #{cid}
+                  -- AND NOT EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = to_codebase_user_id AND co.causal_id = causal.id)
+                  AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
+            UNION
+            -- This nested CTE is required because RECURSIVE CTEs can't refer
+            -- to the recursive table more than once.
+            ( WITH rec AS (
+                SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root
+                FROM transitive_causals tc
+            )
+                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_root
+                FROM causal_ancestors ca
+                    JOIN rec ON ca.causal_id = rec.causal_id
+                    JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
+                    -- Only get the history of the top level spine
+                    WHERE rec.is_spine
+                    -- WHERE NOT EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = to_codebase_user_id AND co.causal_id = ancestor_causal.id)
+                UNION
+                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id, false AS is_spine, nc.name_segment_id = #{libSegmentTextId} AS is_lib_causal, rec.is_lib_causal AS is_lib_root
+                FROM rec
+                    JOIN namespace_children nc ON rec.causal_namespace_hash_id = nc.parent_namespace_hash_id
+                    JOIN causals child_causal ON nc.child_causal_id = child_causal.id
+                    -- Don't sync children of lib roots.
+                    WHERE NOT rec.is_lib_root
+                          AND (nc.name_segment_id = #{libSegmentTextId} OR rec.is_lib_causal))
+                    -- WHERE NOT EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = to_codebase_user_id AND co.causal_id = child_causal.id)
+            )
+           (SELECT tc.causal_hash, tc.is_spine, tc.is_lib_root
+             FROM transitive_causals tc
+           )
+  |]
+    <&> fmap (\(hash, isSpine, isLibRoot) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))
