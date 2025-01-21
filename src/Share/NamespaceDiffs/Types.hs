@@ -24,6 +24,7 @@ module Share.NamespaceDiffs.Types
 
     -- * Misc. helpers
     definitionDiffsToTree,
+    combineTermsAndTypes,
   )
 where
 
@@ -33,6 +34,7 @@ import Control.Lens hiding ((:<))
 import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
 import Data.Map qualified as Map
+import Data.Semialign (Semialign, alignWith)
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Servant (err404, err500)
@@ -341,3 +343,25 @@ expandNameTree m =
       case Name.segments n of
         (ns :| []) -> Left (ns, a)
         (ns :| (r : rs)) -> Right (ns, Map.singleton (Name.fromSegments (r :| rs)) a)
+
+combineTermsAndTypes ::
+  forall f reference referent.
+  (Semialign f, Ord reference, Ord referent) =>
+  These
+    (f (Set (DefinitionDiff referent Name Name)))
+    (f (Set (DefinitionDiff reference Name Name))) ->
+  f (DiffAtPath referent reference Name Name Name Name)
+combineTermsAndTypes = \case
+  This termsMap -> termsMap <&> \termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
+  That typesMap -> typesMap <&> \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
+  These trms typs -> alignWith combineNode trms typs
+  where
+    combineNode ::
+      These
+        (Set (DefinitionDiff referent Name Name))
+        (Set (DefinitionDiff reference Name Name)) ->
+      DiffAtPath referent reference Name Name Name Name
+    combineNode = \case
+      This termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
+      That typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
+      These termDiffsAtPath typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}

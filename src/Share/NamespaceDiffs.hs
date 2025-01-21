@@ -82,17 +82,6 @@ diffTreeNamespacesHelper (oldTerms, newTerms) (oldTypes, newTypes) = do
         alignWith combineTermsAndTypes termTree typeTree
           & compressNameTree
   pure compressed
-  where
-    combineTermsAndTypes :: These (Map NameSegment (Set (DefinitionDiff referent Name Name))) (Map NameSegment (Set (DefinitionDiff reference Name Name))) -> Map NameSegment (DiffAtPath referent reference Name Name Name Name)
-    combineTermsAndTypes = \case
-      This termsMap -> termsMap <&> \termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
-      That typesMap -> typesMap <&> \typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
-      These trms typs -> alignWith combineNode trms typs
-    combineNode :: These (Set (DefinitionDiff referent Name Name)) (Set (DefinitionDiff reference Name Name)) -> DiffAtPath referent reference Name Name Name Name
-    combineNode = \case
-      This termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
-      That typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
-      These termDiffsAtPath typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 -- | Collapse all links which have only a single child into a path.
 -- I.e. the resulting tree will not contain nodes that have only a single namespace child with no diffs.
