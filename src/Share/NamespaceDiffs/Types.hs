@@ -21,12 +21,19 @@ module Share.NamespaceDiffs.Types
     definitionDiffKindRefs_,
     definitionDiffKindDiffs_,
     definitionDiffKindRendered_,
+
+    -- * Misc. helpers
+    definitionDiffsToTree,
   )
 where
 
 import Control.Comonad.Cofree (Cofree)
+import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens hiding ((:<))
+import Data.Either (partitionEithers)
+import Data.Foldable qualified as Foldable
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Servant (err404, err500)
 import Share.Prelude
@@ -34,6 +41,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
 import Unison.Codebase.Path (Path)
 import Unison.Name (Name)
+import Unison.Name qualified as Name
 import Unison.NameSegment (NameSegment)
 import Unison.Util.Set qualified as Set
 
@@ -263,3 +271,73 @@ namespaceTreeDiffRenderedTerms_ = traversed . traversed . diffAtPathRenderedTerm
 namespaceTreeDiffRenderedTypes_ :: (Ord typeDiff, Ord reference, Ord renderedType') => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm renderedType' termDiff typeDiff) renderedType renderedType'
 namespaceTreeDiffRenderedTypes_ = traversed . traversed . diffAtPathRenderedTypes_
 
+-- | Convert a `DefinitionDiffs` into a tree of differences.
+definitionDiffsToTree :: forall ref. (Ord ref) => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref Name Name)))
+definitionDiffsToTree dd =
+  let DefinitionDiffs {added, removed, updated, renamed, newAliases} = dd
+      expandedAliases :: Map Name (Set (DefinitionDiffKind ref Name Name))
+      expandedAliases =
+        newAliases
+          & Map.toList
+          & foldMap
+            ( \(r, (existingNames, newNames)) ->
+                ( Foldable.toList newNames
+                    <&> \newName -> Map.singleton newName (Set.singleton (NewAlias r existingNames newName))
+                )
+            )
+          & Map.unionsWith (<>)
+      expandedRenames :: Map Name (Set (DefinitionDiffKind ref Name Name))
+      expandedRenames =
+        renamed
+          & Map.toList
+          & foldMap \(r, (oldNames, newNames)) ->
+            ( -- We don't currently want to track the old names in a rename, and including them messes up
+              -- the path-compression for the diff tree, so we just omit them.
+              -- ( Foldable.toList oldNames
+              --       <&> \oldName -> Map.singleton oldName (Set.singleton (RenamedTo r newNames))
+              --   )
+              -- <>
+              ( Foldable.toList newNames
+                  <&> \newName -> Map.singleton newName (Set.singleton (RenamedFrom r oldNames newName))
+              )
+            )
+              & Map.unionsWith (<>)
+      diffTree :: Map Name (Set (DefinitionDiffKind ref Name Name))
+      diffTree =
+        Map.unionsWith
+          (<>)
+          [ (added & Map.mapWithKey \n r -> Set.singleton $ Added r n),
+            expandedAliases,
+            (removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
+            (updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
+            expandedRenames
+          ]
+      includeFQNs :: Map Name (Set (DefinitionDiffKind ref Name Name)) -> Map Name (Set (DefinitionDiff ref Name Name))
+      includeFQNs m = m & imap \n ds -> (ds & Set.map \d -> DefinitionDiff {kind = d, fqn = n})
+   in diffTree
+        & includeFQNs
+        & expandNameTree
+
+-- Unfolds a Map of names into a Cofree of paths by name segemnt.
+--
+-- >>> import qualified Unison.Syntax.Name as NS
+-- >>> expandNameTree $ Map.fromList [(NS.unsafeParseText "a.b", "a.b"), (NS.unsafeParseText "a.c", "a.c"), (NS.unsafeParseText "x.y.z", "x.y.z")]
+-- fromList [] :< fromList [(a,fromList [(b,"a.b"),(c,"a.c")] :< fromList []),(x,fromList [] :< fromList [(y,fromList [(z,"x.y.z")] :< fromList [])])]
+expandNameTree :: forall a. Map Name a -> Cofree (Map NameSegment) (Map NameSegment a)
+expandNameTree m =
+  let (here, children) =
+        m
+          & Map.toList
+          & fmap splitNames
+          & partitionEithers
+      childMap =
+        children
+          & Map.fromListWith Map.union
+          & fmap expandNameTree
+   in (Map.fromList here) Cofree.:< childMap
+  where
+    splitNames :: (Name, a) -> Either (NameSegment, a) (NameSegment, Map Name a)
+    splitNames (n, a) =
+      case Name.segments n of
+        (ns :| []) -> Left (ns, a)
+        (ns :| (r : rs)) -> Right (ns, Map.singleton (Name.fromSegments (r :| rs)) a)
