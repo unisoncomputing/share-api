@@ -7,11 +7,13 @@ module Share.NamespaceDiffs2
   )
 where
 
+import Control.Comonad.Cofree (Cofree)
 import Control.Monad.Except
 import Data.Map qualified as Map
+import Data.Set.NonEmpty qualified as NESet
 import Share.Codebase qualified as Codebase
 import Share.Names.Postgres qualified as PGNames
-import Share.NamespaceDiffs.Types (NamespaceTreeDiff)
+import Share.NamespaceDiffs.Types (DefinitionDiff, DefinitionDiffs (..), DiffAtPath, NamespaceTreeDiff, combineTermsAndTypes, compressNameTree, definitionDiffsToTree)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NL
@@ -25,6 +27,7 @@ import Unison.DataDeclaration (Decl)
 import Unison.LabeledDependency (LabeledDependency)
 import Unison.Merge (EitherWay, IncoherentDeclReason, LibdepDiffOp, Mergeblob0, Mergeblob1, ThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
+import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
 import Unison.Merge.Mergeblob1 qualified as Mergeblob1
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment (..))
@@ -42,7 +45,7 @@ import Unison.Term (Term)
 import Unison.Type (Type)
 import Unison.Util.BiMultimap (BiMultimap)
 import Unison.Util.BiMultimap qualified as BiMultimap
-import Unison.Util.Defns (Defns (..), DefnsF)
+import Unison.Util.Defns (Defns (..), DefnsF, DefnsF3, alignDefnsWith)
 import Unison.Util.Nametree (Nametree)
 
 data MergeError
@@ -161,5 +164,58 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
     case Merge.makeMergeblob1 blob0 names3 hydratedDefns3 of
       Right blob -> pure blob
       Left err -> throwError (IncoherentDecl err)
+
+  -- Boilerplate conversion: make a "DefinitionDiffs" from the info in a "Mergeblob1".
+  --
+  -- (Mitchell says: I think Share and UCM should share a type here – perhaps DefinitionDiffs should be pushed down? Or
+  -- is it just isomorphic to something that already exists in UCM?)
+  --
+  -- We start focusing only on Bob here, the contributor, even though Alice could have a diff as well of course (since
+  -- the LCA is arbitrarily behind Alice).
+
+  let definitionDiffs :: DefnsF (DefinitionDiffs Name) Referent TypeReference
+      definitionDiffs =
+        let f :: forall ref. (Ord ref) => Map Name (HumanDiffOp ref) -> DefinitionDiffs Name ref
+            f =
+              Map.toList >>> foldMap \(name, op) ->
+                case op of
+                  HumanDiffOp'Add ref -> mempty {added = Map.singleton name ref}
+                  HumanDiffOp'Delete ref -> mempty {removed = Map.singleton name ref}
+                  HumanDiffOp'Update refs -> mempty {updated = Map.singleton name (refs.old, refs.new)}
+                  HumanDiffOp'PropagatedUpdate _ -> mempty
+                  HumanDiffOp'AliasOf ref names ->
+                    mempty {newAliases = Map.singleton ref (names, NESet.singleton name)}
+                  HumanDiffOp'RenamedFrom ref names ->
+                    mempty {renamed = Map.singleton ref (names, NESet.singleton name)}
+                  HumanDiffOp'RenamedTo ref names ->
+                    mempty {renamed = Map.singleton ref (NESet.singleton name, names)}
+         in bimap f f blob1.humanDiffsFromLCA.bob
+
+  -- Convert definition diffs to two uncompressed trees of diffs (one for terms, one for types)
+  let twoUncompressedTrees ::
+        DefnsF3
+          (Cofree (Map NameSegment))
+          (Map NameSegment)
+          Set
+          (DefinitionDiff Referent Name Name)
+          (DefinitionDiff TypeReference Name Name)
+      twoUncompressedTrees =
+        bimap definitionDiffsToTree definitionDiffsToTree definitionDiffs
+
+  -- Align terms and types trees into one tree (still uncompressed)
+  let oneUncompressedTree ::
+        Cofree
+          (Map NameSegment)
+          (Map NameSegment (DiffAtPath Referent TypeReference Name Name Name Name))
+      oneUncompressedTree =
+        alignDefnsWith combineTermsAndTypes twoUncompressedTrees
+
+  -- Compress the name tree
+  let oneCompressedTree ::
+        Cofree
+          (Map Path)
+          (Map NameSegment (DiffAtPath Referent TypeReference Name Name Name Name))
+      oneCompressedTree =
+        compressNameTree oneUncompressedTree
 
   undefined
