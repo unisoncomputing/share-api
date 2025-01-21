@@ -83,35 +83,6 @@ diffTreeNamespacesHelper (oldTerms, newTerms) (oldTypes, newTypes) = do
           & compressNameTree
   pure compressed
 
--- | Collapse all links which have only a single child into a path.
--- I.e. the resulting tree will not contain nodes that have only a single namespace child with no diffs.
---
--- Note that the final node will always have a map of name segments containing the final
--- segment of the name, since that's considered the name and not part of the path.
---
--- >>> import qualified Unison.Syntax.Name as NS
--- >>> let expanded = expandNameTree $ Map.fromList [(NS.unsafeParseText "a.b", "a.b"), (NS.unsafeParseText "a.c", "a.c"), (NS.unsafeParseText "x.y.z", "x.y.z")]
--- >>> compressNameTree expanded
--- fromList [] :< fromList [(a,fromList [(b,"a.b"),(c,"a.c")] :< fromList []),(x.y,fromList [(z,"x.y.z")] :< fromList [])]
-compressNameTree :: Cofree (Map NameSegment) (Map NameSegment a) -> Cofree (Map Path) (Map NameSegment a)
-compressNameTree (diffs Cofree.:< children) =
-  let compressedChildren =
-        children
-          & fmap compressNameTree
-          & Map.toList
-          & fmap
-            ( \(ns, child) ->
-                case child of
-                  (childDiffs Cofree.:< nestedChildren)
-                    | null childDiffs,
-                      [(k, v)] <- Map.toList nestedChildren ->
-                        (ns Path.:< k, v)
-                    | otherwise ->
-                        (Path.singleton ns, child)
-            )
-          & Map.fromList
-   in diffs Cofree.:< compressedChildren
-
 -- | Compute changes between two unstructured Name relations, determining what has changed and how
 -- it should be interpreted so it's meaningful to the user.
 computeDefinitionDiff ::

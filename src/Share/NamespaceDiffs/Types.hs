@@ -25,6 +25,7 @@ module Share.NamespaceDiffs.Types
     -- * Misc. helpers
     definitionDiffsToTree,
     combineTermsAndTypes,
+    compressNameTree,
   )
 where
 
@@ -42,6 +43,7 @@ import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
 import Unison.Codebase.Path (Path)
+import Unison.Codebase.Path qualified as Path
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment (NameSegment)
@@ -365,3 +367,32 @@ combineTermsAndTypes = \case
       This termDiffsAtPath -> DiffAtPath {termDiffsAtPath, typeDiffsAtPath = mempty}
       That typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath = mempty}
       These termDiffsAtPath typeDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
+
+-- | Collapse all links which have only a single child into a path.
+-- I.e. the resulting tree will not contain nodes that have only a single namespace child with no diffs.
+--
+-- Note that the final node will always have a map of name segments containing the final
+-- segment of the name, since that's considered the name and not part of the path.
+--
+-- >>> import qualified Unison.Syntax.Name as NS
+-- >>> let expanded = expandNameTree $ Map.fromList [(NS.unsafeParseText "a.b", "a.b"), (NS.unsafeParseText "a.c", "a.c"), (NS.unsafeParseText "x.y.z", "x.y.z")]
+-- >>> compressNameTree expanded
+-- fromList [] :< fromList [(a,fromList [(b,"a.b"),(c,"a.c")] :< fromList []),(x.y,fromList [(z,"x.y.z")] :< fromList [])]
+compressNameTree :: Cofree (Map NameSegment) (Map NameSegment a) -> Cofree (Map Path) (Map NameSegment a)
+compressNameTree (diffs Cofree.:< children) =
+  let compressedChildren =
+        children
+          & fmap compressNameTree
+          & Map.toList
+          & fmap
+            ( \(ns, child) ->
+                case child of
+                  (childDiffs Cofree.:< nestedChildren)
+                    | null childDiffs,
+                      [(k, v)] <- Map.toList nestedChildren ->
+                        (ns Path.:< k, v)
+                    | otherwise ->
+                        (Path.singleton ns, child)
+            )
+          & Map.fromList
+   in diffs Cofree.:< compressedChildren
