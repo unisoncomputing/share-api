@@ -27,7 +27,7 @@ worker scope = do
 
 processEntities :: AuthZ.AuthZReceipt -> Background Bool
 processEntities !_authZReceipt = do
-  PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+  PG.runTransaction do
     Q.claimEntity >>= \case
       Nothing -> pure False
       Just (hash32, codebaseUserId) -> do
