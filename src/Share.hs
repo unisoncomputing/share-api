@@ -226,6 +226,8 @@ mkShareServer env = do
         ("codebases" : _) -> True
         ("search" : _) -> True
         ("sync" : _) -> True
+        ("ucm" : "v1" : "sync" : _) -> True
+        ("ucm" : "v2" : "sync" : _) -> True
         _ -> False
     corsPolicy :: Request -> Maybe CorsResourcePolicy
     corsPolicy req = case Deployment.deployment of
