@@ -34,8 +34,8 @@ library
       Share.BackgroundJobs.Monad
       Share.BackgroundJobs.Search.DefinitionSync
       Share.BackgroundJobs.Search.DefinitionSync.Types
-      Share.BackgroundJobs.SerialisedEntitiesMigration.Queries
-      Share.BackgroundJobs.SerialisedEntitiesMigration.Worker
+      Share.BackgroundJobs.SerializedEntitiesMigration.Queries
+      Share.BackgroundJobs.SerializedEntitiesMigration.Worker
       Share.BackgroundJobs.Workers
       Share.Branch
       Share.Codebase
