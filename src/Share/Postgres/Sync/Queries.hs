@@ -12,6 +12,8 @@ module Share.Postgres.Sync.Queries
     getEntitiesReadyToFlush,
     filterForFlushableHashes,
     tryPopFlushableTempEntity,
+    -- Exported for migrations
+    saveSerializedEntities,
   )
 where
 
