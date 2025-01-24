@@ -33,6 +33,7 @@ import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.SyncV2.Queries qualified as SSQ
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Debug qualified as Debug
+import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.SyncV2.API qualified as SyncV2
 import Unison.SyncV2.Types (DownloadEntitiesChunk (..), EntityChunk (..), ErrorChunk (..), StreamInitInfo (..))
@@ -43,8 +44,8 @@ import UnliftIO.Async qualified as Async
 batchSize :: Int32
 batchSize = 1000
 
-streamSettings :: StreamInitInfo
-streamSettings = StreamInitInfo {version = SyncV2.Version 1, entitySorting = SyncV2.Unsorted, numEntities = Nothing}
+streamSettings :: Hash32 -> Maybe SyncV2.BranchRef -> StreamInitInfo
+streamSettings rootCausalHash rootBranchRef = StreamInitInfo {version = SyncV2.Version 1, entitySorting = SyncV2.Unsorted, numEntities = Nothing, rootCausalHash, rootBranchRef}
 
 server :: Maybe UserId -> SyncV2.Routes WebAppServer
 server mayUserId =
@@ -90,7 +91,7 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
     q <- UnliftIO.atomically $ do
       q <- STM.newTBMQueue 10
-      STM.writeTBMQueue q (NEL.singleton $ InitialC $ streamSettings)
+      STM.writeTBMQueue q (NEL.singleton $ InitialC $ streamSettings causalHash (Just branchRef))
       pure q
     streamResults <- lift $ UnliftIO.toIO do
       Logging.logInfoText "Starting download entities stream"
