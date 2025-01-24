@@ -8,7 +8,7 @@ CREATE TABLE migrate_serialized_queue(
 
 -- Run this manually to populate the queue
 
--- INSERT INTO migrate_serialised_queue (hash, user_id)
+-- INSERT INTO migrate_serialized_queue (hash, user_id)
 --     SELECT c.hash, co.user_id
 --       FROM causal_ownership co
 --         JOIN causals c ON co.causal_id = c.id
