@@ -8,7 +8,6 @@ import Control.Concurrent.STM qualified as STM
 import Control.Concurrent.STM.TBMQueue qualified as STM
 import Control.Monad.Except (ExceptT (ExceptT))
 import Control.Monad.Trans.Except (runExceptT)
-import Data.Conduit.Combinators qualified as C
 import Data.List.NonEmpty qualified as NEL
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
@@ -32,7 +31,6 @@ import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.SyncV2.Queries qualified as SSQ
 import U.Codebase.Sqlite.Orphans ()
-import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.SyncV2.API qualified as SyncV2
@@ -96,13 +94,9 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
     streamResults <- lift $ UnliftIO.toIO do
       Logging.logInfoText "Starting download entities stream"
       Codebase.runCodebaseTransaction codebase $ do
-        Debug.debugM Debug.Temp "Getting IDs for:" causalHash
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
-        Debug.debugM Debug.Temp "Getting deps of" causalId
         cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId
-        Debug.debugLogM Debug.Temp "Got cursor"
         Cursor.foldBatched cursor batchSize \batch -> do
-          Debug.debugLogM Debug.Temp "Emitting batch"
           let entityChunkBatch = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
@@ -113,19 +107,15 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
     stream q = do
       let loop :: C.ConduitT () DownloadEntitiesChunk IO ()
           loop = do
-            Debug.debugLogM Debug.Temp "Waiting for batch..."
             liftIO (STM.atomically (STM.readTBMQueue q)) >>= \case
               -- The queue is closed.
               Nothing -> do
-                Debug.debugLogM Debug.Temp "Queue closed. finishing up!"
                 pure ()
               Just batch -> do
-                Debug.debugLogM Debug.Temp $ "Emitting chunk of " <> show (length batch) <> " entities"
                 C.yieldMany batch
                 loop
 
       loop
-      Debug.debugLogM Debug.Temp "Done!"
 
     emitErr :: SyncV2.DownloadEntitiesError -> SourceIO SyncV2.DownloadEntitiesChunk
     emitErr err = SourceT.source [ErrorC (ErrorChunk err)]
@@ -138,13 +128,3 @@ sourceIOWithAsync :: IO a -> SourceIO r -> SourceIO r
 sourceIOWithAsync action (SourceT k) =
   SourceT \k' ->
     Async.withAsync action \_ -> k k'
-
--- debug the output pipe.
-_tap :: (Monad m) => (C.ConduitT a DownloadEntitiesChunk m ()) -> (C.ConduitT a DownloadEntitiesChunk m ())
-_tap s =
-  s
-    C..| ( C.iterM \case
-             InitialC init -> Debug.debugM Debug.Temp "Initial " init
-             EntityC ec -> Debug.debugM Debug.Temp "Chunk " ec
-             ErrorC err -> Debug.debugM Debug.Temp "Error " err
-         )
