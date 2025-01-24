@@ -10,13 +10,13 @@ claimEntity = do
     [sql|
     WITH chosen_entity(hash, user_id) AS (
       SELECT q.hash, q.user_id
-      FROM migrate_serialised_queue q
+      FROM migrate_serialized_queue q
       LIMIT 1
       -- Skip any that are being synced by other workers.
       FOR UPDATE SKIP LOCKED
     )
-    DELETE FROM migrate_serialised_queue
+    DELETE FROM migrate_serialized_queue
       USING chosen_entity
-      WHERE migrate_serialised_queue.hash = chosen_entity.hash AND migrate_serialised_queue.user_id = chosen_entity.user_id
+      WHERE migrate_serialized_queue.hash = chosen_entity.hash AND migrate_serialized_queue.user_id = chosen_entity.user_id
     RETURNING chosen_entity.hash, chosen_entity.user_id
     |]
