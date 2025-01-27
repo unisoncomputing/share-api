@@ -20,12 +20,11 @@ import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Prelude
-import U.Codebase.Referent qualified as V2
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.DataDeclaration (Decl)
 import Unison.LabeledDependency (LabeledDependency)
-import Unison.Merge (EitherWay, IncoherentDeclReason, LibdepDiffOp, Mergeblob0, Mergeblob1, ThreeWay (..), TwoWay (..))
+import Unison.Merge (EitherWay, IncoherentDeclReason, Mergeblob0, Mergeblob1, ThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
 import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
 import Unison.Merge.Mergeblob1 qualified as Mergeblob1
@@ -61,10 +60,7 @@ computeThreeWayNamespaceDiff ::
   ExceptT
     MergeError
     (PG.Transaction e)
-    ( Defns (Set Name) (Set Name),
-      NamespaceTreeDiff V2.Referent Reference Name Name Name Name,
-      Map NameSegment (LibdepDiffOp BranchHashId)
-    )
+    (NamespaceTreeDiff Referent Reference Name Name Name Name)
 computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = do
   -- Load a flat definitions names (no lib) for Alice/Bob/LCA
   defnsNames3 :: ThreeWay Names <-
@@ -211,11 +207,8 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
         alignDefnsWith combineTermsAndTypes twoUncompressedTrees
 
   -- Compress the name tree
-  let oneCompressedTree ::
-        Cofree
-          (Map Path)
-          (Map NameSegment (DiffAtPath Referent TypeReference Name Name Name Name))
+  let oneCompressedTree :: NamespaceTreeDiff Referent TypeReference Name Name Name Name
       oneCompressedTree =
         compressNameTree oneUncompressedTree
 
-  undefined
+  pure oneCompressedTree

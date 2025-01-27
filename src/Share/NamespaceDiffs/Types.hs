@@ -112,7 +112,10 @@ data DefinitionDiffKind r rendered diff
   = Added r rendered
   | NewAlias r (NESet Name {- existing names -}) rendered
   | Removed r rendered
-  | Updated r {- old -} r {- new -} diff
+  | -- | A non-propagated update, where old and new have different syntactic hashes.
+    Updated r {- old -} r {- new -} diff
+  | -- | A propagated update (old and new are different but have the same syntactic hash)
+    Propagated r {- old -} r {- new -} diff
   | -- This definition was removed away from this location and added at the provided names.
     RenamedTo r (NESet Name) rendered
   | -- This definition was added at this location and removed from the provided names.
@@ -144,6 +147,7 @@ definitionDiffKindRefs_ f = \case
   Added r rendered -> Added <$> f r <*> pure rendered
   NewAlias r ns rendered -> NewAlias <$> f r <*> pure ns <*> pure rendered
   Removed r rendered -> Removed <$> f r <*> pure rendered
+  Propagated old new diff -> Propagated <$> f old <*> f new <*> pure diff
   Updated old new diff -> Updated <$> f old <*> f new <*> pure diff
   RenamedTo r old rendered -> RenamedTo <$> f r <*> pure old <*> pure rendered
   RenamedFrom r old rendered -> RenamedFrom <$> f r <*> pure old <*> pure rendered
@@ -153,6 +157,7 @@ definitionDiffKindDiffs_ f = \case
   Added r rendered -> Added r <$> pure rendered
   NewAlias r ns rendered -> NewAlias r ns <$> pure rendered
   Removed r rendered -> Removed r <$> pure rendered
+  Propagated old new diff -> Propagated old new <$> f diff
   Updated old new diff -> Updated old new <$> f diff
   RenamedTo r old rendered -> RenamedTo r old <$> pure rendered
   RenamedFrom r old rendered -> RenamedFrom r old <$> pure rendered
@@ -162,6 +167,7 @@ definitionDiffKindRendered_ f = \case
   Added r rendered -> Added r <$> f rendered
   NewAlias r ns rendered -> NewAlias r ns <$> f rendered
   Removed r rendered -> Removed r <$> f rendered
+  Propagated old new diff -> Propagated old new <$> pure diff
   Updated old new diff -> Updated old new <$> pure diff
   RenamedTo r old rendered -> RenamedTo r old <$> f rendered
   RenamedFrom r old rendered -> RenamedFrom r old <$> f rendered

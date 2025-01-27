@@ -143,6 +143,7 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase
       NewAlias r existingNames name -> NewAlias r existingNames <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "NewAlias"))
       Removed r name -> Removed r <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "Removed"))
       Updated oldRef newRef diff -> pure $ Updated oldRef newRef diff
+      Propagated oldRef newRef diff -> pure $ Propagated oldRef newRef diff
       RenamedTo r names name -> RenamedTo r names <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "RenamedTo"))
       RenamedFrom r names name -> RenamedFrom r names <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "RenamedFrom"))
 
@@ -220,6 +221,9 @@ instance ToJSON RenderedNamespaceDiff where
         Updated (oldTag, oldRef) (newTag, newRef) diffVal ->
           let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
            in (newTag, object ["tag" .= text "Updated", "contents" .= contents])
+        Propagated (oldTag, oldRef) (newTag, newRef) diffVal ->
+          let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
+           in (newTag, object ["tag" .= text "Propagated", "contents" .= contents])
         RenamedTo (defnTag, r) newNames rendered ->
           let contents = object ["oldShortName" .= shortName, "oldFullName" .= fqn, "newNames" .= newNames, "hash" .= r, "rendered" .= rendered]
            in (defnTag, object ["tag" .= text "RenamedTo", "contents" .= contents])
