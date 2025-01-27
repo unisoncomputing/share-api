@@ -1,99 +1,43 @@
-CREATE TYPE entity_kind AS ENUM ('term_component', 'decl_component', 'namespace', 'patch', 'causal');
+CREATE TABLE serialized_components (
+    -- The user the term is sandboxed to.
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    component_hash_id INTEGER NOT NULL REFERENCES component_hashes(id) ON DELETE CASCADE,
 
--- A "temp entity" is a term/decl/namespace/patch/causal that we cannot store in the database proper due to missing
--- dependencies.
---
--- The existence of each `temp_entity` row implies the existence of one or more corresponding
--- `temp_entity_missing_dependency` rows: it does not make sense to make a `temp_entity` row for a thing that has no
--- missing dependencies!
---
--- Similarly, each `temp_entity` row implies we do not have the entity in the database proper. When and if we *do* store
--- an entity proper (after storing all of its dependencies), we should always atomically delete the corresponding
--- `temp_entity` row, if any.
-CREATE TABLE temp_entity (
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  hash TEXT NOT NULL,
-  bytes BYTEA NOT NULL,
-  kind entity_kind NOT NULL,
-  PRIMARY KEY (user_id, hash)
+    -- The serialized component
+    bytes_id INTEGER NOT NULL REFERENCES bytes(id) ON DELETE NO ACTION,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    PRIMARY KEY (user_id, component_hash_id) INCLUDE (bytes_id)
 );
 
--- A many-to-many relationship between `temp_entity` (entities we can't yet store due to missing dependencies), and the
--- non-empty set of hashes of each entity's dependencies.
---
--- For example, if we wanted to store term #foo, but couldn't because it depends on term #bar which we don't have yet,
--- we would end up with the following rows.
---
---  temp_entity
--- +----------------------------------+
--- | user_id | hash | bytes | type_id  |
--- |==================================|
--- | U-...   | #foo | ...  | term_component |
--- +----------------------------------+
---
---  temp_entity_missing_dependency
--- +----------------------------------+
--- | user_id | dependent | dependency |
--- |=========|========================|
--- | U-...   | #foo      | #bar       |
--- +----------------------------------+
-CREATE TABLE temp_entity_missing_dependency (
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  -- Hash of the dependent
-  dependent TEXT NOT NULL,
-  -- Hash of the dependency
-  dependency TEXT NOT NULL,
-  PRIMARY KEY (user_id, dependent, dependency),
-  FOREIGN KEY (user_id, dependent) REFERENCES temp_entity(user_id, hash) ON DELETE NO ACTION
-);
-CREATE INDEX temp_entity_missing_dependency_ix_dependent ON temp_entity_missing_dependency (user_id, dependent);
-CREATE INDEX temp_entity_missing_dependency_ix_dependency ON temp_entity_missing_dependency (user_id, dependency);
+CREATE TABLE serialized_namespaces (
+    namespace_hash_id INTEGER NOT NULL REFERENCES branch_hashes(id) ON DELETE CASCADE,
 
--- Used to determine which entities are still missing dependencies during upload.
--- Includes all hashes in the user's codebase but not temp_entities
-CREATE OR REPLACE VIEW main_hashes_for_user(user_id, hash, kind) AS (
-    SELECT causal_ownership.user_id, causal.hash, 'causal'::entity_kind
-      FROM causal_ownership JOIN causals causal ON causal_ownership.causal_id = causal.id
-    UNION ALL
-    SELECT namespace_ownership.user_id, branch_hashes.base32, 'namespace'::entity_kind
-      FROM namespace_ownership
-        JOIN namespaces ON namespace_ownership.namespace_hash_id = namespaces.namespace_hash_id
-        JOIN branch_hashes ON namespaces.namespace_hash_id = branch_hashes.id
-    UNION ALL
-    SELECT patch_ownership.user_id, patch.hash, 'patch'::entity_kind
-      FROM patch_ownership JOIN patches patch ON patch_ownership.patch_id = patch.id
-    UNION ALL
-    SELECT sandboxed_terms.user_id, component_hashes.base32, 'term_component'::entity_kind
-      FROM sandboxed_terms
-        JOIN terms ON sandboxed_terms.term_id = terms.id
-        JOIN component_hashes ON terms.component_hash_id = component_hashes.id
-    UNION ALL
-    SELECT sandboxed_types.user_id, component_hashes.base32, 'decl_component'::entity_kind
-      FROM sandboxed_types
-        JOIN types ON sandboxed_types.type_id = types.id
-        JOIN component_hashes ON types.component_hash_id = component_hashes.id
+    -- The serialized namespace
+    bytes_id INTEGER NOT NULL REFERENCES bytes(id) ON DELETE NO ACTION,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    PRIMARY KEY (namespace_hash_id) INCLUDE (bytes_id)
 );
 
--- Includes all hashes in both the user's codebase and temp_entities
-CREATE OR REPLACE VIEW all_hashes_for_user(user_id, hash, kind) AS (
-    SELECT user_id, hash, kind FROM temp_entity
-    UNION
-    SELECT user_id, hash, kind FROM main_hashes_for_user
+CREATE TABLE serialized_patches (
+  patch_id INTEGER NOT NULL REFERENCES patches(id) ON DELETE CASCADE,
+  bytes_id INTEGER NOT NULL REFERENCES bytes(id) ON DELETE NO ACTION,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  PRIMARY KEY (patch_id) INCLUDE (bytes_id)
 );
 
-CREATE OR REPLACE FUNCTION remove_entity_from_temp(user_id UUID, hash TEXT)
-RETURNS VOID AS $$
-BEGIN
-    DELETE FROM temp_entity_missing_dependency dep
-      WHERE dep.user_id = remove_entity_from_temp.user_id
-        AND (dep.dependent = remove_entity_from_temp.hash OR dep.dependency = remove_entity_from_temp.hash);
-    DELETE FROM temp_entity te WHERE te.user_id = remove_entity_from_temp.user_id AND te.hash = remove_entity_from_temp.hash;
-END;
-$$ LANGUAGE plpgsql;
+CREATE TABLE serialized_causals (
+  causal_id INTEGER NOT NULL REFERENCES causals(id) ON DELETE CASCADE,
+  bytes_id INTEGER NOT NULL REFERENCES bytes(id) ON DELETE NO ACTION,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
--- Copies ALL dependencies of a causal into the codebase.
--- 
--- Note: This has been replaced in a later migration.
+  PRIMARY KEY (causal_id) INCLUDE (bytes_id)
+);
+
 CREATE OR REPLACE FUNCTION copy_causal_into_codebase(causal_id_to_copy INTEGER, from_codebase_user_id UUID, to_codebase_user_id UUID)
 RETURNS VOID AS $$
 DECLARE copied_hash TEXT;
@@ -261,6 +205,15 @@ BEGIN
                     JOIN sandboxed_types copy ON typ.id = copy.type_id
                     WHERE copy.user_id = from_codebase_user_id
                     ON CONFLICT DO NOTHING
+        ), copied_serialized_components AS (
+            INSERT INTO serialized_components(user_id, component_hash_id, bytes_id)
+              SELECT DISTINCT to_codebase_user_id, sc.component_hash_id, sc.bytes_id
+              FROM transitive_components tc
+                JOIN serialized_components sc
+                  ON (tc.component_hash_id = sc.component_hash_id
+                        AND sc.user_id = from_codebase_user_id
+                     )
+                  ON CONFLICT DO NOTHING
         ) SELECT causal.hash
              FROM copied_causals cc
                JOIN causals causal ON cc.causal_id = causal.id
@@ -281,38 +234,5 @@ BEGIN
     LOOP
         PERFORM remove_entity_from_temp(to_codebase_user_id, copied_hash);
     END LOOP;
-END;
-$$ LANGUAGE plpgsql;
-
--- Check whether a hash exists in the user's main codebase.
-CREATE OR REPLACE FUNCTION have_hash_in_codebase(codebase_owner_user_id UUID, hash_to_check TEXT)
-RETURNS BOOLEAN
-STABLE
-PARALLEL SAFE
-AS $$
-BEGIN
-    RETURN EXISTS (
-        SELECT FROM causals causal
-            JOIN causal_ownership co ON causal.id = co.causal_id
-            WHERE co.user_id = codebase_owner_user_id AND causal.hash = hash_to_check
-        UNION ALL
-        SELECT FROM namespace_ownership no
-            JOIN branch_hashes ON no.namespace_hash_id = branch_hashes.id
-            WHERE no.user_id = codebase_owner_user_id AND branch_hashes.base32 = hash_to_check
-        UNION ALL
-        SELECT FROM patch_ownership po
-            JOIN patches patch ON po.patch_id = patch.id
-            WHERE po.user_id = codebase_owner_user_id AND patch.hash = hash_to_check
-        UNION ALL
-        SELECT FROM sandboxed_terms st
-            JOIN terms term ON st.term_id = term.id
-            JOIN component_hashes ON term.component_hash_id = component_hashes.id
-            WHERE st.user_id = codebase_owner_user_id AND component_hashes.base32 = hash_to_check
-        UNION ALL
-        SELECT FROM sandboxed_types st
-            JOIN types typ ON st.type_id = typ.id
-            JOIN component_hashes ON typ.component_hash_id = component_hashes.id
-            WHERE st.user_id = codebase_owner_user_id AND component_hashes.base32 = hash_to_check
-    );
 END;
 $$ LANGUAGE plpgsql;

@@ -6,7 +6,7 @@ CREATE TABLE migrate_serialized_queue(
   PRIMARY KEY (user_id, hash)
 );
 
--- Run this manually to populate the queue
+-- Run this manually to populate the queue m
 
 -- INSERT INTO migrate_serialized_queue (hash, user_id)
 --     SELECT c.hash, co.user_id
