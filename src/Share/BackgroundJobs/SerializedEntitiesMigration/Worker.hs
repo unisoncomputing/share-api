@@ -9,6 +9,7 @@ import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Sync.Queries qualified as SQ
 import Share.Prelude
+import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import Unison.Sync.Common qualified as SyncCommon
 import UnliftIO.Concurrent qualified as UnliftIO
@@ -27,13 +28,18 @@ worker scope = do
 
 processEntities :: AuthZ.AuthZReceipt -> Background Bool
 processEntities !_authZReceipt = do
-  PG.runTransaction do
+  mayHash <- PG.runTransaction do
     Q.claimEntity >>= \case
-      Nothing -> pure False
+      Nothing -> pure Nothing
       Just (hash32, codebaseUserId) -> do
         let codebaseEnv = CodebaseEnv codebaseUserId
         Codebase.codebaseMToTransaction codebaseEnv $ do
           entity <- SQ.expectEntity hash32
           let tempEntity = SyncCommon.entityToTempEntity id entity
           SQ.saveSerializedEntities [(hash32, tempEntity)]
-        pure True
+        pure (Just hash32)
+  case mayHash of
+    Just hash -> do
+      Logging.logInfoText ("Migrated entity: " <> tShow hash)
+      pure True
+    Nothing -> pure False
