@@ -32,13 +32,8 @@ CREATE TABLE migrate_serialized_queue_unsandboxed (
 -- Run this manually to populate the sandboxed queue
 
 -- INSERT INTO migrate_serialized_queue_sandboxed (component_hash_id, user_id)
---     SELECT DISTINCT t.component_hash_id, st.user_id
---       FROM sandboxed_terms st
---         JOIN terms t ON st.term_id = t.id
---   UNION
---     SELECT DISTINCT t.component_hash_id, st.user_id
---       FROM sandboxed_types st
---         JOIN types t ON st.type_id = t.id
+--     SELECT DISTINCT ON (sd.component_hash_id, sd.component_summary_digest) sd.component_hash_id, sd.user_id
+--       FROM user_component_summary_digest sd
 --   ON CONFLICT DO NOTHING;
 
 
