@@ -3,7 +3,7 @@
 -- only a digest of the byte hashes of the elements of the component.
 CREATE OR REPLACE FUNCTION compute_component_summary_digest(the_user_id UUID, the_component_hash_id INTEGER) 
 RETURNS bytea AS $$
-  SELECT component_summary_digest FROM
+  SELECT t.component_summary_digest FROM
   (
     (SELECT 
       digest(array_to_string(ARRAY_AGG(b.content_hash ORDER BY b.content_hash), '|')::text, 'sha256')::bytea as component_summary_digest
@@ -20,7 +20,9 @@ RETURNS bytea AS $$
         JOIN bytes b ON st.bytes_id = b.id
         WHERE st.user_id = the_user_id AND t.component_hash_id = the_component_hash_id
     )
-  ) AS t;
+  ) AS t 
+    WHERE t.component_summary_digest IS NOT NULL
+  ;
 $$ LANGUAGE sql;
 
 

@@ -101,7 +101,6 @@ expectEntity hash = do
     TermEntity -> Share.TC <$> expectTermComponentEntity (ComponentHash . Hash32.toHash $ hash)
     TypeEntity -> Share.DC <$> expectTypeComponentEntity (ComponentHash . Hash32.toHash $ hash)
     PatchEntity -> Share.P <$> expectPatchEntity (PatchHash . Hash32.toHash $ hash)
-  where
 
 expectCausalEntity :: (HasCallStack) => CausalHash -> CodebaseM e (Share.Causal Hash32)
 expectCausalEntity hash = do
@@ -609,7 +608,7 @@ saveSerializedComponent hash (CBORBytes bytes) = do
       ON CONFLICT DO NOTHING
     |]
 
-saveSerializedPatch :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedPatch :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
 saveSerializedPatch hash (CBORBytes bytes) = do
   bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
   execute_
@@ -619,7 +618,7 @@ saveSerializedPatch hash (CBORBytes bytes) = do
       ON CONFLICT DO NOTHING
     |]
 
-saveSerializedCausal :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedCausal :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
 saveSerializedCausal hash (CBORBytes bytes) = do
   bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
   execute_
@@ -629,7 +628,7 @@ saveSerializedCausal hash (CBORBytes bytes) = do
       ON CONFLICT DO NOTHING
     |]
 
-saveSerializedNamespace :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedNamespace :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
 saveSerializedNamespace hash (CBORBytes bytes) = do
   bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
   execute_

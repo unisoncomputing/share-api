@@ -1,6 +1,5 @@
 module Share.BackgroundJobs.SerializedEntitiesMigration.Worker (worker) where
 
-import Control.Lens
 import Data.ByteString.Lazy qualified as BL
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
@@ -19,7 +18,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import U.Codebase.Sqlite.Entity qualified as Entity
 import U.Codebase.Sqlite.TempEntity (TempEntity)
-import Unison.Hash32
+import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as SyncCommon
 import Unison.SyncV2.Types qualified as SyncV2
@@ -52,7 +51,7 @@ processEntities !_authZReceipt = do
         Codebase.codebaseMToTransaction codebaseEnv $ do
           entity <- SQ.expectEntity hash32
           let tempEntity = SyncCommon.entityToTempEntity id entity
-          SQ.saveSerializedEntities [(hash32, tempEntity)]
+          saveUnsandboxedSerializedEntities hash32 tempEntity
         pure (Just hash32)
   case mayHash of
     Just hash -> do
@@ -90,3 +89,13 @@ processComponents !_authZReceipt = do
                   VALUES (#{componentHashId}, #{componentSummaryDigest}, #{bytesId})
                 |]
               pure True
+
+saveUnsandboxedSerializedEntities :: (QueryM m) => Hash32 -> TempEntity -> m ()
+saveUnsandboxedSerializedEntities hash entity = do
+  let serialised = SyncV2.serialiseCBORBytes entity
+  case entity of
+    Entity.TC {} -> error "Unexpected term component"
+    Entity.DC {} -> error "Unexpected decl component"
+    Entity.P {} -> SQ.saveSerializedPatch hash serialised
+    Entity.C {} -> SQ.saveSerializedCausal hash serialised
+    Entity.N {} -> SQ.saveSerializedNamespace hash serialised
