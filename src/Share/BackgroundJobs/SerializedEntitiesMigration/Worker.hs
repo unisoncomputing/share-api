@@ -14,7 +14,6 @@ import Share.Postgres.Hashes.Queries qualified as HQ
 import Share.Postgres.IDs
 import Share.Postgres.Sync.Queries qualified as SQ
 import Share.Prelude
-import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import U.Codebase.Sqlite.Entity qualified as Entity
 import U.Codebase.Sqlite.TempEntity (TempEntity)
@@ -54,8 +53,7 @@ processEntities !_authZReceipt = do
           saveUnsandboxedSerializedEntities hash32 tempEntity
         pure (Just hash32)
   case mayHash of
-    Just hash -> do
-      Logging.logInfoText ("Migrated entity: " <> tShow hash)
+    Just _hash -> do
       pure True
     Nothing -> pure False
 
