@@ -1,3 +1,55 @@
+-- Gets the composite hash of all component element byte hashes keyed by user and component.
+-- NOTE: this digest differs from the 'bytes_hash' you get from taking the digest of the serialized component, it's
+-- only a digest of the byte hashes of the elements of the component.
+CREATE OR REPLACE FUNCTION compute_component_summary_digest(the_user_id UUID, the_component_hash_id INTEGER) 
+RETURNS bytea AS $$
+  SELECT component_summary_digest FROM
+  (
+    (SELECT 
+      digest(array_to_string(ARRAY_AGG(b.content_hash ORDER BY b.content_hash), '|')::text, 'sha256')::bytea as component_summary_digest
+      FROM sandboxed_terms st
+        JOIN terms t ON st.term_id = t.id
+        JOIN bytes b ON st.bytes_id = b.id
+        WHERE st.user_id = the_user_id AND t.component_hash_id = the_component_hash_id
+    )
+    UNION ALL
+    (SELECT 
+      digest(array_to_string(ARRAY_AGG(b.content_hash ORDER BY b.content_hash), '|')::text, 'sha256')::bytea as component_summary_digest
+      FROM sandboxed_types st
+        JOIN types t ON st.type_id = t.id
+        JOIN bytes b ON st.bytes_id = b.id
+        WHERE st.user_id = the_user_id AND t.component_hash_id = the_component_hash_id
+    )
+  ) AS t;
+$$ LANGUAGE sql;
+
+
+-- Materialized view to be used just during migration, then removed afterwards.
+CREATE MATERIALIZED VIEW user_component_summary_digest AS 
+SELECT compute_component_summary_digest(user_id, component_hash_id) AS component_summary_digest, user_id, component_hash_id
+  FROM (
+    SELECT DISTINCT st.user_id, t.component_hash_id
+    FROM sandboxed_terms st
+      JOIN terms t ON st.term_id = t.id
+    UNION
+    SELECT DISTINCT st.user_id, t.component_hash_id
+    FROM sandboxed_types st
+      JOIN types t ON st.type_id = t.id
+  ) AS t
+;
+
+-- Stores a mapping between a given component's elements byte hash summary 
+CREATE TABLE component_summary_digests_to_serialized_component_bytes_hash(
+  component_hash_id INTEGER NOT NULL REFERENCES component_hashes(id) ON DELETE CASCADE,
+  -- This is the bytes hash of a sorted array of byte-hashes of all component elements.
+  component_summary_digest bytea NOT NULL,
+  -- The bytes of the serialized component which matches the elements_byte_hash_digest.
+  serialized_component_bytes_id INTEGER NOT NULL REFERENCES bytes(id) ON DELETE NO ACTION,
+
+  PRIMARY KEY (component_hash_id, component_summary_digest) INCLUDE (serialized_component_bytes_id)
+);
+
+
 CREATE TABLE serialized_components (
     -- The user the term is sandboxed to.
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

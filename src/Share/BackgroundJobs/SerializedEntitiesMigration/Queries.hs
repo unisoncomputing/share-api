@@ -1,7 +1,12 @@
-module Share.BackgroundJobs.SerializedEntitiesMigration.Queries (claimEntity) where
+module Share.BackgroundJobs.SerializedEntitiesMigration.Queries
+  ( claimEntity,
+    claimComponent,
+  )
+where
 
 import Share.IDs
 import Share.Postgres
+import Share.Postgres.IDs
 import Unison.Hash32
 
 claimEntity :: Transaction e (Maybe (Hash32, UserId))
@@ -20,3 +25,6 @@ claimEntity = do
       WHERE migrate_serialized_queue.hash = chosen_entity.hash AND migrate_serialized_queue.user_id = chosen_entity.user_id
     RETURNING chosen_entity.hash, chosen_entity.user_id
     |]
+
+claimComponent :: Transaction e (Maybe (ComponentHashId, UserId))
+claimComponent = undefined

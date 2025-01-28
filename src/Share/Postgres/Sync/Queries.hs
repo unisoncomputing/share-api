@@ -14,6 +14,10 @@ module Share.Postgres.Sync.Queries
     tryPopFlushableTempEntity,
     -- Exported for migrations
     saveSerializedEntities,
+    saveSerializedNamespace,
+    saveSerializedCausal,
+    saveSerializedComponent,
+    saveSerializedPatch,
   )
 where
 

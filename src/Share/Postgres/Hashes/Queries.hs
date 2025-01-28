@@ -34,6 +34,7 @@ module Share.Postgres.Hashes.Queries
     isCausalHashAllowedToBeMismatched,
     addKnownComponentHashMismatch,
     addKnownCausalHashMismatch,
+    expectComponentSummaryDigest,
   )
 where
 
@@ -338,3 +339,12 @@ expectCausalIdByHash :: (HasCallStack) => CausalHash -> Codebase.CodebaseM e Cau
 expectCausalIdByHash causalHash = do
   loadCausalIdByHash causalHash
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal id for hash: " <> tShow causalHash)
+
+-- | Computes the summary digest of a component within the given user's codebase.
+expectComponentSummaryDigest :: (HasCallStack) => ComponentHashId -> CodebaseM e ComponentSummaryDigest
+expectComponentSummaryDigest componentHashId = do
+  codebaseOwner <- asks Codebase.codebaseOwner
+  queryExpect1Col
+    [sql|
+    SELECT compute_component_summary_digest(#{codebaseOwner}, #{componentHashId})
+    |]
