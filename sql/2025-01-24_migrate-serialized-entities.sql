@@ -45,9 +45,10 @@ CREATE TABLE migrate_serialized_queue_unsandboxed (
 -- AFTER the automated migration is done, you'll need to run the following add the appropriate mappings from user
 -- id to serialized component
 
-INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
-  SELECT summaries.user_id AS user_id, summaries.component_hash_id AS component_hash_id, serialized.serialized_component_bytes_id AS bytes_id
-    FROM user_component_summary_digest summaries
-    JOIN component_summary_digests_to_serialized_component_bytes_hash serialized
-      ON summaries.component_summary_digest = serialized.component_summary_digest AND summaries.component_hash_id = serialized.component_hash_id;
+-- INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
+--   SELECT summaries.user_id AS user_id, summaries.component_hash_id AS component_hash_id, serialized.serialized_component_bytes_id AS bytes_id
+--     FROM user_component_summary_digest summaries
+--     JOIN component_summary_digests_to_serialized_component_bytes_hash serialized
+--       ON summaries.component_summary_digest = serialized.component_summary_digest AND summaries.component_hash_id = serialized.component_hash_id
+--   ON CONFLICT DO NOTHING;
 
