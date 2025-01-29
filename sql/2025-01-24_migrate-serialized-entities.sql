@@ -48,7 +48,7 @@ CREATE TABLE migrate_serialized_queue_unsandboxed (
 --   ON CONFLICT DO NOTHING;
 
 
---- Sanity Checks
+--- Sanity Checks, If all has gone well, these should all return 0 or no results respectively.
 -- SELECT COUNT(*) FROM migrate_serialized_queue_sandboxed;
 -- SELECT COUNT(*) FROM migrate_serialized_queue_unsandboxed;
 
@@ -63,3 +63,14 @@ CREATE TABLE migrate_serialized_queue_unsandboxed (
 --   FROM sandboxed_types st 
 --   JOIN types t ON st.type_id = t.id
 --   WHERE NOT EXISTS(SELECT FROM serialized_components sc WHERE sc.user_id = st.user_id AND sc.component_hash_id = t.component_hash_id);
+
+
+-- EXTRA
+
+-- If some components were somehow missing, this will detect which ones still need processing and add them back to
+-- the queue.
+-- INSERT INTO migrate_serialized_queue_sandboxed (component_hash_id, user_id)
+-- SELECT DISTINCT ON (sd.component_hash_id, sd.component_summary_digest) sd.component_hash_id, sd.user_id
+--   FROM user_component_summary_digest sd
+--   WHERE NOT EXISTS(SELECT FROM component_summary_digests_to_serialized_component_bytes_hash csd WHERE csd.component_summary_digest = sd.component_summary_digest AND csd.component_hash_id = sd.component_hash_id)
+--   ;
