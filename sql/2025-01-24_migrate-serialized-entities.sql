@@ -47,3 +47,19 @@ CREATE TABLE migrate_serialized_queue_unsandboxed (
 --       ON summaries.component_summary_digest = serialized.component_summary_digest AND summaries.component_hash_id = serialized.component_hash_id
 --   ON CONFLICT DO NOTHING;
 
+
+--- Sanity Checks
+-- SELECT COUNT(*) FROM migrate_serialized_queue_sandboxed;
+-- SELECT COUNT(*) FROM migrate_serialized_queue_unsandboxed;
+
+-- SELECT c.id FROM causals c WHERE NOT EXISTS(SELECT FROM serialized_causals sc WHERE sc.causal_id = c.id);
+-- SELECT n.namespace_hash_id FROM namespaces n WHERE NOT EXISTS(SELECT FROM serialized_namespaces sn WHERE sn.namespace_hash_id = n.namespace_hash_id);
+-- SELECT p.id FROM patches p WHERE NOT EXISTS(SELECT FROM serialized_patches sp WHERE sp.patch_id = p.id);
+-- SELECT st.user_id, t.component_hash_id 
+--   FROM sandboxed_terms st 
+--   JOIN terms t ON st.term_id = t.id
+--   WHERE NOT EXISTS(SELECT FROM serialized_components sc WHERE sc.user_id = st.user_id AND sc.component_hash_id = t.component_hash_id);
+-- SELECT st.user_id, t.component_hash_id 
+--   FROM sandboxed_types st 
+--   JOIN types t ON st.type_id = t.id
+--   WHERE NOT EXISTS(SELECT FROM serialized_components sc WHERE sc.user_id = st.user_id AND sc.component_hash_id = t.component_hash_id);
