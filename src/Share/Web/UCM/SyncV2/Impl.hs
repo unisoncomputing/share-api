@@ -7,12 +7,13 @@ import Codec.Serialise qualified as CBOR
 import Conduit qualified as C
 import Control.Concurrent.STM qualified as STM
 import Control.Concurrent.STM.TBMQueue qualified as STM
-import Control.Monad.Except (ExceptT (ExceptT))
+import Control.Monad.Except (ExceptT (ExceptT), withExceptT)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Binary.Builder qualified as Builder
 import Data.Set qualified as Set
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
+import Data.Text.Encoding qualified as Text
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
 import Servant.Types.SourceT (SourceT (..))
@@ -38,7 +39,7 @@ import U.Codebase.Sqlite.Orphans ()
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.SyncV2.API qualified as SyncV2
-import Unison.SyncV2.Types (DownloadEntitiesChunk (..), EntityChunk (..), ErrorChunk (..), StreamInitInfo (..))
+import Unison.SyncV2.Types (CausalDependenciesChunk (..), DownloadEntitiesChunk (..), EntityChunk (..), ErrorChunk (..), StreamInitInfo (..))
 import Unison.SyncV2.Types qualified as SyncV2
 import UnliftIO qualified
 import UnliftIO.Async qualified as Async
@@ -52,7 +53,8 @@ streamSettings rootCausalHash rootBranchRef = StreamInitInfo {version = SyncV2.V
 server :: Maybe UserId -> SyncV2.Routes WebAppServer
 server mayUserId =
   SyncV2.Routes
-    { downloadEntitiesStream = downloadEntitiesStreamImpl mayUserId
+    { downloadEntitiesStream = downloadEntitiesStreamImpl mayUserId,
+      causalDependenciesStream = causalDependenciesStreamImpl mayUserId
     }
 
 parseBranchRef :: SyncV2.BranchRef -> Either Text (Either ProjectReleaseShortHand ProjectBranchShortHand)
@@ -72,25 +74,11 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
     addRequestTag "branch-ref" (SyncV2.unBranchRef branchRef)
     HashJWTClaims {hash = causalHash} <- lift (HashJWT.verifyHashJWT mayCallerUserId causalHashJWT >>= either respondError pure)
     codebase <-
-      case parseBranchRef branchRef of
-        Left err -> throwError (SyncV2.DownloadEntitiesInvalidBranchRef err branchRef)
-        Right (Left (ProjectReleaseShortHand {userHandle, projectSlug})) -> do
-          let projectShortHand = ProjectShortHand {userHandle, projectSlug}
-          (Project {ownerUserId = projectOwnerUserId}, contributorId) <- ExceptT . PG.tryRunTransaction $ do
-            project <- PGQ.projectByShortHand projectShortHand `whenNothingM` throwError (SyncV2.DownloadEntitiesProjectNotFound $ IDs.toText @ProjectShortHand projectShortHand)
-            pure (project, Nothing)
-          authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (SyncV2.DownloadEntitiesNoReadPermission branchRef)
-          let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
-          pure $ Codebase.codebaseEnv authZToken codebaseLoc
-        Right (Right (ProjectBranchShortHand {userHandle, projectSlug, contributorHandle})) -> do
-          let projectShortHand = ProjectShortHand {userHandle, projectSlug}
-          (Project {ownerUserId = projectOwnerUserId}, contributorId) <- ExceptT . PG.tryRunTransaction $ do
-            project <- (PGQ.projectByShortHand projectShortHand) `whenNothingM` throwError (SyncV2.DownloadEntitiesProjectNotFound $ IDs.toText @ProjectShortHand projectShortHand)
-            mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (PGQ.userByHandle ch) `whenNothingM` throwError (SyncV2.DownloadEntitiesUserNotFound $ IDs.toText @UserHandle ch)
-            pure (project, mayContributorUserId)
-          authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (SyncV2.DownloadEntitiesNoReadPermission branchRef)
-          let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
-          pure $ Codebase.codebaseEnv authZToken codebaseLoc
+      flip withExceptT (codebaseForBranchRef branchRef) \case
+        CodebaseLoadingErrorProjectNotFound projectShortHand -> SyncV2.DownloadEntitiesProjectNotFound (IDs.toText projectShortHand)
+        CodebaseLoadingErrorUserNotFound userHandle -> SyncV2.DownloadEntitiesUserNotFound (IDs.toText userHandle)
+        CodebaseLoadingErrorNoReadPermission branchRef -> SyncV2.DownloadEntitiesNoReadPermission branchRef
+        CodebaseLoadingErrorInvalidBranchRef err branchRef -> SyncV2.DownloadEntitiesInvalidBranchRef err branchRef
     q <- UnliftIO.atomically $ do
       q <- STM.newTBMQueue 10
       STM.writeTBMQueue q (Vector.singleton $ InitialC $ streamSettings causalHash (Just branchRef))
@@ -106,7 +94,7 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
-      stream q
+      queueToStream q
   where
     stream :: STM.TBMQueue (Vector DownloadEntitiesChunk) -> C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
     stream q = do
@@ -127,6 +115,75 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
 
     emitErr :: SyncV2.DownloadEntitiesError -> SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk)
     emitErr err = SourceT.source [SyncV2.CBORStream . CBOR.serialise $ ErrorC (ErrorChunk err)]
+
+causalDependenciesStreamImpl :: Maybe UserId -> SyncV2.CausalDependenciesRequest -> WebApp (SourceIO SyncV2.CausalDependenciesChunk)
+causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {rootCausal = causalHashJWT, branchRef}) = do
+  respondExceptT do
+    addRequestTag "branch-ref" (SyncV2.unBranchRef branchRef)
+    HashJWTClaims {hash = causalHash} <- lift (HashJWT.verifyHashJWT mayCallerUserId causalHashJWT >>= either respondError pure)
+    addRequestTag "root-causal" (tShow causalHash)
+    codebase <- codebaseForBranchRef branchRef
+    q <- UnliftIO.atomically $ STM.newTBMQueue 10
+    streamResults <- lift $ UnliftIO.toIO do
+      Codebase.runCodebaseTransaction codebase $ do
+        (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
+        cursor <- SSQ.spineAndLibDependenciesOfCausalCursor causalId
+        Cursor.foldBatched cursor batchSize \batch -> do
+          let depBatch = batch <&> \(hash, _, _) -> HashC hash
+          PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q depBatch
+        PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
+    pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
+      queueToStream q
+
+queueToStream :: forall a. STM.TBMQueue (NonEmpty a) -> C.ConduitT () a IO ()
+queueToStream q = do
+  let loop :: C.ConduitT () a IO ()
+      loop = do
+        liftIO (STM.atomically (STM.readTBMQueue q)) >>= \case
+          -- The queue is closed.
+          Nothing -> do
+            pure ()
+          Just batch -> do
+            C.yieldMany batch
+            loop
+  loop
+
+data CodebaseLoadingError
+  = CodebaseLoadingErrorProjectNotFound ProjectShortHand
+  | CodebaseLoadingErrorUserNotFound UserHandle
+  | CodebaseLoadingErrorNoReadPermission SyncV2.BranchRef
+  | CodebaseLoadingErrorInvalidBranchRef Text SyncV2.BranchRef
+  deriving stock (Show)
+  deriving (Logging.Loggable) via Logging.ShowLoggable Logging.UserFault CodebaseLoadingError
+
+instance ToServerError CodebaseLoadingError where
+  toServerError = \case
+    CodebaseLoadingErrorProjectNotFound projectShortHand -> (ErrorID "codebase-loading:project-not-found", Servant.err404 {errBody = from . Text.encodeUtf8 $ "Project not found: " <> (IDs.toText projectShortHand)})
+    CodebaseLoadingErrorUserNotFound userHandle -> (ErrorID "codebase-loading:user-not-found", Servant.err404 {errBody = from . Text.encodeUtf8 $ "User not found: " <> (IDs.toText userHandle)})
+    CodebaseLoadingErrorNoReadPermission branchRef -> (ErrorID "codebase-loading:no-read-permission", Servant.err403 {errBody = from . Text.encodeUtf8 $ "No read permission for branch ref: " <> (SyncV2.unBranchRef branchRef)})
+    CodebaseLoadingErrorInvalidBranchRef err branchRef -> (ErrorID "codebase-loading:invalid-branch-ref", Servant.err400 {errBody = from . Text.encodeUtf8 $ "Invalid branch ref: " <> err <> " " <> (SyncV2.unBranchRef branchRef)})
+
+codebaseForBranchRef :: SyncV2.BranchRef -> (ExceptT CodebaseLoadingError WebApp Codebase.CodebaseEnv)
+codebaseForBranchRef branchRef = do
+  case parseBranchRef branchRef of
+    Left err -> throwError (CodebaseLoadingErrorInvalidBranchRef err branchRef)
+    Right (Left (ProjectReleaseShortHand {userHandle, projectSlug})) -> do
+      let projectShortHand = ProjectShortHand {userHandle, projectSlug}
+      (Project {ownerUserId = projectOwnerUserId}, contributorId) <- ExceptT . PG.tryRunTransaction $ do
+        project <- PGQ.projectByShortHand projectShortHand `whenNothingM` throwError (CodebaseLoadingErrorProjectNotFound $ projectShortHand)
+        pure (project, Nothing)
+      authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (CodebaseLoadingErrorNoReadPermission branchRef)
+      let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
+      pure $ Codebase.codebaseEnv authZToken codebaseLoc
+    Right (Right (ProjectBranchShortHand {userHandle, projectSlug, contributorHandle})) -> do
+      let projectShortHand = ProjectShortHand {userHandle, projectSlug}
+      (Project {ownerUserId = projectOwnerUserId}, contributorId) <- ExceptT . PG.tryRunTransaction $ do
+        project <- (PGQ.projectByShortHand projectShortHand) `whenNothingM` throwError (CodebaseLoadingErrorProjectNotFound projectShortHand)
+        mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (PGQ.userByHandle ch) `whenNothingM` throwError (CodebaseLoadingErrorUserNotFound ch)
+        pure (project, mayContributorUserId)
+      authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (CodebaseLoadingErrorNoReadPermission branchRef)
+      let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
+      pure $ Codebase.codebaseEnv authZToken codebaseLoc
 
 -- | Run an IO action in the background while streaming the results.
 --
