@@ -300,7 +300,7 @@ allSerializedDependenciesOfCausalCursor cid = do
         )
            (SELECT bytes.bytes, ch.base32
              FROM transitive_components tc
-               JOIN serialized_components sc ON tc.component_hash_id = sc.component_hash_id
+               JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND tc.component_hash_id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_hashes ch ON tc.component_hash_id = ch.id
            )
