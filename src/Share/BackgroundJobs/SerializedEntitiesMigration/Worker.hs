@@ -65,14 +65,6 @@ processComponents !_authZReceipt = do
     Q.claimComponent >>= \case
       Nothing -> pure False
       Just (componentHashId, userId) -> do
-        done <-
-          queryExpect1Col
-            [sql|
-          SELECT EXISTS(SELECT FROM component_summary_digests_to_serialized_component_bytes_hash t WHERE t.component_hash_id = #{componentHashId})
-          |]
-        if done
-          then pure True
-          else do
             let codebaseEnv = CodebaseEnv userId
             Codebase.codebaseMToTransaction codebaseEnv $ do
               hash32 <- (Hash32.fromHash . unComponentHash) <$> HQ.expectComponentHashesOf id componentHashId
