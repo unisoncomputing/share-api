@@ -20,7 +20,6 @@ import Share.App (AppM)
 import Share.Codebase qualified as Codebase
 import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceDiffError (..), NamespaceTreeDiff)
 import Share.NamespaceDiffs qualified as NamespaceDiffs
-import Share.NamespaceDiffs2 qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionQ

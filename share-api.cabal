@@ -46,8 +46,6 @@ library
       Share.Monitoring
       Share.Names.Postgres
       Share.NamespaceDiffs
-      Share.NamespaceDiffs.Types
-      Share.NamespaceDiffs2
       Share.Postgres
       Share.Postgres.Admin
       Share.Postgres.Authorization.Queries
