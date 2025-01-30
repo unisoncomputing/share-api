@@ -55,17 +55,18 @@ processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT 
 
 diffContribution :: AuthZ.AuthZReceipt -> ContributionId -> ExceptT NamespaceDiffError Background ()
 diffContribution authZReceipt contributionId = do
-  ( project,
+  ( bestCommonAncestorCausalId,
+    project,
     newBranch@Branch {causal = newBranchCausalId},
     oldBranch@Branch {causal = oldBranchCausalId}
     ) <- ExceptT $ PG.tryRunTransaction $ do
-    Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <- ContributionsQ.contributionById contributionId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <- ContributionsQ.contributionById contributionId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     project <- Q.projectById projectId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "project:missing") "Project not found")
     newBranch <- Q.branchById newBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Source branch not found")
     oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Target branch not found")
-    pure (project, newBranch, oldBranch)
+    pure (bestCommonAncestorCausalId, project, newBranch, oldBranch)
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
   -- This method saves the diff so it'll be there when we need it, so we don't need to do anything with it.
-  _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
+  _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId) bestCommonAncestorCausalId
   pure ()

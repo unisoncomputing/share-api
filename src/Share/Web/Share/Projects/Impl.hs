@@ -158,16 +158,17 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
 
   let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.causalIdCacheKey oldCausalId, Caching.causalIdCacheKey newCausalId]
   Caching.cachedResponse authZReceipt "project-diff-namespaces" cacheKeys do
-    (ancestorCausalId, ancestorCausalHash, newCausalHash) <- PG.runTransaction $ do
-      ancestorCausalId <- fromMaybe oldCausalId <$> CausalQ.bestCommonAncestor oldCausalId newCausalId
-      (ancestorCausalHash, newCausalHash) <- CausalQ.expectCausalHashesByIdsOf both (ancestorCausalId, newCausalId)
-      pure (ancestorCausalId, ancestorCausalHash, newCausalHash)
-    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, ancestorCausalId) (newCodebase, newCausalId))
-    pure $
+    (oldCausalHash, newCausalHash, maybeLcaCausalId) <-
+      PG.runTransaction do
+        (oldCausalHash, newCausalHash) <- CausalQ.expectCausalHashesByIdsOf each (oldCausalId, newCausalId)
+        maybeLcaCausalId <- CausalQ.bestCommonAncestor oldCausalId newCausalId
+        pure (oldCausalHash, newCausalHash, maybeLcaCausalId)
+    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) maybeLcaCausalId)
+    pure
       ShareNamespaceDiffResponse
         { project = projectShortHand,
           oldRef = oldShortHand,
-          oldRefHash = Just $ PrefixedHash ancestorCausalHash,
+          oldRefHash = Just $ PrefixedHash oldCausalHash,
           newRef = newShortHand,
           newRefHash = Just $ PrefixedHash newCausalHash,
           diff = namespaceDiff

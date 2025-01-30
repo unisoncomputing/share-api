@@ -38,7 +38,7 @@ import Data.Map qualified as Map
 import Data.Semialign (Semialign, alignWith)
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
-import Servant (err404, err500)
+import Servant (err400, err404, err500)
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
@@ -48,15 +48,22 @@ import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment (NameSegment)
 import Unison.Util.Set qualified as Set
+import Unison.Merge (EitherWay)
+import Unison.Merge.DeclCoherencyCheck (IncoherentDeclReason)
 
 data NamespaceDiffError
   = ImpossibleError Text
+  | IncoherentDecl (EitherWay IncoherentDeclReason)
+  | LibFoundAtUnexpectedPath Path
   | MissingEntityError EntityMissing
+
   deriving stock (Eq, Show)
 
 instance ToServerError NamespaceDiffError where
   toServerError = \case
     ImpossibleError {} -> (ErrorID "namespace-diff:impossible-error", err500)
+    IncoherentDecl {} -> (ErrorID "namespace-diff:incoherent-decl", err400)
+    LibFoundAtUnexpectedPath {} -> (ErrorID "namespace-diff:lib-at-unexpected-path", err400)
     MissingEntityError (EntityMissing eId _msg) -> (eId, err404)
 
 instance Logging.Loggable NamespaceDiffError where
@@ -64,6 +71,8 @@ instance Logging.Loggable NamespaceDiffError where
     (ImpossibleError t) ->
       Logging.textLog t
         & Logging.withSeverity Logging.Error
+    (IncoherentDecl _) -> Logging.textLog "couldn't diff namespaces due to incoherent decl"
+    (LibFoundAtUnexpectedPath _) -> Logging.textLog "couldn't diff namespaces due to lib found at unexpected path"
     (MissingEntityError e) -> Logging.toLog e
 
 -- | The differences between two namespaces.

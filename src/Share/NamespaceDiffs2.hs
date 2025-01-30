@@ -13,21 +13,21 @@ import Data.Map qualified as Map
 import Data.Set.NonEmpty qualified as NESet
 import Share.Codebase qualified as Codebase
 import Share.Names.Postgres qualified as PGNames
-import Share.NamespaceDiffs.Types (DefinitionDiff, DefinitionDiffs (..), DiffAtPath, NamespaceTreeDiff, combineTermsAndTypes, compressNameTree, definitionDiffsToTree)
+import Share.NamespaceDiffs.Types (DefinitionDiff, DefinitionDiffs (..), DiffAtPath, NamespaceDiffError (..), NamespaceTreeDiff, combineTermsAndTypes, compressNameTree, definitionDiffsToTree)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Prelude
-import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.DataDeclaration (Decl)
 import Unison.LabeledDependency (LabeledDependency)
-import Unison.Merge (EitherWay, IncoherentDeclReason, Mergeblob0, Mergeblob1, ThreeWay (..), TwoWay (..))
+import Unison.Merge (Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
 import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
 import Unison.Merge.Mergeblob1 qualified as Mergeblob1
+import Unison.Merge.ThreeWay qualified as ThreeWay
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment (..))
 import Unison.NameSegment qualified as NameSegment
@@ -45,39 +45,34 @@ import Unison.Type (Type)
 import Unison.Util.BiMultimap (BiMultimap)
 import Unison.Util.BiMultimap qualified as BiMultimap
 import Unison.Util.Defns (Defns (..), DefnsF, DefnsF3, alignDefnsWith)
-import Unison.Util.Nametree (Nametree)
+import Unison.Util.Nametree (Nametree (..))
 
-data MergeError
-  = IncoherentDecl (EitherWay IncoherentDeclReason)
-  | LibFoundAtUnexpectedPath Path
+-- Defns (Set Name) (Set Name),
+-- Map NameSegment (LibdepDiffOp BranchHashId)
+-- )
 
--- type CodebaseM e = ReaderT CodebaseEnv (PG.Transaction e)
 computeThreeWayNamespaceDiff ::
-  forall e.
   TwoWay Codebase.CodebaseEnv ->
-  ThreeWay BranchHashId ->
-  ThreeWay NameLookupReceipt ->
-  ExceptT
-    MergeError
-    (PG.Transaction e)
-    (NamespaceTreeDiff Referent Reference Name Name Name Name)
+  TwoOrThreeWay BranchHashId ->
+  TwoOrThreeWay NameLookupReceipt ->
+  PG.Transaction NamespaceDiffError (NamespaceTreeDiff Referent Reference Name Name Name Name)
 computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = do
   -- Load a flat definitions names (no lib) for Alice/Bob/LCA
-  defnsNames3 :: ThreeWay Names <-
-    lift (sequence (NL.projectNamesWithoutLib <$> nameLookupReceipts3 <*> branchHashIds3))
+  defnsNames3 :: TwoOrThreeWay Names <-
+    sequence (NL.projectNamesWithoutLib <$> nameLookupReceipts3 <*> branchHashIds3)
 
   -- Unflatten each Names to a Nametree (leniently). Really, only the LCA is "allowed" to break the diff/merge rules of
   -- no conflicted names, but we don't enforce that here. If Alice or Bob have a conflicted name for some reason, we'll
   -- just silently pick one of the refs and move on.
-  let defnsNametrees3 :: ThreeWay (Nametree (DefnsF (Map NameSegment) Referent TypeReference))
+  let defnsNametrees3 :: TwoOrThreeWay (Nametree (DefnsF (Map NameSegment) Referent TypeReference))
       defnsNametrees3 =
         Names.lenientToNametree <$> defnsNames3
 
   -- Load the shallow libdeps for Alice/Bob/LCA. This can fail with "lib at unexpected path"
-  libdeps3 :: ThreeWay (Map NameSegment BranchHashId) <- do
-    let f :: NameLookupReceipt -> BranchHashId -> ExceptT MergeError (PG.Transaction e) (Map NameSegment BranchHashId)
+  libdeps3 :: TwoOrThreeWay (Map NameSegment BranchHashId) <- do
+    let f :: NameLookupReceipt -> BranchHashId -> PG.Transaction NamespaceDiffError (Map NameSegment BranchHashId)
         f nameLookupReceipt branchHashId = do
-          mounts <- lift $ NL.listNameLookupMounts nameLookupReceipt branchHashId
+          mounts <- NL.listNameLookupMounts nameLookupReceipt branchHashId
           libDepsList <-
             for mounts \(NL.PathSegments path, libBhId) -> do
               case NameSegment.unsafeParseText <$> path of
@@ -89,7 +84,17 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
   -- Make that 0th mergeblob
   let blob0 :: Mergeblob0 BranchHashId
       blob0 =
-        Merge.makeMergeblob0 defnsNametrees3 libdeps3
+        Merge.makeMergeblob0
+          ThreeWay
+            { alice = defnsNametrees3.alice,
+              bob = defnsNametrees3.bob,
+              lca = fromMaybe Nametree {value = Defns Map.empty Map.empty, children = Map.empty} defnsNametrees3.lca
+            }
+          ThreeWay
+            { alice = libdeps3.alice,
+              bob = libdeps3.bob,
+              lca = fromMaybe Map.empty libdeps3.lca
+            }
 
   -- Hydrate defns in Alice/Bob/LCA
   hydratedDefns3 ::
@@ -138,26 +143,26 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
               bob = codebaseEnvs2.bob,
               lca = codebaseEnvs2.alice
             }
-    lift (sequence (f <$> codebaseEnvs3 <*> blob0.defns))
+    sequence (f <$> codebaseEnvs3 <*> blob0.defns)
 
   -- Get a names object that contains just enough names to compute the diff:
-  names3 :: ThreeWay Names <-
-    lift do
-      -- Massage the hydrated definitions into a set of "labeled dependency" that contains the definitions themselves
-      -- and their direct references.
-      --
-      -- FIXME: Mitchell wonders why self is necessary. Aren't direct dependency names enough?
-      let labeledDeps3 :: ThreeWay (Set LabeledDependency)
-          labeledDeps3 =
-            Mergeblob1.hydratedDefnsLabeledDependencies <$> hydratedDefns3
-      -- Get a names perspective for Alice/Bob/LCA
-      namesPerspectives3 :: ThreeWay NL.NamesPerspective <-
-        for branchHashIds3 \branchHashId ->
-          NL.namesPerspectiveForRootAndPath branchHashId (mempty @NL.PathSegments)
-      sequence (PGNames.namesForReferences <$> namesPerspectives3 <*> labeledDeps3)
+  names3 :: TwoOrThreeWay Names <- do
+    -- Massage the hydrated definitions into a set of "labeled dependency" that contains the definitions themselves
+    -- and their direct references.
+    --
+    -- FIXME: Mitchell wonders why self is necessary. Aren't direct dependency names enough?
+    let labeledDeps3 :: ThreeWay (Set LabeledDependency)
+        labeledDeps3 =
+          Mergeblob1.hydratedDefnsLabeledDependencies <$> hydratedDefns3
+    -- Get a names perspective for Alice/Bob/LCA
+    namesPerspectives3 :: TwoOrThreeWay NL.NamesPerspective <-
+      for branchHashIds3 \branchHashId ->
+        NL.namesPerspectiveForRootAndPath branchHashId (mempty @NL.PathSegments)
+    sequence (PGNames.namesForReferences <$> namesPerspectives3 <*> ThreeWay.toTwoOrThreeWay labeledDeps3)
 
-  blob1 :: Mergeblob1 BranchHashId <-
-    case Merge.makeMergeblob1 blob0 names3 hydratedDefns3 of
+  blob1 :: Mergeblob1 BranchHashId <- do
+    let names3' = ThreeWay {alice = names3.alice, bob = names3.bob, lca = fromMaybe (mempty @Names) names3.lca}
+    case Merge.makeMergeblob1 blob0 names3' hydratedDefns3 of
       Right blob -> pure blob
       Left err -> throwError (IncoherentDecl err)
 

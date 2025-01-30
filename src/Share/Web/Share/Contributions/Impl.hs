@@ -277,21 +277,20 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
     lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
 
-  let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
-  let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId]
+  let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldBranchCausalId]
   Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
-    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldCausalId) (newCodebase, newBranchCausalId))
-    (newBranchCausalHash, oldCausalHash) <- PG.runTransaction $ do
+    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId) bestCommonAncestorCausalId)
+    (newBranchCausalHash, oldBranchCausalHash) <- PG.runTransaction do
       newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
-      oldCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldCausalId
-      pure (newBranchCausalHash, oldCausalHash)
+      oldBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId
+      pure (newBranchCausalHash, oldBranchCausalHash)
     pure $
       ShareNamespaceDiffResponse
         { project = projectShorthand,
           newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
           newRefHash = Just $ PrefixedHash newBranchCausalHash,
           oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
-          oldRefHash = Just $ PrefixedHash oldCausalHash,
+          oldRefHash = Just $ PrefixedHash oldBranchCausalHash,
           diff = namespaceDiff
         }
   where
