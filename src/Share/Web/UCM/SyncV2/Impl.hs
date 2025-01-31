@@ -11,9 +11,8 @@ import Control.Monad.Except (ExceptT (ExceptT), withExceptT)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Binary.Builder qualified as Builder
 import Data.Set qualified as Set
-import Data.Vector (Vector)
-import Data.Vector qualified as Vector
 import Data.Text.Encoding qualified as Text
+import Data.Vector qualified as Vector
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
 import Servant.Types.SourceT (SourceT (..))
@@ -96,27 +95,10 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
       queueToStream q
   where
-    stream :: STM.TBMQueue (Vector DownloadEntitiesChunk) -> C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
-    stream q = do
-      let loop :: C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
-          loop = do
-            liftIO (STM.atomically (STM.readTBMQueue q)) >>= \case
-              -- The queue is closed.
-              Nothing -> do
-                pure ()
-              Just batches -> do
-                batches
-                  & foldMap (CBOR.serialiseIncremental)
-                  & (SyncV2.CBORStream . Builder.toLazyByteString)
-                  & C.yield
-                loop
-
-      loop
-
     emitErr :: SyncV2.DownloadEntitiesError -> SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk)
     emitErr err = SourceT.source [SyncV2.CBORStream . CBOR.serialise $ ErrorC (ErrorChunk err)]
 
-causalDependenciesStreamImpl :: Maybe UserId -> SyncV2.CausalDependenciesRequest -> WebApp (SourceIO SyncV2.CausalDependenciesChunk)
+causalDependenciesStreamImpl :: Maybe UserId -> SyncV2.CausalDependenciesRequest -> WebApp (SourceIO (SyncV2.CBORStream SyncV2.CausalDependenciesChunk))
 causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {rootCausal = causalHashJWT, branchRef}) = do
   respondExceptT do
     addRequestTag "branch-ref" (SyncV2.unBranchRef branchRef)
@@ -135,16 +117,19 @@ causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
       queueToStream q
 
-queueToStream :: forall a. STM.TBMQueue (NonEmpty a) -> C.ConduitT () a IO ()
+queueToStream :: forall a f. (CBOR.Serialise a, Foldable f) => STM.TBMQueue (f a) -> C.ConduitT () (SyncV2.CBORStream a) IO ()
 queueToStream q = do
-  let loop :: C.ConduitT () a IO ()
+  let loop :: C.ConduitT () (SyncV2.CBORStream a) IO ()
       loop = do
         liftIO (STM.atomically (STM.readTBMQueue q)) >>= \case
           -- The queue is closed.
           Nothing -> do
             pure ()
-          Just batch -> do
-            C.yieldMany batch
+          Just batches -> do
+            batches
+              & foldMap (CBOR.serialiseIncremental)
+              & (SyncV2.CBORStream . Builder.toLazyByteString)
+              & C.yield
             loop
   loop
 
