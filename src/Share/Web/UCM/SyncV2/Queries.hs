@@ -186,7 +186,7 @@ import Unison.SyncV2.Types (CBORBytes)
 allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
 allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   ownerUserId <- asks codebaseOwner
-  execute_ [sql| CREATE TEMP TABLE except_causals ( causal_id INTEGER NOT NULL REFERENCES causals(id) ) |]
+  execute_ [sql| CREATE TEMP TABLE except_causals ( causal_id INTEGER NOT NULL ) ON COMMIT DROP |]
   execute_
     [sql| INSERT INTO except_causals (causal_id)
     WITH the_causal_hashes(hash) AS (SELECT * FROM ^{singleColumnTable (toList exceptCausalHashes)})
@@ -335,13 +335,12 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                JOIN bytes ON sn.bytes_id = bytes.id
            )
            UNION ALL
-           (SELECT bytes.bytes, tc.causal_hash, tc.is_spine, tc.is_lib_root
+           (SELECT bytes.bytes, tc.causal_hash
              FROM transitive_causals tc
                JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
                JOIN bytes ON sc.bytes_id = bytes.id
            )
   |]
-  execute_ [sql| DROP TABLE except_causals |]
   pure cursor
 
 spineAndLibDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
@@ -366,7 +365,7 @@ spineAndLibDependenciesOfCausalCursor cid = do
                 SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root
                 FROM transitive_causals tc
             )
-                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_root
+                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_causal, rec.is_lib_root
                 FROM causal_ancestors ca
                     JOIN rec ON ca.causal_id = rec.causal_id
                     JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
