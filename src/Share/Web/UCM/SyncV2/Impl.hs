@@ -3,11 +3,13 @@
 
 module Share.Web.UCM.SyncV2.Impl (server) where
 
+import Codec.Serialise qualified as CBOR
 import Conduit qualified as C
 import Control.Concurrent.STM qualified as STM
 import Control.Concurrent.STM.TBMQueue qualified as STM
 import Control.Monad.Except (ExceptT (ExceptT))
 import Control.Monad.Trans.Except (runExceptT)
+import Data.Binary.Builder qualified as Builder
 import Data.List.NonEmpty qualified as NEL
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
@@ -62,7 +64,7 @@ parseBranchRef (SyncV2.BranchRef branchRef) =
     parseRelease :: Maybe (Either ProjectReleaseShortHand ProjectBranchShortHand)
     parseRelease = fmap Left . eitherToMaybe $ IDs.fromText @ProjectReleaseShortHand branchRef
 
-downloadEntitiesStreamImpl :: Maybe UserId -> SyncV2.DownloadEntitiesRequest -> WebApp (SourceIO SyncV2.DownloadEntitiesChunk)
+downloadEntitiesStreamImpl :: Maybe UserId -> SyncV2.DownloadEntitiesRequest -> WebApp (SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk))
 downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {causalHash = causalHashJWT, branchRef, knownHashes = _todo}) = do
   either emitErr id <$> runExceptT do
     addRequestTag "branch-ref" (SyncV2.unBranchRef branchRef)
@@ -103,22 +105,25 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
       stream q
   where
-    stream :: STM.TBMQueue (NonEmpty DownloadEntitiesChunk) -> C.ConduitT () DownloadEntitiesChunk IO ()
+    stream :: STM.TBMQueue (NonEmpty DownloadEntitiesChunk) -> C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
     stream q = do
-      let loop :: C.ConduitT () DownloadEntitiesChunk IO ()
+      let loop :: C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
           loop = do
             liftIO (STM.atomically (STM.readTBMQueue q)) >>= \case
               -- The queue is closed.
               Nothing -> do
                 pure ()
-              Just batch -> do
-                C.yieldMany batch
+              Just batches -> do
+                batches
+                  & foldMap (CBOR.serialiseIncremental)
+                  & (SyncV2.CBORStream . Builder.toLazyByteString)
+                  & C.yield
                 loop
 
       loop
 
-    emitErr :: SyncV2.DownloadEntitiesError -> SourceIO SyncV2.DownloadEntitiesChunk
-    emitErr err = SourceT.source [ErrorC (ErrorChunk err)]
+    emitErr :: SyncV2.DownloadEntitiesError -> SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk)
+    emitErr err = SourceT.source [SyncV2.CBORStream . CBOR.serialise $ ErrorC (ErrorChunk err)]
 
 -- | Run an IO action in the background while streaming the results.
 --
