@@ -48,6 +48,7 @@ module Share.Postgres
     -- * query Helpers
     rollback,
     queryListRows,
+    queryVectorRows,
     query1Row,
     queryExpect1Row,
     queryListCol,
@@ -81,6 +82,7 @@ import Data.Text qualified as Text
 import Data.Time.Clock (picosecondsToDiffTime)
 import Data.Time.Clock.System (getSystemTime, systemToTAITime)
 import Data.Time.Clock.TAI (diffAbsoluteTime)
+import Data.Vector (Vector)
 import Data.Void
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
@@ -376,6 +378,9 @@ prepareStatements = True
 
 queryListRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m [r]
 queryListRows sql = statement () (Interp.interp prepareStatements sql)
+
+queryVectorRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m (Vector r)
+queryVectorRows sql = statement () (Interp.interp prepareStatements sql)
 
 query1Row :: forall r m. (QueryM m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
 query1Row sql = listToMaybe <$> queryListRows sql

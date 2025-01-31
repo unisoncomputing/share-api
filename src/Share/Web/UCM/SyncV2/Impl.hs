@@ -10,7 +10,8 @@ import Control.Concurrent.STM.TBMQueue qualified as STM
 import Control.Monad.Except (ExceptT (ExceptT))
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Binary.Builder qualified as Builder
-import Data.List.NonEmpty qualified as NEL
+import Data.Vector (Vector)
+import Data.Vector qualified as Vector
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
 import Servant.Types.SourceT (SourceT (..))
@@ -91,7 +92,7 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
     q <- UnliftIO.atomically $ do
       q <- STM.newTBMQueue 10
-      STM.writeTBMQueue q (NEL.singleton $ InitialC $ streamSettings causalHash (Just branchRef))
+      STM.writeTBMQueue q (Vector.singleton $ InitialC $ streamSettings causalHash (Just branchRef))
       pure q
     streamResults <- lift $ UnliftIO.toIO do
       Logging.logInfoText "Starting download entities stream"
@@ -105,7 +106,7 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
       stream q
   where
-    stream :: STM.TBMQueue (NonEmpty DownloadEntitiesChunk) -> C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
+    stream :: STM.TBMQueue (Vector DownloadEntitiesChunk) -> C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
     stream q = do
       let loop :: C.ConduitT () (SyncV2.CBORStream DownloadEntitiesChunk) IO ()
           loop = do

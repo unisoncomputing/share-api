@@ -11,10 +11,10 @@ module Share.Postgres.Cursors
 where
 
 import Data.Char qualified as Char
-import Data.List.NonEmpty qualified as NEL
 import Data.String (IsString (fromString))
 import Data.Text qualified as Text
 import Data.UUID (UUID)
+import Data.Vector (Vector)
 import Share.Postgres
 import Share.Prelude
 import System.Random (randomIO)
@@ -62,18 +62,22 @@ newRowCursor namePrefix query =
     pure $ PGCursor cursorName id
 
 -- | Fetch UP TO the next N results from the cursor. If there are no more rows, returns Nothing.
-fetchN :: forall r m. (QueryM m) => PGCursor r -> Int32 -> m (Maybe (NonEmpty r))
+fetchN :: forall r m. (QueryM m) => PGCursor r -> Int32 -> m (Maybe (Vector r))
 fetchN (PGCursor cursorName f) n = do
   -- PG doesn't allow bind params for limits or cursor names.
   -- We're safe from injection here because `n` is just an int, and we guarantee the
   -- cursorName is safe at construction time.
   let sql = fromString . Text.unpack $ Text.intercalate " " ["FETCH FORWARD", tShow n, "FROM", cursorName]
-  rows <- queryListRows sql
-  pure $ NEL.nonEmpty (f <$> rows)
+  rows <- queryVectorRows sql
+  if null rows
+    then do
+      execute_ $ fromString $ "CLOSE " <> Text.unpack cursorName
+      pure Nothing
+    else pure $ Just (f <$> rows)
 
 -- | Fold over the cursor in batches of N rows.
 -- N.B. Fold is strict in the accumulator.
-foldBatched :: forall r m a. (QueryM m, Monoid a) => PGCursor r -> Int32 -> (NonEmpty r -> m a) -> m a
+foldBatched :: forall r m a. (QueryM m, Monoid a) => PGCursor r -> Int32 -> (Vector r -> m a) -> m a
 foldBatched cursor batchSize f = do
   batch <- fetchN cursor batchSize
   case batch of
