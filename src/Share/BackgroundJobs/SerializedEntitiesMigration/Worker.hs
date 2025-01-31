@@ -65,20 +65,21 @@ processComponents !_authZReceipt = do
     Q.claimComponent >>= \case
       Nothing -> pure False
       Just (componentHashId, userId) -> do
-            let codebaseEnv = CodebaseEnv userId
-            Codebase.codebaseMToTransaction codebaseEnv $ do
-              hash32 <- (Hash32.fromHash . unComponentHash) <$> HQ.expectComponentHashesOf id componentHashId
-              entity <- SQ.expectEntity hash32
-              componentSummaryDigest <- HQ.expectComponentSummaryDigest componentHashId
-              let tempEntity = SyncCommon.entityToTempEntity id entity
-              let (SyncV2.CBORBytes bytes) = SyncV2.serialiseCBORBytes tempEntity
-              bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
-              execute_
-                [sql|
+        let codebaseEnv = CodebaseEnv userId
+        Codebase.codebaseMToTransaction codebaseEnv $ do
+          hash32 <- (Hash32.fromHash . unComponentHash) <$> HQ.expectComponentHashesOf id componentHashId
+          entity <- SQ.expectEntity hash32
+          componentSummaryDigest <- HQ.expectComponentSummaryDigest componentHashId
+          let tempEntity = SyncCommon.entityToTempEntity id entity
+          let (SyncV2.CBORBytes bytes) = SyncV2.serialiseCBORBytes tempEntity
+          bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+          execute_
+            [sql|
                 INSERT INTO component_summary_digests_to_serialized_component_bytes_hash (component_hash_id, component_summary_digest, serialized_component_bytes_id)
                   VALUES (#{componentHashId}, #{componentSummaryDigest}, #{bytesId})
+                  ON CONFLICT DO NOTHING
                 |]
-              pure True
+          pure True
 
 saveUnsandboxedSerializedEntities :: (QueryM m) => Hash32 -> TempEntity -> m ()
 saveUnsandboxedSerializedEntities hash entity = do

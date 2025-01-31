@@ -67,6 +67,40 @@ CREATE TABLE migrate_serialized_queue_unsandboxed (
 
 -- EXTRA
 
+-- If some causals are missing:
+-- INSERT INTO migrate_serialized_queue_unsandboxed (hash, user_id)
+--     SELECT DISTINCT ON(c.hash) c.hash, co.user_id
+--       FROM causal_ownership co
+--         JOIN causals c ON co.causal_id = c.id
+--   WHERE NOT EXISTS(SELECT FROM serialized_causals sc WHERE sc.causal_id = c.id)
+--   ;
+
+
+-- If some namespaces are missing:
+-- INSERT INTO migrate_serialized_queue_unsandboxed (hash, user_id)
+--     SELECT DISTINCT ON(bh.base32) bh.base32, no.user_id
+--       FROM namespace_ownership no
+--         JOIN branch_hashes bh ON no.namespace_hash_id = bh.id
+--   WHERE NOT EXISTS(SELECT FROM serialized_namespaces sn WHERE sn.namespace_hash_id = bh.id)
+--   ;
+
+-- If some term components are missing
+-- INSERT INTO migrate_serialized_queue_sandboxed (component_hash_id, user_id)
+-- SELECT DISTINCT ON (t.component_hash_id) t.component_hash_id, st.user_id
+--   FROM sandboxed_terms st
+--     JOIN terms t ON st.term_id = t.id
+--   WHERE NOT EXISTS(SELECT FROM serialized_components sc WHERE sc.user_id = st.user_id AND sc.component_hash_id = t.component_hash_id)
+--   ;
+
+-- If some type components are missing
+-- INSERT INTO migrate_serialized_queue_sandboxed (component_hash_id, user_id)
+-- SELECT DISTINCT ON (t.component_hash_id) t.component_hash_id, st.user_id
+--   FROM sandboxed_types st
+--     JOIN types t ON st.type_id = t.id
+--   WHERE NOT EXISTS(SELECT FROM serialized_components sc WHERE sc.user_id = st.user_id AND sc.component_hash_id = t.component_hash_id)
+--   ;
+
+
 -- If some components were somehow missing, this will detect which ones still need processing and add them back to
 -- the queue.
 -- INSERT INTO migrate_serialized_queue_sandboxed (component_hash_id, user_id)
