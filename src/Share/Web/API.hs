@@ -5,7 +5,7 @@ module Share.Web.API where
 
 import Servant
 import Share.OAuth.API qualified as OAuth
-import Share.OAuth.Session (MaybeAuthenticatedSession)
+import Share.OAuth.Session (MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
 import Share.Prelude
 import Share.Web.Admin.API qualified as Admin
 import Share.Web.Local.API qualified as Local
@@ -13,6 +13,7 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Projects.API qualified as Projects
 import Share.Web.Support.API qualified as Support
 import Share.Web.Types
+import Share.Web.UCM.SyncV2.API qualified as SyncV2
 import Unison.Share.API.Projects qualified as UCMProjects
 import Unison.Sync.API qualified as Unison.Sync
 
@@ -36,6 +37,7 @@ type API =
     :<|> ("sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
     :<|> ("ucm" :> "v1" :> "sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
     :<|> ("ucm" :> "v1" :> "projects" :> MaybeAuthenticatedSession :> UCMProjects.ProjectsAPI)
+    :<|> ("ucm" :> "v2" :> "sync" :> MaybeAuthenticatedUserId :> SyncV2.API)
     :<|> ("admin" :> Admin.API)
 
 api :: Proxy API

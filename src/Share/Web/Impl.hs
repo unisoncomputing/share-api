@@ -24,6 +24,7 @@ import Share.Web.Support.Impl qualified as Support
 import Share.Web.Types
 import Share.Web.UCM.Projects.Impl qualified as UCMProjects
 import Share.Web.UCM.Sync.Impl qualified as Sync
+import Share.Web.UCM.SyncV2.Impl qualified as SyncV2
 
 discoveryEndpoint :: WebApp DiscoveryDocument
 discoveryEndpoint = do
@@ -72,4 +73,5 @@ server =
     :<|> Sync.server -- Deprecated path
     :<|> Sync.server
     :<|> UCMProjects.server
+    :<|> SyncV2.server
     :<|> Admin.server

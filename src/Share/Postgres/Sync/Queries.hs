@@ -1,3 +1,5 @@
+{-# LANGUAGE StandaloneDeriving #-}
+
 -- | Queries related to sync and temp entities.
 module Share.Postgres.Sync.Queries
   ( expectEntity,
@@ -10,6 +12,12 @@ module Share.Postgres.Sync.Queries
     getEntitiesReadyToFlush,
     filterForFlushableHashes,
     tryPopFlushableTempEntity,
+    -- Exported for migrations
+    saveSerializedEntities,
+    saveSerializedNamespace,
+    saveSerializedCausal,
+    saveSerializedComponent,
+    saveSerializedPatch,
   )
 where
 
@@ -21,6 +29,7 @@ import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Data.Vector qualified as Vector
+import Servant (ServerError (..), err500)
 import Share.Codebase.Types (CodebaseM)
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs
@@ -39,7 +48,6 @@ import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (InternalServerError (..), ToServerError (..), Unimplemented (Unimplemented))
 import Share.Web.UCM.Sync.Types
-import Servant (ServerError (..), err500)
 import U.Codebase.Branch qualified as V2
 import U.Codebase.Causal qualified as U
 import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes (LocalBranchBytes))
@@ -51,6 +59,7 @@ import U.Codebase.Sqlite.Decode qualified as Decoders
 import U.Codebase.Sqlite.Entity qualified as Entity
 import U.Codebase.Sqlite.LocalIds qualified as LocalIds
 import U.Codebase.Sqlite.LocalizeObject qualified as Localize
+import U.Codebase.Sqlite.Patch.Format (PatchLocalIds' (patchDefnLookup))
 import U.Codebase.Sqlite.Patch.Format qualified as PatchFormat
 import U.Codebase.Sqlite.Patch.Full qualified as PatchFull
 import U.Codebase.Sqlite.Queries qualified as Share
@@ -61,6 +70,8 @@ import Unison.Hash32
 import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as Share
 import Unison.Sync.Types qualified as Share
+import Unison.SyncV2.Types (CBORBytes (..), EntityKind (..))
+import Unison.SyncV2.Types qualified as SyncV2
 
 data SyncQError
   = InvalidNamespaceBytes
@@ -82,7 +93,7 @@ instance Logging.Loggable SyncQError where
   toLog = Logging.withSeverity Logging.Error . Logging.showLog
 
 -- | Read an entity out of the database that we know is in main storage.
-expectEntity :: HasCallStack => Hash32 -> CodebaseM e (Share.Entity Text Hash32 Hash32)
+expectEntity :: (HasCallStack) => Hash32 -> CodebaseM e (Share.Entity Text Hash32 Hash32)
 expectEntity hash = do
   expectEntityKindForHash hash >>= \case
     CausalEntity -> Share.C <$> expectCausalEntity (CausalHash . Hash32.toHash $ hash)
@@ -90,9 +101,8 @@ expectEntity hash = do
     TermEntity -> Share.TC <$> expectTermComponentEntity (ComponentHash . Hash32.toHash $ hash)
     TypeEntity -> Share.DC <$> expectTypeComponentEntity (ComponentHash . Hash32.toHash $ hash)
     PatchEntity -> Share.P <$> expectPatchEntity (PatchHash . Hash32.toHash $ hash)
-  where
 
-expectCausalEntity :: HasCallStack => CausalHash -> CodebaseM e (Share.Causal Hash32)
+expectCausalEntity :: (HasCallStack) => CausalHash -> CodebaseM e (Share.Causal Hash32)
 expectCausalEntity hash = do
   causalId <- CausalQ.expectCausalIdByHash hash
   U.Causal {valueHash, parents} <- CausalQ.expectCausalNamespace causalId
@@ -103,7 +113,7 @@ expectCausalEntity hash = do
         }
     )
 
-expectNamespaceEntity :: HasCallStack => BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
+expectNamespaceEntity :: (HasCallStack) => BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
 expectNamespaceEntity bh = do
   bhId <- HashQ.expectBranchHashId bh
   v2Branch <- CausalQ.expectNamespace bhId
@@ -122,17 +132,17 @@ expectNamespaceEntity bh = do
             bytes = bytes
           }
 
-expectTermComponentEntity :: HasCallStack => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
+expectTermComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
 expectTermComponentEntity hash = do
   chId <- HashQ.expectComponentHashId hash
   DefnQ.expectShareTermComponent chId
 
-expectTypeComponentEntity :: HasCallStack => ComponentHash -> CodebaseM e (Share.DeclComponent Text Hash32)
+expectTypeComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.DeclComponent Text Hash32)
 expectTypeComponentEntity hash = do
   chId <- HashQ.expectComponentHashId hash
   DefnQ.expectShareTypeComponent chId
 
-expectPatchEntity :: HasCallStack => PatchHash -> CodebaseM e (Share.Patch Text Hash32 Hash32)
+expectPatchEntity :: (HasCallStack) => PatchHash -> CodebaseM e (Share.Patch Text Hash32 Hash32)
 expectPatchEntity patchHash = do
   patchId <- HashQ.expectPatchIdsOf id patchHash
   v2Patch <- PatchQ.expectPatch patchId
@@ -154,7 +164,7 @@ expectPatchEntity patchHash = do
         & pure
 
 -- | Determine the kind of an arbitrary hash.
-expectEntityKindForHash :: HasCallStack => Hash32 -> CodebaseM e EntityKind
+expectEntityKindForHash :: (HasCallStack) => Hash32 -> CodebaseM e EntityKind
 expectEntityKindForHash h =
   do
     queryExpect1Row
@@ -317,7 +327,7 @@ entityLocations sortedEntities = do
 -- | Save a temp entity to the temp entities table, also tracking its missing dependencies.
 -- You can pass ALL the dependencies of the temp entity, the query will determine which ones
 -- are missing.
-saveTempEntities :: Foldable f => f (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e ()
+saveTempEntities :: (Foldable f) => f (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e ()
 saveTempEntities entities = do
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   let tempEntities =
@@ -401,10 +411,12 @@ clearTempDependencies hash = do
 
 -- | Save a temp entity to main storage, and clear any missing dependency rows for it, and
 -- return the set of hashes which dependended on it and _might_ now be ready to flush.
-saveTempEntityInMain :: forall e. HasCallStack => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
+saveTempEntityInMain :: forall e. (HasCallStack) => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
 saveTempEntityInMain hash entity = do
   saveEntity entity
-  clearTempDependencies hash
+  dependencies <- clearTempDependencies hash
+  saveSerializedEntities [(hash, entity)]
+  pure dependencies
   where
     saveEntity :: TempEntity -> CodebaseM e ()
     saveEntity = \case
@@ -572,4 +584,56 @@ getEntitiesReadyToFlush = do
                           WHERE missing_dep.dependent = temp_entity.hash
                             AND missing_dep.user_id = #{codebaseOwnerUserId}
                         )
+    |]
+
+saveSerializedEntities :: (Foldable f) => f (Hash32, TempEntity) -> CodebaseM e ()
+saveSerializedEntities entities = do
+  for_ entities \(hash, entity) -> do
+    let serialised = SyncV2.serialiseCBORBytes entity
+    case entity of
+      Entity.TC {} -> saveSerializedComponent hash serialised
+      Entity.DC {} -> saveSerializedComponent hash serialised
+      Entity.P {} -> saveSerializedPatch hash serialised
+      Entity.C {} -> saveSerializedCausal hash serialised
+      Entity.N {} -> saveSerializedNamespace hash serialised
+
+saveSerializedComponent :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedComponent hash (CBORBytes bytes) = do
+  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
+        VALUES (#{codebaseOwnerUserId}, (SELECT ch.id FROM component_hashes ch where ch.base32 = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+saveSerializedPatch :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
+saveSerializedPatch hash (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_patches (patch_id, bytes_id)
+        VALUES ((SELECT p.id FROM patches p where p.hash = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+saveSerializedCausal :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
+saveSerializedCausal hash (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_causals (causal_id, bytes_id)
+        VALUES ((SELECT c.id FROM causals c where c.hash = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+saveSerializedNamespace :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
+saveSerializedNamespace hash (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_namespaces (namespace_hash_id, bytes_id)
+        VALUES ((SELECT bh.id FROM branch_hashes bh where bh.base32 = #{hash}), #{bytesId})
+      ON CONFLICT DO NOTHING
     |]

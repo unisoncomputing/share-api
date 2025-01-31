@@ -19,7 +19,6 @@ module Share.Postgres
     Interp.DecodeValue (..),
     Interp.DecodeRow (..),
     Interp.DecodeField,
-    RawBytes (..),
     Only (..),
     QueryA (..),
     QueryM (..),
@@ -334,7 +333,8 @@ instance QueryA (Transaction e) where
   statement q s = do
     transactionStatement q s
 
-  unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
+  unrecoverableError e = do
+    Transaction (pure (Left (Unrecoverable (someServerError e))))
 
 instance QueryM (Transaction e) where
   transactionUnsafeIO io = Transaction (Right <$> liftIO io)
@@ -343,7 +343,8 @@ instance QueryA (Session e) where
   statement q s = do
     lift $ Session.statement q s
 
-  unrecoverableError e = throwError (Unrecoverable (someServerError e))
+  unrecoverableError e = do
+    throwError (Unrecoverable (someServerError e))
 
 instance QueryM (Session e) where
   transactionUnsafeIO io = lift $ liftIO io
@@ -356,7 +357,8 @@ instance QueryA (Pipeline e) where
 instance (QueryM m) => QueryA (ReaderT e m) where
   statement q s = lift $ statement q s
 
-  unrecoverableError e = lift $ unrecoverableError e
+  unrecoverableError e = do
+    lift $ unrecoverableError e
 
 instance (QueryM m) => QueryM (ReaderT e m) where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
@@ -468,17 +470,6 @@ cachedForOf trav s f = do
 -- | cachedForOf, but for traversables.
 cachedFor :: (Traversable t, Monad m, Ord a) => t a -> (a -> m b) -> m (t b)
 cachedFor = cachedForOf traversed
-
--- | Preferably you should use custom newtypes for your bytes, but you can use this with
--- deriving via to get the encoding/decoding instances.
-newtype RawBytes = RawBytes {unRawBytes :: ByteString}
-  deriving stock (Show, Eq, Ord)
-
-instance Interp.EncodeValue RawBytes where
-  encodeValue = contramap unRawBytes Encoders.bytea
-
-instance Interp.DecodeValue RawBytes where
-  decodeValue = RawBytes <$> Decoders.bytea
 
 -- | Useful when running queries using a join over `toTable` which may be empty.
 -- Without explicitly handling the empty case we'll waste time sending a query to PG

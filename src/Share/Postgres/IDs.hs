@@ -22,6 +22,7 @@ module Share.Postgres.IDs
     EvalResultId (..),
     NamespaceTermMappingId (..),
     NamespaceTypeMappingId (..),
+    ComponentSummaryDigest (..),
 
     -- * Conversions
     hash32AsComponentHash_,
@@ -93,6 +94,10 @@ newtype NamespaceTermMappingId = NamespaceTermMappingId Int32
 newtype NamespaceTypeMappingId = NamespaceTypeMappingId Int32
   deriving stock (Show, Eq, Ord)
   deriving (PG.EncodeValue, PG.DecodeValue) via Int32
+
+newtype ComponentSummaryDigest = ComponentSummaryDigest {unComponentSummaryDigest :: ByteString}
+  deriving stock (Show, Eq, Ord)
+  deriving (PG.EncodeValue, PG.DecodeValue) via ByteString
 
 hash32AsComponentHash_ :: Iso Hash32 b ComponentHash b
 hash32AsComponentHash_ = iso (ComponentHash . Hash32.toHash) id

@@ -3,6 +3,7 @@
 module Share.Web.App
   ( RequestCtx (..),
     WebApp,
+    WebAppServer,
     ReqTagsVar,
     localRequestCtx,
     withLocalTag,
@@ -23,6 +24,7 @@ import Control.Monad.Reader
 import Data.Map qualified as Map
 import Network.URI
 import Servant
+import Servant.Server.Generic (AsServerT)
 import Share.App
 import Share.Env
 import Share.Env qualified as Env
@@ -33,6 +35,8 @@ import Share.Utils.URI (setPathAndQueryParams)
 import UnliftIO.STM
 
 type WebApp = AppM RequestCtx
+
+type WebAppServer = AsServerT WebApp
 
 type ReqTagsVar = TVar (Map Text Text)
 
