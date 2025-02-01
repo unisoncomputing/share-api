@@ -352,38 +352,40 @@ spineAndLibDependenciesOfCausalCursor cid = do
     [sql|
     -- is_lib_causal indicates the causal itself is the library, whereas is_lib_root indicates
     -- the causal is the root of a library INSIDE 'lib'
-        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id, is_spine, is_lib_causal, is_lib_root) AS (
-            SELECT causal.id, causal.hash, causal.namespace_hash_id, true AS is_spine, false AS is_lib_causal, false AS is_lib_root
+        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id, is_spine, is_lib_causal, is_lib_root, depth) AS (
+            SELECT causal.id, causal.hash, causal.namespace_hash_id, true AS is_spine, false AS is_lib_causal, false AS is_lib_root, 1 AS depth
             FROM causals causal
                 WHERE causal.id = #{cid}
-                  -- AND NOT EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = to_codebase_user_id AND co.causal_id = causal.id)
                   AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
             UNION
             -- This nested CTE is required because RECURSIVE CTEs can't refer
             -- to the recursive table more than once.
             ( WITH rec AS (
-                SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root
+                SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root, tc.depth
                 FROM transitive_causals tc
             )
-                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_causal, rec.is_lib_root
+                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_causal, rec.is_lib_root, rec.depth + 1
                 FROM causal_ancestors ca
                     JOIN rec ON ca.causal_id = rec.causal_id
                     JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
                     -- Only get the history of the top level spine
                     WHERE rec.is_spine
-                    -- WHERE NOT EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = to_codebase_user_id AND co.causal_id = ancestor_causal.id)
                 UNION
-                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id, false AS is_spine, nc.name_segment_id = #{libSegmentTextId} AS is_lib_causal, rec.is_lib_causal AS is_lib_root
+                -- libs within a causal should have the same depth as the causal they're in so
+                -- we order them locally with their causal.
+                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id, false AS is_spine, nc.name_segment_id = #{libSegmentTextId} AS is_lib_causal, rec.is_lib_causal AS is_lib_root, rec.depth
                 FROM rec
                     JOIN namespace_children nc ON rec.causal_namespace_hash_id = nc.parent_namespace_hash_id
                     JOIN causals child_causal ON nc.child_causal_id = child_causal.id
                     -- Don't sync children of lib roots.
                     WHERE NOT rec.is_lib_root
                           AND (nc.name_segment_id = #{libSegmentTextId} OR rec.is_lib_causal))
-                    -- WHERE NOT EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = to_codebase_user_id AND co.causal_id = child_causal.id)
             )
            (SELECT tc.causal_hash, tc.is_spine, tc.is_lib_root
              FROM transitive_causals tc
+             WHERE tc.is_spine OR tc.is_lib_causal
+             -- Order by depth, causals first.
+             ORDER BY tc.depth ASC, tc.is_spine DESC
            )
   |]
     <&> fmap (\(hash, isSpine, isLibRoot) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))

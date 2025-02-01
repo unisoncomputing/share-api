@@ -111,7 +111,13 @@ causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
         cursor <- SSQ.spineAndLibDependenciesOfCausalCursor causalId
         Cursor.foldBatched cursor batchSize \batch -> do
-          let depBatch = batch <&> \(hash, _, _) -> HashC hash
+          let depBatch =
+                batch <&> \(hash, isCausalSpine, isLibRoot) ->
+                  let dependencyType = case (isCausalSpine, isLibRoot) of
+                        (True, _) -> CausalSpine
+                        (_, True) -> LibRoot
+                        _ -> error $ "Causal dependency which is neither spine nor lib root: " <> tShow hash
+                   in HashC {hash, dependencyType}
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q depBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
