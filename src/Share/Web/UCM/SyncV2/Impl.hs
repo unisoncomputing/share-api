@@ -34,11 +34,12 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.SyncV2.Queries qualified as SSQ
+import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.SyncV2.API qualified as SyncV2
-import Unison.SyncV2.Types (CausalDependenciesChunk (..), DownloadEntitiesChunk (..), EntityChunk (..), ErrorChunk (..), StreamInitInfo (..))
+import Unison.SyncV2.Types (CausalDependenciesChunk (..), DependencyType (..), DownloadEntitiesChunk (..), EntityChunk (..), ErrorChunk (..), StreamInitInfo (..))
 import Unison.SyncV2.Types qualified as SyncV2
 import UnliftIO qualified
 import UnliftIO.Async qualified as Async
@@ -112,12 +113,12 @@ causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {
         cursor <- SSQ.spineAndLibDependenciesOfCausalCursor causalId
         Cursor.foldBatched cursor batchSize \batch -> do
           let depBatch =
-                batch <&> \(hash, isCausalSpine, isLibRoot) ->
+                batch <&> \(causalHash, isCausalSpine, isLibRoot) ->
                   let dependencyType = case (isCausalSpine, isLibRoot) of
-                        (True, _) -> CausalSpine
-                        (_, True) -> LibRoot
-                        _ -> error $ "Causal dependency which is neither spine nor lib root: " <> tShow hash
-                   in HashC {hash, dependencyType}
+                        (IsCausalSpine, _) -> CausalSpineDependency
+                        (_, IsLibRoot) -> LibDependency
+                        _ -> error $ "Causal dependency which is neither spine nor lib root: " <> show causalHash
+                   in CausalHashDepC {causalHash, dependencyType}
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q depBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
