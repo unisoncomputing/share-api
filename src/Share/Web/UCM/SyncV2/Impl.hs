@@ -13,6 +13,7 @@ import Data.Binary.Builder qualified as Builder
 import Data.Set qualified as Set
 import Data.Text.Encoding qualified as Text
 import Data.Vector qualified as Vector
+import Ki.Unlifted qualified as Ki
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
 import Servant.Types.SourceT (SourceT (..))
@@ -42,7 +43,6 @@ import Unison.SyncV2.API qualified as SyncV2
 import Unison.SyncV2.Types (CausalDependenciesChunk (..), DependencyType (..), DownloadEntitiesChunk (..), EntityChunk (..), ErrorChunk (..), StreamInitInfo (..))
 import Unison.SyncV2.Types qualified as SyncV2
 import UnliftIO qualified
-import UnliftIO.Async qualified as Async
 
 batchSize :: Int32
 batchSize = 1000
@@ -184,4 +184,6 @@ codebaseForBranchRef branchRef = do
 sourceIOWithAsync :: IO a -> SourceIO r -> SourceIO r
 sourceIOWithAsync action (SourceT k) =
   SourceT \k' ->
-    Async.withAsync action \_ -> k k'
+    Ki.scoped \scope -> do
+      _ <- Ki.fork scope action
+      k k'
