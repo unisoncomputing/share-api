@@ -13,6 +13,7 @@ import Share.Postgres.IDs
 import Share.Prelude
 import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.TempEntity (TempEntity)
+import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
 
@@ -186,17 +187,23 @@ import Unison.SyncV2.Types (CBORBytes)
 allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
 allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   ownerUserId <- asks codebaseOwner
-  execute_ [sql| CREATE TEMP TABLE except_causals ( causal_id INTEGER NOT NULL ) ON COMMIT DROP |]
-  execute_
-    [sql| INSERT INTO except_causals (causal_id)
-    WITH the_causal_hashes(hash) AS (SELECT * FROM ^{singleColumnTable (toList exceptCausalHashes)})
-    SELECT c.id
-      FROM the_causal_hashes tch
-        JOIN causals c ON tch.hash = c.hash
-    |]
+  Debug.debugLogM Debug.Temp "created except_hashes temp table."
+  -- Create a temp table for storing the dependencies we know the calling client already has.
+  execute_ [sql| CREATE TEMP TABLE except_hashes ( hash TEXT NOT NULL PRIMARY KEY ) ON COMMIT DROP |]
+  Debug.debugLogM Debug.Temp "filling in except_hashes temp table."
   execute_
     [sql|
+    WITH the_causal_hashes(hash) AS (
+      SELECT * FROM ^{singleColumnTable (toList exceptCausalHashes)}
+    ), known_causal_ids(causal_id) AS (
+      SELECT c.id
+      FROM the_causal_hashes tch
+        JOIN causals c ON tch.hash = c.hash
+    ) INSERT INTO except_hashes(hash)
+      SELECT DISTINCT deps.hash FROM dependencies_of_causals((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
+      ON CONFLICT DO NOTHING
     |]
+  Debug.debugLogM Debug.Temp "Running cursor query"
   cursor <-
     PGCursor.newRowCursor
       "serialized_entities"
@@ -206,7 +213,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
             FROM causals causal
                 WHERE causal.id = #{cid}
                   AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
-                  AND NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = causal.id)
+                  AND NOT EXISTS (SELECT FROM except_hashes ec WHERE ec.causal_id = causal.id)
             UNION
             -- This nested CTE is required because RECURSIVE CTEs can't refer
             -- to the recursive table more than once.
@@ -218,23 +225,25 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                 FROM causal_ancestors ca
                     JOIN rec tc ON ca.causal_id = tc.causal_id
                     JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
-                    WHERE NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = ancestor_causal.id)
+                    WHERE NOT EXISTS (SELECT FROM except_hashes ec WHERE ec.causal_id = ancestor_causal.id)
                 UNION
                 SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id
                 FROM rec tc
                     JOIN namespace_children nc ON tc.causal_namespace_hash_id = nc.parent_namespace_hash_id
                     JOIN causals child_causal ON nc.child_causal_id = child_causal.id
-                    WHERE NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = child_causal.id)
+                    WHERE NOT EXISTS (SELECT FROM except_hashes ec WHERE ec.causal_id = child_causal.id)
             )
         ), all_namespaces(namespace_hash_id, namespace_hash) AS (
             SELECT DISTINCT tc.causal_namespace_hash_id AS namespace_hash_id, bh.base32 as namespace_hash
             FROM transitive_causals tc
             JOIN branch_hashes bh ON tc.causal_namespace_hash_id = bh.id
+            WHERE NOT EXISTS (SELECT FROM except_hashes eh WHERE eh.hash = bh.base32)
         ), all_patches(patch_id, patch_hash) AS (
             SELECT DISTINCT patch.id, patch.hash
             FROM all_namespaces an
                 JOIN namespace_patches np ON an.namespace_hash_id = np.namespace_hash_id
                 JOIN patches patch ON np.patch_id = patch.id
+            WHERE NOT EXISTS (SELECT FROM except_hashes eh WHERE eh.hash = patch.hash)
         ),
         -- term components to start transitively joining dependencies to
         base_term_components(component_hash_id) AS (
@@ -321,6 +330,9 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND tc.component_hash_id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_hashes ch ON tc.component_hash_id = ch.id
+                WHERE NOT EXISTS (SELECT FROM except_hashes eh WHERE eh.hash = ch.base32)
+               -- TODO: Filter out components we know we already have,
+               -- We should do this earlier in the process if possible.
            )
            UNION ALL
            (SELECT bytes.bytes, ap.patch_hash
