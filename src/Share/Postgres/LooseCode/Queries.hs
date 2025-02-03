@@ -119,6 +119,6 @@ setLooseCodeRoot !_nlReceipt callerUserId description newCausalId = do
 -- | Initializes a codebase for a new user
 initialize :: CodebaseM e ()
 initialize = do
-  (emptyBhId, _) <- CausalQ.savePgNamespace Nothing BranchFull.emptyBranch
+  (emptyBhId, _) <- CausalQ.savePgNamespace Nothing Nothing BranchFull.emptyBranch
   (cid, _causalHash) <- CausalQ.saveCausal Nothing Nothing emptyBhId mempty
   ensureLooseCodeRootHash cid

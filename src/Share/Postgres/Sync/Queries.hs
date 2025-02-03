@@ -13,7 +13,6 @@ module Share.Postgres.Sync.Queries
     tryPopFlushableTempEntity,
     -- Exported for migrations
     saveSerializedEntities,
-    saveSerializedNamespace,
     saveSerializedComponent,
     saveSerializedPatch,
   )
@@ -46,7 +45,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (InternalServerError (..), ToServerError (..), Unimplemented (Unimplemented))
 import Share.Web.UCM.Sync.Types
 import U.Codebase.Branch qualified as V2
-import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes (LocalBranchBytes))
+import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes)
 import U.Codebase.Sqlite.Branch.Format qualified as BranchFormat
 import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
 import U.Codebase.Sqlite.Causal qualified as SqliteCausal
@@ -95,29 +94,12 @@ expectEntity hash = do
     CausalEntity -> do
       causalId <- CausalQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
       Share.C <$> CausalQ.expectCausalEntity causalId
-    NamespaceEntity -> Share.N <$> expectNamespaceEntity (BranchHash . Hash32.toHash $ hash)
+    NamespaceEntity -> do
+      bhId <- HashQ.expectBranchHashId (fromHash32 @BranchHash $ hash)
+      Share.N <$> CausalQ.expectNamespaceEntity bhId
     TermEntity -> Share.TC <$> expectTermComponentEntity (ComponentHash . Hash32.toHash $ hash)
     TypeEntity -> Share.DC <$> expectTypeComponentEntity (ComponentHash . Hash32.toHash $ hash)
     PatchEntity -> Share.P <$> expectPatchEntity (PatchHash . Hash32.toHash $ hash)
-
-expectNamespaceEntity :: (HasCallStack) => BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
-expectNamespaceEntity bh = do
-  bhId <- HashQ.expectBranchHashId bh
-  v2Branch <- CausalQ.expectNamespace bhId
-  second Hash32.fromHash <$> branchToEntity v2Branch
-  where
-    branchToEntity branch = do
-      branchFull <- Cv.branchV2ToBF branch
-      let (BranchFormat.LocalIds {branchTextLookup, branchDefnLookup, branchPatchLookup, branchChildLookup}, localBranch) = Localize.localizeBranchG branchFull
-      let bytes = LocalBranchBytes $ S.encodeNamespace localBranch
-      pure $
-        Share.Namespace
-          { textLookup = Vector.toList branchTextLookup,
-            defnLookup = Vector.toList branchDefnLookup,
-            patchLookup = Vector.toList branchPatchLookup,
-            childLookup = Vector.toList branchChildLookup,
-            bytes = bytes
-          }
 
 expectTermComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
 expectTermComponentEntity hash = do
@@ -411,7 +393,7 @@ saveTempEntityInMain hash entity = do
       Entity.DC (DeclFormat.SyncDecl syncDecl) -> doDeclComponent syncDecl
       Entity.N BranchFormat.SyncDiff {} ->
         lift . unrecoverableError $ InternalServerError "namespace-diffs-not-supported" Unimplemented
-      Entity.N (BranchFormat.SyncFull localIds bytes) -> doNamespace localIds bytes
+      Entity.N (BranchFormat.SyncFull localIds bytes) -> doNamespace entity localIds bytes
       Entity.P PatchFormat.SyncDiff {} -> lift . unrecoverableError $ InternalServerError "patch-diffs-not-supported" Unimplemented
       Entity.P (PatchFormat.SyncFull localIds patchBytes) -> doPatch localIds patchBytes
       Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) -> doCausal entity valueHash parents
@@ -446,17 +428,18 @@ saveTempEntityInMain hash entity = do
       Defn.saveTypeComponent componentHash componentWithIds
 
     doNamespace ::
+      TempEntity ->
       BranchFormat.BranchLocalIds' Text Hash32 Hash32 (Hash32, Hash32) ->
       LocalBranchBytes ->
       CodebaseM e ()
-    doNamespace localIds bytes = do
+    doNamespace entity localIds bytes = do
       pgNamespace <-
         (expandNamespaceFormat localIds bytes)
           >>= Defn.ensureTextIdsOf BranchFull.t_
           >>= HashQ.expectComponentHashIdsOf (BranchFull.h_ . hash32AsComponentHash_)
           >>= HashQ.expectPatchIdsOf (BranchFull.p_ . hash32AsPatchHash_)
           >>= HashQ.expectCausalIdsOf (BranchFull.c_ . childHashT)
-      void $ CausalQ.savePgNamespace (Just (BranchHash . Hash32.toHash $ hash)) pgNamespace
+      void $ CausalQ.savePgNamespace (Just entity) (Just (BranchHash . Hash32.toHash $ hash)) pgNamespace
 
     doPatch ::
       PatchFormat.PatchLocalIds' Text Hash32 Hash32 ->
@@ -585,7 +568,9 @@ saveSerializedEntities entities = do
       Entity.C {} -> do
         causalId <- CausalQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
         CausalQ.saveSerializedCausal causalId serialised
-      Entity.N {} -> saveSerializedNamespace hash serialised
+      Entity.N {} -> do
+        bhId <- HashQ.expectBranchHashId (fromHash32 @BranchHash hash)
+        CausalQ.saveSerializedNamespace bhId serialised
 
 saveSerializedComponent :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
 saveSerializedComponent hash (CBORBytes bytes) = do
@@ -605,15 +590,5 @@ saveSerializedPatch hash (CBORBytes bytes) = do
     [sql|
       INSERT INTO serialized_patches (patch_id, bytes_id)
         VALUES ((SELECT p.id FROM patches p where p.hash = #{hash}), #{bytesId})
-      ON CONFLICT DO NOTHING
-    |]
-
-saveSerializedNamespace :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
-saveSerializedNamespace hash (CBORBytes bytes) = do
-  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
-  execute_
-    [sql|
-      INSERT INTO serialized_namespaces (namespace_hash_id, bytes_id)
-        VALUES ((SELECT bh.id FROM branch_hashes bh where bh.base32 = #{hash}), #{bytesId})
       ON CONFLICT DO NOTHING
     |]

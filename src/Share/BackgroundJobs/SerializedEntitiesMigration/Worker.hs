@@ -92,4 +92,6 @@ saveUnsandboxedSerializedEntities hash entity = do
     Entity.C {} -> do
       cId <- CQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
       CQ.saveSerializedCausal cId serialised
-    Entity.N {} -> SQ.saveSerializedNamespace hash serialised
+    Entity.N {} -> do
+      bhId <- HQ.expectBranchHashId (fromHash32 @BranchHash hash)
+      CQ.saveSerializedNamespace bhId serialised
