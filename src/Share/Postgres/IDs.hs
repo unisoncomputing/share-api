@@ -33,13 +33,17 @@ module Share.Postgres.IDs
     hash32FromBranchHash_,
     hash32AsCausalHash_,
     hash32FromCausalHash_,
+    toHash32,
+    fromHash32,
   )
 where
 
 import Control.Lens
+import Data.Coerce (Coercible)
 import Share.Postgres qualified as PG
 import Share.Prelude
 import U.Codebase.HashTags (BranchHash (..), CausalHash (..), ComponentHash (..), PatchHash (..))
+import Unison.Hash (Hash)
 import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
 
@@ -98,6 +102,12 @@ newtype NamespaceTypeMappingId = NamespaceTypeMappingId Int32
 newtype ComponentSummaryDigest = ComponentSummaryDigest {unComponentSummaryDigest :: ByteString}
   deriving stock (Show, Eq, Ord)
   deriving (PG.EncodeValue, PG.DecodeValue) via ByteString
+
+toHash32 :: (Coercible h Hash) => h -> Hash32
+toHash32 = Hash32.fromHash . coerce
+
+fromHash32 :: (Coercible h Hash) => Hash32 -> h
+fromHash32 = coerce . Hash32.toHash
 
 hash32AsComponentHash_ :: Iso Hash32 b ComponentHash b
 hash32AsComponentHash_ = iso (ComponentHash . Hash32.toHash) id

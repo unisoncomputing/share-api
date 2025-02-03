@@ -9,6 +9,7 @@ import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres
 import Share.Postgres qualified as PG
+import Share.Postgres.Causal.Queries qualified as CQ
 import Share.Postgres.Definitions.Queries qualified as DefnQ
 import Share.Postgres.Hashes.Queries qualified as HQ
 import Share.Postgres.IDs
@@ -81,12 +82,14 @@ processComponents !_authZReceipt = do
                 |]
           pure True
 
-saveUnsandboxedSerializedEntities :: (QueryM m) => Hash32 -> TempEntity -> m ()
+saveUnsandboxedSerializedEntities :: Hash32 -> TempEntity -> Codebase.CodebaseM e ()
 saveUnsandboxedSerializedEntities hash entity = do
   let serialised = SyncV2.serialiseCBORBytes entity
   case entity of
     Entity.TC {} -> error "Unexpected term component"
     Entity.DC {} -> error "Unexpected decl component"
     Entity.P {} -> SQ.saveSerializedPatch hash serialised
-    Entity.C {} -> SQ.saveSerializedCausal hash serialised
+    Entity.C {} -> do
+      cId <- CQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
+      CQ.saveSerializedCausal cId serialised
     Entity.N {} -> SQ.saveSerializedNamespace hash serialised

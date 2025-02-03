@@ -25,10 +25,17 @@ module Share.Postgres.Causal.Queries
     hashCausal,
     bestCommonAncestor,
     isFastForward,
+
+    -- * Sync
+    expectCausalEntity,
+
+    -- * For migrations, can probably remove this export later.
+    saveSerializedCausal,
   )
 where
 
 import Control.Lens
+import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Share.Codebase.Types (CodebaseM)
@@ -37,6 +44,7 @@ import Share.IDs (UserId)
 import Share.Postgres
 import Share.Postgres.Causal.Types
 import Share.Postgres.Definitions.Queries qualified as Defn
+import Share.Postgres.Definitions.Queries qualified as DefnQ
 import Share.Postgres.Definitions.Types
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
@@ -47,16 +55,23 @@ import Share.Web.Errors (MissingExpectedEntity (MissingExpectedEntity))
 import U.Codebase.Branch hiding (NamespaceStats, nonEmptyChildren)
 import U.Codebase.Branch qualified as V2 hiding (NamespaceStats)
 import U.Codebase.Causal qualified as Causal
+import U.Codebase.Causal qualified as U
 import U.Codebase.Reference
 import U.Codebase.Referent
 import U.Codebase.Referent qualified as Referent
 import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
+import U.Codebase.Sqlite.TempEntity (TempEntity)
 import Unison.Codebase.Path qualified as Path
 import Unison.Hash (Hash)
 import Unison.Hash32 (Hash32)
+import Unison.Hash32 qualified as Hash32
 import Unison.Hashing.V2 qualified as H
 import Unison.NameSegment.Internal as NameSegment
 import Unison.Reference qualified as Reference
+import Unison.Sync.Common qualified as SyncCommon
+import Unison.Sync.Types qualified as Sync
+import Unison.SyncV2.Types (CBORBytes (..))
+import Unison.SyncV2.Types qualified as SyncV2
 import Unison.Util.Map qualified as Map
 
 expectCausalNamespace :: (HasCallStack, QueryM m) => CausalId -> m (CausalNamespace m)
@@ -671,8 +686,15 @@ hashCausal branchHashId ancestorIds = do
   let hCausal = H.Causal {branchHash = unBranchHash branchHash, parents = ancestors}
   pure . CausalHash . H.contentHash $ hCausal
 
-saveCausal :: Maybe CausalHash -> BranchHashId -> Set CausalId -> CodebaseM e (CausalId, CausalHash)
-saveCausal mayCh bhId ancestorIds = do
+saveCausal ::
+  -- The pre-serialized causal, if available. If Nothing it will be re-generated, which is
+  -- slower.
+  Maybe TempEntity ->
+  Maybe CausalHash ->
+  BranchHashId ->
+  Set CausalId ->
+  CodebaseM e (CausalId, CausalHash)
+saveCausal maySerializedCausal mayCh bhId ancestorIds = do
   ch <- maybe (hashCausal bhId ancestorIds) pure mayCh
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   cId <-
@@ -685,6 +707,12 @@ saveCausal mayCh bhId ancestorIds = do
       VALUES (#{codebaseOwnerUserId}, #{cId})
       ON CONFLICT DO NOTHING
     |]
+  causalEntity <- case maySerializedCausal of
+    Just serializedCausal -> pure serializedCausal
+    Nothing -> do
+      SyncCommon.entityToTempEntity id . Sync.C <$> expectCausalEntity cId
+  let serializedCausal = SyncV2.serialiseCBORBytes causalEntity
+  saveSerializedCausal cId serializedCausal
   pure (cId, ch)
   where
     doSave ch = do
@@ -706,6 +734,26 @@ saveCausal mayCh bhId ancestorIds = do
           FROM ancestors a
       |]
       pure cId
+
+saveSerializedCausal :: (QueryM m) => CausalId -> CBORBytes TempEntity -> m ()
+saveSerializedCausal causalId (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_causals (causal_id, bytes_id)
+        VALUES (#{causalId}, #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+expectCausalEntity :: (HasCallStack) => CausalId -> CodebaseM e (Sync.Causal Hash32)
+expectCausalEntity causalId = do
+  U.Causal {valueHash, parents} <- expectCausalNamespace causalId
+  pure $
+    ( Sync.Causal
+        { namespaceHash = Hash32.fromHash $ unBranchHash valueHash,
+          parents = Set.map (Hash32.fromHash . unCausalHash) . Map.keysSet $ parents
+        }
+    )
 
 -- | Get the ref to the result of squashing if we've squashed that ref in the past.
 -- Also adds the squash result to current codebase if we find it.

@@ -468,7 +468,7 @@ squashCausal Causal.Causal {valueHash = unsquashedBranchHash, value} = do
       let squashedBranchHead = branch {V2.children = snd <$> squashedChildren}
       (squashedBranchHashId, squashedBranchHash) <- CausalQ.saveV2BranchShallow squashedBranchHead
       let ancestors = mempty
-      (squashedCausalId, squashedCausalHash) <- CausalQ.saveCausal Nothing squashedBranchHashId ancestors
+      (squashedCausalId, squashedCausalHash) <- CausalQ.saveCausal Nothing Nothing squashedBranchHashId ancestors
       let squashedCausalBranch =
             Causal.Causal
               { causalHash = squashedCausalHash,
