@@ -9,9 +9,11 @@ import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres
 import Share.Postgres qualified as PG
+import Share.Postgres.Causal.Queries qualified as CQ
 import Share.Postgres.Definitions.Queries qualified as DefnQ
 import Share.Postgres.Hashes.Queries qualified as HQ
 import Share.Postgres.IDs
+import Share.Postgres.Patches.Queries qualified as PQ
 import Share.Postgres.Sync.Queries qualified as SQ
 import Share.Prelude
 import Share.Web.Authorization qualified as AuthZ
@@ -81,12 +83,18 @@ processComponents !_authZReceipt = do
                 |]
           pure True
 
-saveUnsandboxedSerializedEntities :: (QueryM m) => Hash32 -> TempEntity -> m ()
+saveUnsandboxedSerializedEntities :: Hash32 -> TempEntity -> Codebase.CodebaseM e ()
 saveUnsandboxedSerializedEntities hash entity = do
   let serialised = SyncV2.serialiseCBORBytes entity
   case entity of
     Entity.TC {} -> error "Unexpected term component"
     Entity.DC {} -> error "Unexpected decl component"
-    Entity.P {} -> SQ.saveSerializedPatch hash serialised
-    Entity.C {} -> SQ.saveSerializedCausal hash serialised
-    Entity.N {} -> SQ.saveSerializedNamespace hash serialised
+    Entity.P {} -> do
+      patchId <- HQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
+      PQ.saveSerializedPatch patchId serialised
+    Entity.C {} -> do
+      cId <- CQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
+      CQ.saveSerializedCausal cId serialised
+    Entity.N {} -> do
+      bhId <- HQ.expectBranchHashId (fromHash32 @BranchHash hash)
+      CQ.saveSerializedNamespace bhId serialised
