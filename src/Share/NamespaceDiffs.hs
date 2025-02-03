@@ -50,7 +50,7 @@ import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.DataDeclaration (Decl)
 import Unison.LabeledDependency (LabeledDependency)
-import Unison.Merge (EitherWay, Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge (DiffOp, EitherWay, Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
 import Unison.Merge.DeclCoherencyCheck (IncoherentDeclReason)
 import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
@@ -76,10 +76,6 @@ import Unison.Util.BiMultimap qualified as BiMultimap
 import Unison.Util.Defns (Defns (..), DefnsF, DefnsF3, alignDefnsWith)
 import Unison.Util.Nametree (Nametree (..))
 import Unison.Util.Set qualified as Set
-
--- Defns (Set Name) (Set Name),
--- Map NameSegment (LibdepDiffOp BranchHashId)
--- )
 
 data NamespaceDiffError
   = ImpossibleError Text
@@ -445,7 +441,7 @@ computeThreeWayNamespaceDiff ::
   TwoWay Codebase.CodebaseEnv ->
   TwoOrThreeWay BranchHashId ->
   TwoOrThreeWay NameLookupReceipt ->
-  PG.Transaction NamespaceDiffError (NamespaceTreeDiff Referent Reference Name Name Name Name)
+  PG.Transaction NamespaceDiffError (NamespaceTreeDiff Referent Reference Name Name Name Name, TwoWay (Map NameSegment (DiffOp BranchHashId)))
 computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = do
   -- Load a flat definitions names (no lib) for Alice/Bob/LCA
   defnsNames3 :: TwoOrThreeWay Names <-
@@ -606,4 +602,4 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
       oneCompressedTree =
         compressNameTree oneUncompressedTree
 
-  pure oneCompressedTree
+  pure (oneCompressedTree, blob1.libdepsDiffs)

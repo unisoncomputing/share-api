@@ -90,7 +90,7 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
       diffWithTags <-
         ExceptT do
           PG.tryRunTransaction do
-            diff <-
+            (diff, _) <-
               NamespaceDiffs.computeThreeWayNamespaceDiff
                 TwoWay {alice = oldCodebase, bob = newCodebase}
                 TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
