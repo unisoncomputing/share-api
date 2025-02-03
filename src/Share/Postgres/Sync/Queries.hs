@@ -14,7 +14,6 @@ module Share.Postgres.Sync.Queries
     -- Exported for migrations
     saveSerializedEntities,
     saveSerializedComponent,
-    saveSerializedPatch,
   )
 where
 
@@ -38,13 +37,11 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.Patches.Queries qualified as PatchQ
 import Share.Postgres.Serialization qualified as S
-import Share.Postgres.Sync.Conversions qualified as Cv
 import Share.Postgres.Sync.Types (TypedTempEntity (..))
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (InternalServerError (..), ToServerError (..), Unimplemented (Unimplemented))
 import Share.Web.UCM.Sync.Types
-import U.Codebase.Branch qualified as V2
 import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes)
 import U.Codebase.Sqlite.Branch.Format qualified as BranchFormat
 import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
@@ -53,8 +50,6 @@ import U.Codebase.Sqlite.Decl.Format qualified as DeclFormat
 import U.Codebase.Sqlite.Decode qualified as Decoders
 import U.Codebase.Sqlite.Entity qualified as Entity
 import U.Codebase.Sqlite.LocalIds qualified as LocalIds
-import U.Codebase.Sqlite.LocalizeObject qualified as Localize
-import U.Codebase.Sqlite.Patch.Format (PatchLocalIds' (patchDefnLookup))
 import U.Codebase.Sqlite.Patch.Format qualified as PatchFormat
 import U.Codebase.Sqlite.Patch.Full qualified as PatchFull
 import U.Codebase.Sqlite.Queries qualified as Share
@@ -99,7 +94,9 @@ expectEntity hash = do
       Share.N <$> CausalQ.expectNamespaceEntity bhId
     TermEntity -> Share.TC <$> expectTermComponentEntity (ComponentHash . Hash32.toHash $ hash)
     TypeEntity -> Share.DC <$> expectTypeComponentEntity (ComponentHash . Hash32.toHash $ hash)
-    PatchEntity -> Share.P <$> expectPatchEntity (PatchHash . Hash32.toHash $ hash)
+    PatchEntity -> do
+      patchId <- HashQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
+      Share.P <$> PatchQ.expectPatchEntity patchId
 
 expectTermComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
 expectTermComponentEntity hash = do
@@ -110,27 +107,6 @@ expectTypeComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Sha
 expectTypeComponentEntity hash = do
   chId <- HashQ.expectComponentHashId hash
   DefnQ.expectShareTypeComponent chId
-
-expectPatchEntity :: (HasCallStack) => PatchHash -> CodebaseM e (Share.Patch Text Hash32 Hash32)
-expectPatchEntity patchHash = do
-  patchId <- HashQ.expectPatchIdsOf id patchHash
-  v2Patch <- PatchQ.expectPatch patchId
-  patchToEntity v2Patch
-  where
-    patchToEntity :: V2.Patch -> CodebaseM e (Share.Patch Text Hash32 Hash32)
-    patchToEntity patch = do
-      let patchFull = Cv.patchV2ToPF patch
-      let (PatchFormat.LocalIds {patchTextLookup, patchHashLookup, patchDefnLookup}, localPatch) = Localize.localizePatchG patchFull
-      let bytes = S.encodePatch localPatch
-      Share.Patch
-        { textLookup = Vector.toList patchTextLookup,
-          oldHashLookup = Vector.toList patchHashLookup,
-          newHashLookup = Vector.toList patchDefnLookup,
-          bytes
-        }
-        & Share.patchOldHashes_ %~ Hash32.fromHash
-        & Share.patchNewHashes_ %~ Hash32.fromHash
-        & pure
 
 -- | Determine the kind of an arbitrary hash.
 expectEntityKindForHash :: (HasCallStack) => Hash32 -> CodebaseM e EntityKind
@@ -395,7 +371,7 @@ saveTempEntityInMain hash entity = do
         lift . unrecoverableError $ InternalServerError "namespace-diffs-not-supported" Unimplemented
       Entity.N (BranchFormat.SyncFull localIds bytes) -> doNamespace entity localIds bytes
       Entity.P PatchFormat.SyncDiff {} -> lift . unrecoverableError $ InternalServerError "patch-diffs-not-supported" Unimplemented
-      Entity.P (PatchFormat.SyncFull localIds patchBytes) -> doPatch localIds patchBytes
+      Entity.P (PatchFormat.SyncFull localIds patchBytes) -> doPatch entity localIds patchBytes
       Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) -> doCausal entity valueHash parents
     doTermComponent ::
       TermFormat.SyncLocallyIndexedComponent' Text Hash32 ->
@@ -442,10 +418,11 @@ saveTempEntityInMain hash entity = do
       void $ CausalQ.savePgNamespace (Just entity) (Just (BranchHash . Hash32.toHash $ hash)) pgNamespace
 
     doPatch ::
+      TempEntity ->
       PatchFormat.PatchLocalIds' Text Hash32 Hash32 ->
       ByteString ->
       CodebaseM e ()
-    doPatch localIds patchBytes = do
+    doPatch entity localIds patchBytes = do
       pgPatch <-
         expandPatchFormat localIds patchBytes
           >>= Defn.ensureTextIdsOf PatchFull.patchT_
@@ -455,7 +432,7 @@ saveTempEntityInMain hash entity = do
           -- if for some reason they don't already exist.
           >>= HashQ.ensureComponentHashIdsOf (PatchFull.patchH_ . hash32AsComponentHash_)
           >>= HashQ.expectComponentHashIdsOf (PatchFull.patchO_ . hash32AsComponentHash_)
-      void $ PatchQ.savePatch (PatchHash . Hash32.toHash $ hash) pgPatch
+      void $ PatchQ.savePatch (Just entity) (PatchHash . Hash32.toHash $ hash) pgPatch
 
     doCausal ::
       TempEntity ->
@@ -564,7 +541,9 @@ saveSerializedEntities entities = do
     case entity of
       Entity.TC {} -> saveSerializedComponent hash serialised
       Entity.DC {} -> saveSerializedComponent hash serialised
-      Entity.P {} -> saveSerializedPatch hash serialised
+      Entity.P {} -> do
+        patchId <- HashQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
+        PatchQ.saveSerializedPatch patchId serialised
       Entity.C {} -> do
         causalId <- CausalQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
         CausalQ.saveSerializedCausal causalId serialised
@@ -580,15 +559,5 @@ saveSerializedComponent hash (CBORBytes bytes) = do
     [sql|
       INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
         VALUES (#{codebaseOwnerUserId}, (SELECT ch.id FROM component_hashes ch where ch.base32 = #{hash}), #{bytesId})
-      ON CONFLICT DO NOTHING
-    |]
-
-saveSerializedPatch :: (QueryM m) => Hash32 -> CBORBytes TempEntity -> m ()
-saveSerializedPatch hash (CBORBytes bytes) = do
-  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
-  execute_
-    [sql|
-      INSERT INTO serialized_patches (patch_id, bytes_id)
-        VALUES ((SELECT p.id FROM patches p where p.hash = #{hash}), #{bytesId})
       ON CONFLICT DO NOTHING
     |]

@@ -1,33 +1,53 @@
 module Share.Postgres.Patches.Queries
   ( expectPatch,
     savePatch,
+
+    -- * Sync
+    expectPatchEntity,
+
+    -- * Exported for migrations
+    saveSerializedPatch,
   )
 where
 
 import Control.Lens
+import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
+import Data.Vector qualified as Vector
 import Share.Codebase.Types (CodebaseEnv (codebaseOwner), CodebaseM)
 import Share.Postgres
 import Share.Postgres.Definitions.Queries qualified as Defn
+import Share.Postgres.Definitions.Queries qualified as DefnQ
 import Share.Postgres.Definitions.Types (PgComponentIndex, pgComponentIndex, unPgComponentIndex)
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.Patches.Types
+import Share.Postgres.Serialization qualified as S
+import Share.Postgres.Sync.Conversions qualified as Cv
 import Share.Prelude
 import U.Codebase.Branch qualified as V2
 import U.Codebase.Referent qualified as Referent
+import U.Codebase.Sqlite.LocalizeObject qualified as Localize
+import U.Codebase.Sqlite.Patch.Format qualified as PatchFormat
 import U.Codebase.Sqlite.Patch.Full qualified as PatchFull
 import U.Codebase.Sqlite.Patch.TermEdit qualified as PatchFullTermEdit
 import U.Codebase.Sqlite.Patch.TypeEdit qualified as PatchFullTypeEdit
+import U.Codebase.Sqlite.TempEntity (TempEntity)
 import U.Codebase.TermEdit qualified as TermEdit
 import U.Codebase.TypeEdit qualified as TypeEdit
 import Unison.Hash (Hash)
+import Unison.Hash32 (Hash32)
+import Unison.Hash32 qualified as Hash32
 import Unison.Hashing.V2 qualified as H
 import Unison.Reference qualified as Reference
+import Unison.Sync.Common qualified as SyncCommon
+import Unison.Sync.Types qualified as Sync
+import Unison.SyncV2.Types (CBORBytes (..))
+import Unison.SyncV2.Types qualified as SyncV2
 import Unison.Util.Map qualified as Map
 
-loadPatch :: forall m. QueryM m => PatchId -> m (Maybe V2.Patch)
+loadPatch :: forall m. (QueryM m) => PatchId -> m (Maybe V2.Patch)
 loadPatch patchId = runMaybeT do
   termMappings <- lift $ getTermMappings patchId
   constructorMappings <- lift $ getConstructorMappings patchId
@@ -135,13 +155,16 @@ expectPatch patchId = do
     Nothing -> error "expectPatch: Patch not found"
     Just patch -> pure patch
 
-savePatch :: PatchHash -> PgPatch -> CodebaseM e PatchId
-savePatch patchHash PatchFull.Patch {termEdits, typeEdits} = do
+savePatch :: Maybe TempEntity -> PatchHash -> PgPatch -> CodebaseM e PatchId
+savePatch maySerialized patchHash PatchFull.Patch {termEdits, typeEdits} = do
   codebaseOwnerUserId <- asks codebaseOwner
   patchId <-
     query1Col [sql| SELECT id FROM patches WHERE hash = #{patchHash} |] >>= \case
       Just patchId -> pure patchId
-      Nothing -> doSave patchHash
+      Nothing -> do
+        patchId <- doSave patchHash
+        doSaveSerialized patchId
+        pure patchId
   -- add to patch ownership
   execute_
     [sql|
@@ -151,6 +174,14 @@ savePatch patchHash PatchFull.Patch {termEdits, typeEdits} = do
     |]
   pure patchId
   where
+    doSaveSerialized patchId = do
+      patchEntity <- case maySerialized of
+        Just serialized -> pure serialized
+        Nothing -> do
+          SyncCommon.entityToTempEntity id . Sync.P <$> expectPatchEntity patchId
+      let serializedPatch = SyncV2.serialiseCBORBytes patchEntity
+      saveSerializedPatch patchId serializedPatch
+
     doSave patchHash = do
       patchId <-
         queryExpect1Col
@@ -254,6 +285,36 @@ savePatch patchHash PatchFull.Patch {termEdits, typeEdits} = do
                   (fromCompHash, fromCompIndex, fromBuiltin, Nothing, Nothing, Just builtin, False)
                 PatchFullTypeEdit.Deprecate ->
                   (fromCompHash, fromCompIndex, fromBuiltin, Nothing, Nothing, Nothing, True)
+
+expectPatchEntity :: (HasCallStack) => PatchId -> CodebaseM e (Sync.Patch Text Hash32 Hash32)
+expectPatchEntity patchId = do
+  v2Patch <- expectPatch patchId
+  patchToEntity v2Patch
+  where
+    patchToEntity :: V2.Patch -> CodebaseM e (Sync.Patch Text Hash32 Hash32)
+    patchToEntity patch = do
+      let patchFull = Cv.patchV2ToPF patch
+      let (PatchFormat.LocalIds {patchTextLookup, patchHashLookup, patchDefnLookup}, localPatch) = Localize.localizePatchG patchFull
+      let bytes = S.encodePatch localPatch
+      Sync.Patch
+        { textLookup = Vector.toList patchTextLookup,
+          oldHashLookup = Vector.toList patchHashLookup,
+          newHashLookup = Vector.toList patchDefnLookup,
+          bytes
+        }
+        & Sync.patchOldHashes_ %~ Hash32.fromHash
+        & Sync.patchNewHashes_ %~ Hash32.fromHash
+        & pure
+
+saveSerializedPatch :: (QueryM m) => PatchId -> CBORBytes TempEntity -> m ()
+saveSerializedPatch patchId (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_patches (patch_id, bytes_id)
+        VALUES (#{patchId}, #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
 
 -- | Hash a namespace into a BranchHash
 _hashPgPatch :: PgPatch -> CodebaseM e PatchHash

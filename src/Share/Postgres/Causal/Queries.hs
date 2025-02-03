@@ -443,14 +443,15 @@ savePgNamespace maySerialized mayBh b@(BranchFull.Branch {terms, types, patches,
   bh <- whenNothing mayBh $ hashPgNamespace b
   bhId <- HashQ.ensureBranchHashId bh
   queryExpect1Col [sql| SELECT EXISTS (SELECT FROM namespaces WHERE namespace_hash_id = #{bhId}) |] >>= \case
-    False -> doSave bhId
+    False -> do
+      doSave bhId
+      doSaveSerialized bhId
     True -> pure ()
   execute_
     [sql| INSERT INTO namespace_ownership (namespace_hash_id, user_id)
                    VALUES (#{bhId}, #{codebaseOwnerUserId})
                    ON CONFLICT DO NOTHING
     |]
-  doSaveSerialized bhId
   pure (bhId, bh)
   where
     doSaveSerialized :: BranchHashId -> CodebaseM e ()
@@ -746,14 +747,16 @@ saveCausal maySerializedCausal mayCh bhId ancestorIds = do
   cId <-
     query1Col [sql| SELECT id FROM causals WHERE hash = #{ch} |] >>= \case
       Just cId -> pure cId
-      Nothing -> doSave ch
+      Nothing -> do
+        cId <- doSave ch
+        doSaveSerialized cId
+        pure cId
   execute_
     [sql|
     INSERT INTO causal_ownership (user_id, causal_id)
       VALUES (#{codebaseOwnerUserId}, #{cId})
       ON CONFLICT DO NOTHING
     |]
-  doSaveSerialized cId
   pure (cId, ch)
   where
     doSaveSerialized cId = do
