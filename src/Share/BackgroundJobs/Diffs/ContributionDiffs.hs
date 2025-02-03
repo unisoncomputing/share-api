@@ -26,6 +26,9 @@ import UnliftIO.Concurrent qualified as UnliftIO
 pollingIntervalSeconds :: Int
 pollingIntervalSeconds = 10
 
+retries :: Int
+retries = 3
+
 worker :: Ki.Scope -> Background ()
 worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
@@ -37,11 +40,11 @@ worker scope = do
 
 processDiffs :: AuthZ.AuthZReceipt -> Background (Either NamespaceDiffError ())
 processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT $ do
-  mayContributionId <- PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+  mayInfo <- PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
     DQ.claimContributionToDiff
-  for_ mayContributionId (diffContribution authZReceipt)
-  case mayContributionId of
-    Just contributionId -> do
+  for_ mayInfo (diffContribution authZReceipt)
+  case mayInfo of
+    Just (contributionId, retriesLeft) -> do
       Logging.textLog ("Recomputed contribution diff: " <> tShow contributionId)
         & Logging.withTag ("contribution-id", tShow contributionId)
         & Logging.withSeverity Logging.Info
@@ -50,19 +53,21 @@ processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT 
       either throwError pure =<< lift (processDiffs authZReceipt)
     Nothing -> pure ()
 
-diffContribution :: AuthZ.AuthZReceipt -> ContributionId -> ExceptT NamespaceDiffError Background ()
-diffContribution authZReceipt contributionId = do
-  ( project,
-    newBranch@Branch {causal = newBranchCausalId},
-    oldBranch@Branch {causal = oldBranchCausalId}
-    ) <- ExceptT $ PG.tryRunTransaction $ do
+diffContribution :: AuthZ.AuthZReceipt -> (ContributionId, Int32) -> Background ()
+diffContribution authZReceipt (contributionId, retriesLeft) = do
+  r <- PG.tryRunTransaction $ do
     Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <- ContributionsQ.contributionById contributionId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     project <- Q.projectById projectId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "project:missing") "Project not found")
     newBranch <- Q.branchById newBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Source branch not found")
     oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Target branch not found")
     pure (project, newBranch, oldBranch)
-  let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
-  let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-  -- This method saves the diff so it'll be there when we need it, so we don't need to do anything with it.
-  _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
-  pure ()
+  case r of
+    Right (project, newBranch@Branch {causal = newBranchCausalId}, oldBranch@Branch {causal = oldBranchCausalId}) -> do
+      let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
+      let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
+      -- This method saves the diff so it'll be there when we need it, so we don't need to do anything with it.
+      _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
+      pure ()
+    Left e -> do
+      reportError e
+      PG.runTransaction $ DQ.updateRetries contributionId (pred retriesLeft)
