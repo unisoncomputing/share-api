@@ -11,8 +11,6 @@ module Share.Postgres.Sync.Queries
     getEntitiesReadyToFlush,
     filterForFlushableHashes,
     tryPopFlushableTempEntity,
-    -- Exported for migrations
-    saveSerializedEntities,
   )
 where
 
@@ -60,7 +58,6 @@ import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as Share
 import Unison.Sync.Types qualified as Share
 import Unison.SyncV2.Types (EntityKind (..))
-import Unison.SyncV2.Types qualified as SyncV2
 
 data SyncQError
   = InvalidNamespaceBytes
@@ -352,9 +349,7 @@ clearTempDependencies hash = do
 saveTempEntityInMain :: forall e. (HasCallStack) => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
 saveTempEntityInMain hash entity = do
   saveEntity entity
-  dependencies <- clearTempDependencies hash
-  saveSerializedEntities [(hash, entity)]
-  pure dependencies
+  clearTempDependencies hash
   where
     saveEntity :: TempEntity -> CodebaseM e ()
     saveEntity = \case
@@ -530,24 +525,3 @@ getEntitiesReadyToFlush = do
                             AND missing_dep.user_id = #{codebaseOwnerUserId}
                         )
     |]
-
-saveSerializedEntities :: (Foldable f) => f (Hash32, TempEntity) -> CodebaseM e ()
-saveSerializedEntities entities = do
-  for_ entities \(hash, entity) -> do
-    let serialised = SyncV2.serialiseCBORBytes entity
-    case entity of
-      Entity.TC {} -> do
-        chId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
-        DefnQ.saveSerializedComponent chId serialised
-      Entity.DC {} -> do
-        chId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
-        DefnQ.saveSerializedComponent chId serialised
-      Entity.P {} -> do
-        patchId <- HashQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
-        PatchQ.saveSerializedPatch patchId serialised
-      Entity.C {} -> do
-        causalId <- CausalQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
-        CausalQ.saveSerializedCausal causalId serialised
-      Entity.N {} -> do
-        bhId <- HashQ.expectBranchHashId (fromHash32 @BranchHash hash)
-        CausalQ.saveSerializedNamespace bhId serialised
