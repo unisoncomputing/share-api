@@ -13,7 +13,6 @@ module Share.Postgres.Sync.Queries
     tryPopFlushableTempEntity,
     -- Exported for migrations
     saveSerializedEntities,
-    saveSerializedComponent,
   )
 where
 
@@ -60,7 +59,7 @@ import Unison.Hash32
 import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as Share
 import Unison.Sync.Types qualified as Share
-import Unison.SyncV2.Types (CBORBytes (..), EntityKind (..))
+import Unison.SyncV2.Types (EntityKind (..))
 import Unison.SyncV2.Types qualified as SyncV2
 
 data SyncQError
@@ -92,21 +91,15 @@ expectEntity hash = do
     NamespaceEntity -> do
       bhId <- HashQ.expectBranchHashId (fromHash32 @BranchHash $ hash)
       Share.N <$> CausalQ.expectNamespaceEntity bhId
-    TermEntity -> Share.TC <$> expectTermComponentEntity (ComponentHash . Hash32.toHash $ hash)
-    TypeEntity -> Share.DC <$> expectTypeComponentEntity (ComponentHash . Hash32.toHash $ hash)
+    TermEntity -> do
+      componentHashId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
+      Share.TC <$> DefnQ.expectShareTermComponent componentHashId
+    TypeEntity -> do
+      componentHashId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
+      Share.DC <$> DefnQ.expectShareTypeComponent componentHashId
     PatchEntity -> do
       patchId <- HashQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
       Share.P <$> PatchQ.expectPatchEntity patchId
-
-expectTermComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
-expectTermComponentEntity hash = do
-  chId <- HashQ.expectComponentHashId hash
-  DefnQ.expectShareTermComponent chId
-
-expectTypeComponentEntity :: (HasCallStack) => ComponentHash -> CodebaseM e (Share.DeclComponent Text Hash32)
-expectTypeComponentEntity hash = do
-  chId <- HashQ.expectComponentHashId hash
-  DefnQ.expectShareTypeComponent chId
 
 -- | Determine the kind of an arbitrary hash.
 expectEntityKindForHash :: (HasCallStack) => Hash32 -> CodebaseM e EntityKind
@@ -365,8 +358,10 @@ saveTempEntityInMain hash entity = do
   where
     saveEntity :: TempEntity -> CodebaseM e ()
     saveEntity = \case
-      Entity.TC (TermFormat.SyncTerm syncTermComponent) -> doTermComponent syncTermComponent
-      Entity.DC (DeclFormat.SyncDecl syncDecl) -> doDeclComponent syncDecl
+      Entity.TC (TermFormat.SyncTerm syncTermComponent) -> do
+        doTermComponent entity syncTermComponent
+      Entity.DC (DeclFormat.SyncDecl syncDecl) -> do
+        doDeclComponent entity syncDecl
       Entity.N BranchFormat.SyncDiff {} ->
         lift . unrecoverableError $ InternalServerError "namespace-diffs-not-supported" Unimplemented
       Entity.N (BranchFormat.SyncFull localIds bytes) -> doNamespace entity localIds bytes
@@ -374,9 +369,10 @@ saveTempEntityInMain hash entity = do
       Entity.P (PatchFormat.SyncFull localIds patchBytes) -> doPatch entity localIds patchBytes
       Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) -> doCausal entity valueHash parents
     doTermComponent ::
+      TempEntity ->
       TermFormat.SyncLocallyIndexedComponent' Text Hash32 ->
       CodebaseM e ()
-    doTermComponent syncTermComponent = do
+    doTermComponent entity syncTermComponent = do
       let (TermFormat.SyncLocallyIndexedComponent termComponentElements) = syncTermComponent
       elementsWithDecodedType <-
         for termComponentElements \(localIds, termElementBytes) ->
@@ -388,11 +384,12 @@ saveTempEntityInMain hash entity = do
             >>= HashQ.ensureComponentHashIdsOf (traversed . _1 . LocalIds.h_ . hash32AsComponentHash_)
           )
           <&> Vector.toList
-      Defn.saveEncodedTermComponent componentHash componentWithIds
+      Defn.saveEncodedTermComponent componentHash (Just entity) componentWithIds
     doDeclComponent ::
+      TempEntity ->
       DeclFormat.SyncLocallyIndexedComponent' Text Hash32 ->
       CodebaseM e ()
-    doDeclComponent syncDecl = do
+    doDeclComponent entity syncDecl = do
       declComponentElements <- case Decoders.unsyncDeclComponent syncDecl of
         Left decodeErr -> lift . unrecoverableError $ InternalServerError "term-format-invalid" (InvalidTermComponentBytes decodeErr)
         Right (DeclFormat.LocallyIndexedComponent elements) -> pure elements
@@ -401,7 +398,7 @@ saveTempEntityInMain hash entity = do
             >>= HashQ.ensureComponentHashIdsOf (traversed . _1 . LocalIds.h_ . hash32AsComponentHash_)
           )
           <&> Vector.toList
-      Defn.saveTypeComponent componentHash componentWithIds
+      Defn.saveTypeComponent componentHash (Just entity) componentWithIds
 
     doNamespace ::
       TempEntity ->
@@ -539,8 +536,12 @@ saveSerializedEntities entities = do
   for_ entities \(hash, entity) -> do
     let serialised = SyncV2.serialiseCBORBytes entity
     case entity of
-      Entity.TC {} -> saveSerializedComponent hash serialised
-      Entity.DC {} -> saveSerializedComponent hash serialised
+      Entity.TC {} -> do
+        chId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
+        DefnQ.saveSerializedComponent chId serialised
+      Entity.DC {} -> do
+        chId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
+        DefnQ.saveSerializedComponent chId serialised
       Entity.P {} -> do
         patchId <- HashQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
         PatchQ.saveSerializedPatch patchId serialised
@@ -550,14 +551,3 @@ saveSerializedEntities entities = do
       Entity.N {} -> do
         bhId <- HashQ.expectBranchHashId (fromHash32 @BranchHash hash)
         CausalQ.saveSerializedNamespace bhId serialised
-
-saveSerializedComponent :: Hash32 -> CBORBytes TempEntity -> CodebaseM e ()
-saveSerializedComponent hash (CBORBytes bytes) = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
-  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
-  execute_
-    [sql|
-      INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
-        VALUES (#{codebaseOwnerUserId}, (SELECT ch.id FROM component_hashes ch where ch.base32 = #{hash}), #{bytesId})
-      ON CONFLICT DO NOTHING
-    |]

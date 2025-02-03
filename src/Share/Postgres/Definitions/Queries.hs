@@ -28,11 +28,15 @@ module Share.Postgres.Definitions.Queries
     ensureBytesIdsOf,
     expectTextsOf,
     saveTypeComponent,
+
+    -- * For Migrations
+    saveSerializedComponent,
   )
 where
 
 import Control.Lens
 import Data.ByteString qualified as BS
+import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
@@ -41,6 +45,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Servant (err500)
 import Share.Codebase.Types (CodebaseEnv (..), CodebaseM)
+import Share.Codebase.Types qualified as Codebase
 import Share.IDs
 import Share.Postgres
 import Share.Postgres qualified as PG
@@ -64,6 +69,7 @@ import U.Codebase.Sqlite.HashHandle (HashHandle (..))
 import U.Codebase.Sqlite.LocalIds qualified as LocalIds
 import U.Codebase.Sqlite.Queries qualified as Util
 import U.Codebase.Sqlite.Symbol (Symbol)
+import U.Codebase.Sqlite.TempEntity (TempEntity)
 import U.Codebase.Sqlite.Term.Format qualified as TermFormat
 import U.Codebase.Sqlite.V2.HashHandle (v2HashHandle)
 import U.Codebase.Term qualified as V2
@@ -81,7 +87,10 @@ import Unison.Reference qualified as V1Reference
 import Unison.Referent qualified as V1Referent
 import Unison.Runtime.IOSource qualified as Decls
 import Unison.Server.Types qualified as Tags
+import Unison.Sync.Common qualified as SyncCommon
 import Unison.Sync.Types qualified as Share
+import Unison.SyncV2.Types (CBORBytes (..))
+import Unison.SyncV2.Types qualified as SyncV2
 
 type ResolvedLocalIds = LocalIds.LocalIds' Text ComponentHash
 
@@ -731,12 +740,12 @@ saveTermComponent componentHash elements = do
   let encodedElements =
         elements <&> \(localIds, trm, typ) ->
           (localIds, TermComponentElementBytes $ termComponentElementToByteString (TermComponentElement trm typ), typ)
-  saveEncodedTermComponent componentHash encodedElements
+  saveEncodedTermComponent componentHash Nothing encodedElements
 
 -- | Save an already-encoded term component to the database. This is more efficient than
 -- 'saveTermComponent' in cases where you've already got a serialized term (like during sync).
-saveEncodedTermComponent :: ComponentHash -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> CodebaseM e ()
-saveEncodedTermComponent componentHash elements = do
+saveEncodedTermComponent :: ComponentHash -> Maybe TempEntity -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> CodebaseM e ()
+saveEncodedTermComponent componentHash maySerialized elements = do
   codebaseOwnerUserId <- asks codebaseOwner
   componentHashId <- HashQ.ensureComponentHashId componentHash
   let elementsTable = elements & imap \i _ -> pgComponentIndex $ fromIntegral @Int i
@@ -775,7 +784,16 @@ saveEncodedTermComponent componentHash elements = do
         SELECT #{codebaseOwnerUserId}, element.term_id, element.bytes_id
           FROM elements element
     |]
+  doSaveSerialized componentHashId
   where
+    doSaveSerialized chId = do
+      componentEntity <- case maySerialized of
+        Just serialized -> pure serialized
+        Nothing -> do
+          SyncCommon.entityToTempEntity id . Share.TC <$> expectShareTermComponent chId
+      let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
+      saveSerializedComponent chId serializedEntity
+
     saveSharedTermAndLocalMappings :: ComponentHashId -> CodebaseM e (NE.NonEmpty TermId)
     saveSharedTermAndLocalMappings componentHashId = do
       let HashHandle {toReference = hashType} = v2HashHandle
@@ -847,8 +865,8 @@ saveEncodedTermComponent componentHash elements = do
         |]
       pure termIds
 
-saveTypeComponent :: ComponentHash -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> CodebaseM e ()
-saveTypeComponent componentHash elements = do
+saveTypeComponent :: ComponentHash -> Maybe TempEntity -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> CodebaseM e ()
+saveTypeComponent componentHash maySerialized elements = do
   codebaseOwnerUserId <- asks codebaseOwner
   componentHashId <- HashQ.ensureComponentHashId componentHash
   let elementsTable = elements & imap \i _ -> fromIntegral @Int @Int32 i
@@ -886,7 +904,16 @@ saveTypeComponent componentHash elements = do
         SELECT #{codebaseOwnerUserId}, element.type_id, element.bytes_id
           FROM elements element
     |]
+  doSaveSerialized componentHashId
   where
+    doSaveSerialized chId = do
+      componentEntity <- case maySerialized of
+        Just serialized -> pure serialized
+        Nothing -> do
+          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponent chId
+      let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
+      saveSerializedComponent chId serializedEntity
+
     saveConstructors :: [(TypeId, (PgLocalIds, DeclFormat.Decl Symbol))] -> CodebaseM e ()
     saveConstructors typeElements = do
       typeElementsWithResolvedLocals <- lift $ resolveLocalIdsOf (traversed . _2 . _1) typeElements
@@ -1121,3 +1148,14 @@ typeTagsByReferencesOf trav s = do
     tagFromDeclKind = \case
       DefnTypes.Ability -> Tags.Ability
       DefnTypes.Data -> Tags.Data
+
+saveSerializedComponent :: ComponentHashId -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedComponent chId (CBORBytes bytes) = do
+  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+  bytesId <- ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
+        VALUES (#{codebaseOwnerUserId}, #{chId}, #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
