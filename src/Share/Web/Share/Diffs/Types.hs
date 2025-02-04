@@ -4,14 +4,15 @@ module Share.Web.Share.Diffs.Types where
 
 import Data.Aeson
 import Share.IDs
-import Share.NamespaceDiffs (NamespaceTreeDiff)
-import Share.Postgres.IDs (CausalHash)
+import Share.NamespaceDiffs (NamespaceAndLibdepsDiff)
+import Share.Postgres.IDs (BranchHash, CausalHash)
 import Share.Prelude
 import Share.Utils.Aeson (PreEncoded)
 import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermDefinitionDiff (..), TermTag, TypeDefinition, TypeDefinitionDiff (..), TypeTag)
 import Unison.ShortHash (ShortHash)
 
-type ShareNamespaceDiff = NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff
+type ShareNamespaceDiff =
+  NamespaceAndLibdepsDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff BranchHash
 
 data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
   { project :: ProjectShortHand,

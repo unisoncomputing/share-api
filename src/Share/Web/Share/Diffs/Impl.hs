@@ -18,12 +18,13 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Share.App (AppM)
 import Share.Codebase qualified as Codebase
-import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceDiffError (..), NamespaceTreeDiff)
+import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceAndLibdepsDiff, NamespaceDiffError (..), NamespaceTreeDiff)
 import Share.NamespaceDiffs qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
-import Share.Postgres.IDs (BranchHashId, CausalId)
+import Share.Postgres.Hashes.Queries qualified as HashQ
+import Share.Postgres.IDs (BranchHash, BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
@@ -35,7 +36,8 @@ import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions (referent1to2)
-import Unison.Merge (TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge (DiffOp (..), TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge qualified as Merge
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.PrettyPrintEnvDecl qualified as PPED
@@ -58,13 +60,14 @@ diffCausals ::
     NamespaceDiffs.NamespaceDiffError
     (AppM r)
     ( PreEncoded
-        ( NamespaceDiffs.NamespaceTreeDiff
+        ( NamespaceDiffs.NamespaceAndLibdepsDiff
             (TermTag, ShortHash)
             (TypeTag, ShortHash)
             TermDefinition
             TypeDefinition
             TermDefinitionDiff
             TypeDefinitionDiff
+            BranchHash
         )
     )
 diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) maybeLcaCausalId = do
@@ -87,27 +90,30 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
             (lcaBranchHashId, lcaBranchNLReceipt) <- getBranch lcaCausalId
             pure (Just lcaBranchHashId, Just lcaBranchNLReceipt)
           Nothing -> pure (Nothing, Nothing)
-      diffWithTags <-
+      diff0 <-
         ExceptT do
           PG.tryRunTransaction do
-            (diff, _) <-
+            diff <-
               NamespaceDiffs.computeThreeWayNamespaceDiff
                 TwoWay {alice = oldCodebase, bob = newCodebase}
                 TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
                 TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
-            withTermTags <-
-              diff
+            defns1 <-
+              diff.defns
                 & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferents_
                   %%~ \refs -> do
                     termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
                     pure $ zip termTags (refs <&> Referent.toShortHash)
-            withTermTags
-              & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
-                %%~ \refs -> do
-                  typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-                  pure $ zip typeTags (refs <&> V2Reference.toShortHash)
-      diff <- computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
-      let encoded = Aeson.encode . RenderedNamespaceDiff $ diff
+            defns2 <-
+              defns1
+                & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
+                  %%~ \refs -> do
+                    typeTags <- Codebase.typeTagsByReferencesOf traversed refs
+                    pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+            libdeps <- HashQ.expectNamespaceHashesByNamespaceHashIdsOf (traversed . traversed) diff.libdeps
+            pure NamespaceDiffs.NamespaceAndLibdepsDiff {defns = defns2, libdeps}
+      defns <- computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diff0.defns
+      let encoded = Aeson.encode . RenderedNamespaceAndLibdepsDiff $ NamespaceDiffs.NamespaceAndLibdepsDiff {defns, libdeps = diff0.libdeps}
       PG.runTransaction $ ContributionQ.savePrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) (TL.toStrict $ TL.decodeUtf8 encoded)
       pure $ PreEncoded encoded
 
@@ -116,8 +122,11 @@ computeUpdatedDefinitionDiffs ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId) ->
   (Codebase.CodebaseEnv, BranchHashId) ->
-  (NamespaceDiffs.NamespaceTreeDiff a b Name Name Name Name) ->
-  ExceptT NamespaceDiffError (AppM r) (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
+  NamespaceDiffs.NamespaceTreeDiff a b Name Name Name Name ->
+  ExceptT
+    NamespaceDiffError
+    (AppM r)
+    (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
 computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff = do
   withTermDiffs <-
     diff
@@ -197,10 +206,16 @@ getTypeDefinition (codebase, bhId, name) = do
     renderWidth :: Width
     renderWidth = 80
 
-newtype RenderedNamespaceDiff = RenderedNamespaceDiff (NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
+newtype RenderedNamespaceAndLibdepsDiff
+  = RenderedNamespaceAndLibdepsDiff
+      (NamespaceAndLibdepsDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff BranchHash)
 
-instance ToJSON RenderedNamespaceDiff where
-  toJSON (RenderedNamespaceDiff diffs) = namespaceTreeDiffJSON diffs
+instance ToJSON RenderedNamespaceAndLibdepsDiff where
+  toJSON (RenderedNamespaceAndLibdepsDiff diff) =
+    object
+      [ "defns" .= namespaceTreeDiffJSON diff.defns,
+        "libdeps" .= libdepsDiffJSON diff.libdeps
+      ]
     where
       text :: Text -> Text
       text t = t
@@ -258,7 +273,7 @@ instance ToJSON RenderedNamespaceDiff where
                                & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
                            )
                   )
-                & toJSON @([Value])
+                & toJSON @[Value]
             childrenJSON =
               children
                 & Map.toList
@@ -270,6 +285,34 @@ instance ToJSON RenderedNamespaceDiff where
               [ "changes" .= changesJSON,
                 "children" .= childrenJSON
               ]
+
+      libdepsDiffJSON :: Map NameSegment (DiffOp BranchHash) -> Value
+      libdepsDiffJSON =
+        Map.toList
+          >>> map
+            ( \(name, op) ->
+                case op of
+                  DiffOp'Add hash ->
+                    object
+                      [ "hash" .= hash,
+                        "name" .= name,
+                        "tag" .= ("Added" :: Text)
+                      ]
+                  DiffOp'Delete hash ->
+                    object
+                      [ "hash" .= hash,
+                        "name" .= name,
+                        "tag" .= ("Removed" :: Text)
+                      ]
+                  DiffOp'Update Merge.Updated {old, new} ->
+                    object
+                      [ "name" .= name,
+                        "newHash" .= new,
+                        "oldHash" .= old,
+                        "tag" .= ("Updated" :: Text)
+                      ]
+            )
+          >>> toJSON @[Value]
 
 concurrentExceptT :: (MonadUnliftIO m) => ExceptT e m a -> ExceptT e m b -> ExceptT e m (a, b)
 concurrentExceptT a b = do

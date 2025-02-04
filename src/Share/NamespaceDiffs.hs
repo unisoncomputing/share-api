@@ -1,7 +1,8 @@
 -- | Logic for computing the differerences between two namespaces,
 -- typically used when showing the differences caused by a contribution.
 module Share.NamespaceDiffs
-  ( NamespaceTreeDiff,
+  ( NamespaceAndLibdepsDiff (..),
+    NamespaceTreeDiff,
     DiffAtPath (..),
     NamespaceDiffError (..),
     DefinitionDiff (..),
@@ -206,6 +207,12 @@ definitionDiffKindRendered_ f = \case
   RenamedTo r old rendered -> RenamedTo r old <$> f rendered
   RenamedFrom r old rendered -> RenamedFrom r old <$> f rendered
 
+data NamespaceAndLibdepsDiff referent reference renderedTerm renderedType termDiff typeDiff libdep
+  = NamespaceAndLibdepsDiff
+  { defns :: NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff,
+    libdeps :: Map NameSegment (DiffOp libdep)
+  }
+
 -- | A compressed tree of differences between two namespaces.
 -- All intermediate namespaces with no differences are compressed into the keys of the
 -- first child that has differences.
@@ -227,7 +234,8 @@ definitionDiffKindRendered_ f = \case
 --    ├── c = DiffAtPath
 --    └── x = DiffAtPath
 -- @@
-type NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff = Cofree (Map Path) (Map NameSegment (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff))
+type NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff =
+  Cofree (Map Path) (Map NameSegment (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff))
 
 -- | The differences at a specific path in the namespace tree.
 data DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff = DiffAtPath
@@ -441,7 +449,7 @@ computeThreeWayNamespaceDiff ::
   TwoWay Codebase.CodebaseEnv ->
   TwoOrThreeWay BranchHashId ->
   TwoOrThreeWay NameLookupReceipt ->
-  PG.Transaction NamespaceDiffError (NamespaceTreeDiff Referent Reference Name Name Name Name, TwoWay (Map NameSegment (DiffOp BranchHashId)))
+  PG.Transaction NamespaceDiffError (NamespaceAndLibdepsDiff Referent Reference Name Name Name Name BranchHashId)
 computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = do
   -- Load a flat definitions names (no lib) for Alice/Bob/LCA
   defnsNames3 :: TwoOrThreeWay Names <-
@@ -602,4 +610,8 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
       oneCompressedTree =
         compressNameTree oneUncompressedTree
 
-  pure (oneCompressedTree, blob1.libdepsDiffs)
+  pure
+    NamespaceAndLibdepsDiff
+      { defns = oneCompressedTree,
+        libdeps = blob1.libdepsDiffs.bob
+      }
