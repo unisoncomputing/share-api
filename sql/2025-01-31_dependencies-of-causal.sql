@@ -2,7 +2,7 @@
 CREATE OR REPLACE FUNCTION dependencies_of_causals(the_causal_ids INTEGER[]) RETURNS TABLE (hash TEXT) AS $$
   WITH RECURSIVE all_causals(causal_id, causal_hash, causal_namespace_hash_id) AS (
       -- Base causal
-      SELECT causal.id, causal.hash, causal.namespace_hash_id
+      SELECT DISTINCT causal.id, causal.hash, causal.namespace_hash_id
       FROM UNNEST(the_causal_ids) AS causal_id
           JOIN causals causal ON causal.id = causal_id
       UNION

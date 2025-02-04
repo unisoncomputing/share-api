@@ -13,7 +13,6 @@ import Share.Postgres.IDs
 import Share.Prelude
 import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.TempEntity (TempEntity)
-import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
 
@@ -187,10 +186,10 @@ import Unison.SyncV2.Types (CBORBytes)
 allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
 allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   ownerUserId <- asks codebaseOwner
-  Debug.debugLogM Debug.Temp "created except_hashes temp table."
   -- Create a temp table for storing the dependencies we know the calling client already has.
-  execute_ [sql| CREATE TEMP TABLE except_hashes ( hash TEXT NOT NULL PRIMARY KEY ) ON COMMIT DROP |]
-  Debug.debugLogM Debug.Temp "filling in except_hashes temp table."
+  execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER NULL ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER NULL ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER NULL ) ON COMMIT DROP |]
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -199,11 +198,24 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
       SELECT c.id
       FROM the_causal_hashes tch
         JOIN causals c ON tch.hash = c.hash
-    ) INSERT INTO except_hashes(hash)
-      SELECT DISTINCT deps.hash FROM dependencies_of_causals((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
-      ON CONFLICT DO NOTHING
+    ), dependency_hashes(hash) AS (
+      SELECT DISTINCT deps.hash
+      FROM dependencies_of_causals((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
+    ), do_causals AS (
+      INSERT INTO except_causals(causal_id)
+      SELECT causal.id
+      FROM the_causal_hashes tch
+        JOIN causals causal ON tch.hash = causal.hash
+    ), do_namespaces AS (
+      INSERT INTO except_namespaces(branch_hash_ids)
+      SELECT bh.id
+      FROM dependency_hashes dh
+        JOIN branch_hashes bh ON dh.hash = bh.base32
+    ) INSERT INTO except_components(component_hash_id)
+      SELECT ch.id
+      FROM dependency_hashes dh
+        JOIN component_hashes ch ON dh.hash = ch.base32
     |]
-  Debug.debugLogM Debug.Temp "Running cursor query"
   cursor <-
     PGCursor.newRowCursor
       "serialized_entities"
@@ -213,7 +225,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
             FROM causals causal
                 WHERE causal.id = #{cid}
                   AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
-                  AND NOT EXISTS (SELECT FROM except_hashes ec WHERE ec.causal_id = causal.id)
+                  AND NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = causal.id)
             UNION
             -- This nested CTE is required because RECURSIVE CTEs can't refer
             -- to the recursive table more than once.
@@ -225,25 +237,24 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                 FROM causal_ancestors ca
                     JOIN rec tc ON ca.causal_id = tc.causal_id
                     JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
-                    WHERE NOT EXISTS (SELECT FROM except_hashes ec WHERE ec.causal_id = ancestor_causal.id)
+                    WHERE NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = ancestor_causal.id)
                 UNION
                 SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id
                 FROM rec tc
                     JOIN namespace_children nc ON tc.causal_namespace_hash_id = nc.parent_namespace_hash_id
                     JOIN causals child_causal ON nc.child_causal_id = child_causal.id
-                    WHERE NOT EXISTS (SELECT FROM except_hashes ec WHERE ec.causal_id = child_causal.id)
+                    WHERE NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = child_causal.id)
             )
         ), all_namespaces(namespace_hash_id, namespace_hash) AS (
             SELECT DISTINCT tc.causal_namespace_hash_id AS namespace_hash_id, bh.base32 as namespace_hash
             FROM transitive_causals tc
             JOIN branch_hashes bh ON tc.causal_namespace_hash_id = bh.id
-            WHERE NOT EXISTS (SELECT FROM except_hashes eh WHERE eh.hash = bh.base32)
+            WHERE NOT EXISTS (SELECT FROM except_namespaces en WHERE en.branch_hash_ids = tc.causal_namespace_hash_id)
         ), all_patches(patch_id, patch_hash) AS (
             SELECT DISTINCT patch.id, patch.hash
             FROM all_namespaces an
                 JOIN namespace_patches np ON an.namespace_hash_id = np.namespace_hash_id
                 JOIN patches patch ON np.patch_id = patch.id
-            WHERE NOT EXISTS (SELECT FROM except_hashes eh WHERE eh.hash = patch.hash)
         ),
         -- term components to start transitively joining dependencies to
         base_term_components(component_hash_id) AS (
@@ -270,6 +281,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                 JOIN namespace_types nt ON an.namespace_hash_id = nt.namespace_hash_id
                 JOIN namespace_type_metadata meta ON nt.id = meta.named_type
                 JOIN terms term ON meta.metadata_term_id = term.id
+            WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = term.component_hash_id)
         ),
         -- type components to start transitively joining dependencies to
         base_type_components(component_hash_id) AS (
@@ -294,6 +306,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                 JOIN patch_constructor_mappings pcm ON ap.patch_id = pcm.patch_id
                 JOIN constructors con ON pcm.to_constructor_id = con.id
                 JOIN types typ ON con.type_id = typ.id
+            WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = typ.component_hash_id)
         ),
         -- All the dependencies we join in transitively from the known term & type components we depend on.
         -- Unfortunately it's not possible to know which hashes are terms vs types :'(
@@ -315,6 +328,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                     -- component
                     JOIN terms term ON atc.component_hash_id = term.component_hash_id
                     JOIN term_local_component_references ref ON term.id = ref.term_id
+                    WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = ref.component_hash_id)
                 UNION
                 -- recursively union in type dependencies
                 SELECT DISTINCT ref.component_hash_id
@@ -323,6 +337,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                     -- component
                     JOIN types typ ON atc.component_hash_id = typ.component_hash_id
                     JOIN type_local_component_references ref ON typ.id = ref.type_id
+                    WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = ref.component_hash_id)
             )
         )
            (SELECT bytes.bytes, ch.base32
@@ -330,9 +345,6 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND tc.component_hash_id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_hashes ch ON tc.component_hash_id = ch.id
-                WHERE NOT EXISTS (SELECT FROM except_hashes eh WHERE eh.hash = ch.base32)
-               -- TODO: Filter out components we know we already have,
-               -- We should do this earlier in the process if possible.
            )
            UNION ALL
            (SELECT bytes.bytes, ap.patch_hash
@@ -364,8 +376,8 @@ spineAndLibDependenciesOfCausalCursor cid = do
     [sql|
     -- is_lib_causal indicates the causal itself is the library, whereas is_lib_root indicates
     -- the causal is the root of a library INSIDE 'lib'
-        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id, is_spine, is_lib_causal, is_lib_root, depth) AS (
-            SELECT causal.id, causal.hash, causal.namespace_hash_id, true AS is_spine, false AS is_lib_causal, false AS is_lib_root, 1 AS depth
+        WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id, is_spine, is_lib_causal, is_lib_root) AS (
+            SELECT causal.id, causal.hash, causal.namespace_hash_id, true AS is_spine, false AS is_lib_causal, false AS is_lib_root
             FROM causals causal
                 WHERE causal.id = #{cid}
                   AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
@@ -373,19 +385,17 @@ spineAndLibDependenciesOfCausalCursor cid = do
             -- This nested CTE is required because RECURSIVE CTEs can't refer
             -- to the recursive table more than once.
             ( WITH rec AS (
-                SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root, tc.depth
+                SELECT tc.causal_id, tc.causal_namespace_hash_id, tc.is_spine, tc.is_lib_causal, tc.is_lib_root
                 FROM transitive_causals tc
             )
-                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_causal, rec.is_lib_root, rec.depth + 1
+                SELECT ancestor_causal.id, ancestor_causal.hash, ancestor_causal.namespace_hash_id, rec.is_spine, rec.is_lib_causal, rec.is_lib_root
                 FROM causal_ancestors ca
                     JOIN rec ON ca.causal_id = rec.causal_id
                     JOIN causals ancestor_causal ON ca.ancestor_id = ancestor_causal.id
                     -- Only get the history of the top level spine
                     WHERE rec.is_spine
                 UNION
-                -- libs within a causal should have the same depth as the causal they're in so
-                -- we order them locally with their causal.
-                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id, false AS is_spine, nc.name_segment_id = #{libSegmentTextId} AS is_lib_causal, rec.is_lib_causal AS is_lib_root, rec.depth
+                SELECT child_causal.id, child_causal.hash, child_causal.namespace_hash_id, false AS is_spine, nc.name_segment_id = #{libSegmentTextId} AS is_lib_causal, rec.is_lib_causal AS is_lib_root
                 FROM rec
                     JOIN namespace_children nc ON rec.causal_namespace_hash_id = nc.parent_namespace_hash_id
                     JOIN causals child_causal ON nc.child_causal_id = child_causal.id
@@ -396,8 +406,6 @@ spineAndLibDependenciesOfCausalCursor cid = do
            (SELECT tc.causal_hash, tc.is_spine, tc.is_lib_root
              FROM transitive_causals tc
              WHERE tc.is_spine OR tc.is_lib_causal
-             -- Order by depth, causals first.
-             ORDER BY tc.depth ASC, tc.is_spine DESC
            )
   |]
     <&> fmap (\(hash, isSpine, isLibRoot) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))
