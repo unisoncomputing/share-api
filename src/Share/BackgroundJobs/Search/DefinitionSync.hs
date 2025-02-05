@@ -16,6 +16,7 @@ import Data.Monoid (Any (..), Sum (..))
 import Data.Set qualified as Set
 import Data.Set.Lens (setOf)
 import Data.Text qualified as Text
+import Data.Vector qualified as V
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, OccurrenceKind (..), TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
@@ -59,8 +60,8 @@ import Unison.Server.Types qualified as Server.Types
 import Unison.ShortHash (ShortHash)
 import Unison.Type qualified as Type
 import Unison.Util.Monoid qualified as Monoid
-import Unison.Util.Set qualified as Set
 import Unison.Util.Recursion qualified as Rec
+import Unison.Util.Set qualified as Set
 import Unison.Var qualified as Var
 import UnliftIO.Concurrent qualified as UnliftIO
 
@@ -141,10 +142,9 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
     (errs, refDocs) <-
       PG.timeTransaction "Building terms" $
         terms
-          & NEL.toList
           -- Most lib names are already filtered out by using the name lookup; but sometimes
           -- when libs aren't at the project root some can slip through, so we remove them.
-          & List.filter
+          & V.filter
             ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
             )
           & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
@@ -257,44 +257,45 @@ typeSigTokens typ =
     alg ::
       ABT.Term' Type.F v ann (TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)) ->
       TokenGenM v (MonoidalMap (Either VarId TypeReference) (Occurrence, Any {- Is return type -}), Sum Arity)
-    alg = ABT.out' >>> \case
-      -- Type Var usage
-      ABT.Var v -> do
-        vId <- varIdFor v
-        pure $ (MonMap.singleton (Left vId) (1, Any True), mempty)
-      ABT.Cycle a -> a
-      -- Type Var scoping. Assign this var to a var id within this scope.
-      ABT.Abs v r -> do
-        vId <- nextVarId
-        local (field @"varIds" . at v ?~ vId) r
-      ABT.Tm tf -> case tf of
-        -- Type reference mention
-        Type.Ref typeRef -> do
-          pure $ (MonMap.singleton (Right typeRef) (1, Any True), mempty)
-        -- Arrow increases the arity of the type signature, we only use the arity of the RHS
-        -- due to how arrows are associated, this sorts out types like `(a -> b) -> c` where
-        -- the arity needs to be 1, not 2.
-        Type.Arrow a b -> do
-          -- Anything on the left of an arrow is not a return type.
-          aTokens <- a <&> \(toks, _arity) -> MonMap.map (\(occ, _) -> (occ, Any False)) toks
-          (bTokens, arity) <- b
-          pure $ (aTokens <> bTokens, arity + 1)
-        Type.Ann a _kind -> a
-        -- At the moment we don't handle higher kinded type applications differently than regular
-        -- type mentions.
-        Type.App a b -> do
-          aTokens <- a
-          bTokens <- b
-          pure $ aTokens <> bTokens
-        Type.Effect a b -> do
-          -- Don't include vars from effects, people often leave off the `{g}` in types, so
-          -- including effect vars would throw off type-directed search a lot.
-          aTokens <- removeVars . fst <$> a
-          (bTokens, bArity) <- b
-          pure $ (aTokens <> bTokens, bArity)
-        Type.Effects as -> first removeVars <$> Monoid.foldMapM id as
-        Type.Forall a -> a
-        Type.IntroOuter a -> a
+    alg =
+      ABT.out' >>> \case
+        -- Type Var usage
+        ABT.Var v -> do
+          vId <- varIdFor v
+          pure $ (MonMap.singleton (Left vId) (1, Any True), mempty)
+        ABT.Cycle a -> a
+        -- Type Var scoping. Assign this var to a var id within this scope.
+        ABT.Abs v r -> do
+          vId <- nextVarId
+          local (field @"varIds" . at v ?~ vId) r
+        ABT.Tm tf -> case tf of
+          -- Type reference mention
+          Type.Ref typeRef -> do
+            pure $ (MonMap.singleton (Right typeRef) (1, Any True), mempty)
+          -- Arrow increases the arity of the type signature, we only use the arity of the RHS
+          -- due to how arrows are associated, this sorts out types like `(a -> b) -> c` where
+          -- the arity needs to be 1, not 2.
+          Type.Arrow a b -> do
+            -- Anything on the left of an arrow is not a return type.
+            aTokens <- a <&> \(toks, _arity) -> MonMap.map (\(occ, _) -> (occ, Any False)) toks
+            (bTokens, arity) <- b
+            pure $ (aTokens <> bTokens, arity + 1)
+          Type.Ann a _kind -> a
+          -- At the moment we don't handle higher kinded type applications differently than regular
+          -- type mentions.
+          Type.App a b -> do
+            aTokens <- a
+            bTokens <- b
+            pure $ aTokens <> bTokens
+          Type.Effect a b -> do
+            -- Don't include vars from effects, people often leave off the `{g}` in types, so
+            -- including effect vars would throw off type-directed search a lot.
+            aTokens <- removeVars . fst <$> a
+            (bTokens, bArity) <- b
+            pure $ (aTokens <> bTokens, bArity)
+          Type.Effects as -> first removeVars <$> Monoid.foldMapM id as
+          Type.Forall a -> a
+          Type.IntroOuter a -> a
     removeVars :: MonoidalMap (Either VarId TypeReference) (Occurrence, Any) -> MonoidalMap (Either VarId TypeReference) (Occurrence, Any)
     removeVars = MonMap.filterWithKey (\k _ -> isRight k)
     nextVarId :: TokenGenM v VarId
@@ -317,10 +318,9 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
     (errs, refDocs) <-
       types
-        & NEL.toList
         -- Most lib names are already filtered out by using the name lookup; but sometimes
         -- when libs aren't at the project root some can slip through, so we remove them.
-        & List.filter
+        & V.filter
           ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
           )
         & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do

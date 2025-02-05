@@ -8,11 +8,9 @@ import Data.Foldable (toList)
 import Data.Set (Set)
 import Share.IDs
 import Share.Postgres
-import Unison.Debug qualified as Debug
 
 submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
 submitContributionsToBeDiffed contributions = do
-  Debug.debugM Debug.Temp "Submitting contributions to be diffed: " contributions
   execute_
     [sql|
     WITH new_contributions(contribution_id) AS (

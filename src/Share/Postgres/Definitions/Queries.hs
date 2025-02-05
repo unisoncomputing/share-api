@@ -28,18 +28,24 @@ module Share.Postgres.Definitions.Queries
     ensureBytesIdsOf,
     expectTextsOf,
     saveTypeComponent,
+
+    -- * For Migrations
+    saveSerializedComponent,
   )
 where
 
 import Control.Lens
 import Data.ByteString qualified as BS
+import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
+import Servant (err500)
 import Share.Codebase.Types (CodebaseEnv (..), CodebaseM)
+import Share.Codebase.Types qualified as Codebase
 import Share.IDs
 import Share.Postgres
 import Share.Postgres qualified as PG
@@ -49,9 +55,8 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Share.Utils.Postgres (OrdBy)
+import Share.Utils.Postgres (OrdBy, RawBytes (..))
 import Share.Web.Errors (ErrorID (..), InternalServerError (InternalServerError), ToServerError (..))
-import Servant (err500)
 import U.Codebase.Decl qualified as Decl
 import U.Codebase.Decl qualified as V2 hiding (Type)
 import U.Codebase.Decl qualified as V2Decl
@@ -64,6 +69,7 @@ import U.Codebase.Sqlite.HashHandle (HashHandle (..))
 import U.Codebase.Sqlite.LocalIds qualified as LocalIds
 import U.Codebase.Sqlite.Queries qualified as Util
 import U.Codebase.Sqlite.Symbol (Symbol)
+import U.Codebase.Sqlite.TempEntity (TempEntity)
 import U.Codebase.Sqlite.Term.Format qualified as TermFormat
 import U.Codebase.Sqlite.V2.HashHandle (v2HashHandle)
 import U.Codebase.Term qualified as V2
@@ -81,7 +87,10 @@ import Unison.Reference qualified as V1Reference
 import Unison.Referent qualified as V1Referent
 import Unison.Runtime.IOSource qualified as Decls
 import Unison.Server.Types qualified as Tags
+import Unison.Sync.Common qualified as SyncCommon
 import Unison.Sync.Types qualified as Share
+import Unison.SyncV2.Types (CBORBytes (..))
+import Unison.SyncV2.Types qualified as SyncV2
 
 type ResolvedLocalIds = LocalIds.LocalIds' Text ComponentHash
 
@@ -270,7 +279,7 @@ expectTypeComponent componentRef = do
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
-loadTermById :: QueryM m => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
+loadTermById :: (QueryM m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
 loadTermById codebaseUser termId = runMaybeT $ do
   (TermComponentElement trm typ) <-
     MaybeT $
@@ -288,7 +297,7 @@ loadTermById codebaseUser termId = runMaybeT $ do
       localIds = LocalIds.LocalIds {textLookup = Vector.fromList textLookup, defnLookup = Vector.fromList defnLookup}
   pure $ s2cTermWithType (localIds, trm, typ)
 
-termLocalTextReferences :: QueryM m => TermId -> m [Text]
+termLocalTextReferences :: (QueryM m) => TermId -> m [Text]
 termLocalTextReferences termId =
   queryListCol
     [sql|
@@ -299,7 +308,7 @@ termLocalTextReferences termId =
           ORDER BY local_index ASC
       |]
 
-termLocalComponentReferences :: QueryM m => TermId -> m [ComponentHash]
+termLocalComponentReferences :: (QueryM m) => TermId -> m [ComponentHash]
 termLocalComponentReferences termId =
   queryListCol
     [sql|
@@ -342,10 +351,10 @@ resolveConstructorTypeLocalIds (LocalIds.LocalIds {textLookup, defnLookup}) =
     substText i = textLookup ^?! ix (fromIntegral i)
     substHash i = unComponentHash $ (defnLookup ^?! ix (fromIntegral i))
 
-loadDeclKind :: PG.QueryM m => Reference.Id -> m (Maybe CT.ConstructorType)
+loadDeclKind :: (PG.QueryM m) => Reference.Id -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: PG.QueryM m => Traversal s t Reference.Id (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.Id (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refIds -> do
@@ -517,7 +526,7 @@ constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
 --
 -- This is intentionally not in CodebaseM because this method is used to build the
 -- CodebaseEnv.
-loadCachedEvalResult :: QueryM m => UserId -> Reference.Id -> m (Maybe (V2.Term Symbol))
+loadCachedEvalResult :: (QueryM m) => UserId -> Reference.Id -> m (Maybe (V2.Term Symbol))
 loadCachedEvalResult codebaseOwnerUserId (Reference.Id hash compIndex) = runMaybeT do
   let compIndex' = pgComponentIndex compIndex
   (evalResultId :: EvalResultId, EvalResultTerm term) <-
@@ -557,12 +566,12 @@ loadCachedEvalResult codebaseOwnerUserId (Reference.Id hash compIndex) = runMayb
   pure $ resolveTermLocalIds localIds term
 
 -- | Get text ids for all provided texts, inserting any that don't already exist.
-ensureTextIds :: QueryM m => Traversable t => t Text -> m (t TextId)
+ensureTextIds :: (QueryM m) => (Traversable t) => t Text -> m (t TextId)
 ensureTextIds = ensureTextIdsOf traversed
 
 -- | Efficiently saves all Text's focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureTextIdsOf :: QueryM m => Traversal s t Text TextId -> s -> m t
+ensureTextIdsOf :: (QueryM m) => Traversal s t Text TextId -> s -> m t
 ensureTextIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \texts -> do
@@ -589,12 +598,12 @@ ensureTextIdsOf trav s = do
         else pure results
 
 -- | Get text ids for all provided texts, inserting any that don't already exist.
-ensureBytesIds :: QueryM m => Traversable t => t BS.ByteString -> m (t BytesId)
+ensureBytesIds :: (QueryM m) => (Traversable t) => t BS.ByteString -> m (t BytesId)
 ensureBytesIds = ensureBytesIdsOf traversed
 
 -- | Efficiently saves all Text's focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureBytesIdsOf :: QueryM m => Traversal s t BS.ByteString BytesId -> s -> m t
+ensureBytesIdsOf :: (QueryM m) => Traversal s t BS.ByteString BytesId -> s -> m t
 ensureBytesIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \bytestrings -> do
@@ -621,7 +630,7 @@ ensureBytesIdsOf trav s = do
         else pure results
 
 -- | Efficiently loads Texts for all TextIds focused by the provided traversal.
-expectTextsOf :: QueryM m => Traversal s t TextId Text -> s -> m t
+expectTextsOf :: (QueryM m) => Traversal s t TextId Text -> s -> m t
 expectTextsOf trav =
   unsafePartsOf trav %%~ \textIds -> do
     let numberedTextIds = zip [0 :: Int32 ..] textIds
@@ -649,7 +658,7 @@ localizeTerm tm = do
 
 -- | Replace all references in a term with local references.
 _localizeTermAndType ::
-  HasCallStack =>
+  (HasCallStack) =>
   V2.Term Symbol ->
   V2.Type Symbol ->
   Transaction e (PgLocalIds, TermFormat.Term, TermFormat.Type)
@@ -731,12 +740,12 @@ saveTermComponent componentHash elements = do
   let encodedElements =
         elements <&> \(localIds, trm, typ) ->
           (localIds, TermComponentElementBytes $ termComponentElementToByteString (TermComponentElement trm typ), typ)
-  saveEncodedTermComponent componentHash encodedElements
+  saveEncodedTermComponent componentHash Nothing encodedElements
 
 -- | Save an already-encoded term component to the database. This is more efficient than
 -- 'saveTermComponent' in cases where you've already got a serialized term (like during sync).
-saveEncodedTermComponent :: ComponentHash -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> CodebaseM e ()
-saveEncodedTermComponent componentHash elements = do
+saveEncodedTermComponent :: ComponentHash -> Maybe TempEntity -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> CodebaseM e ()
+saveEncodedTermComponent componentHash maySerialized elements = do
   codebaseOwnerUserId <- asks codebaseOwner
   componentHashId <- HashQ.ensureComponentHashId componentHash
   let elementsTable = elements & imap \i _ -> pgComponentIndex $ fromIntegral @Int i
@@ -775,7 +784,16 @@ saveEncodedTermComponent componentHash elements = do
         SELECT #{codebaseOwnerUserId}, element.term_id, element.bytes_id
           FROM elements element
     |]
+  doSaveSerialized componentHashId
   where
+    doSaveSerialized chId = do
+      componentEntity <- case maySerialized of
+        Just serialized -> pure serialized
+        Nothing -> do
+          SyncCommon.entityToTempEntity id . Share.TC <$> expectShareTermComponent chId
+      let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
+      saveSerializedComponent chId serializedEntity
+
     saveSharedTermAndLocalMappings :: ComponentHashId -> CodebaseM e (NE.NonEmpty TermId)
     saveSharedTermAndLocalMappings componentHashId = do
       let HashHandle {toReference = hashType} = v2HashHandle
@@ -847,8 +865,8 @@ saveEncodedTermComponent componentHash elements = do
         |]
       pure termIds
 
-saveTypeComponent :: ComponentHash -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> CodebaseM e ()
-saveTypeComponent componentHash elements = do
+saveTypeComponent :: ComponentHash -> Maybe TempEntity -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> CodebaseM e ()
+saveTypeComponent componentHash maySerialized elements = do
   codebaseOwnerUserId <- asks codebaseOwner
   componentHashId <- HashQ.ensureComponentHashId componentHash
   let elementsTable = elements & imap \i _ -> fromIntegral @Int @Int32 i
@@ -886,7 +904,16 @@ saveTypeComponent componentHash elements = do
         SELECT #{codebaseOwnerUserId}, element.type_id, element.bytes_id
           FROM elements element
     |]
+  doSaveSerialized componentHashId
   where
+    doSaveSerialized chId = do
+      componentEntity <- case maySerialized of
+        Just serialized -> pure serialized
+        Nothing -> do
+          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponent chId
+      let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
+      saveSerializedComponent chId serializedEntity
+
     saveConstructors :: [(TypeId, (PgLocalIds, DeclFormat.Decl Symbol))] -> CodebaseM e ()
     saveConstructors typeElements = do
       typeElementsWithResolvedLocals <- lift $ resolveLocalIdsOf (traversed . _2 . _1) typeElements
@@ -997,7 +1024,7 @@ resolveLocalIdsOf trav s = do
         >>= HashQ.expectComponentHashesOf (traversed . LocalIds.h_)
 
 -- | Fetch term tags for all the provided Referents.
-termTagsByReferentsOf :: HasCallStack => Traversal s t Referent.Referent Tags.TermTag -> s -> Transaction e t
+termTagsByReferentsOf :: (HasCallStack) => Traversal s t Referent.Referent Tags.TermTag -> s -> Transaction e t
 termTagsByReferentsOf trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
@@ -1080,7 +1107,7 @@ termTagsByReferentsOf trav s = do
         (refTagRow Tags.Test Decls.testResultListRef)
       ]
 
-typeTagsByReferencesOf :: HasCallStack => Traversal s t TypeReference Tags.TypeTag -> s -> Transaction e t
+typeTagsByReferencesOf :: (HasCallStack) => Traversal s t TypeReference Tags.TypeTag -> s -> Transaction e t
 typeTagsByReferencesOf trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
@@ -1121,3 +1148,14 @@ typeTagsByReferencesOf trav s = do
     tagFromDeclKind = \case
       DefnTypes.Ability -> Tags.Ability
       DefnTypes.Data -> Tags.Data
+
+saveSerializedComponent :: ComponentHashId -> CBORBytes TempEntity -> CodebaseM e ()
+saveSerializedComponent chId (CBORBytes bytes) = do
+  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+  bytesId <- ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
+        VALUES (#{codebaseOwnerUserId}, #{chId}, #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]

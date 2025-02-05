@@ -32,7 +32,6 @@ import Network.Wai.Internal qualified as Wai
 import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.Gzip qualified as Gzip
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import Network.Wai.Middleware.Routed (routedMiddleware)
 import Servant
 import Share.App
 import Share.BackgroundJobs qualified as BackgroundJobs
@@ -123,14 +122,19 @@ mkShareServer env = do
         appServer reqTagsKey
           & hoistServerWithContext appAPI ctxType (toServantHandler env)
           & serveWithContext appAPI ctx
-          & reqLoggerMiddleware
           & requestIDMiddleware
           & requestMetricsMiddleware Web.api
           & metricsMiddleware
           & skipOnLocal corsMiddleware
-          & gzipMiddleware
+          & Gzip.gzip gzipSettings
+          & reqLoggerMiddleware
   pure waiApp
   where
+    gzipSettings =
+      Gzip.def
+        { Gzip.gzipFiles = Gzip.GzipCompress,
+          Gzip.gzipCheckMime = \mime -> Gzip.defaultCheckMime mime || mime == "application/cbor"
+        }
     ctxType = Proxy @(AuthCheckCtx .++ '[Cookies.CookieSettings, JWT.JWTSettings])
     uriFromReq req =
       (Env.apiOrigin env)
@@ -216,17 +220,6 @@ mkShareServer env = do
     appAPI = Proxy
     skipOnLocal :: Middleware -> Middleware
     skipOnLocal m = if Deployment.onLocal then id else m
-    gzipMiddleware =
-      -- Only apply gzipping on subsections of the api which tend to have sufficiently
-      -- large payloads. Gzipping small payloads is a waste of time and might actually
-      -- inflate them.
-      -- Normally this would be done by looking at Content-Length headers, but Wai sends
-      -- responses in the 'chunked' format and doesn't usually provide a Content-Length.
-      flip routedMiddleware (Gzip.gzip Gzip.def) \case
-        ("codebases" : _) -> True
-        ("search" : _) -> True
-        ("sync" : _) -> True
-        _ -> False
     corsPolicy :: Request -> Maybe CorsResourcePolicy
     corsPolicy req = case Deployment.deployment of
       Deployment.Local -> Nothing
@@ -324,7 +317,10 @@ verboseRequestResponseLogger app req responder = do
   case requestBodyLength req of
     ChunkedBody -> putStrLn "Request Body: Unknown Size"
     KnownLength wo -> putStrLn $ "Request Body: " <> show wo <> " bytes"
+  putStrLn $ "Request Headers: " <> show (requestHeaders req)
   logStdoutDev app req $ \resp -> do
+    -- Response headers
+    putStrLn $ "Response Headers: " <> show (responseHeaders resp)
     BL.putStr $ "Response Body: "
     case resp of
       Wai.ResponseFile _ _ filePath _ -> putStrLn $ "<ResponseFile: " <> filePath <> ">"

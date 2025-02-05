@@ -19,7 +19,6 @@ module Share.Postgres
     Interp.DecodeValue (..),
     Interp.DecodeRow (..),
     Interp.DecodeField,
-    RawBytes (..),
     Only (..),
     QueryA (..),
     QueryM (..),
@@ -49,6 +48,7 @@ module Share.Postgres
     -- * query Helpers
     rollback,
     queryListRows,
+    queryVectorRows,
     query1Row,
     queryExpect1Row,
     queryListCol,
@@ -82,6 +82,7 @@ import Data.Text qualified as Text
 import Data.Time.Clock (picosecondsToDiffTime)
 import Data.Time.Clock.System (getSystemTime, systemToTAITime)
 import Data.Time.Clock.TAI (diffAbsoluteTime)
+import Data.Vector (Vector)
 import Data.Void
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
@@ -334,7 +335,8 @@ instance QueryA (Transaction e) where
   statement q s = do
     transactionStatement q s
 
-  unrecoverableError e = Transaction (pure (Left (Unrecoverable (someServerError e))))
+  unrecoverableError e = do
+    Transaction (pure (Left (Unrecoverable (someServerError e))))
 
 instance QueryM (Transaction e) where
   transactionUnsafeIO io = Transaction (Right <$> liftIO io)
@@ -343,7 +345,8 @@ instance QueryA (Session e) where
   statement q s = do
     lift $ Session.statement q s
 
-  unrecoverableError e = throwError (Unrecoverable (someServerError e))
+  unrecoverableError e = do
+    throwError (Unrecoverable (someServerError e))
 
 instance QueryM (Session e) where
   transactionUnsafeIO io = lift $ liftIO io
@@ -356,7 +359,8 @@ instance QueryA (Pipeline e) where
 instance (QueryM m) => QueryA (ReaderT e m) where
   statement q s = lift $ statement q s
 
-  unrecoverableError e = lift $ unrecoverableError e
+  unrecoverableError e = do
+    lift $ unrecoverableError e
 
 instance (QueryM m) => QueryM (ReaderT e m) where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
@@ -374,6 +378,9 @@ prepareStatements = True
 
 queryListRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m [r]
 queryListRows sql = statement () (Interp.interp prepareStatements sql)
+
+queryVectorRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m (Vector r)
+queryVectorRows sql = statement () (Interp.interp prepareStatements sql)
 
 query1Row :: forall r m. (QueryM m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
 query1Row sql = listToMaybe <$> queryListRows sql
@@ -468,17 +475,6 @@ cachedForOf trav s f = do
 -- | cachedForOf, but for traversables.
 cachedFor :: (Traversable t, Monad m, Ord a) => t a -> (a -> m b) -> m (t b)
 cachedFor = cachedForOf traversed
-
--- | Preferably you should use custom newtypes for your bytes, but you can use this with
--- deriving via to get the encoding/decoding instances.
-newtype RawBytes = RawBytes {unRawBytes :: ByteString}
-  deriving stock (Show, Eq, Ord)
-
-instance Interp.EncodeValue RawBytes where
-  encodeValue = contramap unRawBytes Encoders.bytea
-
-instance Interp.DecodeValue RawBytes where
-  decodeValue = RawBytes <$> Decoders.bytea
 
 -- | Useful when running queries using a join over `toTable` which may be empty.
 -- Without explicitly handling the empty case we'll waste time sending a query to PG

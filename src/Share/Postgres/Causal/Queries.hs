@@ -25,38 +25,61 @@ module Share.Postgres.Causal.Queries
     hashCausal,
     bestCommonAncestor,
     isFastForward,
+
+    -- * Sync
+    expectCausalEntity,
+    expectNamespaceEntity,
+
+    -- * For migrations, can probably remove this export later.
+    saveSerializedCausal,
+    saveSerializedNamespace,
   )
 where
 
 import Control.Lens
+import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
+import Data.Vector qualified as Vector
 import Share.Codebase.Types (CodebaseM)
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs (UserId)
 import Share.Postgres
 import Share.Postgres.Causal.Types
 import Share.Postgres.Definitions.Queries qualified as Defn
+import Share.Postgres.Definitions.Queries qualified as DefnQ
 import Share.Postgres.Definitions.Types
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.Patches.Queries qualified as PatchQ
+import Share.Postgres.Serialization qualified as S
+import Share.Postgres.Sync.Conversions qualified as Cv
 import Share.Prelude
 import Share.Utils.Postgres (OrdBy, ordered)
 import Share.Web.Errors (MissingExpectedEntity (MissingExpectedEntity))
 import U.Codebase.Branch hiding (NamespaceStats, nonEmptyChildren)
 import U.Codebase.Branch qualified as V2 hiding (NamespaceStats)
 import U.Codebase.Causal qualified as Causal
+import U.Codebase.Causal qualified as U
 import U.Codebase.Reference
 import U.Codebase.Referent
 import U.Codebase.Referent qualified as Referent
+import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes (..))
+import U.Codebase.Sqlite.Branch.Format qualified as BranchFormat
 import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
+import U.Codebase.Sqlite.LocalizeObject qualified as Localize
+import U.Codebase.Sqlite.TempEntity (TempEntity)
 import Unison.Codebase.Path qualified as Path
 import Unison.Hash (Hash)
 import Unison.Hash32 (Hash32)
+import Unison.Hash32 qualified as Hash32
 import Unison.Hashing.V2 qualified as H
 import Unison.NameSegment.Internal as NameSegment
 import Unison.Reference qualified as Reference
+import Unison.Sync.Common qualified as SyncCommon
+import Unison.Sync.Types qualified as Sync
+import Unison.SyncV2.Types (CBORBytes (..))
+import Unison.SyncV2.Types qualified as SyncV2
 import Unison.Util.Map qualified as Map
 
 expectCausalNamespace :: (HasCallStack, QueryM m) => CausalId -> m (CausalNamespace m)
@@ -407,18 +430,22 @@ loadCausalNamespaceAtPath causalId path = do
 -- | Given a namespace whose dependencies have all been pre-saved, save it to the database under the given hash.
 savePgNamespace ::
   (HasCallStack) =>
+  -- | The pre-serialized namespace, if available. If Nothing it will be re-generated, which is slower.
+  Maybe TempEntity ->
   -- Normally we'd prefer to always hash it ourselves, but there are some bad hashes in the wild
   -- that we need to support saving, if we're passed a hash to save a branch at we will save
   -- it at that hash regardless of what the _actual_ hash is.
   Maybe BranchHash ->
   PgNamespace ->
   CodebaseM e (BranchHashId, BranchHash)
-savePgNamespace mayBh b@(BranchFull.Branch {terms, types, patches, children}) = do
+savePgNamespace maySerialized mayBh b@(BranchFull.Branch {terms, types, patches, children}) = do
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   bh <- whenNothing mayBh $ hashPgNamespace b
   bhId <- HashQ.ensureBranchHashId bh
   queryExpect1Col [sql| SELECT EXISTS (SELECT FROM namespaces WHERE namespace_hash_id = #{bhId}) |] >>= \case
-    False -> doSave bhId
+    False -> do
+      doSave bhId
+      doSaveSerialized bhId
     True -> pure ()
   execute_
     [sql| INSERT INTO namespace_ownership (namespace_hash_id, user_id)
@@ -427,6 +454,14 @@ savePgNamespace mayBh b@(BranchFull.Branch {terms, types, patches, children}) = 
     |]
   pure (bhId, bh)
   where
+    doSaveSerialized :: BranchHashId -> CodebaseM e ()
+    doSaveSerialized bhId = do
+      nsEntity <- case maySerialized of
+        Just serialized -> pure serialized
+        Nothing -> SyncCommon.entityToTempEntity id . Sync.N <$> expectNamespaceEntity bhId
+      let serializedNamespace = SyncV2.serialiseCBORBytes nsEntity
+      saveSerializedNamespace bhId serializedNamespace
+
     doSave :: BranchHashId -> CodebaseM e ()
     doSave bhId = do
       -- Expand all term mappings into a list
@@ -608,6 +643,34 @@ savePgNamespace mayBh b@(BranchFull.Branch {terms, types, patches, children}) = 
       -- Note: this must be run AFTER inserting the namespace and all its children.
       execute_ [sql| SELECT save_namespace(#{bhId}) |]
 
+saveSerializedNamespace :: (QueryM m) => BranchHashId -> CBORBytes TempEntity -> m ()
+saveSerializedNamespace bhId (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_namespaces (namespace_hash_id, bytes_id)
+        VALUES (#{bhId}, #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+expectNamespaceEntity :: BranchHashId -> CodebaseM e (Sync.Namespace Text Hash32)
+expectNamespaceEntity bhId = do
+  v2Branch <- expectNamespace bhId
+  second Hash32.fromHash <$> branchToEntity v2Branch
+  where
+    branchToEntity branch = do
+      branchFull <- Cv.branchV2ToBF branch
+      let (BranchFormat.LocalIds {branchTextLookup, branchDefnLookup, branchPatchLookup, branchChildLookup}, localBranch) = Localize.localizeBranchG branchFull
+      let bytes = LocalBranchBytes $ S.encodeNamespace localBranch
+      pure $
+        Sync.Namespace
+          { textLookup = Vector.toList branchTextLookup,
+            defnLookup = Vector.toList branchDefnLookup,
+            patchLookup = Vector.toList branchPatchLookup,
+            childLookup = Vector.toList branchChildLookup,
+            bytes = bytes
+          }
+
 -- | Hash a namespace into a BranchHash
 hashPgNamespace :: forall m. (QueryM m) => PgNamespace -> m BranchHash
 hashPgNamespace b = do
@@ -671,14 +734,23 @@ hashCausal branchHashId ancestorIds = do
   let hCausal = H.Causal {branchHash = unBranchHash branchHash, parents = ancestors}
   pure . CausalHash . H.contentHash $ hCausal
 
-saveCausal :: Maybe CausalHash -> BranchHashId -> Set CausalId -> CodebaseM e (CausalId, CausalHash)
-saveCausal mayCh bhId ancestorIds = do
+saveCausal ::
+  -- | The pre-serialized causal, if available. If Nothing it will be re-generated, which is slower.
+  Maybe TempEntity ->
+  Maybe CausalHash ->
+  BranchHashId ->
+  Set CausalId ->
+  CodebaseM e (CausalId, CausalHash)
+saveCausal maySerializedCausal mayCh bhId ancestorIds = do
   ch <- maybe (hashCausal bhId ancestorIds) pure mayCh
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   cId <-
     query1Col [sql| SELECT id FROM causals WHERE hash = #{ch} |] >>= \case
       Just cId -> pure cId
-      Nothing -> doSave ch
+      Nothing -> do
+        cId <- doSave ch
+        doSaveSerialized cId
+        pure cId
   execute_
     [sql|
     INSERT INTO causal_ownership (user_id, causal_id)
@@ -687,6 +759,14 @@ saveCausal mayCh bhId ancestorIds = do
     |]
   pure (cId, ch)
   where
+    doSaveSerialized cId = do
+      causalEntity <- case maySerializedCausal of
+        Just serializedCausal -> pure serializedCausal
+        Nothing -> do
+          SyncCommon.entityToTempEntity id . Sync.C <$> expectCausalEntity cId
+      let serializedCausal = SyncV2.serialiseCBORBytes causalEntity
+      saveSerializedCausal cId serializedCausal
+
     doSave ch = do
       cId <-
         queryExpect1Col
@@ -706,6 +786,26 @@ saveCausal mayCh bhId ancestorIds = do
           FROM ancestors a
       |]
       pure cId
+
+saveSerializedCausal :: (QueryM m) => CausalId -> CBORBytes TempEntity -> m ()
+saveSerializedCausal causalId (CBORBytes bytes) = do
+  bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+  execute_
+    [sql|
+      INSERT INTO serialized_causals (causal_id, bytes_id)
+        VALUES (#{causalId}, #{bytesId})
+      ON CONFLICT DO NOTHING
+    |]
+
+expectCausalEntity :: (HasCallStack) => CausalId -> CodebaseM e (Sync.Causal Hash32)
+expectCausalEntity causalId = do
+  U.Causal {valueHash, parents} <- expectCausalNamespace causalId
+  pure $
+    ( Sync.Causal
+        { namespaceHash = Hash32.fromHash $ unBranchHash valueHash,
+          parents = Set.map (Hash32.fromHash . unCausalHash) . Map.keysSet $ parents
+        }
+    )
 
 -- | Get the ref to the result of squashing if we've squashed that ref in the past.
 -- Also adds the squash result to current codebase if we find it.
@@ -744,7 +844,7 @@ saveSquashResult unsquashedBranchHash squashedCausalHashId = do
 saveV2BranchShallow :: V2.Branch (CodebaseM e) -> CodebaseM e (BranchHashId, BranchHash)
 saveV2BranchShallow v2Branch = do
   pgNamespace <- expectV2BranchDependencies v2Branch
-  savePgNamespace Nothing pgNamespace
+  savePgNamespace Nothing Nothing pgNamespace
   where
     expectV2BranchDependencies :: V2.Branch (CodebaseM e) -> CodebaseM e PgNamespace
     expectV2BranchDependencies V2.Branch {terms, types, patches, children} = do

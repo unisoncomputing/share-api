@@ -36,6 +36,7 @@ import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.Server.Types (TermTag (..), TypeTag (..))
 import Unison.ShortHash (ShortHash)
+import Unison.ShortHash qualified as SH
 import Unison.Syntax.Name qualified as Name
 import Unison.Syntax.NameSegment qualified as NameSegment
 
@@ -191,11 +192,11 @@ searchTokenToText shouldAddWildcards = \case
     makeSearchToken typeMentionTypeByNameType (Text.toLower (reversedNameText name)) (Just occ)
       & addWildCard
   TypeMentionToken (Right sh) occ ->
-    makeSearchToken typeMentionTypeByHashType (into @Text @ShortHash sh) (Just occ)
+    makeSearchToken typeMentionTypeByHashType (SH.toText sh) (Just occ)
       & addWildCard
   TypeVarToken varId occ -> makeSearchToken typeVarType (varIdText varId) (Just occ)
   HashToken sh ->
-    makeSearchToken hashType (into @Text sh) Nothing
+    makeSearchToken hashType (SH.toText sh) Nothing
       & addWildCard
   TermTagToken termTag -> makeSearchToken tagType (termTagText termTag) Nothing
   TypeTagToken typTag -> makeSearchToken tagType (typeTagText typTag) Nothing

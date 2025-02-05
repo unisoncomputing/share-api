@@ -1,7 +1,8 @@
+{-# LANGUAGE StandaloneDeriving #-}
+
 -- | Queries related to sync and temp entities.
 module Share.Postgres.Sync.Queries
   ( expectEntity,
-    expectCausalEntity,
     entityLocations,
     saveTempEntityInMain,
     saveTempEntities,
@@ -16,11 +17,11 @@ where
 import Control.Lens hiding (from)
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Foldable qualified as Foldable
-import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Data.Vector qualified as Vector
+import Servant (ServerError (..), err500)
 import Share.Codebase.Types (CodebaseM)
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs
@@ -33,16 +34,12 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.Patches.Queries qualified as PatchQ
 import Share.Postgres.Serialization qualified as S
-import Share.Postgres.Sync.Conversions qualified as Cv
 import Share.Postgres.Sync.Types (TypedTempEntity (..))
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (InternalServerError (..), ToServerError (..), Unimplemented (Unimplemented))
 import Share.Web.UCM.Sync.Types
-import Servant (ServerError (..), err500)
-import U.Codebase.Branch qualified as V2
-import U.Codebase.Causal qualified as U
-import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes (LocalBranchBytes))
+import U.Codebase.Sqlite.Branch.Format (LocalBranchBytes)
 import U.Codebase.Sqlite.Branch.Format qualified as BranchFormat
 import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
 import U.Codebase.Sqlite.Causal qualified as SqliteCausal
@@ -50,7 +47,6 @@ import U.Codebase.Sqlite.Decl.Format qualified as DeclFormat
 import U.Codebase.Sqlite.Decode qualified as Decoders
 import U.Codebase.Sqlite.Entity qualified as Entity
 import U.Codebase.Sqlite.LocalIds qualified as LocalIds
-import U.Codebase.Sqlite.LocalizeObject qualified as Localize
 import U.Codebase.Sqlite.Patch.Format qualified as PatchFormat
 import U.Codebase.Sqlite.Patch.Full qualified as PatchFull
 import U.Codebase.Sqlite.Queries qualified as Share
@@ -61,6 +57,7 @@ import Unison.Hash32
 import Unison.Hash32 qualified as Hash32
 import Unison.Sync.Common qualified as Share
 import Unison.Sync.Types qualified as Share
+import Unison.SyncV2.Types (EntityKind (..))
 
 data SyncQError
   = InvalidNamespaceBytes
@@ -82,79 +79,27 @@ instance Logging.Loggable SyncQError where
   toLog = Logging.withSeverity Logging.Error . Logging.showLog
 
 -- | Read an entity out of the database that we know is in main storage.
-expectEntity :: HasCallStack => Hash32 -> CodebaseM e (Share.Entity Text Hash32 Hash32)
+expectEntity :: (HasCallStack) => Hash32 -> CodebaseM e (Share.Entity Text Hash32 Hash32)
 expectEntity hash = do
   expectEntityKindForHash hash >>= \case
-    CausalEntity -> Share.C <$> expectCausalEntity (CausalHash . Hash32.toHash $ hash)
-    NamespaceEntity -> Share.N <$> expectNamespaceEntity (BranchHash . Hash32.toHash $ hash)
-    TermEntity -> Share.TC <$> expectTermComponentEntity (ComponentHash . Hash32.toHash $ hash)
-    TypeEntity -> Share.DC <$> expectTypeComponentEntity (ComponentHash . Hash32.toHash $ hash)
-    PatchEntity -> Share.P <$> expectPatchEntity (PatchHash . Hash32.toHash $ hash)
-  where
-
-expectCausalEntity :: HasCallStack => CausalHash -> CodebaseM e (Share.Causal Hash32)
-expectCausalEntity hash = do
-  causalId <- CausalQ.expectCausalIdByHash hash
-  U.Causal {valueHash, parents} <- CausalQ.expectCausalNamespace causalId
-  pure $
-    ( Share.Causal
-        { namespaceHash = Hash32.fromHash $ unBranchHash valueHash,
-          parents = Set.map (Hash32.fromHash . unCausalHash) . Map.keysSet $ parents
-        }
-    )
-
-expectNamespaceEntity :: HasCallStack => BranchHash -> CodebaseM e (Share.Namespace Text Hash32)
-expectNamespaceEntity bh = do
-  bhId <- HashQ.expectBranchHashId bh
-  v2Branch <- CausalQ.expectNamespace bhId
-  second Hash32.fromHash <$> branchToEntity v2Branch
-  where
-    branchToEntity branch = do
-      branchFull <- Cv.branchV2ToBF branch
-      let (BranchFormat.LocalIds {branchTextLookup, branchDefnLookup, branchPatchLookup, branchChildLookup}, localBranch) = Localize.localizeBranchG branchFull
-      let bytes = LocalBranchBytes $ S.encodeNamespace localBranch
-      pure $
-        Share.Namespace
-          { textLookup = Vector.toList branchTextLookup,
-            defnLookup = Vector.toList branchDefnLookup,
-            patchLookup = Vector.toList branchPatchLookup,
-            childLookup = Vector.toList branchChildLookup,
-            bytes = bytes
-          }
-
-expectTermComponentEntity :: HasCallStack => ComponentHash -> CodebaseM e (Share.TermComponent Text Hash32)
-expectTermComponentEntity hash = do
-  chId <- HashQ.expectComponentHashId hash
-  DefnQ.expectShareTermComponent chId
-
-expectTypeComponentEntity :: HasCallStack => ComponentHash -> CodebaseM e (Share.DeclComponent Text Hash32)
-expectTypeComponentEntity hash = do
-  chId <- HashQ.expectComponentHashId hash
-  DefnQ.expectShareTypeComponent chId
-
-expectPatchEntity :: HasCallStack => PatchHash -> CodebaseM e (Share.Patch Text Hash32 Hash32)
-expectPatchEntity patchHash = do
-  patchId <- HashQ.expectPatchIdsOf id patchHash
-  v2Patch <- PatchQ.expectPatch patchId
-  patchToEntity v2Patch
-  where
-    patchToEntity :: V2.Patch -> CodebaseM e (Share.Patch Text Hash32 Hash32)
-    patchToEntity patch = do
-      let patchFull = Cv.patchV2ToPF patch
-      let (PatchFormat.LocalIds {patchTextLookup, patchHashLookup, patchDefnLookup}, localPatch) = Localize.localizePatchG patchFull
-      let bytes = S.encodePatch localPatch
-      Share.Patch
-        { textLookup = Vector.toList patchTextLookup,
-          oldHashLookup = Vector.toList patchHashLookup,
-          newHashLookup = Vector.toList patchDefnLookup,
-          bytes
-        }
-        & Share.patchOldHashes_ %~ Hash32.fromHash
-        & Share.patchNewHashes_ %~ Hash32.fromHash
-        & pure
+    CausalEntity -> do
+      causalId <- CausalQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
+      Share.C <$> CausalQ.expectCausalEntity causalId
+    NamespaceEntity -> do
+      bhId <- HashQ.expectBranchHashId (fromHash32 @BranchHash $ hash)
+      Share.N <$> CausalQ.expectNamespaceEntity bhId
+    TermEntity -> do
+      componentHashId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
+      Share.TC <$> DefnQ.expectShareTermComponent componentHashId
+    TypeEntity -> do
+      componentHashId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
+      Share.DC <$> DefnQ.expectShareTypeComponent componentHashId
+    PatchEntity -> do
+      patchId <- HashQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
+      Share.P <$> PatchQ.expectPatchEntity patchId
 
 -- | Determine the kind of an arbitrary hash.
-expectEntityKindForHash :: HasCallStack => Hash32 -> CodebaseM e EntityKind
+expectEntityKindForHash :: (HasCallStack) => Hash32 -> CodebaseM e EntityKind
 expectEntityKindForHash h =
   do
     queryExpect1Row
@@ -317,7 +262,7 @@ entityLocations sortedEntities = do
 -- | Save a temp entity to the temp entities table, also tracking its missing dependencies.
 -- You can pass ALL the dependencies of the temp entity, the query will determine which ones
 -- are missing.
-saveTempEntities :: Foldable f => f (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e ()
+saveTempEntities :: (Foldable f) => f (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e ()
 saveTempEntities entities = do
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   let tempEntities =
@@ -401,25 +346,28 @@ clearTempDependencies hash = do
 
 -- | Save a temp entity to main storage, and clear any missing dependency rows for it, and
 -- return the set of hashes which dependended on it and _might_ now be ready to flush.
-saveTempEntityInMain :: forall e. HasCallStack => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
+saveTempEntityInMain :: forall e. (HasCallStack) => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
 saveTempEntityInMain hash entity = do
   saveEntity entity
   clearTempDependencies hash
   where
     saveEntity :: TempEntity -> CodebaseM e ()
     saveEntity = \case
-      Entity.TC (TermFormat.SyncTerm syncTermComponent) -> doTermComponent syncTermComponent
-      Entity.DC (DeclFormat.SyncDecl syncDecl) -> doDeclComponent syncDecl
+      Entity.TC (TermFormat.SyncTerm syncTermComponent) -> do
+        doTermComponent entity syncTermComponent
+      Entity.DC (DeclFormat.SyncDecl syncDecl) -> do
+        doDeclComponent entity syncDecl
       Entity.N BranchFormat.SyncDiff {} ->
         lift . unrecoverableError $ InternalServerError "namespace-diffs-not-supported" Unimplemented
-      Entity.N (BranchFormat.SyncFull localIds bytes) -> doNamespace localIds bytes
+      Entity.N (BranchFormat.SyncFull localIds bytes) -> doNamespace entity localIds bytes
       Entity.P PatchFormat.SyncDiff {} -> lift . unrecoverableError $ InternalServerError "patch-diffs-not-supported" Unimplemented
-      Entity.P (PatchFormat.SyncFull localIds patchBytes) -> doPatch localIds patchBytes
-      Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) -> doCausal valueHash parents
+      Entity.P (PatchFormat.SyncFull localIds patchBytes) -> doPatch entity localIds patchBytes
+      Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) -> doCausal entity valueHash parents
     doTermComponent ::
+      TempEntity ->
       TermFormat.SyncLocallyIndexedComponent' Text Hash32 ->
       CodebaseM e ()
-    doTermComponent syncTermComponent = do
+    doTermComponent entity syncTermComponent = do
       let (TermFormat.SyncLocallyIndexedComponent termComponentElements) = syncTermComponent
       elementsWithDecodedType <-
         for termComponentElements \(localIds, termElementBytes) ->
@@ -431,11 +379,12 @@ saveTempEntityInMain hash entity = do
             >>= HashQ.ensureComponentHashIdsOf (traversed . _1 . LocalIds.h_ . hash32AsComponentHash_)
           )
           <&> Vector.toList
-      Defn.saveEncodedTermComponent componentHash componentWithIds
+      Defn.saveEncodedTermComponent componentHash (Just entity) componentWithIds
     doDeclComponent ::
+      TempEntity ->
       DeclFormat.SyncLocallyIndexedComponent' Text Hash32 ->
       CodebaseM e ()
-    doDeclComponent syncDecl = do
+    doDeclComponent entity syncDecl = do
       declComponentElements <- case Decoders.unsyncDeclComponent syncDecl of
         Left decodeErr -> lift . unrecoverableError $ InternalServerError "term-format-invalid" (InvalidTermComponentBytes decodeErr)
         Right (DeclFormat.LocallyIndexedComponent elements) -> pure elements
@@ -444,26 +393,28 @@ saveTempEntityInMain hash entity = do
             >>= HashQ.ensureComponentHashIdsOf (traversed . _1 . LocalIds.h_ . hash32AsComponentHash_)
           )
           <&> Vector.toList
-      Defn.saveTypeComponent componentHash componentWithIds
+      Defn.saveTypeComponent componentHash (Just entity) componentWithIds
 
     doNamespace ::
+      TempEntity ->
       BranchFormat.BranchLocalIds' Text Hash32 Hash32 (Hash32, Hash32) ->
       LocalBranchBytes ->
       CodebaseM e ()
-    doNamespace localIds bytes = do
+    doNamespace entity localIds bytes = do
       pgNamespace <-
         (expandNamespaceFormat localIds bytes)
           >>= Defn.ensureTextIdsOf BranchFull.t_
           >>= HashQ.expectComponentHashIdsOf (BranchFull.h_ . hash32AsComponentHash_)
           >>= HashQ.expectPatchIdsOf (BranchFull.p_ . hash32AsPatchHash_)
           >>= HashQ.expectCausalIdsOf (BranchFull.c_ . childHashT)
-      void $ CausalQ.savePgNamespace (Just (BranchHash . Hash32.toHash $ hash)) pgNamespace
+      void $ CausalQ.savePgNamespace (Just entity) (Just (BranchHash . Hash32.toHash $ hash)) pgNamespace
 
     doPatch ::
+      TempEntity ->
       PatchFormat.PatchLocalIds' Text Hash32 Hash32 ->
       ByteString ->
       CodebaseM e ()
-    doPatch localIds patchBytes = do
+    doPatch entity localIds patchBytes = do
       pgPatch <-
         expandPatchFormat localIds patchBytes
           >>= Defn.ensureTextIdsOf PatchFull.patchT_
@@ -473,18 +424,19 @@ saveTempEntityInMain hash entity = do
           -- if for some reason they don't already exist.
           >>= HashQ.ensureComponentHashIdsOf (PatchFull.patchH_ . hash32AsComponentHash_)
           >>= HashQ.expectComponentHashIdsOf (PatchFull.patchO_ . hash32AsComponentHash_)
-      void $ PatchQ.savePatch (PatchHash . Hash32.toHash $ hash) pgPatch
+      void $ PatchQ.savePatch (Just entity) (PatchHash . Hash32.toHash $ hash) pgPatch
 
     doCausal ::
+      TempEntity ->
       Hash32 ->
       Vector.Vector Hash32 ->
       CodebaseM e ()
-    doCausal valueHash parents = do
+    doCausal serialized valueHash parents = do
       bhId <- HashQ.expectBranchHashId $ BranchHash (Hash32.toHash valueHash)
       parentIds <-
         HashQ.expectCausalIdsOf (traversed . hash32AsCausalHash_) parents
           <&> (Vector.toList >>> fmap snd >>> Set.fromList)
-      void $ CausalQ.saveCausal (Just . CausalHash . Hash32.toHash $ hash) bhId parentIds
+      void $ CausalQ.saveCausal (Just serialized) (Just . CausalHash . Hash32.toHash $ hash) bhId parentIds
 
     componentHash :: ComponentHash
     componentHash = ComponentHash . Hash32.toHash $ hash
