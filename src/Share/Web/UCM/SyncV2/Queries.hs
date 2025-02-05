@@ -214,7 +214,7 @@ spineAndLibDependenciesOfCausalCursor cid = do
       SELECT ch.causal_id, ROW_NUMBER() OVER () FROM causal_history(#{cid}) AS ch
         WHERE EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = #{cid})
     ), lib_deps(causal_id, ord) AS (
-      SELECT DISTINCT ON (lib_dep.child_causal_id), cs.ord
+      SELECT DISTINCT ON (lib_dep.child_causal_id) lib_dep.child_causal_id, cs.ord
       FROM causal_spine cs
       -- Spinal causal
       -- Root where all library roots are attached
