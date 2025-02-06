@@ -128,55 +128,53 @@ BEGIN
     FROM (
       -- direct term references
       ( SELECT cd.depth AS depth
-        FROM component_depth cd
-        JOIN term_local_component_references cr
-          ON cd.component_hash_id = cr.component_hash_id
+        FROM namespace_terms nt
         JOIN terms t
-          ON cr.term_id = t.id
-        JOIN namespace_terms nt
-          ON t.id = nt.term_id
+          ON nt.term_id = t.id
+        JOIN component_depth cd
+          ON t.component_hash_id = cd.component_hash_id
         WHERE nt.namespace_hash_id = the_namespace_hash_id
       ) UNION
       -- term metadata references
       ( SELECT cd.depth AS depth
-        FROM component_depth cd
-        JOIN terms t
-          ON cd.component_hash_id = t.component_hash_id
+        FROM namespace_terms nt
         JOIN namespace_term_metadata ntm
-          ON ntm.metadata_term_id = t.id
-        JOIN namespace_terms nt
           ON ntm.named_term = nt.id
+        JOIN terms t
+          ON ntm.metadata_term_id = t.id
+        JOIN component_depth cd
+          ON t.component_hash_id = cd.component_hash_id
         WHERE nt.namespace_hash_id = the_namespace_hash_id
       ) UNION
       -- direct constructor references
       ( SELECT cd.depth AS depth
-        FROM component_depth cd
+        FROM namespace_terms nt
         JOIN constructors c
-          ON cd.component_hash_id = c.constructor_type_component_hash_id
-        JOIN namespace_terms nt
           ON c.id = nt.constructor_id
+        JOIN types t 
+          ON c.type_id = t.id
+        JOIN component_depth cd
+          ON t.component_hash_id = cd.component_hash_id
         WHERE nt.namespace_hash_id = the_namespace_hash_id
       ) UNION
       -- direct type references
       ( SELECT cd.depth AS depth
-        FROM component_depth cd
-        JOIN type_local_component_references cr
-          ON cd.component_hash_id = cr.component_hash_id
+        FROM namespace_types nt
         JOIN types t
-          ON cr.type_id = t.id
-        JOIN namespace_types nt
-          ON t.id = nt.type_id
+          ON nt.type_id = t.id
+        JOIN component_depth cd
+          ON t.component_hash_id = cd.component_hash_id
         WHERE nt.namespace_hash_id = the_namespace_hash_id
       ) UNION
       -- type metadata references
       ( SELECT cd.depth AS depth
-        FROM component_depth cd
-        JOIN terms t
-          ON cd.component_hash_id = t.component_hash_id
+        FROM namespace_types nt
         JOIN namespace_type_metadata ntm
-          ON ntm.metadata_term_id = t.id
-        JOIN namespace_types nt
           ON ntm.named_type = nt.id
+        JOIN terms t
+          ON ntm.metadata_term_id = t.id
+        JOIN component_depth cd
+          ON t.component_hash_id = cd.component_hash_id
         WHERE nt.namespace_hash_id = the_namespace_hash_id
       )
   ) AS refs;
@@ -202,19 +200,27 @@ BEGIN
   SELECT COALESCE(MAX(cd.depth), -1) INTO max_referenced_component_depth
     FROM (
       -- term references
-      ( SELECT from_term_component_hash_id AS component_hash_id
-        FROM patch_term_mappings
-        WHERE patch_id = the_patch_id
+      ( SELECT t.component_hash_id AS component_hash_id
+        FROM patch_term_mappings ptm
+        JOIN terms t
+          ON ptm.to_term_id = t.id
+        WHERE ptm.patch_id = the_patch_id
       ) UNION
       -- constructor mappings
-      ( SELECT from_constructor_component_hash_id AS component_hash_id
-        FROM patch_constructor_mappings
-        WHERE patch_id = the_patch_id
+      ( SELECT t.component_hash_id AS component_hash_id
+        FROM patch_constructor_mappings pcm
+        JOIN constructors c
+          ON pcm.to_constructor_id = c.id
+        JOIN types t
+          ON c.type_id = t.id
+        WHERE pcm.patch_id = the_patch_id
       ) UNION
       -- type references
-      ( SELECT from_type_component_hash_id AS component_hash_id
-        FROM patch_type_mappings
-        WHERE patch_id = the_patch_id
+      ( SELECT t.component_hash_id AS component_hash_id
+        FROM patch_type_mappings ptm
+        JOIN types t
+          ON ptm.to_type_id = t.id
+        WHERE ptm.patch_id = the_patch_id
       )
     ) AS refs JOIN component_depth cd
       ON cd.component_hash_id = refs.component_hash_id;

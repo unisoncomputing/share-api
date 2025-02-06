@@ -173,30 +173,35 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                     WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = ref.component_hash_id)
             )
         )
-           (SELECT bytes.bytes, ch.base32
+           (SELECT bytes.bytes, ch.base32, cd.depth
              FROM transitive_components tc
                JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND tc.component_hash_id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_hashes ch ON tc.component_hash_id = ch.id
+               JOIN component_depth cd ON ch.id = cd.component_hash_id
            )
            UNION ALL
-           (SELECT bytes.bytes, ap.patch_hash
+           (SELECT bytes.bytes, ap.patch_hash, pd.depth
              FROM all_patches ap
                JOIN serialized_patches sp ON ap.patch_id = sp.patch_id
                JOIN bytes ON sp.bytes_id = bytes.id
+               JOIN patch_depth pd ON ap.patch_id = pd.patch_id
            )
            UNION ALL
-           (SELECT bytes.bytes, an.namespace_hash
+           (SELECT bytes.bytes, an.namespace_hash, nd.depth
              FROM all_namespaces an
                JOIN serialized_namespaces sn ON an.namespace_hash_id = sn.namespace_hash_id
                JOIN bytes ON sn.bytes_id = bytes.id
+               JOIN namespace_depth nd ON an.namespace_hash_id = nd.namespace_hash_id
            )
            UNION ALL
-           (SELECT bytes.bytes, tc.causal_hash
+           (SELECT bytes.bytes, tc.causal_hash, cd.depth
              FROM transitive_causals tc
                JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
                JOIN bytes ON sc.bytes_id = bytes.id
+               JOIN causal_depth cd ON tc.causal_id = cd.causal_id
            )
+           ORDER BY depth ASC
   |]
   pure cursor
 
