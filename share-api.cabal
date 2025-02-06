@@ -30,6 +30,8 @@ library
       Share.BackgroundJobs
       Share.BackgroundJobs.Diffs.ContributionDiffs
       Share.BackgroundJobs.Diffs.Queries
+      Share.BackgroundJobs.EntityDepthMigration.Queries
+      Share.BackgroundJobs.EntityDepthMigration.Worker
       Share.BackgroundJobs.Errors
       Share.BackgroundJobs.Monad
       Share.BackgroundJobs.Search.DefinitionSync
