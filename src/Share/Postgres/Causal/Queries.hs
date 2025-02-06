@@ -642,6 +642,7 @@ savePgNamespace maySerialized mayBh b@(BranchFull.Branch {terms, types, patches,
             |]
       -- Note: this must be run AFTER inserting the namespace and all its children.
       execute_ [sql| SELECT save_namespace(#{bhId}) |]
+      execute_ [sql| SELECT update_namespace_depth(#{bhId}) |]
 
 saveSerializedNamespace :: (QueryM m) => BranchHashId -> CBORBytes TempEntity -> m ()
 saveSerializedNamespace bhId (CBORBytes bytes) = do
@@ -785,6 +786,7 @@ saveCausal maySerializedCausal mayCh bhId ancestorIds = do
         SELECT #{cId}, a.ancestor_id
           FROM ancestors a
       |]
+      execute_ [sql| SELECT update_causal_depth(#{cId}) |]
       pure cId
 
 saveSerializedCausal :: (QueryM m) => CausalId -> CBORBytes TempEntity -> m ()
