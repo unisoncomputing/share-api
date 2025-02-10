@@ -34,7 +34,7 @@ data CacheKey = CacheKey
 
 encodeKey :: CacheKey -> Text
 encodeKey (CacheKey {key, rootCausalId}) =
-  let keyWithCausal = maybe key (\rci -> ("rootCausalId", tShow rci) : key) rootCausalId
+  let keyWithCausal = maybe key (\(CausalId rci) -> ("rootCausalId", tShow @Int32 rci) : key) rootCausalId
    in keyWithCausal
         <&> (\(k, v) -> k <> "=" <> v)
           & T.intercalate ","
@@ -73,19 +73,19 @@ getJSONCacheEntry :: (FromJSON v, PG.QueryM m) => CacheKey -> m (Maybe v)
 getJSONCacheEntry ck@(CacheKey {cacheTopic, sandbox}) = do
   let cacheKey = encodeKey ck
   r <-
-    PG.query1Col @ByteString
+    PG.query1Col @Text
       [PG.sql|
     SELECT jc.value
     FROM json_cache jc
     WHERE topic = #{cacheTopic}
       AND key = #{cacheKey}
-      AND sandbox = #{sandbox}
+      AND codebase_user_id = #{sandbox}
     LIMIT 1
   |]
   case r of
     Nothing -> pure Nothing
-    Just valBytes ->
-      case Aeson.eitherDecode (BL.fromStrict valBytes) of
+    Just valText ->
+      case Aeson.eitherDecode (BL.fromStrict . Text.encodeUtf8 $ valText) of
         Left _err -> do
           -- reportError $ JSONCacheDecodingError ck (T.pack err)
           pure Nothing
@@ -94,11 +94,11 @@ getJSONCacheEntry ck@(CacheKey {cacheTopic, sandbox}) = do
 putJSONCacheEntry :: (ToJSON v, PG.QueryM m) => CacheKey -> v -> m ()
 putJSONCacheEntry ck@(CacheKey {cacheTopic, sandbox}) v = do
   let keyText = encodeKey ck
-  let valBytes = Aeson.encode v
+  let valText = Text.decodeUtf8 . BL.toStrict $ Aeson.encode v
   PG.execute_
     [PG.sql|
-      INSERT INTO json_cache (topic, key, sandbox, value)
-      VALUES (#{cacheTopic}, #{keyText}, #{sandbox}, #{valBytes}::jsonb)
-      ON CONFLICT (topic, key, sandbox)
+      INSERT INTO json_cache (topic, key, codebase_user_id, value)
+      VALUES (#{cacheTopic}, #{keyText}, #{sandbox}, #{valText}::jsonb)
+      ON CONFLICT (topic, key, codebase_user_id)
       DO UPDATE SET value = EXCLUDED.value
     |]

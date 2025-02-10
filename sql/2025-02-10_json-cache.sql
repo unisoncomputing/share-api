@@ -10,7 +10,7 @@ CREATE TABLE json_cache (
     key TEXT NOT NULL CHECK (key <> ''),
     value JSONB NOT NULL,
     -- When this cache entry was created.
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX json_cache_key ON json_cache (topic, codebase_user_id, key) NULLS NOT DISTINCT;
