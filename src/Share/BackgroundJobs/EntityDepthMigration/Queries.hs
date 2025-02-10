@@ -1,14 +1,13 @@
 module Share.BackgroundJobs.EntityDepthMigration.Queries
-  ( claimEntity,
-    claimComponent,
+  ( updateComponentDepths,
+    updatePatchDepths,
+    updateNamespaceDepths,
+    updateCausalDepths,
   )
 where
 
-import Share.IDs
+import Data.Int (Int64)
 import Share.Postgres
-import Share.Postgres (queryExpect1Col, queryVectorRows)
-import Share.Postgres.IDs
-import Unison.Hash32
 
 updateComponentDepths :: Transaction e (Int64)
 updateComponentDepths = do

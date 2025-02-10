@@ -1,6 +1,7 @@
 module Share.BackgroundJobs (startWorkers) where
 
 import Ki.Unlifted qualified as Ki
+import Share.BackgroundJobs.EntityDepthMigration.Worker qualified as EntityDepthMigration
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync qualified as DefnSearch
 

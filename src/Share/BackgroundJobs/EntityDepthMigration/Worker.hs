@@ -1,28 +1,13 @@
 module Share.BackgroundJobs.EntityDepthMigration.Worker (worker) where
 
-import Data.ByteString.Lazy qualified as BL
 import Ki.Unlifted qualified as Ki
+import Share.BackgroundJobs.EntityDepthMigration.Queries qualified as Q
 import Share.BackgroundJobs.Monad (Background)
-import Share.BackgroundJobs.SerializedEntitiesMigration.Queries qualified as Q
 import Share.BackgroundJobs.Workers (newWorker)
-import Share.Codebase qualified as Codebase
-import Share.Codebase.Types (CodebaseEnv (..))
-import Share.Postgres
 import Share.Postgres qualified as PG
-import Share.Postgres.Causal.Queries qualified as CQ
-import Share.Postgres.Definitions.Queries qualified as DefnQ
-import Share.Postgres.Hashes.Queries qualified as HQ
-import Share.Postgres.IDs
-import Share.Postgres.Patches.Queries qualified as PQ
-import Share.Postgres.Sync.Queries qualified as SQ
 import Share.Prelude
+import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
-import U.Codebase.Sqlite.Entity qualified as Entity
-import U.Codebase.Sqlite.TempEntity (TempEntity)
-import Unison.Hash32 (Hash32)
-import Unison.Hash32 qualified as Hash32
-import Unison.Sync.Common qualified as SyncCommon
-import Unison.SyncV2.Types qualified as SyncV2
 import UnliftIO.Concurrent qualified as UnliftIO
 
 pollingIntervalSeconds :: Int
@@ -31,70 +16,49 @@ pollingIntervalSeconds = 10
 worker :: Ki.Scope -> Background ()
 worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
-  newWorker scope "migration:serialised_components" $ forever do
-    gotResult <- processComponents authZReceipt
-    if gotResult
-      then pure ()
-      else liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
-  newWorker scope "migration:serialised_entities" $ forever do
-    gotResult <- processEntities authZReceipt
-    if gotResult
-      then pure ()
-      else liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
-
-processEntities :: AuthZ.AuthZReceipt -> Background Bool
-processEntities !_authZReceipt = do
-  mayHash <- PG.runTransaction do
-    Q.claimEntity >>= \case
-      Nothing -> pure Nothing
-      Just (hash32, codebaseUserId) -> do
-        let codebaseEnv = CodebaseEnv codebaseUserId
-        Codebase.codebaseMToTransaction codebaseEnv $ do
-          entity <- SQ.expectEntity hash32
-          let tempEntity = SyncCommon.entityToTempEntity id entity
-          saveUnsandboxedSerializedEntities hash32 tempEntity
-        pure (Just hash32)
-  case mayHash of
-    Just _hash -> do
-      pure True
-    Nothing -> pure False
+  newWorker scope "migration:entity_depth" $ forever do
+    -- Do the components first, they're the bottom of the dependency tree.
+    computeComponentDepths authZReceipt
+    -- Then do the patches, they depend on components.
+    computePatchDepths authZReceipt
+    -- Then do the namespaces and causals together
+    computeNamespaceAndCausalDepths authZReceipt
+    liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
 
 -- | Components must be handled separately since they're sandboxed to specific users.
 -- NOTE: this process doesn't insert the row into serialized_components, you'll need to do that manually after the automated migration is finished.
-processComponents :: AuthZ.AuthZReceipt -> Background Bool
-processComponents !_authZReceipt = do
-  PG.runTransaction do
-    Q.claimComponent >>= \case
-      Nothing -> pure False
-      Just (componentHashId, userId) -> do
-        let codebaseEnv = CodebaseEnv userId
-        Codebase.codebaseMToTransaction codebaseEnv $ do
-          hash32 <- (Hash32.fromHash . unComponentHash) <$> HQ.expectComponentHashesOf id componentHashId
-          entity <- SQ.expectEntity hash32
-          componentSummaryDigest <- HQ.expectComponentSummaryDigest componentHashId
-          let tempEntity = SyncCommon.entityToTempEntity id entity
-          let (SyncV2.CBORBytes bytes) = SyncV2.serialiseCBORBytes tempEntity
-          bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
-          execute_
-            [sql|
-                INSERT INTO component_summary_digests_to_serialized_component_bytes_hash (component_hash_id, component_summary_digest, serialized_component_bytes_id)
-                  VALUES (#{componentHashId}, #{componentSummaryDigest}, #{bytesId})
-                  ON CONFLICT DO NOTHING
-                |]
-          pure True
+computeComponentDepths :: AuthZ.AuthZReceipt -> Background ()
+computeComponentDepths !_authZReceipt = do
+  PG.runTransaction Q.updateComponentDepths >>= \case
+    0 -> do
+      Logging.logInfoText $ "Done processing component depth"
+      pure ()
+    -- Recurse until there's nothing left to do.
+    n -> do
+      Logging.logInfoText $ "Computed Depth for " <> tShow n <> " components"
+      computeComponentDepths _authZReceipt
 
-saveUnsandboxedSerializedEntities :: Hash32 -> TempEntity -> Codebase.CodebaseM e ()
-saveUnsandboxedSerializedEntities hash entity = do
-  let serialised = SyncV2.serialiseCBORBytes entity
-  case entity of
-    Entity.TC {} -> error "Unexpected term component"
-    Entity.DC {} -> error "Unexpected decl component"
-    Entity.P {} -> do
-      patchId <- HQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
-      PQ.saveSerializedPatch patchId serialised
-    Entity.C {} -> do
-      cId <- CQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
-      CQ.saveSerializedCausal cId serialised
-    Entity.N {} -> do
-      bhId <- HQ.expectBranchHashId (fromHash32 @BranchHash hash)
-      CQ.saveSerializedNamespace bhId serialised
+computePatchDepths :: AuthZ.AuthZReceipt -> Background ()
+computePatchDepths !_authZReceipt = do
+  PG.runTransaction Q.updatePatchDepths >>= \case
+    0 -> do
+      Logging.logInfoText $ "Done processing patch depth"
+      pure ()
+    -- Recurse until there's nothing left to do.
+    n -> do
+      Logging.logInfoText $ "Computed Depth for " <> tShow n <> " patches"
+      computePatchDepths _authZReceipt
+
+computeNamespaceAndCausalDepths :: AuthZ.AuthZReceipt -> Background ()
+computeNamespaceAndCausalDepths !authZReceipt = do
+  PG.runTransaction Q.updateNamespaceDepths >>= \case
+    namespaceN -> do
+      PG.runTransaction Q.updateCausalDepths >>= \case
+        causalN -> do
+          case (namespaceN, causalN) of
+            (0, 0) -> do
+              Logging.logInfoText $ "Done processing namespace and causal depth"
+              pure ()
+            (namespaceN, causalN) -> do
+              Logging.logInfoText $ "Computed Depth for " <> tShow namespaceN <> " namespaces and " <> tShow causalN <> " causals"
+              computeNamespaceAndCausalDepths authZReceipt
