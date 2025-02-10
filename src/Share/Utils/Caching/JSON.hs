@@ -17,7 +17,6 @@ import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Share.Web.App
 import Share.Web.Errors
 
 data CacheKey = CacheKey
@@ -41,11 +40,11 @@ encodeKey (CacheKey {key, rootCausalId}) =
           & T.intercalate ","
 
 usingJSONCache ::
-  (ToJSON v, FromJSON v) =>
+  (ToJSON v, FromJSON v, PG.QueryM m) =>
   CacheKey ->
   -- How to build the value if it's not in the cache.
-  WebApp v ->
-  WebApp v
+  m v ->
+  m v
 usingJSONCache ck action = do
   getJSONCacheEntry ck >>= \case
     Just v -> pure v
@@ -70,13 +69,12 @@ instance Logging.Loggable JSONCacheError where
       & Logging.withTag ("sandbox", tShow $ sandbox ck)
       & Logging.withTag ("rootCausalId", tShow $ rootCausalId ck)
 
-getJSONCacheEntry :: (FromJSON v) => CacheKey -> WebApp (Maybe v)
+getJSONCacheEntry :: (FromJSON v, PG.QueryM m) => CacheKey -> m (Maybe v)
 getJSONCacheEntry ck@(CacheKey {cacheTopic, sandbox}) = do
   let cacheKey = encodeKey ck
   r <-
-    PG.runTransaction $ do
-      PG.query1Col @ByteString
-        [PG.sql|
+    PG.query1Col @ByteString
+      [PG.sql|
     SELECT jc.value
     FROM json_cache jc
     WHERE topic = #{cacheTopic}
@@ -88,18 +86,17 @@ getJSONCacheEntry ck@(CacheKey {cacheTopic, sandbox}) = do
     Nothing -> pure Nothing
     Just valBytes ->
       case Aeson.eitherDecode (BL.fromStrict valBytes) of
-        Left err -> do
-          reportError $ JSONCacheDecodingError ck (T.pack err)
+        Left _err -> do
+          -- reportError $ JSONCacheDecodingError ck (T.pack err)
           pure Nothing
         Right v -> pure $ Just v
 
-putJSONCacheEntry :: (ToJSON v) => CacheKey -> v -> WebApp ()
+putJSONCacheEntry :: (ToJSON v, PG.QueryM m) => CacheKey -> v -> m ()
 putJSONCacheEntry ck@(CacheKey {cacheTopic, sandbox}) v = do
   let keyText = encodeKey ck
   let valBytes = Aeson.encode v
-  PG.runTransaction $ do
-    PG.execute_
-      [PG.sql|
+  PG.execute_
+    [PG.sql|
       INSERT INTO json_cache (topic, key, sandbox, value)
       VALUES (#{cacheTopic}, #{keyText}, #{sandbox}, #{valBytes}::jsonb)
       ON CONFLICT (topic, key, sandbox)
