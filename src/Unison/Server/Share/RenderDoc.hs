@@ -50,7 +50,7 @@ findAndRenderDoc docNames runtime namespacePath rootCausalId _mayWidth = runMayb
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   let cacheKey =
         Caching.CacheKey
-          { cacheTopic = "find-and-render-doc",
+          { cacheTopic = "findAndRenderDoc",
             key = [("namespacePath", tShow namespacePath), ("docRef", SH.toText $ Reference.toShortHash docRef)],
             rootCausalId = Just rootCausalId,
             sandbox = Just codebaseOwnerUserId

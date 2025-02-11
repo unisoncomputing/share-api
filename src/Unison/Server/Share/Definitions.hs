@@ -85,7 +85,7 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
   let cacheKey =
         Caching.CacheKey
           { cacheTopic = "definitionForHQName",
-            key = [("perspective", Path.toText perspective), ("suffixify", tShow suffixifyBindings), ("hqName", HQ.toText perspectiveQuery), ("width", tShow renderWidth)],
+            key = [("perspective", Path.toText perspective), ("suffixify", tShow $ suffixified (suffixifyBindings)), ("hqName", HQ.toText perspectiveQuery), ("width", tShow renderWidth)],
             rootCausalId = Just rootCausalId,
             sandbox = Just codebaseOwnerUserId
           }
