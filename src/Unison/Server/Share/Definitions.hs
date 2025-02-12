@@ -25,8 +25,10 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Prelude
+import Share.Utils.Caching.JSON qualified as Caching
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
+import Unison.Codebase.Path qualified as Path
 import Unison.ConstructorReference qualified as ConstructorReference
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration.Dependencies qualified as DD
@@ -79,51 +81,63 @@ definitionForHQName ::
   HQ.HashQualified Name ->
   Codebase.CodebaseM e DefinitionDisplayResults
 definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
-  rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
-  (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
-  Debug.debugM Debug.Server "definitionForHQName: (namesPerspective, query)" (namesPerspective, query)
-  -- Bias towards both relative and absolute path to queries,
-  -- This allows us to still bias towards definitions outside our namesRoot but within the
-  -- same tree;
-  -- e.g. if the query is `map` and we're in `base.trunk.List`,
-  -- we bias towards `map` and `.base.trunk.List.map` which ensures we still prefer names in
-  -- `trunk` over those in other releases.
-  -- ppe which returns names fully qualified to the current namesRoot,  not to the codebase root.
-  let biases = maybeToList $ HQ.toName query
-  let ppedBuilder deps = (PPED.biasTo biases) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
-  let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery nameSearch [query]
-  Debug.debugM Debug.Server "definitionForHQName: found definitions" dr
-  let width = mayDefaultWidth renderWidth
-  let docResults :: Name -> Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
-      docResults name = do
-        Debug.debugM Debug.Server "definitionForHQName: looking up docs for name" name
-        docRefs <- Docs.docsForDefinitionName nameSearch name
-        Debug.debugM Debug.Server "definitionForHQName: Found these docs" docRefs
-        renderDocRefs ppedBuilder width rt docRefs
+  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+  let cacheKey =
+        Caching.CacheKey
+          { cacheTopic = "definitionForHQName",
+            key = [("perspective", Path.toText perspective), ("suffixify", tShow $ suffixified (suffixifyBindings)), ("hqName", HQ.toText perspectiveQuery), ("width", tShow renderWidth)],
+            rootCausalId = Just rootCausalId,
+            sandbox = Just codebaseOwnerUserId
+          }
+  Caching.usingJSONCache cacheKey go
+  where
+    go :: Codebase.CodebaseM e DefinitionDisplayResults
+    go = do
+      rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
+      (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
+      Debug.debugM Debug.Server "definitionForHQName: (namesPerspective, query)" (namesPerspective, query)
+      -- Bias towards both relative and absolute path to queries,
+      -- This allows us to still bias towards definitions outside our namesRoot but within the
+      -- same tree;
+      -- e.g. if the query is `map` and we're in `base.trunk.List`,
+      -- we bias towards `map` and `.base.trunk.List.map` which ensures we still prefer names in
+      -- `trunk` over those in other releases.
+      -- ppe which returns names fully qualified to the current namesRoot,  not to the codebase root.
+      let biases = maybeToList $ HQ.toName query
+      let ppedBuilder deps = (PPED.biasTo biases) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+      let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+      dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery nameSearch [query]
+      Debug.debugM Debug.Server "definitionForHQName: found definitions" dr
+      let width = mayDefaultWidth renderWidth
+      let docResults :: Name -> Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
+          docResults name = do
+            Debug.debugM Debug.Server "definitionForHQName: looking up docs for name" name
+            docRefs <- Docs.docsForDefinitionName nameSearch name
+            Debug.debugM Debug.Server "definitionForHQName: Found these docs" docRefs
+            renderDocRefs ppedBuilder width rt docRefs
 
-  let drDeps = Backend.definitionResultsDependencies dr
-  termAndTypePPED <- ppedBuilder drDeps
-  let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
-  typeDefinitions <-
-    ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
-      let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
-      docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
-      lift $ Backend.mkTypeDefinition termAndTypePPED width ref docs tp
-  termDefinitions <-
-    ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
-      let referent = Referent.Ref reference
-      let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
-      docs <- maybe (pure []) docResults (HQ.toName hqTermName)
-      Backend.mkTermDefinition termAndTypePPED width reference docs trm
-  let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
-      renderedDisplayTypes = Map.mapKeys Reference.toText typeDefinitions
-      renderedMisses = fmap HQ.toText misses
-  pure $
-    DefinitionDisplayResults
-      renderedDisplayTerms
-      renderedDisplayTypes
-      renderedMisses
+      let drDeps = Backend.definitionResultsDependencies dr
+      termAndTypePPED <- ppedBuilder drDeps
+      let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
+      typeDefinitions <-
+        ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
+          let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
+          docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
+          lift $ Backend.mkTypeDefinition termAndTypePPED width ref docs tp
+      termDefinitions <-
+        ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
+          let referent = Referent.Ref reference
+          let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
+          docs <- maybe (pure []) docResults (HQ.toName hqTermName)
+          Backend.mkTermDefinition termAndTypePPED width reference docs trm
+      let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
+          renderedDisplayTypes = Map.mapKeys Reference.toText typeDefinitions
+          renderedMisses = fmap HQ.toText misses
+      pure $
+        DefinitionDisplayResults
+          renderedDisplayTerms
+          renderedDisplayTypes
+          renderedMisses
 
 renderDocRefs ::
   PPEDBuilder (Codebase.CodebaseM e) ->

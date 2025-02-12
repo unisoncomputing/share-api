@@ -92,6 +92,7 @@ library
       Share.UserProfile
       Share.Utils.API
       Share.Utils.Caching
+      Share.Utils.Caching.JSON
       Share.Utils.Logging
       Share.Utils.Logging.Types
       Share.Utils.Postgres
