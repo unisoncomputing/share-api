@@ -196,7 +196,10 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "project-diff-terms" cacheKeys do
-      termDiff <- respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName))
+      termDiff <-
+        respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName))
+          -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
+          `whenNothingM` respondError (EntityMissing (ErrorID "term:missing") "Term not found")
       pure $
         ShareTermDiffResponse
           { project = projectShortHand,

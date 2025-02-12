@@ -327,8 +327,11 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
       (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      termDiff <- respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName))
-      pure $
+      termDiff <-
+        respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName))
+          -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
+          `whenNothingM` respondError (EntityMissing (ErrorID "term:missing") "Term not found")
+      pure
         ShareTermDiffResponse
           { project = projectShorthand,
             oldBranch = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,

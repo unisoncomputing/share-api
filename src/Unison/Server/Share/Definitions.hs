@@ -28,6 +28,7 @@ import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
+import Unison.ConstructorReference (ConstructorReference)
 import Unison.ConstructorReference qualified as ConstructorReference
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration.Dependencies qualified as DD
@@ -172,16 +173,19 @@ mkDefinitionsForQuery nameSearch query = do
           SR.Tp' _ r _ -> Just r
           _ -> Nothing
 
-termDisplayObjectByName :: NameSearch (PG.Transaction e) -> Name -> CodebaseM e (Maybe (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann)))
+-- Nothing means not found
+-- Just Left means constructor
+-- Just Right means term
+termDisplayObjectByName ::
+  NameSearch (PG.Transaction e) ->
+  Name ->
+  CodebaseM e (Maybe (Either ConstructorReference (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann))))
 termDisplayObjectByName nameSearch name = runMaybeT do
   refs <- lift . lift $ NameSearch.lookupRelativeHQRefs' (termSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
   ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
   case ref of
-    Referent.Ref r -> (r,) <$> lift (Backend.displayTerm r)
-    Referent.Con _ _ ->
-      -- TODO: Should we error here or some other sensible thing rather than returning no
-      -- result?
-      empty
+    Referent.Ref r -> Right . (r,) <$> lift (Backend.displayTerm r)
+    Referent.Con r _ -> pure (Left r)
 
 -- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
 -- share among all of them, it would be more efficient than generating a PPED per definition.
@@ -191,16 +195,19 @@ termDefinitionByName ::
   Width ->
   CodebaseRuntime ->
   Name ->
-  Codebase.CodebaseM e (Maybe TermDefinition)
-termDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT $ do
-  (ref, displayObject) <- MaybeT $ termDisplayObjectByName nameSearch name
-  let deps = termDisplayObjectLabeledDependencies ref displayObject
-  pped <- lift $ ppedBuilder deps
-  let biasedPPED = PPED.biasTo [name] pped
-  docRefs <- lift $ Docs.docsForDefinitionName nameSearch name
-  renderedDocs <- lift $ renderDocRefs ppedBuilder width rt docRefs
-  let (_ref, syntaxDO) = Backend.termsToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
-  lift $ Backend.mkTermDefinition biasedPPED width ref renderedDocs (syntaxDO)
+  Codebase.CodebaseM e (Maybe (Either ConstructorReference TermDefinition))
+termDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT do
+  MaybeT (termDisplayObjectByName nameSearch name) >>= \case
+    Right (ref, displayObject) -> do
+      let deps = termDisplayObjectLabeledDependencies ref displayObject
+      pped <- lift $ ppedBuilder deps
+      let biasedPPED = PPED.biasTo [name] pped
+      docRefs <- lift $ Docs.docsForDefinitionName nameSearch name
+      renderedDocs <- lift $ renderDocRefs ppedBuilder width rt docRefs
+      let (_ref, syntaxDO) = Backend.termsToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
+      defn <- lift $ Backend.mkTermDefinition biasedPPED width ref renderedDocs (syntaxDO)
+      pure (Right defn)
+    Left ref -> pure (Left ref)
 
 termDisplayObjectLabeledDependencies :: TermReference -> DisplayObject (Type Symbol Ann) (Term Symbol Ann) -> (Set LD.LabeledDependency)
 termDisplayObjectLabeledDependencies termRef displayObject = do
