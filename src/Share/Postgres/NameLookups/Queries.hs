@@ -12,8 +12,9 @@ module Share.Postgres.NameLookups.Queries
     FuzzySearchScore,
 
     -- * Cursors
-    termsWithinNamespace,
-    typesWithinNamespace,
+    projectTermsWithinRoot,
+    projectTermsWithinRootV1,
+    projectTypesWithinRoot,
 
     -- * Name lookup management
     listNameLookupMounts,
@@ -35,8 +36,11 @@ import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
 import U.Codebase.Reference (Reference)
-import U.Codebase.Referent (ConstructorType, Referent)
+import U.Codebase.Referent (ConstructorType)
+import U.Codebase.Referent qualified as V2
+import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.Name (Name)
+import Unison.Referent qualified as V1
 import Unison.Util.Monoid qualified as Monoid
 
 -- | Get the list of term names and suffixifications for a given Referent within a given namespace.
@@ -463,20 +467,31 @@ toNamespacePrefix = \case
 toReversedNamePrefix :: ReversedName -> Text
 toReversedNamePrefix suffix = Text.intercalate "." (into @[Text] suffix) <> "."
 
-termsWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (Name, Referent))
-termsWithinNamespace !_nlReceipt bhId = do
-  Cursors.newRowCursor @(NamedRef Referent)
+-- | Get a cursor over all non-lib terms within the given root branch.
+projectTermsWithinRootV1 :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (Name, V1.Referent))
+projectTermsWithinRootV1 !_nlReceipt bhId = do
+  Cursors.newRowCursor @(NamedRef (V2.Referent PG.:. PG.Only (Maybe ConstructorType)))
     "termsForSearchSyncCursor"
     [sql|
-        SELECT reversed_name, referent_builtin, referent_component_hash.base32, referent_component_index, referent_constructor_index
+        SELECT reversed_name, referent_builtin, referent_component_hash.base32, referent_component_index, referent_constructor_index, referent_constructor_type
         FROM scoped_term_name_lookup
         LEFT JOIN component_hashes referent_component_hash ON referent_component_hash.id = referent_component_hash_id
         WHERE root_branch_hash_id = #{bhId}
     |]
-    <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
+    <&> fmap
+      ( \NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, referent2to1 ref)
+      )
 
-typesWithinNamespace :: NameLookupReceipt -> BranchHashId -> Transaction e (PGCursor (Name, Reference))
-typesWithinNamespace !_nlReceipt bhId = do
+-- | Get a cursor over all non-lib terms within the given root branch.
+projectTermsWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (Name, V2.Referent))
+projectTermsWithinRoot !nlr bhId = projectTermsWithinRootV1 nlr bhId <&> fmap (over _2 Cv.referent1to2)
+
+referent2to1 :: (HasCallStack) => (V2.Referent PG.:. PG.Only (Maybe V2.ConstructorType)) -> V1.Referent
+referent2to1 (r PG.:. PG.Only mayCT) = Cv.referent2to1UsingCT (fromMaybe (error "Required constructor type for constructor but it was null") mayCT) r
+
+-- | Get a cursor over all non-lib types within the given root branch.
+projectTypesWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (Name, Reference))
+projectTypesWithinRoot !_nlReceipt bhId = do
   Cursors.newRowCursor @(NamedRef Reference)
     "typesForSearchSyncCursor"
     [sql|
