@@ -52,6 +52,7 @@ withEnv action = do
   githubClientID <- fromEnv "SHARE_GITHUB_CLIENTID" (pure . Right . Text.pack)
   githubClientSecret <- fromEnv "SHARE_GITHUB_CLIENT_SECRET" (pure . Right . Text.pack)
   hs256Key <- fromEnv "SHARE_HMAC_KEY" (pure . Right . BS.pack)
+  edDSAKey <- fromEnv "SHARE_EDDSA_KEY" (pure . Right . BS.pack)
   zendeskAPIUser <- fromEnv "SHARE_ZENDESK_API_USER" (pure . Right . BS.pack)
   zendeskAPIToken <- fromEnv "SHARE_ZENDESK_API_TOKEN" (pure . Right . BS.pack)
   let zendeskAuth = Servant.BasicAuthData zendeskAPIUser zendeskAPIToken
@@ -88,7 +89,12 @@ withEnv action = do
             | otherwise = Nothing
        in r {Redis.connectTLSParams = tlsParams}
   let acceptedAudiences = Set.singleton apiOrigin
-  let jwtSettings = JWT.defaultJWTSettings hs256Key acceptedAudiences apiOrigin
+  let legacyKey = JWT.KeyDescription {JWT.key = hs256Key, JWT.alg = JWT.HS256}
+  let signingKey = JWT.KeyDescription {JWT.key = edDSAKey, JWT.alg = JWT.Ed25519}
+  let rotatedKeys = Set.empty
+  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) rotatedKeys acceptedAudiences apiOrigin of
+    Left cryptoError -> throwIO cryptoError
+    Right settings -> pure settings
   let cookieSettings = Cookies.defaultCookieSettings Deployment.onLocal (Just (realToFrac cookieSessionTTL))
   let sessionCookieKey = tShow Deployment.deployment <> "-share-session"
   redisConnection <- Redis.checkedConnect redisConfig
