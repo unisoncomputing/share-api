@@ -24,6 +24,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Prelude
 import Share.Utils.Caching.JSON qualified as Caching
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
@@ -112,6 +113,10 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
       let docResults :: Name -> Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
           docResults name = do
             Debug.debugM Debug.Server "definitionForHQName: looking up docs for name" name
+            -- We need to re-lookup the names perspective here because the name we've found
+            -- may now be in a lib.
+            namesPerspective <- NameLookupOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (NL.nameToPathSegments name)
+            let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
             docRefs <- Docs.docsForDefinitionName nameSearch name
             Debug.debugM Debug.Server "definitionForHQName: Found these docs" docRefs
             renderDocRefs ppedBuilder width rt docRefs
@@ -122,12 +127,14 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
       typeDefinitions <-
         ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
           let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
+          Debug.debugM Debug.Temp "definitionForHQName: hqTypeName " (ref, hqTypeName)
           docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
           lift $ Backend.mkTypeDefinition termAndTypePPED width ref docs tp
       termDefinitions <-
         ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
           let referent = Referent.Ref reference
           let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
+          Debug.debugM Debug.Temp "definitionForHQName: hqTermName " (reference, hqTermName)
           docs <- maybe (pure []) docResults (HQ.toName hqTermName)
           Backend.mkTermDefinition termAndTypePPED width reference docs trm
       let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
