@@ -86,7 +86,7 @@ worker scope = do
     liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
   where
     processReleases authZReceipt = do
-      (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransaction $ do
         mayReleaseId <- DDQ.claimUnsyncedRelease
         mayErrs <- for mayReleaseId (syncRelease authZReceipt)
         pure (mayErrs, mayReleaseId)

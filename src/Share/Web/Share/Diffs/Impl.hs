@@ -161,11 +161,11 @@ diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
 getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TermDefinition)
 getTermDefinition (codebase, bhId, name) = do
   let perspective = Path.empty
-  (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+  (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
   let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
   rt <- Codebase.codebaseRuntime codebase
-  Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
+  Codebase.runCodebaseTransaction codebase do
     Definitions.termDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width
@@ -190,11 +190,11 @@ diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
 getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TypeDefinition)
 getTypeDefinition (codebase, bhId, name) = do
   let perspective = Path.empty
-  (namesPerspective, Identity relocatedName) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+  (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
   let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
   rt <- Codebase.codebaseRuntime codebase
-  Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase do
+  Codebase.runCodebaseTransaction codebase do
     Definitions.typeDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width

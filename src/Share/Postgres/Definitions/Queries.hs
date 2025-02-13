@@ -601,7 +601,7 @@ ensureTextIdsOf trav s = do
 ensureBytesIds :: (QueryM m) => (Traversable t) => t BS.ByteString -> m (t BytesId)
 ensureBytesIds = ensureBytesIdsOf traversed
 
--- | Efficiently saves all Text's focused by the provided traversal into the database and
+-- | Efficiently saves all bytestrings focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
 ensureBytesIdsOf :: (QueryM m) => Traversal s t BS.ByteString BytesId -> s -> m t
 ensureBytesIdsOf trav s = do

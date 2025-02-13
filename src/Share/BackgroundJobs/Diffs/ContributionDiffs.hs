@@ -37,8 +37,7 @@ worker scope = do
 
 processDiffs :: AuthZ.AuthZReceipt -> Background (Either NamespaceDiffError ())
 processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT $ do
-  mayContributionId <- PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-    DQ.claimContributionToDiff
+  mayContributionId <- PG.runTransaction DQ.claimContributionToDiff
   for_ mayContributionId (diffContribution authZReceipt)
   case mayContributionId of
     Just contributionId -> do
