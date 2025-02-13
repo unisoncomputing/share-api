@@ -240,7 +240,7 @@ jobs:
 
           # Install ucm
           mkdir ucm
-          curl -L https://github.com/unisonweb/unison/releases/download/release%2F0.5.33/ucm-linux.tar.gz | tar -xz -C ucm
+          curl -L https://github.com/unisonweb/unison/releases/download/release%2F0.5.33/ucm-linux-x64.tar.gz | tar -xz -C ucm
           export PATH=$PWD/ucm:$PATH
 
           # Clean up old postgres data if it exists.
