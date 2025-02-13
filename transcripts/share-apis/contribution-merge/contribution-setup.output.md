@@ -1,6 +1,12 @@
 Add a change to a contributor branch, based on the main branch.
 
-``` unison
+``` ucm :hide
+scratch/main> clone @transcripts/merge/main
+
+@transcripts/merge/main> branch @test/fast-forward-feature
+```
+
+``` unison :hide
 term = "feature"
 ```
 
@@ -8,9 +14,6 @@ Push the feature branch.
 
 ``` ucm
 @transcripts/merge/@test/fast-forward-feature> update
-
-  Okay, I'm searching the branch for code that needs to be
-  updated...
 
   Done.
 
@@ -22,5 +25,4 @@ Push the feature branch.
   on http://localhost:5424
 
   View it here: @transcripts/merge/@test/fast-forward-feature on http://localhost:5424
-
 ```

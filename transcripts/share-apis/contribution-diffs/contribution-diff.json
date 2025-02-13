@@ -99,7 +99,11 @@
                     },
                     {
                       "annotation": null,
-                      "segment": " "
+                      "segment": "\n"
+                    },
+                    {
+                      "annotation": null,
+                      "segment": "  "
                     },
                     {
                       "annotation": {
@@ -197,7 +201,11 @@
                     },
                     {
                       "annotation": null,
-                      "segment": " "
+                      "segment": "\n"
+                    },
+                    {
+                      "annotation": null,
+                      "segment": "  "
                     },
                     {
                       "annotation": {
@@ -295,7 +303,11 @@
                     },
                     {
                       "annotation": null,
-                      "segment": " "
+                      "segment": "\n"
+                    },
+                    {
+                      "annotation": null,
+                      "segment": "  "
                     },
                     {
                       "annotation": {
@@ -397,7 +409,11 @@
                     },
                     {
                       "annotation": null,
-                      "segment": " "
+                      "segment": "\n"
+                    },
+                    {
+                      "annotation": null,
+                      "segment": "  "
                     },
                     {
                       "annotation": {
@@ -494,7 +510,11 @@
                           },
                           {
                             "annotation": null,
-                            "segment": " "
+                            "segment": "\n"
+                          },
+                          {
+                            "annotation": null,
+                            "segment": "  "
                           }
                         ]
                       },
@@ -617,7 +637,11 @@
                       },
                       {
                         "annotation": null,
-                        "segment": " "
+                        "segment": "\n"
+                      },
+                      {
+                        "annotation": null,
+                        "segment": "  "
                       },
                       {
                         "annotation": {
@@ -704,7 +728,11 @@
                       },
                       {
                         "annotation": null,
-                        "segment": " "
+                        "segment": "\n"
+                      },
+                      {
+                        "annotation": null,
+                        "segment": "  "
                       },
                       {
                         "annotation": {
