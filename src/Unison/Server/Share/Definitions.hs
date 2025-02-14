@@ -33,7 +33,6 @@ import Unison.Codebase.Path qualified as Path
 import Unison.ConstructorReference qualified as ConstructorReference
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration.Dependencies qualified as DD
-import Unison.Debug qualified as Debug
 import Unison.HashQualified qualified as HQ
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
@@ -96,7 +95,6 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
     go = do
       rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
       (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
-      Debug.debugM Debug.Server "definitionForHQName: (namesPerspective, query)" (namesPerspective, query)
       -- Bias towards both relative and absolute path to queries,
       -- This allows us to still bias towards definitions outside our namesRoot but within the
       -- same tree;
@@ -108,17 +106,14 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
       let ppedBuilder deps = (PPED.biasTo biases) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
       let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
       dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery nameSearch [query]
-      Debug.debugM Debug.Server "definitionForHQName: found definitions" dr
       let width = mayDefaultWidth renderWidth
       let docResults :: Name -> Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
           docResults name = do
-            Debug.debugM Debug.Server "definitionForHQName: looking up docs for name" name
             -- We need to re-lookup the names perspective here because the name we've found
             -- may now be in a lib.
             namesPerspective <- NameLookupOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (NL.nameToPathSegments name)
             let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
             docRefs <- Docs.docsForDefinitionName nameSearch name
-            Debug.debugM Debug.Server "definitionForHQName: Found these docs" docRefs
             renderDocRefs ppedBuilder width rt docRefs
 
       let drDeps = Backend.definitionResultsDependencies dr
@@ -127,14 +122,12 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
       typeDefinitions <-
         ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
           let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
-          Debug.debugM Debug.Temp "definitionForHQName: hqTypeName " (ref, hqTypeName)
           docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
           lift $ Backend.mkTypeDefinition termAndTypePPED width ref docs tp
       termDefinitions <-
         ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
           let referent = Referent.Ref reference
           let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
-          Debug.debugM Debug.Temp "definitionForHQName: hqTermName " (reference, hqTermName)
           docs <- maybe (pure []) docResults (HQ.toName hqTermName)
           Backend.mkTermDefinition termAndTypePPED width reference docs trm
       let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
