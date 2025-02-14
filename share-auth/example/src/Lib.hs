@@ -8,6 +8,10 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Time (DiffTime)
 import Database.Redis qualified as R
+import GHC.Stack (HasCallStack)
+import Network.URI qualified as URI
+import Network.Wai.Handler.Warp qualified as Warp
+import Servant
 import Share.JWT qualified as JWT
 import Share.OAuth.API (ServiceProviderAPI)
 import Share.OAuth.IdentityProvider.Share qualified as Share
@@ -18,10 +22,6 @@ import Share.OAuth.ServiceProvider qualified as Auth
 import Share.OAuth.Session (AuthCheckCtx, AuthenticatedUserId, MaybeAuthenticatedUserId, addAuthCheckCtx)
 import Share.OAuth.Types (OAuthClientId (..), OAuthClientSecret (OAuthClientSecret), RedirectReceiverErr, UserId)
 import Share.Utils.Servant.Cookies qualified as Cookies
-import GHC.Stack (HasCallStack)
-import Network.URI qualified as URI
-import Network.Wai.Handler.Warp qualified as Warp
-import Servant
 import UnliftIO
 
 -- | An example application endpoint which is optionally authenticated.
@@ -44,7 +44,7 @@ type MyAPI =
     :<|> "error" :> ErrorEndpoint
 
 -- | A handler which checks if the user is authenticated.
-mayAuthedEndpoint :: MonadIO m => Maybe UserId -> m String
+mayAuthedEndpoint :: (MonadIO m) => Maybe UserId -> m String
 mayAuthedEndpoint mayCallerUserId = do
   case mayCallerUserId of
     Nothing -> pure "no user"
@@ -52,22 +52,22 @@ mayAuthedEndpoint mayCallerUserId = do
       pure $ "Hello, " <> show userId
 
 -- | A handler which requires an authenticated user.
-authedEndpoint :: MonadIO m => UserId -> m String
+authedEndpoint :: (MonadIO m) => UserId -> m String
 authedEndpoint callerUserId = do
   pure $ "Hello, " <> show callerUserId
 
 -- | A handler which displays errors from the OAuth2 flow.
-errorEndpoint :: Applicative m => Maybe String -> m String
+errorEndpoint :: (Applicative m) => Maybe String -> m String
 errorEndpoint err = do
   pure $ fromMaybe "no error" err
 
 -- | A helper function for constructing URIs from constant strings.
-unsafeURI :: HasCallStack => String -> URI.URI
+unsafeURI :: (HasCallStack) => String -> URI.URI
 unsafeURI = fromJust . URI.parseURI
 
 -- | A session callback which redirects the user to either an error page
 -- or the authed handler endpoint depending on whether the oauth2 login succeeds.
-mySessionCallback :: Applicative m => Either RedirectReceiverErr SessionCallbackData -> m URI
+mySessionCallback :: (Applicative m) => Either RedirectReceiverErr SessionCallbackData -> m URI
 mySessionCallback (Left err) = pure . fromJust . URI.parseURI $ "http://cloud:3030/error?error=" <> show err
 mySessionCallback (Right _session) = pure $ unsafeURI "http://cloud:3030/authed"
 
@@ -78,7 +78,12 @@ main = do
   redisConn <- R.checkedConnect R.defaultConnectInfo
   putStrLn "booting up"
 
-  Warp.run 3030 $ serveWithContext (Proxy @MyAPI) ctx (myServer redisConn)
+  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) rotatedKeys acceptedAudiences issuer of
+    Left cryptoError -> throwIO cryptoError
+    Right jwtS -> do
+      pure jwtS
+
+  Warp.run 3030 $ serveWithContext (Proxy @MyAPI) (ctx jwtSettings) (myServer redisConn jwtSettings)
   putStrLn "exiting"
   pure ()
   where
@@ -87,18 +92,18 @@ main = do
     apiProxy :: Proxy MyAPI
     apiProxy = Proxy
     -- The api context required by servant-auth
-    appCtx :: (Context '[Cookies.CookieSettings, JWT.JWTSettings])
-    appCtx = cookieSettings :. jwtSettings :. EmptyContext
+    appCtx :: JWT.JWTSettings -> (Context '[Cookies.CookieSettings, JWT.JWTSettings])
+    appCtx jwtSettings = cookieSettings :. jwtSettings :. EmptyContext
     sessionCookieKey :: Text
     sessionCookieKey = "session"
-    ctx :: Context (AuthCheckCtx .++ '[Cookies.CookieSettings, JWT.JWTSettings])
-    ctx = addAuthCheckCtx cookieSettings jwtSettings "session" appCtx
-    serviceProviderEndpoints :: ServerT ServiceProviderAPI R.Redis
-    serviceProviderEndpoints = Auth.serviceProviderServer Share.localShareIdentityProvider spConfig mySessionCallback
-    myServer :: R.Connection -> Server MyAPI
-    myServer conn =
+    ctx :: JWT.JWTSettings -> Context (AuthCheckCtx .++ '[Cookies.CookieSettings, JWT.JWTSettings])
+    ctx jwtSettings = addAuthCheckCtx cookieSettings jwtSettings "session" (appCtx jwtSettings)
+    serviceProviderEndpoints :: JWT.JWTSettings -> ServerT ServiceProviderAPI R.Redis
+    serviceProviderEndpoints jwtSettings = Auth.serviceProviderServer Share.localShareIdentityProvider (spConfig jwtSettings) mySessionCallback
+    myServer :: R.Connection -> JWT.JWTSettings -> Server MyAPI
+    myServer conn jwtSettings =
       Servant.hoistServerWithContext apiProxy ctxProxy (unRedis conn) $
-        serviceProviderEndpoints
+        serviceProviderEndpoints jwtSettings
           :<|> mayAuthedEndpoint
           :<|> authedEndpoint
           :<|> errorEndpoint
@@ -108,10 +113,8 @@ main = do
     cookieDefaultTTL = Just $ 60 * 60 * 24 * 7 -- 1 week
     cookieSettings :: Cookies.CookieSettings
     cookieSettings = Cookies.defaultCookieSettings onLocal cookieDefaultTTL
-    jwtSettings :: JWT.JWTSettings
-    jwtSettings = JWT.defaultJWTSettings hs256Key acceptedAudiences issuer
-    spConfig :: ServiceProviderConfig
-    spConfig =
+    spConfig :: JWT.JWTSettings -> ServiceProviderConfig
+    spConfig jwtSettings =
       ServiceProviderConfig
         { cookieSettings,
           jwtSettings = jwtSettings,
@@ -124,7 +127,13 @@ main = do
           sessionCookieKey
         }
     onLocal = True
-    hs256Key = "gpeakbroleymbscyqzrcalpemrjayhur"
+    -- Ensure you use cryptographically secure 32-byte keys in production use.
+    -- And don't re-use keys.
+    hs256Key = "example-32-byte-hs256Key-jayhuxr"
+    edDSAKey = "example-32-byte-edDSAKey-dxencne"
+    legacyKey = JWT.KeyDescription {JWT.key = hs256Key, JWT.alg = JWT.HS256}
+    signingKey = JWT.KeyDescription {JWT.key = edDSAKey, JWT.alg = JWT.Ed25519}
+    rotatedKeys = Set.empty
     api = unsafeURI "http://cloud:3030"
     serviceAudience = api
     acceptedAudiences = Set.singleton serviceAudience

@@ -27,6 +27,7 @@ import Witch (into)
 data DebugFlag
   = Timing
   | Queries
+  | Temp
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 debugFlags :: Set DebugFlag
@@ -38,6 +39,7 @@ debugFlags = case (unsafePerformIO (lookupEnv "SHARE_DEBUG")) of
     case Text.toUpper . Text.strip $ w of
       "TIMING" -> pure Timing
       "QUERIES" -> pure Queries
+      "TEMP" -> pure Temp
       _ -> mempty
 {-# NOINLINE debugFlags #-}
 
@@ -48,6 +50,10 @@ debugTiming = Timing `Set.member` debugFlags
 debugQueries :: Bool
 debugQueries = Queries `Set.member` debugFlags
 {-# NOINLINE debugQueries #-}
+
+debugTemp :: Bool
+debugTemp = Temp `Set.member` debugFlags
+{-# NOINLINE debugTemp #-}
 
 -- | Use for trace-style selective debugging.
 -- E.g. 1 + (debug Sync "The second number" 2)
@@ -90,3 +96,4 @@ shouldDebug :: DebugFlag -> Bool
 shouldDebug = \case
   Timing -> debugTiming
   Queries -> debugQueries
+  Temp -> debugTemp
