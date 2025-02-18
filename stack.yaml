@@ -1,42 +1,9 @@
 resolver: lts-22.26
 
 packages:
-- .
 - share-auth
 - share-auth/example
 - share-utils
-- unison/codebase2/codebase
-- unison/codebase2/codebase-sqlite
-- unison/codebase2/codebase-sqlite-hashing-v2
-- unison/codebase2/codebase-sync
-- unison/codebase2/core
-- unison/codebase2/util-serialization
-- unison/codebase2/util-term
-- unison/lib/orphans/network-uri-orphans-sqlite
-- unison/lib/orphans/unison-core-orphans-sqlite
-- unison/lib/orphans/unison-hash-orphans-aeson
-- unison/lib/orphans/unison-hash-orphans-sqlite
-- unison/lib/orphans/uuid-orphans-sqlite
-- unison/lib/unison-hash
-- unison/lib/unison-hashing
-- unison/lib/unison-prelude
-- unison/lib/unison-pretty-printer
-- unison/lib/unison-sqlite
-- unison/lib/unison-util-base32hex
-- unison/lib/unison-util-bytes
-- unison/lib/unison-util-cache
-- unison/lib/unison-util-file-embed
-- unison/lib/unison-util-recursion
-- unison/lib/unison-util-relation
-- unison/lib/unison-util-rope
-- unison/parser-typechecker
-- unison/unison-core
-- unison/unison-hashing-v2
-- unison/unison-runtime
-- unison/unison-share-api
-- unison/unison-share-projects-api
-- unison/unison-syntax
-- unison/yaks/easytest
 
 extra-deps:
 # wrong version in snapshot

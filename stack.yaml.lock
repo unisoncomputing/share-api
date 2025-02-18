@@ -82,9 +82,9 @@ packages:
   original:
     hackage: hasql-pool-1.2.0.2
 - completed:
-    hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
+    hackage: hasql-interpolate-1.0.1.0@sha256:a31848665e8f9d96c369f536a4cb00137dc288bcf02401f5b25977b165e58836,3331
     pantry-tree:
-      sha256: f7d9f29c576c4d36cb2f44d2f9a672e08e84d79060928aa9ed005e9e30c35202
+      sha256: 0b1a4ef29f2515ba3eb70f88b93baaf0652672d477602eaf024501e4c8f5633b
       size: 1276
   original:
     hackage: hasql-interpolate-1.0.1.0

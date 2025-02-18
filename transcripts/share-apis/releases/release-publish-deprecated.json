@@ -1,8 +1,0 @@
-{
-  "body": "Cannot publish a release which has already been deprecated",
-  "status": [
-    {
-      "status_code": 400
-    }
-  ]
-}
