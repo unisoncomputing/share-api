@@ -17,18 +17,18 @@ data DiscoveryDocument = DiscoveryDocument
     authorizationE :: URIParam,
     tokenE :: URIParam,
     userInfoE :: URIParam,
-    -- We should probably support this eventually
-    -- jwksURI :: URIParam
+    jwksURI :: URIParam,
     responseTypesSupported :: Set ResponseType
   }
 
 instance ToJSON DiscoveryDocument where
-  toJSON (DiscoveryDocument issuer authE tokenE userInfoE responseTypesSupported) =
+  toJSON (DiscoveryDocument issuer authE tokenE userInfoE jwksURI responseTypesSupported) =
     Aeson.object
       [ "issuer" .= issuer,
         "authorization_endpoint" .= authE,
         "token_endpoint" .= tokenE,
         "userinfo_endpoint" .= userInfoE,
+        "jwks_uri" .= jwksURI,
         "response_types_supported" .= responseTypesSupported
       ]
 
