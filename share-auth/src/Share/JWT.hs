@@ -16,6 +16,7 @@ module Share.JWT
     textToSignedJWT,
     signedJWTToText,
     createSignedCookie,
+    publicJWKSet,
 
     -- * Re-exports
     CryptoError (..),
@@ -72,6 +73,18 @@ data JWTSettings = JWTSettings
     issuer :: URI
   }
   deriving (Show) via Censored JWTSettings
+
+-- | Get the JWK Set value which is safe to expose to the public, e.g. in a JWKS endpoint.
+-- This will only include public keys.
+--
+-- Note that this will not include the legacy key or any HS256 keys, since those don't have a
+-- safe public component.
+publicJWKSet :: JWTSettings -> JWK.JWKSet
+publicJWKSet JWTSettings {validationKeys = KeyMap {byKeyId}} =
+  JWK.JWKSet
+    ( byKeyId
+        & foldMap (\jwk -> jwk ^.. JWK.asPublicKey . _Just)
+    )
 
 data SupportedAlg = HS256 | Ed25519
   deriving (Eq, Ord)
