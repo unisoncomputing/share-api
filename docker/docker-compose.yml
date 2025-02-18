@@ -53,6 +53,7 @@ services:
       - SHARE_REDIS=redis://redis:6379
       - SHARE_POSTGRES=postgresql://postgres:sekrit@postgres:5432
       - SHARE_HMAC_KEY=test-key-test-key-test-key-test-key-
+      - SHARE_EDDSA_KEY=eddsa-key-test-key-test-key-test
       - SHARE_DEPLOYMENT=local
       - SHARE_POSTGRES_CONN_TTL=30
       - SHARE_POSTGRES_CONN_MAX=10
