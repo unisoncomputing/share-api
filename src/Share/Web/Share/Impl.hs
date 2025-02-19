@@ -35,6 +35,7 @@ import Share.Utils.API
 import Share.Utils.Caching
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
+import Share.Utils.URI (URIParam (..))
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
@@ -363,8 +364,8 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
     pure (users, projects)
   let userResults =
         users
-          <&> \User {user_name, avatar_url, handle} ->
-            SearchResultUser handle user_name avatar_url
+          <&> \User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId} ->
+            SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
   let projectResults =
         projects
           <&> \(Project {slug, summary, visibility}, ownerHandle) ->

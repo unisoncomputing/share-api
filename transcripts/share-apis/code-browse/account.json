@@ -8,7 +8,11 @@
       "unison"
     ],
     "primaryEmail": "transcripts@example.com",
-    "userId": "U-43efd5e7-139a-40b2-8a35-3f99b054dc84"
+    "userId": "U-<UUID>"
   },
-  "status": 200
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
 }

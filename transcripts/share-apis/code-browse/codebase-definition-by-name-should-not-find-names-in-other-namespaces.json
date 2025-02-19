@@ -6,5 +6,9 @@
     "termDefinitions": {},
     "typeDefinitions": {}
   },
-  "status": 200
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
 }
