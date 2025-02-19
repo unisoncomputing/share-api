@@ -156,8 +156,7 @@ instance ToJSON UserDisplayInfo where
         "userId" Aeson..= userId
       ]
 
-data DefinitionNameSearchResult
-  = DefinitionNameSearchResult
+data DefinitionNameSearchResult = DefinitionNameSearchResult
   { token :: Name,
     tag :: TermOrTypeTag
   }
@@ -179,8 +178,7 @@ instance ToJSON DefinitionSearchResults where
       [ "results" .= results
       ]
 
-data DefinitionSearchResult
-  = DefinitionSearchResult
+data DefinitionSearchResult = DefinitionSearchResult
   { fqn :: Name,
     summary :: DefSync.TermOrTypeSummary,
     project :: ProjectShortHand,
