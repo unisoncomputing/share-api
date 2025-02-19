@@ -10,7 +10,7 @@ import Unison.Share.API.Hash (HashJWTClaims)
 
 signHashJWT :: HashJWTClaims -> WebApp SignedJWT
 signHashJWT claims = do
-  jSettings <- asks Env.jwtSettings
-  JWT.signJWT jSettings claims >>= \case
+  hashJWTJWK <- asks Env.hashJWTJWK
+  JWT.signJWTWithJWK hashJWTJWK claims >>= \case
     Left err -> respondError (InternalServerError "jwt:signing-error" err)
     Right a -> pure a

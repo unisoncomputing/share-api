@@ -91,8 +91,14 @@ withEnv action = do
   let acceptedAudiences = Set.singleton apiOrigin
   let legacyKey = JWT.KeyDescription {JWT.key = hs256Key, JWT.alg = JWT.HS256}
   let signingKey = JWT.KeyDescription {JWT.key = edDSAKey, JWT.alg = JWT.Ed25519}
-  let rotatedKeys = Set.empty
-  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) rotatedKeys acceptedAudiences apiOrigin of
+  hashJWTJWK <- case JWT.keyDescToJWK legacyKey of
+    Left err -> throwIO err
+    Right (_thumbprint, jwk) -> pure jwk
+  -- I explicitly add the legacy key to the validation keys, so that the thumbprinted
+  -- version of the key is used for validation, which is needed for HashJWTs which are signed
+  -- with a 'kid'.
+  let validationKeys = Set.fromList [legacyKey]
+  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) validationKeys acceptedAudiences apiOrigin of
     Left cryptoError -> throwIO cryptoError
     Right settings -> pure settings
   let cookieSettings = Cookies.defaultCookieSettings Deployment.onLocal (Just (realToFrac cookieSessionTTL))

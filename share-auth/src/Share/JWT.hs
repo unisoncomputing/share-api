@@ -10,7 +10,9 @@ module Share.JWT
     ServantAuth.ToJWT (..),
     ServantAuth.FromJWT (..),
     signJWT,
+    signJWTWithJWK,
     verifyJWT,
+    keyDescToJWK,
 
     -- * Additional Helpers
     textToSignedJWT,
@@ -97,7 +99,8 @@ newtype KeyThumbprint = KeyThumbprint Text
 
 data KeyMap = KeyMap
   { byKeyId :: (Map KeyThumbprint JWT.JWK),
-    -- | The key from before the introduction of key ids. This will be used to verify legacy tokens, but can eventually be removed.
+    -- | The key from before the introduction of key ids.
+    -- This will be used to verify legacy tokens, but is also used to sign HashJWTs on share.
     legacyKey :: Maybe JWT.JWK
   }
   deriving (Show) via (Censored KeyMap)
@@ -134,11 +137,11 @@ defaultJWTSettings ::
   -- E.g. https://api.unison-lang.org
   URI ->
   Either CryptoError JWTSettings
-defaultJWTSettings signingKey legacyKey oldValidKeys acceptedAudiences issuer = toEither do
-  sjwk@(_, signingJWK) <- toJWK signingKey
-  verificationJWKs <- (sjwk :) <$> traverse toJWK (Set.toList oldValidKeys)
+defaultJWTSettings signingKey legacyKey oldValidKeys acceptedAudiences issuer = do
+  sjwk@(_, signingJWK) <- keyDescToJWK signingKey
+  verificationJWKs <- (sjwk :) <$> traverse keyDescToJWK (Set.toList oldValidKeys)
   let byKeyId = Map.fromList verificationJWKs
-  legacyKey <- traverse toJWK legacyKey <&> fmap snd
+  legacyKey <- traverse keyDescToJWK legacyKey <&> fmap snd
   pure $
     JWTSettings
       { signingJWK,
@@ -148,31 +151,33 @@ defaultJWTSettings signingKey legacyKey oldValidKeys acceptedAudiences issuer = 
         acceptedAudiences,
         issuer
       }
+
+-- | Converts a 'KeyDescription' to a 'JWK' and a 'KeyThumbprint'.
+keyDescToJWK :: KeyDescription -> Either CryptoError (KeyThumbprint, JWK.JWK)
+keyDescToJWK (KeyDescription {key, alg}) = cryptoFailableToEither $ do
+  case alg of
+    HS256 -> do
+      let jwk =
+            JWK.fromOctets key
+              & JWK.jwkUse .~ Just JWK.Sig
+              & JWK.jwkAlg .~ Just (JWK.JWSAlg JWS.HS256)
+      let thumbprint = jwkThumbprint jwk
+      pure (KeyThumbprint thumbprint, jwk & JWK.jwkKid .~ Just thumbprint)
+    Ed25519 -> do
+      privKey <- Ed25519.secretKey key
+      let pubKey = Ed25519.toPublic privKey
+      let jwk =
+            (JWT.Ed25519Key pubKey (Just privKey))
+              & JWT.OKPKeyMaterial
+              & JWK.fromKeyMaterial
+              & JWK.jwkUse .~ Just JWK.Sig
+              & JWK.jwkAlg .~ Just (JWK.JWSAlg JWS.EdDSA)
+      let thumbprint = jwkThumbprint jwk
+      pure (KeyThumbprint thumbprint, jwk & JWK.jwkKid .~ Just thumbprint)
   where
-    toEither :: CryptoFailable a -> Either CryptoError a
-    toEither (CryptoFailed err) = Left err
-    toEither (CryptoPassed a) = Right a
-    toJWK :: KeyDescription -> CryptoFailable (KeyThumbprint, JWK.JWK)
-    toJWK (KeyDescription {key, alg}) =
-      case alg of
-        HS256 -> do
-          let jwk =
-                JWK.fromOctets key
-                  & JWK.jwkUse .~ Just JWK.Sig
-                  & JWK.jwkAlg .~ Just (JWK.JWSAlg JWS.HS256)
-          let thumbprint = jwkThumbprint jwk
-          pure (KeyThumbprint thumbprint, jwk & JWK.jwkKid .~ Just thumbprint)
-        Ed25519 -> do
-          privKey <- Ed25519.secretKey key
-          let pubKey = Ed25519.toPublic privKey
-          let jwk =
-                (JWT.Ed25519Key pubKey (Just privKey))
-                  & JWT.OKPKeyMaterial
-                  & JWK.fromKeyMaterial
-                  & JWK.jwkUse .~ Just JWK.Sig
-                  & JWK.jwkAlg .~ Just (JWK.JWSAlg JWS.EdDSA)
-          let thumbprint = jwkThumbprint jwk
-          pure (KeyThumbprint thumbprint, jwk & JWK.jwkKid .~ Just thumbprint)
+    cryptoFailableToEither :: CryptoFailable a -> Either CryptoError a
+    cryptoFailableToEither (CryptoFailed err) = Left err
+    cryptoFailableToEither (CryptoPassed a) = Right a
 
     jwkThumbprint :: JWK.JWK -> Text
     jwkThumbprint jwk =
@@ -216,10 +221,15 @@ textToSignedJWT jwtText = JWT.decodeCompact (TL.encodeUtf8 . TL.fromStrict $ jwt
 
 -- | Signs and encodes a JWT using the given 'JWTSettings'.
 signJWT :: forall m v. (MonadIO m, ServantAuth.ToJWT v) => JWTSettings -> v -> m (Either JWT.JWTError JWT.SignedJWT)
-signJWT JWTSettings {signingJWK} v = runExceptT $ do
+signJWT JWTSettings {signingJWK} v = signJWTWithJWK signingJWK v
+
+-- | Signs and encodes a JWT using the given JWK, you should typically use 'signJWT' instead
+-- unless you have a specific reason to use a different JWK.
+signJWTWithJWK :: forall m v. (MonadIO m, ServantAuth.ToJWT v) => JWK.JWK -> v -> m (Either JWT.JWTError JWT.SignedJWT)
+signJWTWithJWK jwk v = runExceptT $ do
   let claimsSet = ServantAuth.encodeJWT v
-  jwtHeader <- mapExceptT liftIO (JWT.makeJWSHeader signingJWK)
-  mapExceptT liftIO (JWT.signClaims signingJWK jwtHeader claimsSet)
+  jwtHeader <- mapExceptT liftIO (JWT.makeJWSHeader jwk)
+  mapExceptT liftIO (JWT.signClaims jwk jwtHeader claimsSet)
 
 -- | Decodes a JWT and verifies the following:
 -- * algorithm (except for legacy tokens)
