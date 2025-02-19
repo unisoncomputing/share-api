@@ -5,7 +5,11 @@
     "name": "Transcript User",
     "picture": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
     "profile": "http://localhost:1234/@transcripts",
-    "sub": "U-43efd5e7-139a-40b2-8a35-3f99b054dc84"
+    "sub": "U-<UUID>"
   },
-  "status": 200
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
 }

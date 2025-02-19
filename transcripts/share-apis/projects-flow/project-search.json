@@ -4,7 +4,8 @@
       "avatarUrl": null,
       "handle": "test",
       "name": null,
-      "tag": "User"
+      "tag": "User",
+      "userId": "U-<UUID>"
     },
     {
       "projectRef": "@test/publictestproject",

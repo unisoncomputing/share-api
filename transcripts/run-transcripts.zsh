@@ -2,6 +2,8 @@
 
 set -e
 
+unset UNISON_SYNC_VERSION
+
 while ! (  curl http://localhost:5424/health > /dev/null 2> /dev/null )  do \
     echo "Waiting for share server to come up, did you run 'make serve'?"; \
     sleep 1; \
