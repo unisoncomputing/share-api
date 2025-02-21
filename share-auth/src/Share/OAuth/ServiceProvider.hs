@@ -9,7 +9,7 @@ module Share.OAuth.ServiceProvider
     serviceProviderServer,
     Cookies.defaultCookieSettings,
     JWT.defaultJWTSettings,
-    JWT.JWTSettings (..),
+    JWT.JWTSettings,
     verifySessionToken,
     -- Endpoints
     loginEndpoint,

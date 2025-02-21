@@ -3,6 +3,7 @@ module Share.Env
   )
 where
 
+import Crypto.JOSE.JWK qualified as JWK
 import Database.Redis qualified as R
 import Hasql.Pool qualified as Hasql
 import Network.URI (URI)
@@ -34,6 +35,7 @@ data Env ctx = Env
     githubClientID :: Text,
     githubClientSecret :: Text,
     jwtSettings :: JWT.JWTSettings,
+    hashJWTJWK :: JWK.JWK,
     cookieSettings :: Cookies.CookieSettings,
     sessionCookieKey :: Text,
     sandboxedRuntime :: Runtime Symbol,

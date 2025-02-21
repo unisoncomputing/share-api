@@ -3,6 +3,7 @@
 
 module Share.Web.API where
 
+import Crypto.JOSE.JWK qualified as JWK
 import Servant
 import Share.OAuth.API qualified as OAuth
 import Share.OAuth.Session (MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
@@ -27,8 +28,15 @@ type API =
     :<|> ("search-definitions" :> Share.SearchDefinitionsEndpoint)
     :<|> ("account" :> Share.AccountAPI)
     :<|> ("catalog" :> Projects.CatalogAPI)
-    -- This path is part of the standard: https://datatracker.ietf.org/doc/html/rfc5785
-    :<|> (".well-known" :> "openid-configuration" :> DiscoveryEndpoint)
+    :<|> ( ".well-known"
+             :> (
+                  -- This path is part of the standard: https://datatracker.ietf.org/doc/html/rfc5785
+                  ("openid-configuration" :> DiscoveryEndpoint)
+                    -- This path is convention, the location is provided explicitly as part of
+                    -- the discovery document's jwks_uri field.
+                    :<|> ("jwks.json" :> JWKSEndpoint)
+                )
+         )
     :<|> ("user-info" :> UserInfoEndpoint)
     :<|> ("support" :> Support.API)
     :<|> ("local" :> Local.API)
@@ -46,6 +54,9 @@ api = Proxy @API
 -- | https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationRequest
 type DiscoveryEndpoint =
   Get '[JSON] DiscoveryDocument
+
+type JWKSEndpoint =
+  Get '[JSON] JWK.JWKSet
 
 type UserInfoEndpoint =
   MaybeAuthenticatedSession :> Get '[JSON] UserInfo

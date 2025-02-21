@@ -63,13 +63,14 @@ dependencies:
 - mtl
 - transformers
 - aeson
+- base64-bytestring
 - binary
 - binary-instances
 - bytestring
 - case-insensitive
 - containers
 - cookie
-- cryptonite
+- crypton
 - share-utils
 - hasql
 - hasql-interpolate
