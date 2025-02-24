@@ -37,7 +37,6 @@ import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.SyncV2.Queries qualified as SSQ
 import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.Orphans ()
-import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWTClaims (..))
 import Unison.SyncV2.API qualified as SyncV2
@@ -112,11 +111,8 @@ causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {
       Logging.logInfoText "Starting causal dependencies stream"
       Codebase.runCodebaseTransaction codebase $ do
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
-        Debug.debugLogM Debug.Temp "Getting cursor"
         cursor <- SSQ.spineAndLibDependenciesOfCausalCursor causalId
-        Debug.debugLogM Debug.Temp "Folding cursor"
         Cursor.foldBatched cursor batchSize \batch -> do
-          Debug.debugLogM Debug.Temp "Got batch"
           let depBatch =
                 batch <&> \(causalHash, isCausalSpine, isLibRoot) ->
                   let dependencyType = case (isCausalSpine, isLibRoot) of

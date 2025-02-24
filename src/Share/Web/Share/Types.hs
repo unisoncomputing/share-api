@@ -89,19 +89,19 @@ instance ToJSON DocResponse where
       ]
 
 data SearchResult
-  = -- | handle displayName avatarUrl
-    SearchResultUser UserHandle (Maybe Text) (Maybe URIParam)
+  = SearchResultUser UserDisplayInfo
   | -- | shorthand summary visibility
     SearchResultProject ProjectShortHand (Maybe Text) ProjectVisibility
   deriving (Show)
 
 instance ToJSON SearchResult where
   toJSON = \case
-    SearchResultUser handle name avatarUrl ->
+    SearchResultUser (UserDisplayInfo {handle, name, avatarUrl, userId}) ->
       Aeson.object
         [ "handle" .= fromId @UserHandle @Text handle,
           "name" .= name,
           "avatarUrl" .= avatarUrl,
+          "userId" .= userId,
           "tag" .= ("User" :: Text)
         ]
     SearchResultProject shorthand summary visibility ->
@@ -156,8 +156,7 @@ instance ToJSON UserDisplayInfo where
         "userId" Aeson..= userId
       ]
 
-data DefinitionNameSearchResult
-  = DefinitionNameSearchResult
+data DefinitionNameSearchResult = DefinitionNameSearchResult
   { token :: Name,
     tag :: TermOrTypeTag
   }
@@ -179,8 +178,7 @@ instance ToJSON DefinitionSearchResults where
       [ "results" .= results
       ]
 
-data DefinitionSearchResult
-  = DefinitionSearchResult
+data DefinitionSearchResult = DefinitionSearchResult
   { fqn :: Name,
     summary :: DefSync.TermOrTypeSummary,
     project :: ProjectShortHand,

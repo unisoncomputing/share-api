@@ -10,6 +10,7 @@ module Share.Postgres.NameLookups.Types
     NameLookupReceipt (..),
     pathSegmentsToText,
     textToPathSegments,
+    nameToPathSegments,
     reversedNameToNamespaceText,
     reversedNameToPathSegments,
     prefixNamedRef,
@@ -23,6 +24,7 @@ module Share.Postgres.NameLookups.Types
 where
 
 import Control.Lens hiding (from)
+import Data.Foldable qualified as Foldable
 import Data.List.Extra qualified as List
 import Data.List.NonEmpty.Extra qualified as NonEmpty
 import Data.Text qualified as Text
@@ -34,6 +36,7 @@ import Share.Prelude
 import U.Codebase.Referent (ConstructorType)
 import Unison.Name (Name)
 import Unison.Name qualified as Name
+import Unison.NameSegment qualified as NameSegment
 import Unison.NameSegment.Internal (NameSegment (..))
 
 -- | Proof that we've checked that a given name lookup exists before we try to use it.
@@ -123,6 +126,11 @@ type NamespaceText = Text
 -- "base.data.List"
 pathSegmentsToText :: PathSegments -> Text
 pathSegmentsToText (PathSegments txt) = Text.intercalate "." txt
+
+-- >>> nameToPathSegments (Name.fromSegments (NameSegment "base" :| [NameSegment "data", NameSegment "List"]))
+-- PathSegments ["base","data","List"]
+nameToPathSegments :: Name -> PathSegments
+nameToPathSegments name = (PathSegments . Foldable.toList . fmap NameSegment.toUnescapedText $ Name.segments name)
 
 -- |
 -- >>> textToPathSegments "base.data.List"
