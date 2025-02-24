@@ -1,3 +1,9 @@
+``` ucm :hide
+scratch/main> project.create-empty proj
+
+proj/main> builtins.merge
+```
+
 Create some types and values with deep-dependencies and cycles to ensure we have non-trivial components.
 
 ``` unison
@@ -16,14 +22,13 @@ xs = [a, b]
 ys = [!a, !b] :+ 3
 ```
 
-``` ucm
-
+``` ucm :added-by-ucm
   Loading changes detected in scratch.u.
 
   I found and typechecked these definitions in scratch.u. If you
   do an `add` or `update`, here's how your codebase would
   change:
-  
+
     ⍟ These new definitions are ok to `add`:
     
       type A
@@ -32,8 +37,12 @@ ys = [!a, !b] :+ 3
       b  : 'Nat
       xs : ['{g} Nat]
       ys : [Nat]
-
 ```
+
+``` ucm :hide
+proj/main> add
+```
+
 Push and pull it back.
 
 ``` ucm
@@ -48,13 +57,13 @@ proj/main> push @transcripts/proj/main
 proj/main> branch.create-empty pulled
 
   Done. I've created an empty branch proj/pulled.
-  
+
   Tip: Use `merge /somebranch` to initialize this branch.
 
 proj/pulled> pull @transcripts/proj/main
 
   ✅
-  
+
   Successfully pulled into proj/pulled, which was empty.
 
 proj/pulled> ls
@@ -68,9 +77,9 @@ proj/pulled> ls
   7. builtin/ (469 terms, 74 types)
   8. xs       (['{g} Nat])
   9. ys       ([Nat])
-
 ```
-``` unison
+
+``` unison :hide
 newValue = 99
 ```
 
@@ -80,7 +89,7 @@ Do a fast-forward push.
 proj/main> add
 
   ⍟ I've added these definitions:
-  
+
     newValue : Nat
 
 proj/main> push
@@ -88,20 +97,20 @@ proj/main> push
   Uploaded 3 entities.
 
   View it here: @transcripts/proj/main on http://localhost:5424
-
 ```
+
 Do a non-fast-forward push.
 
 ``` ucm
 proj/main> branch /diverge 
 
   Done. I've created the diverge branch based off of main.
-  
+
   Tip: To merge your work back into the main branch, first
        `switch /main` then `merge /diverge`.
-
 ```
-``` unison
+
+``` unison :hide
 diverge = 100
 ```
 
@@ -109,7 +118,7 @@ diverge = 100
 proj/main> add
 
   ⍟ I've added these definitions:
-  
+
     diverge : Nat
 
 proj/main> push @transcripts/proj/main
@@ -117,28 +126,28 @@ proj/main> push @transcripts/proj/main
   Uploaded 3 entities.
 
   View it here: @transcripts/proj/main on http://localhost:5424
-
 ```
-``` unison
+
+``` unison :hide
 diverge = 200
 ```
 
-``` ucm
+``` ucm :error
 proj/diverge> add
 
   ⍟ I've added these definitions:
-  
+
     diverge : Nat
 
 proj/diverge> push @transcripts/proj/main
 
   @transcripts/proj/main on http://localhost:5424 has some
   history that I don't know about.
-
 ```
+
 Pull to trigger local merge
 
-``` ucm
+``` ucm :error
 proj/diverge> pull @transcripts/proj/main
 
   Merging...
@@ -146,21 +155,21 @@ proj/diverge> pull @transcripts/proj/main
   I couldn't automatically merge remote @transcripts/proj/main
   into proj/diverge. However, I've added the definitions that
   need attention to the top of scratch.u.
-  
+
   When you're done, you can run
-  
+
     merge.commit
-  
+
   to merge your changes back into diverge and delete the
   temporary branch. Or, if you decide to cancel the merge
   instead, you can run
-  
-    delete.branch /merge-remote-main-into-diverge
-  
-  to delete the temporary branch and switch back to diverge.
 
+    delete.branch /merge-remote-main-into-diverge
+
+  to delete the temporary branch and switch back to diverge.
 ```
-``` unison:added-by-ucm scratch.u
+
+``` unison :added-by-ucm scratch.u
 -- proj/diverge
 diverge : Nat
 diverge = 200
@@ -170,4 +179,3 @@ diverge : Nat
 diverge = 100
 
 ```
-

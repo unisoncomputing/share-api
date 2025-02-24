@@ -9,5 +9,4 @@ scratch/main> clone @transcripts/merge/main
 
   term : ##Text
   term = "feature"
-
 ```

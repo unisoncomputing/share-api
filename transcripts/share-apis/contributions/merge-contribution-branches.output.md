@@ -12,6 +12,7 @@ scratch/main> clone @transcripts/bca-updates/feature-one
   Cloned @transcripts/bca-updates/feature-one.
 
 -- Merge the feature branch, then push the merged branch to main
+
 @transcripts/bca-updates/main> merge /feature-one
 
   I fast-forward merged @transcripts/bca-updates/feature-one
@@ -22,5 +23,4 @@ scratch/main> clone @transcripts/bca-updates/feature-one
   Uploaded 1 entities.
 
   View it here: @transcripts/bca-updates/main on http://localhost:5424
-
 ```

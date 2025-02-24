@@ -7,7 +7,11 @@ Let's set up a main branch with two feature branches:
 
 `main <- feature-one <- feature-two`
 
-``` unison
+``` ucm :hide
+scratch/main> project.create-empty bca-updates
+```
+
+``` unison :hide
 term = "start"
 ```
 
@@ -15,7 +19,7 @@ term = "start"
 bca-updates/main> add
 
   ⍟ I've added these definitions:
-  
+
     term : ##Text
 
 bca-updates/main> push @transcripts/bca-updates/main
@@ -30,20 +34,17 @@ bca-updates/main> push @transcripts/bca-updates/main
 bca-updates/main> branch /feature-one
 
   Done. I've created the feature-one branch based off of main.
-  
+
   Tip: To merge your work back into the main branch, first
        `switch /main` then `merge /feature-one`.
-
 ```
-``` unison
+
+``` unison :hide
 term = "feature-one"
 ```
 
 ``` ucm
 bca-updates/feature-one> update
-
-  Okay, I'm searching the branch for code that needs to be
-  updated...
 
   Done.
 
@@ -60,20 +61,17 @@ bca-updates/feature-one> branch /feature-two
 
   Done. I've created the feature-two branch based off of
   feature-one.
-  
+
   Tip: To merge your work back into the feature-one branch,
        first `switch /feature-one` then `merge /feature-two`.
-
 ```
-``` unison
+
+``` unison :hide
 term = "feature-two"
 ```
 
 ``` ucm
 bca-updates/feature-two> update
-
-  Okay, I'm searching the branch for code that needs to be
-  updated...
 
   Done.
 
@@ -85,7 +83,6 @@ bca-updates/feature-two> push @transcripts/bca-updates/feature-two
   http://localhost:5424
 
   View it here: @transcripts/bca-updates/feature-two on http://localhost:5424
-
 ```
-See the script, we will create a contribution, then will merge and push branches to see how things change.
 
+See the script, we will create a contribution, then will merge and push branches to see how things change.
