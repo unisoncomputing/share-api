@@ -87,8 +87,8 @@ See `local.env` for example values which are used for local development.
 - `SHARE_SERVER_PORT`: Which port the server should bind to on startup. This may differ from `SHARE_API_ORIGIN` if you're using a reverse proxy.
 - `SHARE_REDIS`: The URL of the redis server.
 - `SHARE_POSTGRES`: The URL of the postgres server.
-- *Deprecated* `SHARE_HMAC_KEY`: A secret key used for cryptographic signing. This should be at least 32 characters long.
-- `SHARE_EDDSA_KEY`: A secret key used for cryptographic signing. This should be at least 32 characters long.
+- `SHARE_HMAC_KEY`: A secret key used for cryptographic signing of HashJWTs. This should be at least 32 characters long.
+- `SHARE_EDDSA_KEY`: A secret key used for cryptographic signing of user sessions. This should be at least 32 characters long.
 - `SHARE_DEPLOYMENT`: The deployment environment. One of: `local`, `staging`, `prod`.
 - `SHARE_POSTGRES_CONN_TTL`: The maximum time a connection to the postgres server should be kept alive.
 - `SHARE_POSTGRES_CONN_MAX`: The maximum number of connections to the postgres server.
