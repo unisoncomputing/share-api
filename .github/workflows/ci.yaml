@@ -25,7 +25,7 @@ env:
 
 jobs:
   ormolu:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,7 +58,7 @@ jobs:
           commit_message: automatically run ormolu
   build-exe:
     name: Build share-api executable
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -103,7 +103,7 @@ jobs:
       container_registry: ghcr.io
       docker_image_name: ${{ github.repository }}
     needs: [build-exe]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:
       contents: read
@@ -191,7 +191,7 @@ jobs:
   # A separate job for docker build because it requires elevated github token permissions.
   transcript-tests:
     needs: [build-exe, docker-build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       # TODO: Maybe make a custom image with docker-compose and zsh pre-installed
