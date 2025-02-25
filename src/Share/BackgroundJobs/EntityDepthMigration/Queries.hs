@@ -17,20 +17,10 @@ updateComponentDepths = do
       -- Find all component hashes which aren't missing depth info for any of their
       -- dependencies.
       SELECT ch.id
-        FROM component_hashes ch
+        FROM unfinished_component_depths ch
         LEFT JOIN component_depth cd ON cd.component_hash_id = ch.id
         -- Only recalculate ones which haven't been calculated yet.
         WHERE cd.depth IS NULL
-        -- Check that the component has a term or type
-          AND EXISTS (
-            SELECT
-              FROM terms t
-            WHERE t.component_hash_id = ch.id
-            UNION
-            SELECT
-              FROM types t
-            WHERE t.component_hash_id = ch.id
-          ) -- Find only the ones that have all their dependency depths already calculated
           AND NOT EXISTS (
             SELECT
               FROM terms t
@@ -48,9 +38,12 @@ updateComponentDepths = do
               t.component_hash_id = ch.id
               AND cr_sub.type_id = t.id AND cd.depth IS NULL
         )
-    ), updated AS (
-        SELECT update_component_depth(ch.component_hash_id)
+    ), updated(component_hash_id, x) AS (
+        SELECT ch.component_hash_id, update_component_depth(ch.component_hash_id)
           FROM updatable_components ch
+    ), mark_finished AS (
+       DELETE FROM unfinished_component_depths ufd
+       WHERE ufd.id IN (SELECT u.component_hash_id FROM updated u)
     ) SELECT COUNT(*) FROM updated
     |]
 
@@ -62,7 +55,7 @@ updatePatchDepths = do
       -- Find all patches which aren't missing depth info for any of their
       -- dependencies.
       SELECT p.id
-        FROM patches p
+        FROM unfinished_patch_depths p
         LEFT JOIN patch_depth pd ON pd.patch_id = p.id
         -- Only recalculate ones which haven't been calculated yet.
         WHERE pd.patch_id IS NULL
@@ -96,9 +89,12 @@ updatePatchDepths = do
               WHERE ptm.patch_id = p.id
                 AND cd.depth IS NULL
           )
-    ), updated AS (
-        SELECT update_patch_depth(up.patch_id)
+    ), updated(patch_id, x) AS (
+        SELECT up.patch_id, update_patch_depth(up.patch_id)
           FROM updatable_patches up
+    ), mark_finished AS (
+       DELETE FROM unfinished_patch_depths ufd
+       WHERE ufd.id IN (SELECT u.patch_id FROM updated u)
     ) SELECT COUNT(*) FROM updated
     |]
 
@@ -109,9 +105,9 @@ updateNamespaceDepths = do
     WITH updatable_namespaces(namespace_hash_id) AS (
       -- Find all namespaces which aren't missing depth info for any of their
       -- dependencies.
-      SELECT n.namespace_hash_id
-        FROM namespaces n
-        LEFT JOIN namespace_depth nd ON nd.namespace_hash_id = n.namespace_hash_id
+      SELECT n.id
+        FROM unfinished_namespace_depths n
+        LEFT JOIN namespace_depth nd ON nd.namespace_hash_id = n.id
         -- Only recalculate ones which haven't been calculated yet.
         WHERE nd.depth IS NULL
           AND NOT EXISTS (
@@ -119,14 +115,14 @@ updateNamespaceDepths = do
               FROM namespace_children nc
               JOIN causals c
                 ON nc.child_causal_id = c.id
-              LEFT JOIN namespace_depth nd ON c.namespace_hash_id = nd.namespace_hash_id
-              WHERE nc.parent_namespace_hash_id = n.namespace_hash_id
-              AND nd.depth IS NULL
+              LEFT JOIN causal_depth cd ON nc.child_causal_id = cd.causal_id
+              WHERE nc.parent_namespace_hash_id = n.id
+              AND cd.depth IS NULL
             UNION
             SELECT
               FROM namespace_patches np
               LEFT JOIN patch_depth pd ON np.patch_id = pd.patch_id
-              WHERE np.namespace_hash_id = n.namespace_hash_id
+              WHERE np.namespace_hash_id = n.id
               AND pd.depth IS NULL
             UNION
             SELECT
@@ -135,7 +131,7 @@ updateNamespaceDepths = do
                 ON nt.term_id = t.id
               LEFT JOIN component_depth cd
                 ON t.component_hash_id = cd.component_hash_id
-              WHERE nt.namespace_hash_id = n.namespace_hash_id
+              WHERE nt.namespace_hash_id = n.id
               AND cd.depth IS NULL
             UNION
             SELECT
@@ -146,7 +142,7 @@ updateNamespaceDepths = do
                 ON ntm.metadata_term_id = t.id
               LEFT JOIN component_depth cd
                 ON t.component_hash_id = cd.component_hash_id
-              WHERE nt.namespace_hash_id = n.namespace_hash_id
+              WHERE nt.namespace_hash_id = n.id
               AND cd.depth IS NULL
             UNION
             SELECT
@@ -157,7 +153,7 @@ updateNamespaceDepths = do
                 ON c.type_id = t.id
               LEFT JOIN component_depth cd
                 ON t.component_hash_id = cd.component_hash_id
-              WHERE nt.namespace_hash_id = n.namespace_hash_id
+              WHERE nt.namespace_hash_id = n.id
               AND cd.depth IS NULL
             UNION
             SELECT
@@ -166,7 +162,7 @@ updateNamespaceDepths = do
                 ON nt.type_id = t.id
               LEFT JOIN component_depth cd
                 ON t.component_hash_id = cd.component_hash_id
-              WHERE nt.namespace_hash_id = n.namespace_hash_id
+              WHERE nt.namespace_hash_id = n.id
               AND cd.depth IS NULL
             UNION
             SELECT
@@ -177,12 +173,15 @@ updateNamespaceDepths = do
                 ON ntm.metadata_term_id = t.id
               LEFT JOIN component_depth cd
                 ON t.component_hash_id = cd.component_hash_id
-              WHERE nt.namespace_hash_id = n.namespace_hash_id
+              WHERE nt.namespace_hash_id = n.id
               AND cd.depth IS NULL
           )
-    ), updated AS (
-        SELECT update_namespace_depth(un.namespace_hash_id)
+    ), updated(namespace_hash_id, x) AS (
+        SELECT un.namespace_hash_id, update_namespace_depth(un.namespace_hash_id)
           FROM updatable_namespaces un
+    ), mark_finished AS (
+        DELETE FROM unfinished_namespace_depths ufd
+        WHERE ufd.id IN (SELECT u.namespace_hash_id FROM updated u)
     ) SELECT COUNT(*) FROM updated
   |]
 
@@ -194,7 +193,8 @@ updateCausalDepths = do
       -- Find all causals which aren't missing depth info for any of their
       -- dependencies.
       SELECT c.id
-        FROM causals c
+        FROM unfinished_causal_depths ucd
+        JOIN causals c ON ucd.id = c.id
         LEFT JOIN causal_depth cd ON cd.causal_id = c.id
         -- Only recalculate ones which haven't been calculated yet.
         WHERE cd.depth IS NULL
@@ -202,7 +202,6 @@ updateCausalDepths = do
             SELECT
               FROM namespace_depth nd
               WHERE nd.namespace_hash_id = c.namespace_hash_id
-              AND nd.depth IS NULL
           ) AND NOT EXISTS (
             SELECT
               FROM causal_ancestors ca
@@ -211,24 +210,36 @@ updateCausalDepths = do
               WHERE ca.causal_id = c.id
               AND cd.depth IS NULL
         )
-    ), updated AS (
-        SELECT update_causal_depth(c.id)
+    ), updated(causal_id) AS (
+        SELECT c.id, update_causal_depth(c.id)
           FROM updatable_causals c
+    ), mark_finished AS (
+        DELETE FROM unfinished_causal_depths ucd
+        WHERE ucd.id IN (SELECT u.causal_id FROM updated u)
     ) SELECT COUNT(*) FROM updated
   |]
 
 -- Sanity checks
 --
--- Should return no rows:
---
--- SELECT ch.id
+-- Should be 0
+
+-- SELECT count(*) from causals
+--   WHERE NOT EXISTS (
+--   SELECT FROM causal_depth cd
+--   WHERE cd.causal_id = causals.id
+--   );
+
+-- SELECT count(ch.id)
 --   FROM component_hashes ch
 --   LEFT JOIN component_depth cd ON cd.component_hash_id = ch.id
---   WHERE cd.depth IS NULL
---
--- Should match the number of components:
---
+--   WHERE cd.depth IS NULL;
+
 -- SELECT COUNT(*)
---   FROM component_hashes ch
---   LEFT JOIN component_depth cd ON cd.component_hash_id = ch.id
---   WHERE cd.depth IS NULL
+--   FROM branch_hashes bh
+--   LEFT JOIN namespace_depth nd ON nd.namespace_hash_id = bh.id
+--   WHERE nd.depth IS NULL;
+
+-- SELECT COUNT(*)
+--  FROM patches p
+--  LEFT JOIN patch_depth pd ON pd.patch_id = p.id
+--  WHERE pd.depth IS NULL;

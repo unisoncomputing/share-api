@@ -23,7 +23,10 @@ worker scope = do
     computePatchDepths authZReceipt
     -- Then do the namespaces and causals together
     computeNamespaceAndCausalDepths authZReceipt
-    liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
+    -- Once we know we're done, just wait until a human comes and
+    -- deploys a new version without the migration.
+    forever do
+      liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
 
 -- | Components must be handled separately since they're sandboxed to specific users.
 -- NOTE: this process doesn't insert the row into serialized_components, you'll need to do that manually after the automated migration is finished.
