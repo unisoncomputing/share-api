@@ -24,28 +24,28 @@ INSERT INTO unfinished_causal_depths (id)
     FROM causals c
     WHERE NOT EXISTS (
       SELECT FROM causal_depth cd WHERE cd.causal_id = c.id
-    );
+    ) ON CONFLICT DO NOTHING;
 
 INSERT INTO unfinished_namespace_depths (id)
   SELECT n.namespace_hash_id
     FROM namespaces n
     WHERE NOT EXISTS (
       SELECT FROM namespace_depth nd WHERE nd.namespace_hash_id = n.namespace_hash_id
-    );
+    )  ON CONFLICT DO NOTHING;
 
 INSERT INTO unfinished_patch_depths (id)
   SELECT p.id
     FROM patches p
     WHERE NOT EXISTS (
       SELECT FROM patch_depth pd WHERE pd.patch_id = p.id
-    );
+    )  ON CONFLICT DO NOTHING;
 
 INSERT INTO unfinished_component_depths (id)
   SELECT ch.id
     FROM component_hashes ch
     WHERE NOT EXISTS (
       SELECT FROM component_depth cd WHERE cd.component_hash_id = ch.id
-    );  
+    ) ON CONFLICT DO NOTHING;
 
 -- Afterwards
 DROP TABLE unfinished_causal_depths;
