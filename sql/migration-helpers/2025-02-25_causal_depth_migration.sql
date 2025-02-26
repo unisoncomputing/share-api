@@ -43,3 +43,8 @@ INSERT INTO unfinished_component_depths (id)
       SELECT FROM component_depth cd WHERE cd.component_hash_id = ch.id
     );  
 
+-- Afterwards
+DROP TABLE unfinished_causal_depths;
+DROP TABLE unfinished_namespace_depths;
+DROP TABLE unfinished_patch_depths;
+DROP TABLE unfinished_component_depths;
