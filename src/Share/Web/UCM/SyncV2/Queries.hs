@@ -201,21 +201,17 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                JOIN bytes ON sc.bytes_id = bytes.id
                LEFT JOIN causal_depth cd ON tc.causal_id = cd.causal_id
            )
-           -- Re-add this once the migration is done.
            -- Put them in dependency order, nulls come first because we want to bail and
-           -- report an error
-           -- if we somehow are missing a depth.
-           -- ORDER BY depth ASC NULLS FIRST
+           -- report an error if we are somehow missing a depth.
+           ORDER BY depth ASC NULLS FIRST
   |]
-  -- pure
-  --   ( cursor <&> \(bytes, hash, depth) -> case depth of
-  --       -- This should never happen, but is a sanity check in case we're missing a depth.
-  --       -- Better than silently omitting a required result.
-  --       Nothing -> error $ "allSerializedDependenciesOfCausalCursor: Missing depth for entity: " <> show hash
-  --       Just _ -> (bytes, hash)
-  --   )
   pure
-    (cursor <&> \(bytes, hash, _depth) -> (bytes, hash))
+    ( cursor <&> \(bytes, hash, depth) -> case depth of
+        -- This should never happen, but is a sanity check in case we're missing a depth.
+        -- Better than silently omitting a required result.
+        Nothing -> error $ "allSerializedDependenciesOfCausalCursor: Missing depth for entity: " <> show hash
+        Just _ -> (bytes, hash)
+    )
 
 spineAndLibDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
 spineAndLibDependenciesOfCausalCursor cid = do
