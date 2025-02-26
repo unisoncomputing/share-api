@@ -863,12 +863,10 @@ saveEncodedTermComponent componentHash maySerialized elements = do
             SELECT defn_mappings.term_id, defn_mappings.local_index, defn_mappings.component_hash_id
               FROM defn_mappings
         |]
-      -- Disabled while migration is running so we don't accidentally get incorrect depths
-      -- from missing depth dependencies
-      -- execute_
-      --   [sql|
-      --     SELECT update_component_depth(#{componentHashId})
-      --   |]
+      execute_
+        [sql|
+          SELECT update_component_depth(#{componentHashId})
+        |]
       pure termIds
 
 saveTypeComponent :: ComponentHash -> Maybe TempEntity -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> CodebaseM e ()
@@ -1019,12 +1017,10 @@ saveTypeComponent componentHash maySerialized elements = do
               FROM defn_mappings
         |]
       saveConstructors (zip (toList typeIds) elements)
-      -- Disabled while migration is running so we don't accidentally get incorrect depths
-      -- from missing depth dependencies
-      -- execute_
-      --   [sql|
-      --     SELECT update_component_depth(#{componentHashId})
-      --   |]
+      execute_
+        [sql|
+          SELECT update_component_depth(#{componentHashId})
+        |]
       pure typeIds
 
 -- | Efficiently resolve all pg Ids across selected Local Ids.
