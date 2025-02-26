@@ -48,7 +48,7 @@ batchSize :: Int32
 batchSize = 1000
 
 streamSettings :: Hash32 -> Maybe SyncV2.BranchRef -> StreamInitInfo
-streamSettings rootCausalHash rootBranchRef = StreamInitInfo {version = SyncV2.Version 1, entitySorting = SyncV2.DependenciesFirst, numEntities = Nothing, rootCausalHash, rootBranchRef}
+streamSettings rootCausalHash rootBranchRef = StreamInitInfo {version = SyncV2.Version 1, entitySorting = SyncV2.Unsorted, numEntities = Nothing, rootCausalHash, rootBranchRef}
 
 server :: Maybe UserId -> SyncV2.Routes WebAppServer
 server mayUserId =
