@@ -32,6 +32,7 @@ worker scope = do
 -- NOTE: this process doesn't insert the row into serialized_components, you'll need to do that manually after the automated migration is finished.
 computeComponentDepths :: AuthZ.AuthZReceipt -> Background ()
 computeComponentDepths !_authZReceipt = do
+  Logging.logInfoText $ "Computing component depth for batch"
   PG.runTransaction Q.updateComponentDepths >>= \case
     0 -> do
       Logging.logInfoText $ "Done processing component depth"
@@ -43,6 +44,7 @@ computeComponentDepths !_authZReceipt = do
 
 computePatchDepths :: AuthZ.AuthZReceipt -> Background ()
 computePatchDepths !_authZReceipt = do
+  Logging.logInfoText $ "Computing patch depth for batch"
   PG.runTransaction Q.updatePatchDepths >>= \case
     0 -> do
       Logging.logInfoText $ "Done processing patch depth"
@@ -54,6 +56,7 @@ computePatchDepths !_authZReceipt = do
 
 computeNamespaceAndCausalDepths :: AuthZ.AuthZReceipt -> Background ()
 computeNamespaceAndCausalDepths !authZReceipt = do
+  Logging.logInfoText $ "Computing namespace and causal depth for batch"
   PG.runTransaction Q.updateNamespaceDepths >>= \case
     namespaceN -> do
       PG.runTransaction Q.updateCausalDepths >>= \case

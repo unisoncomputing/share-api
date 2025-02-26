@@ -18,10 +18,7 @@ updateComponentDepths = do
       -- dependencies.
       SELECT ch.id
         FROM unfinished_component_depths ch
-        LEFT JOIN component_depth cd ON cd.component_hash_id = ch.id
-        -- Only recalculate ones which haven't been calculated yet.
-        WHERE cd.depth IS NULL
-          AND NOT EXISTS (
+        WHERE NOT EXISTS (
             SELECT
               FROM terms t
               JOIN term_local_component_references cr_sub ON cr_sub.term_id = t.id
@@ -38,6 +35,8 @@ updateComponentDepths = do
               t.component_hash_id = ch.id
               AND cr_sub.type_id = t.id AND cd.depth IS NULL
         )
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
     ), updated(component_hash_id, x) AS (
         SELECT ch.component_hash_id, update_component_depth(ch.component_hash_id)
           FROM updatable_components ch
@@ -56,10 +55,7 @@ updatePatchDepths = do
       -- dependencies.
       SELECT p.id
         FROM unfinished_patch_depths p
-        LEFT JOIN patch_depth pd ON pd.patch_id = p.id
-        -- Only recalculate ones which haven't been calculated yet.
-        WHERE pd.patch_id IS NULL
-          AND NOT EXISTS (
+        WHERE NOT EXISTS (
             SELECT
               FROM patch_term_mappings ptm
               JOIN terms t
@@ -89,6 +85,8 @@ updatePatchDepths = do
               WHERE ptm.patch_id = p.id
                 AND cd.depth IS NULL
           )
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
     ), updated(patch_id, x) AS (
         SELECT up.patch_id, update_patch_depth(up.patch_id)
           FROM updatable_patches up
@@ -107,10 +105,7 @@ updateNamespaceDepths = do
       -- dependencies.
       SELECT n.id
         FROM unfinished_namespace_depths n
-        LEFT JOIN namespace_depth nd ON nd.namespace_hash_id = n.id
-        -- Only recalculate ones which haven't been calculated yet.
-        WHERE nd.depth IS NULL
-          AND NOT EXISTS (
+        WHERE NOT EXISTS (
             SELECT
               FROM namespace_children nc
               JOIN causals c
@@ -176,6 +171,8 @@ updateNamespaceDepths = do
               WHERE nt.namespace_hash_id = n.id
               AND cd.depth IS NULL
           )
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
     ), updated(namespace_hash_id, x) AS (
         SELECT un.namespace_hash_id, update_namespace_depth(un.namespace_hash_id)
           FROM updatable_namespaces un
@@ -195,10 +192,7 @@ updateCausalDepths = do
       SELECT c.id
         FROM unfinished_causal_depths ucd
         JOIN causals c ON ucd.id = c.id
-        LEFT JOIN causal_depth cd ON cd.causal_id = c.id
-        -- Only recalculate ones which haven't been calculated yet.
-        WHERE cd.depth IS NULL
-          AND EXISTS (
+        WHERE EXISTS (
             SELECT
               FROM namespace_depth nd
               WHERE nd.namespace_hash_id = c.namespace_hash_id
@@ -210,6 +204,8 @@ updateCausalDepths = do
               WHERE ca.causal_id = c.id
               AND cd.depth IS NULL
         )
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
     ), updated(causal_id) AS (
         SELECT c.id, update_causal_depth(c.id)
           FROM updatable_causals c

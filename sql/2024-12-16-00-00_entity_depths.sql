@@ -70,7 +70,6 @@ CREATE OR REPLACE FUNCTION update_component_depth(the_component_hash_id integer)
 DECLARE
   max_referenced_component_depth INTEGER;
 BEGIN
-  RAISE NOTICE 'Updating component depth for %', the_component_hash_id;
   -- If there's already a depth entry for this component, we're done.
    IF EXISTS (SELECT FROM component_depth cd WHERE cd.component_hash_id = the_component_hash_id) THEN
      RETURN;
