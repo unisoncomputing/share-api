@@ -54,16 +54,28 @@ VALUES (
   'admin'
   );
 
+INSERT INTO orgs (
+  id,
+  org_user_id) 
+VALUES (
+  '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
+  'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9'
+);
+
 INSERT INTO org_members (
+  org_id,
   organization_user_id,
   member_user_id)
 VALUES (
+  '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
   'd32f4ddf-2423-4f10-a4de-465939951354'),
 (
+  '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
   '43efd5e7-139a-40b2-8a35-3f99b054dc84'),
 (
+  '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
   'fe8921ca-aee7-40a2-8020-241ca78f2a5c');
 
