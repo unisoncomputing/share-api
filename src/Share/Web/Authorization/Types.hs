@@ -1,5 +1,5 @@
 module Share.Web.Authorization.Types
-  ( Permission(..),
+  ( Permission (..),
     ProjectMaintainerPermission (..),
     ProjectMaintainerPermissions (..),
     hasProjectPermissions,
@@ -9,32 +9,35 @@ where
 import Data.Aeson (FromJSON, ToJSON (..), object, withObject, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON (..))
-import Data.Set (Set)
+import Hasql.Interpolate qualified as Hasql
+import Share.Prelude
 
-data Permission =
-  -- Project
-  ProjectView
-    | ProjectManage
-    | ProjectContribute
-  -- Org
-    | OrgView
-    | OrgManage
-    | OrgAdmin
-  -- Team
-    | TeamView
-    | TeamManage
+data Permission
+  = -- Project
+    ProjectView2
+  | ProjectManage
+  | ProjectContribute
+  | -- Org
+    OrgView
+  | OrgManage
+  | OrgAdmin
+  | -- Team
+    TeamView
+  | TeamManage
   deriving (Show)
 
 instance Hasql.EncodeValue Permission where
-  encodeValue = Hasql.encodeValue <<< \case
-    ProjectView -> "project:view"
-    ProjectManage -> "project:manage"
-    ProjectContribute -> "project:contribute"
-    OrgView -> "org:view"
-    OrgManage -> "org:manage"
-    OrgAdmin -> "org:admin"
-    TeamView -> "team:view"
-    TeamManage -> "team:manage"
+  encodeValue =
+    Hasql.encodeValue @Text
+      & contramap \case
+        ProjectView2 -> "project:view"
+        ProjectManage -> "project:manage"
+        ProjectContribute -> "project:contribute"
+        OrgView -> "org:view"
+        OrgManage -> "org:manage"
+        OrgAdmin -> "org:admin"
+        TeamView -> "team:view"
+        TeamManage -> "team:manage"
 
 data ProjectMaintainerPermission
   = -- Can see the project and its contents even if it's private.

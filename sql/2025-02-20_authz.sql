@@ -215,8 +215,7 @@ CREATE TRIGGER orgs_create_default_permissions
 -- Backfill orgs from the org_members table, should cause the trigger we just created to fire as well.
 INSERT INTO orgs(org_user_id)
   SELECT DISTINCT om.organization_user_id
-  FROM org_members om
-  ON CONFLICT DO NOTHING;
+  FROM org_members om;
 
 -- New teams tables
 
@@ -296,7 +295,8 @@ BEGIN
     SELECT owner_user.subject_id, NEW.resource_id, role.id
     FROM projects
     JOIN users owner_user ON projects.owner_user_id = owner_user.id
-    JOIN roles role ON role.ref = 'project_owner';
+    JOIN roles role ON role.ref = 'project_owner'
+    WHERE projects.id = NEW.id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -329,8 +329,7 @@ BEGIN
     SELECT owner_user.subject_id, projects.resource_id, role.id
     FROM projects
     JOIN users owner_user ON projects.owner_user_id = owner_user.id
-    JOIN roles role ON role.ref = 'project_owner'
-    ON CONFLICT DO NOTHING;
+    JOIN roles role ON role.ref = 'project_owner';
 END;
 $$;
 
