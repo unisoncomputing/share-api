@@ -1,5 +1,6 @@
 module Share.Web.Authorization.Types
-  ( ProjectMaintainerPermission (..),
+  ( Permission(..),
+    ProjectMaintainerPermission (..),
     ProjectMaintainerPermissions (..),
     hasProjectPermissions,
   )
@@ -9,6 +10,31 @@ import Data.Aeson (FromJSON, ToJSON (..), object, withObject, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON (..))
 import Data.Set (Set)
+
+data Permission =
+  -- Project
+  ProjectView
+    | ProjectManage
+    | ProjectContribute
+  -- Org
+    | OrgView
+    | OrgManage
+    | OrgAdmin
+  -- Team
+    | TeamView
+    | TeamManage
+  deriving (Show)
+
+instance Hasql.EncodeValue Permission where
+  encodeValue = Hasql.encodeValue <<< \case
+    ProjectView -> "project:view"
+    ProjectManage -> "project:manage"
+    ProjectContribute -> "project:contribute"
+    OrgView -> "org:view"
+    OrgManage -> "org:manage"
+    OrgAdmin -> "org:admin"
+    TeamView -> "team:view"
+    TeamManage -> "team:manage"
 
 data ProjectMaintainerPermission
   = -- Can see the project and its contents even if it's private.
