@@ -1,8 +1,6 @@
 module Share.Web.Authorization.Types
-  ( Permission (..),
-    ProjectMaintainerPermission (..),
+  ( RolePermission (..),
     ProjectMaintainerPermissions (..),
-    hasProjectPermissions,
   )
 where
 
@@ -12,9 +10,14 @@ import Data.Aeson.Types (FromJSON (..))
 import Hasql.Interpolate qualified as Hasql
 import Share.Prelude
 
-data Permission
+-- Permissions which are actually tracked on Roles, as opposed to permissions which exist at
+-- the application level, which may be mapped onto these.
+--
+-- E.g. The app may check the Contribution Merge permission by checking if the user has the
+-- ProjectContribute permission.
+data RolePermission
   = -- Project
-    ProjectView2
+    ProjectView
   | ProjectManage
   | ProjectContribute
   | -- Org
@@ -26,11 +29,11 @@ data Permission
   | TeamManage
   deriving (Show)
 
-instance Hasql.EncodeValue Permission where
+instance Hasql.EncodeValue RolePermission where
   encodeValue =
     Hasql.encodeValue @Text
       & contramap \case
-        ProjectView2 -> "project:view"
+        ProjectView -> "project:view"
         ProjectManage -> "project:manage"
         ProjectContribute -> "project:contribute"
         OrgView -> "org:view"
@@ -38,18 +41,6 @@ instance Hasql.EncodeValue Permission where
         OrgAdmin -> "org:admin"
         TeamView -> "team:view"
         TeamManage -> "team:manage"
-
-data ProjectMaintainerPermission
-  = -- Can see the project and its contents even if it's private.
-    -- Can download any branches/releases
-    -- Can comment on contributions & tickets
-    ProjectView
-  | -- Can create/delete/merge branches, tickets, contributions, etc.
-    -- Can't change project settings or add new maintainers.
-    ProjectMaintain
-  | -- Can do anything the project owner can do.
-    ProjectAdmin
-  deriving (Show, Eq, Ord)
 
 data ProjectMaintainerPermissions = ProjectMaintainerPermissions
   { canView :: Bool,
@@ -72,18 +63,3 @@ instance FromJSON ProjectMaintainerPermissions where
     canMaintain <- o Aeson..: "canMaintain"
     canAdmin <- o Aeson..: "canAdmin"
     pure ProjectMaintainerPermissions {canView, canMaintain, canAdmin}
-
--- | >>> import Data.Set qualified as Set
--- >>> hasProjectPermissions (Set.fromList [ProjectView, ProjectMaintain]) (ProjectMaintainerPermissions {canView=True, canMaintain=True, canAdmin=False})
--- True
--- >>> hasProjectPermissions (Set.fromList [ProjectView, ProjectAdmin]) (ProjectMaintainerPermissions {canView=True, canMaintain=True, canAdmin=False})
--- False
-hasProjectPermissions :: Set ProjectMaintainerPermission -> ProjectMaintainerPermissions -> Bool
-hasProjectPermissions permissions ProjectMaintainerPermissions {canView, canMaintain, canAdmin} =
-  all
-    ( \case
-        ProjectView -> canView
-        ProjectMaintain -> canMaintain
-        ProjectAdmin -> canAdmin
-    )
-    permissions
