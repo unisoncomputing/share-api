@@ -116,6 +116,45 @@ CREATE TABLE role_memberships (
 -- Allow looking up roles assigned to a resource.
 CREATE INDEX role_memberships_resource_id ON role_memberships (resource_id) INCLUDE (subject_id, role_id);
 
+
+-- Users
+ALTER TABLE users ADD COLUMN subject_id UUID UNIQUE NULL REFERENCES subjects (id);
+
+-- Backfill subjects for existing users.
+DO $$
+DECLARE
+  user_id UUID;
+  new_subject_id UUID;
+BEGIN
+  FOR user_id IN SELECT id FROM users WHERE subject_id IS NULL LOOP
+    INSERT INTO subjects DEFAULT VALUES
+      RETURNING id INTO new_subject_id;
+    UPDATE users
+      SET subject_id = new_subject_id
+      WHERE id = user_id;
+  END LOOP;
+END;
+$$;
+
+-- Make the subject_id column NOT NULL now that we've backfilled it.
+ALTER TABLE users ALTER COLUMN subject_id SET NOT NULL;
+
+-- Trigger to create a subject for each new user.
+CREATE FUNCTION trigger_create_user_subject()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Insert a new subject for this user, returning the new subject_id.
+  INSERT INTO subjects DEFAULT VALUES
+    RETURNING id INTO NEW.subject_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER users_create_subject
+  BEFORE INSERT ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_create_user_subject();
+
 -- New Org table
 
 CREATE TABLE orgs (
@@ -226,28 +265,6 @@ CREATE TABLE team_members (
   PRIMARY KEY (team_id, member_user_id)
 );
 CREATE INDEX team_members_member_user_id ON team_members (member_user_id) INCLUDE (team_id);
-
--- Users
-ALTER TABLE users ADD COLUMN subject_id UUID UNIQUE NULL REFERENCES subjects (id);
-
--- Backfill subjects for existing users.
-DO $$
-DECLARE
-  user_id UUID;
-  new_subject_id UUID;
-BEGIN
-  FOR user_id IN SELECT id FROM users WHERE subject_id IS NULL LOOP
-    INSERT INTO subjects DEFAULT VALUES
-      RETURNING id INTO new_subject_id;
-    UPDATE users
-      SET subject_id = new_subject_id
-      WHERE id = user_id;
-  END LOOP;
-END;
-$$;
-
--- Make the subject_id column NOT NULL now that we've backfilled it.
-ALTER TABLE users ALTER COLUMN subject_id SET NOT NULL;
 
 -- Projects
 
