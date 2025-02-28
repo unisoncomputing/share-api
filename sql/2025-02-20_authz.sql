@@ -73,7 +73,7 @@ INSERT INTO roles (ref, name, actions)
     ),
     ('org_contributor',
      'Organization Contributor',
-     ARRAY['org:view', 'team:view', 'project:view', 'project:edit', 'project:create', 'project:contribute']
+     ARRAY['org:view', 'team:view', 'project:view', 'project:create', 'project:contribute']
     ),
     ('org_admin',
      'Organization Admin',
@@ -81,7 +81,7 @@ INSERT INTO roles (ref, name, actions)
     ),
     ('org_default',
      'Organization Default', -- The same as the contributor role, but keeping it separate allows us to see which orgs have diverged from the default or not.
-     ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:edit', 'project:create', 'project:contribute']
+     ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:create', 'project:contribute']
     ),
     ('team_admin',
      'Team Admin',

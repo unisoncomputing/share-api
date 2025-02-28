@@ -5,7 +5,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Postgres.Authorization.Queries where
+module Share.Postgres.Authorization.Queries
+  ( getUserProjectPermissions,
+    checkIsUserMaintainer,
+    isUnisonEmployee,
+    isOrgMember,
+    causalIsInHistoryOf,
+    userHasProjectPermission
+  ) where
 
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -103,3 +110,14 @@ causalIsInHistoryOf rootCausalId targetCausalId = do
           WHERE ch.causal_id = ( #{targetCausalId} )
           )
       |]
+
+--------------------------------------------------------------------------------
+
+-- * NEW AuthZ * --
+
+userHasProjectPermission :: UserId -> ProjectId -> Permission -> PG.Transaction e Bool
+userHasProjectPermission userId projectId permission = do
+  PG.queryExpect1Col
+    [PG.sql|
+      SELECT user_has_permission(#{userId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
+    |]
