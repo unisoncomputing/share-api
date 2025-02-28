@@ -56,7 +56,7 @@ VALUES (
 
 INSERT INTO orgs (
   id,
-  org_user_id) 
+  user_id) 
 VALUES (
   '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9'
