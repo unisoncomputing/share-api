@@ -39,7 +39,6 @@ module Share.Web.Authorization
     checkTicketRead,
     checkTicketTimelineRead,
     checkReadUserCodebase,
-    checkWriteUserCodebase,
     checkUploadToUserCodebase,
     checkUploadToProjectBranchCodebase,
     checkUserUpdate,
@@ -84,7 +83,7 @@ import Share.Prelude
 import Share.Project
 import Share.Release
 import Share.Ticket
-import Share.User (User (..), UserVisibility (..))
+import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authorization.Types (RolePermission (..))
@@ -271,10 +270,6 @@ readPath path = UserCodebaseReadPath (Path.toList path)
 writePath :: Path -> CodebasePermission
 writePath path = UserCodebaseWritePath (Path.toList path)
 
-isPublicPath :: [NameSegment] -> Bool
-isPublicPath (NameSegment "public" : _) = True
-isPublicPath _ = False
-
 -- | Requests should only be cached if they're for a public endpoint.
 -- Obtaining a caching token is proof that the resource was public and can be cached.
 data CachingToken = CachingToken
@@ -287,28 +282,13 @@ assertCausalHashAccessibleFromRoot :: CausalId -> CausalId -> WebApp ()
 assertCausalHashAccessibleFromRoot rootCausalId targetCausalId = permissionGuard $ maybePermissionFailure (ProjectPermission $ AccessCausalHash rootCausalId targetCausalId) do
   guardM . PG.runTransaction $ Q.causalIsInHistoryOf rootCausalId targetCausalId
 
+-- | This is deprecated, permissions are all done at the project level now.
+-- For back-compat, this simply checks whether the caller is the same as the target user.
 checkReadUserCodebase :: Maybe UserId -> User -> Path -> WebApp (Either AuthZFailure AuthZReceipt)
-checkReadUserCodebase mayRequestingUser (User {visibility, user_id = targetUserId}) (Path.toList -> path) = maybePermissionFailure (CodebasePermission $ UserCodebaseReadPath path) do
-  case visibility of
-    UserPublic -> pure $ AuthZReceipt (Just CachingToken)
-    UserPrivate -> do
-      reqUserId <- guardMaybe mayRequestingUser
-      assertUserIsUserMaintainer reqUserId targetUserId
-      pure $ AuthZReceipt Nothing
-
-checkWriteUserCodebase :: UserId -> User -> Path -> WebApp (Either AuthZFailure AuthZReceipt)
-checkWriteUserCodebase requestingUser (User {user_id, visibility}) (Path.toList -> path) = maybePermissionFailure (CodebasePermission $ UserCodebaseReadPath path) do
-  assertUserIsUserMaintainer requestingUser user_id
-  case visibility of
-    UserPublic -> do
-      -- We currently don't allow writes to non-public paths for public users, since
-      -- non-public users are currently internal-only
-      guard (isPublicPath path)
-      pure $ AuthZReceipt Nothing
-    UserPrivate -> do
-      -- We allow writing on any path for private users. This is a custom tweak for the cloud
-      -- user, once projects are rolled out we can remove "private users" entirely.
-      pure $ AuthZReceipt Nothing
+checkReadUserCodebase mayRequestingUser (User {user_id = targetUserId}) (Path.toList -> path) = maybePermissionFailure (CodebasePermission $ UserCodebaseReadPath path) do
+  reqUserId <- guardMaybe mayRequestingUser
+  deprecatedUserEqualityCheck reqUserId targetUserId
+  pure $ AuthZReceipt Nothing
 
 -- | Check that the caller is allowed to upload to the specified codebase.
 checkUploadToProjectBranchCodebase ::
@@ -336,6 +316,9 @@ checkUserUpdate reqUserId targetUserId = maybePermissionFailure (UserPermission 
   pure $ AuthZReceipt Nothing
 
 -- | Check that the caller is allowed to upload to the specified codebase.
+--
+-- Note: This is DEPRECATED, and is only used for the legacy user codebase stuff.
+-- It now only checks that the caller is the same as the target user.
 checkUploadToUserCodebase ::
   -- | Requesting user
   UserId ->
@@ -343,7 +326,7 @@ checkUploadToUserCodebase ::
   UserId ->
   WebApp (Either AuthZFailure AuthZReceipt)
 checkUploadToUserCodebase reqUserId codebaseOwnerUserId = maybePermissionFailure (CodebasePermission CodebaseUpload) do
-  assertUserIsUserMaintainer reqUserId codebaseOwnerUserId
+  deprecatedUserEqualityCheck reqUserId codebaseOwnerUserId
   pure $ AuthZReceipt Nothing
 
 -- | The download endpoint currently does all of its own auth using HashJWTs,
@@ -361,7 +344,8 @@ checkDownloadFromProjectBranchCodebase =
 checkProjectCreate :: Maybe UserId -> UserId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkProjectCreate mayReqUserId targetUserId = maybePermissionFailure (ProjectPermission (ProjectCreate targetUserId)) $ do
   reqUserId <- guardMaybe mayReqUserId
-  assertUserIsUserMaintainer reqUserId targetUserId
+  -- Can create projects in their own user, or in any org they have permission to create projects in.
+  guard (reqUserId == targetUserId) <|> (assertUserHasOrgPermission reqUserId targetUserId OrgProjectCreate)
   pure $ AuthZReceipt Nothing
 
 checkProjectUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure ())
@@ -610,9 +594,9 @@ checkTicketTimelineRead mayReqUserId project@(Project {projectId}) =
   where
     authzError = AuthZFailure $ ProjectPermission (TicketTimelineGet projectId)
 
-assertUserIsUserMaintainer :: UserId -> UserId -> MaybeT WebApp ()
-assertUserIsUserMaintainer reqUserId targetUserId =
-  guardM . lift . PG.runTransaction $ Q.checkIsUserMaintainer reqUserId targetUserId
+assertUserHasOrgPermission :: UserId -> UserId -> RolePermission -> MaybeT WebApp ()
+assertUserHasOrgPermission reqUserId targetUserId rolePermission =
+  guardM . lift . PG.runTransaction $ Q.userHasOrgPermission reqUserId targetUserId rolePermission
 
 assertUserHasProjectPermission :: RolePermission -> UserId -> ProjectId -> MaybeT WebApp ()
 assertUserHasProjectPermission rolePermission reqUserId projId = do
@@ -682,3 +666,10 @@ permissionGuard m =
 -- cacheable for authed users even if the original isn't.
 makeCacheable :: AuthZReceipt -> AuthZReceipt
 makeCacheable (AuthZReceipt _) = AuthZReceipt (Just CachingToken)
+
+-- | Helper for checking deprecated User Codebase permissions.
+-- It mostly serves as a marker of places in code that can be cleaned up once user codebase
+-- stuff is sunset.
+deprecatedUserEqualityCheck :: UserId -> UserId -> MaybeT WebApp ()
+deprecatedUserEqualityCheck reqUserId targetUserId = do
+  guard $ reqUserId == targetUserId
