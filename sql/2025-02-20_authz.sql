@@ -59,7 +59,7 @@ CREATE TABLE roles (
   name TEXT NOT NULL,
   -- An internal identifier for the role, this is used to look up the role in the code.
   -- It must be NULL for user-created roles.
-  ref TEXT UNIQUE NULL;
+  ref TEXT UNIQUE NULL,
   -- The list of actions _may_ be empty, not that it's terribly useful
   actions action[] NOT NULL
 );
@@ -67,7 +67,7 @@ CREATE INDEX roles_actions ON roles USING GIN (actions);
 
 INSERT INTO roles (ref, name, actions)
   VALUES
-    ('org_viewer'
+    ('org_viewer',
      'Organization Viewer',
      ARRAY['org:view', 'team:view', 'project:view']
     ),
@@ -95,7 +95,7 @@ INSERT INTO roles (ref, name, actions)
      'Project Contributor',
      ARRAY['project:view', 'project:contribute']
     ),
-    ('project_owner'
+    ('project_owner',
      'Project Owner',
      ARRAY['project:view', 'project:manage', 'project:contribute']
     );
@@ -129,21 +129,22 @@ CREATE TABLE orgs (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TRIGGER orgs_create_resource
-  BEFORE INSERT ON orgs
-  FOR EACH ROW
-  EXECUTE FUNCTION trigger_create_org_resource();
-
 -- Trigger to create an org resource when an org is created.
 CREATE FUNCTION trigger_create_org_resource()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new resource for this org, assigning the resource_id to the new org.
   INSERT INTO resources DEFAULT VALUES
-    RETURNING resources.id INTO NEW.resource_id;
+    RETURNING id INTO NEW.resource_id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+
+CREATE TRIGGER orgs_create_resource
+  BEFORE INSERT ON orgs
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_create_org_resource();
 
 CREATE FUNCTION set_default_org_permissions()
 RETURNS TRIGGER AS $$
@@ -165,11 +166,12 @@ BEGIN
     SELECT org_subject_id, NEW.resource_id, org_default_role_id;
   RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER orgs_create_default_permissions
   AFTER INSERT ON orgs
   FOR EACH ROW
-  EXECUTE FUNCTION set_default_org_permissions(NEW.id);
+  EXECUTE FUNCTION set_default_org_permissions();
 
 -- Backfill orgs from the org_members table, should cause the trigger we just created to fire as well.
 INSERT INTO orgs(org_user_id)
@@ -198,11 +200,11 @@ RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new resource for this team, assigning the resource_id to the new team.
   INSERT INTO resources DEFAULT VALUES
-    RETURNING resources.id INTO NEW.resource_id;
+    RETURNING id INTO NEW.resource_id;
 
   -- Insert a new subject for this team, assigning the subject_id to the new team.
   INSERT INTO subjects DEFAULT VALUES
-    RETURNING subjects.id INTO NEW.subject_id;
+    RETURNING id INTO NEW.subject_id;
 
   RETURN NEW;
 END;
@@ -225,6 +227,28 @@ CREATE TABLE team_members (
 );
 CREATE INDEX team_members_member_user_id ON team_members (member_user_id) INCLUDE (team_id);
 
+-- Users
+ALTER TABLE users ADD COLUMN subject_id UUID UNIQUE NULL REFERENCES subjects (id);
+
+-- Backfill subjects for existing users.
+DO $$
+DECLARE
+  user_id UUID;
+  new_subject_id UUID;
+BEGIN
+  FOR user_id IN SELECT id FROM users WHERE subject_id IS NULL LOOP
+    INSERT INTO subjects DEFAULT VALUES
+      RETURNING id INTO new_subject_id;
+    UPDATE users
+      SET subject_id = new_subject_id
+      WHERE id = user_id;
+  END LOOP;
+END;
+$$;
+
+-- Make the subject_id column NOT NULL now that we've backfilled it.
+ALTER TABLE users ALTER COLUMN subject_id SET NOT NULL;
+
 -- Projects
 
 -- Add the new project resource column
@@ -236,7 +260,7 @@ RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new resource for this project, returning the new resource_id.
   INSERT INTO resources DEFAULT VALUES
-    RETURNING resources.id INTO NEW.resource_id;
+    RETURNING id INTO NEW.resource_id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -273,7 +297,7 @@ DECLARE
 BEGIN
   FOR project_id IN SELECT id FROM projects WHERE resource_id IS NULL LOOP
     INSERT INTO resources DEFAULT VALUES
-      RETURNING resources.id INTO new_resource_id;
+      RETURNING id INTO new_resource_id;
     UPDATE projects
       SET resource_id = new_resource_id
       WHERE projects.id = project_id;
@@ -296,27 +320,6 @@ $$;
 -- Make the resource_id column NOT NULL now that we've backfilled it.
 ALTER TABLE projects ALTER COLUMN resource_id SET NOT NULL;
 
--- Users
-ALTER TABLE users ADD COLUMN subject_id UUID UNIQUE NULL REFERENCES subjects (id);
-
--- Backfill subjects for existing users.
-DO $$
-DECLARE
-  user_id UUID;
-  new_subject_id UUID;
-BEGIN
-  FOR user_id IN SELECT id FROM users WHERE subject_id IS NULL LOOP
-    INSERT INTO subjects DEFAULT VALUES
-      RETURNING id INTO new_subject_id;
-    UPDATE users
-      SET subject_id = new_subject_id
-      WHERE id = user_id;
-  END LOOP;
-END;
-$$;
-
--- Make the subject_id column NOT NULL now that we've backfilled it.
-ALTER TABLE users ALTER COLUMN subject_id SET NOT NULL;
 
 -------------------------------------------------------------------------------
 
@@ -388,7 +391,6 @@ CREATE VIEW user_resource_permissions(user_id, resource_id, action) AS (
 
 CREATE FUNCTION user_has_permission(user_id UUID, resource_id UUID, action action)
 RETURNS BOOLEAN
-LANGUAGE SQL
 STABLE
 STRICT
 PARALLEL SAFE
@@ -398,4 +400,4 @@ AS $$
     FROM user_resource_permissions
     WHERE user_id = $1 AND resource_id = $2 AND action = $3
   );
-$$;
+$$ LANGUAGE SQL;
