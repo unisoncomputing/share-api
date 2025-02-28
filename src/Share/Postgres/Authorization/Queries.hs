@@ -11,14 +11,15 @@ module Share.Postgres.Authorization.Queries
     isUnisonEmployee,
     isOrgMember,
     causalIsInHistoryOf,
-    userHasProjectPermission
-  ) where
+    userHasProjectPermission,
+  )
+where
 
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
 import Share.Prelude
-import Share.Web.Authorization.Types (ProjectMaintainerPermissions (..))
+import Share.Web.Authorization.Types (Permission, ProjectMaintainerPermissions (..))
 
 -- | Check if the given user has access to a provided project.
 -- If yes, return the UserId of the owner of that project.
