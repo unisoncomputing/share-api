@@ -160,7 +160,7 @@ CREATE TRIGGER users_create_subject
 CREATE TABLE orgs (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   -- There's no subject_id on the org, since the org is a user, and the user has a subject_id.
-  org_user_id UUID UNIQUE NOT NULL REFERENCES users (id),
+  org_user_id UUID UNIQUE NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   -- Resource for managing permissions on this organization itself.
   resource_id UUID UNIQUE NOT NULL REFERENCES resources (id),
 
@@ -216,6 +216,19 @@ CREATE TRIGGER orgs_create_default_permissions
 INSERT INTO orgs(org_user_id)
   SELECT DISTINCT om.organization_user_id
   FROM org_members om;
+
+-- Now add the organization id to the org_members table.
+ALTER TABLE org_members ADD COLUMN org_id UUID NULL REFERENCES orgs (id) ON DELETE CASCADE;
+CREATE INDEX org_members_org_id ON org_members (org_id) INCLUDE (member_user_id);
+
+-- Fill it in
+UPDATE org_members
+  SET org_id = org.id
+  FROM orgs org
+  WHERE org_members.organization_user_id = org.org_user_id;
+
+-- Make the org_id column NOT NULL now that we've backfilled it.
+ALTER TABLE org_members ALTER COLUMN org_id SET NOT NULL;
 
 -- New teams tables
 
