@@ -36,21 +36,34 @@ CHECK (
 
 -- Create the new AuthZ tables we need
 
+-- Create an enum for subject kinds.
+-- Orgs are currently represented as users, for better or worse.
+CREATE TYPE subject_kind AS ENUM ('user', 'team');
+
 CREATE TABLE subjects (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  -- This can be helpful for knowing which table to look for the originating row of a subject.
+  kind subject_kind NOT NULL,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX subjects_kind ON subjects (kind) INCLUDE (id);
+
+CREATE TYPE resource_kind AS ENUM ('project', 'org', 'team');
 
 -- Resources are the things that can be accessed.
 -- This table should be managed by database triggers to ensure it's always up to date.
 CREATE TABLE resources (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  -- This can be helpful for knowing which table to look for the originating row of a resource.
+  kind resource_kind NOT NULL,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX resources_kind ON resources (kind) INCLUDE (id);
 
 -- Roles are currently managed by Unison admins only, but we could add a resource for managing custom roles in the
 -- future.
@@ -73,11 +86,11 @@ INSERT INTO roles (ref, name, actions)
     ),
     ('org_contributor',
      'Organization Contributor',
-     ARRAY['org:view', 'team:view', 'project:view', 'project:create', 'project:contribute']
+     ARRAY['org:view', 'team:view', 'project:view', 'project:contribute']
     ),
     ('org_admin',
      'Organization Admin',
-     ARRAY['org:view', 'org:manage', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
+     ARRAY['org:view', 'org:manage', 'org:create_project', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
     ),
     ('org_default',
      'Organization Default', -- The same as the contributor role, but keeping it separate allows us to see which orgs have diverged from the default or not.
@@ -127,7 +140,8 @@ DECLARE
   new_subject_id UUID;
 BEGIN
   FOR user_id IN SELECT id FROM users WHERE subject_id IS NULL LOOP
-    INSERT INTO subjects DEFAULT VALUES
+    INSERT INTO subjects(kind)
+      VALUES ('user')
       RETURNING id INTO new_subject_id;
     UPDATE users
       SET subject_id = new_subject_id
@@ -144,7 +158,8 @@ CREATE FUNCTION trigger_create_user_subject()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new subject for this user, returning the new subject_id.
-  INSERT INTO subjects DEFAULT VALUES
+  INSERT INTO subjects(kind)
+    VALUES ('user')
     RETURNING id INTO NEW.subject_id;
   RETURN NEW;
 END;
@@ -160,7 +175,7 @@ CREATE TRIGGER users_create_subject
 CREATE TABLE orgs (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   -- There's no subject_id on the org, since the org is a user, and the user has a subject_id.
-  org_user_id UUID UNIQUE NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  user_id UUID UNIQUE NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   -- Resource for managing permissions on this organization itself.
   resource_id UUID UNIQUE NOT NULL REFERENCES resources (id),
 
@@ -173,7 +188,8 @@ CREATE FUNCTION trigger_create_org_resource()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new resource for this org, assigning the resource_id to the new org.
-  INSERT INTO resources DEFAULT VALUES
+  INSERT INTO resources(kind)
+    VALUES ('org')
     RETURNING id INTO NEW.resource_id;
   RETURN NEW;
 END;
@@ -194,7 +210,7 @@ DECLARE
 BEGIN
   SELECT org_user.subject_id INTO org_subject_id
     FROM orgs org
-    JOIN users org_user ON org.org_user_id = org_user.id
+    JOIN users org_user ON org.user_id = org_user.id
     WHERE org.id = NEW.id;
   SELECT role.id
     INTO org_default_role_id
@@ -213,7 +229,7 @@ CREATE TRIGGER orgs_create_default_permissions
   EXECUTE FUNCTION set_default_org_permissions();
 
 -- Backfill orgs from the org_members table, should cause the trigger we just created to fire as well.
-INSERT INTO orgs(org_user_id)
+INSERT INTO orgs(user_id)
   SELECT DISTINCT om.organization_user_id
   FROM org_members om;
 
@@ -225,7 +241,7 @@ CREATE INDEX org_members_org_id ON org_members (org_id) INCLUDE (member_user_id)
 UPDATE org_members
   SET org_id = org.id
   FROM orgs org
-  WHERE org_members.organization_user_id = org.org_user_id;
+  WHERE org_members.organization_user_id = org.user_id;
 
 -- Make the org_id column NOT NULL now that we've backfilled it.
 ALTER TABLE org_members ALTER COLUMN org_id SET NOT NULL;
@@ -250,11 +266,13 @@ CREATE FUNCTION trigger_create_team_resource()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new resource for this team, assigning the resource_id to the new team.
-  INSERT INTO resources DEFAULT VALUES
+  INSERT INTO resources(kind)
+    VALUES ('team')
     RETURNING id INTO NEW.resource_id;
 
   -- Insert a new subject for this team, assigning the subject_id to the new team.
-  INSERT INTO subjects DEFAULT VALUES
+  INSERT INTO subjects(kind)
+    VALUES ('team')
     RETURNING id INTO NEW.subject_id;
 
   RETURN NEW;
@@ -288,7 +306,8 @@ CREATE FUNCTION trigger_create_project_resource()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new resource for this project, returning the new resource_id.
-  INSERT INTO resources DEFAULT VALUES
+  INSERT INTO resources(kind)
+    VALUES ('project')
     RETURNING id INTO NEW.resource_id;
   RETURN NEW;
 END;
@@ -326,7 +345,8 @@ DECLARE
   new_resource_id UUID;
 BEGIN
   FOR project_id IN SELECT id FROM projects WHERE resource_id IS NULL LOOP
-    INSERT INTO resources DEFAULT VALUES
+    INSERT INTO resources(kind)
+      VALUES ('project')
       RETURNING id INTO new_resource_id;
     UPDATE projects
       SET resource_id = new_resource_id
@@ -357,7 +377,7 @@ CREATE VIEW group_members(group_subject_id, member_subject_id) AS (
   -- Org groups
   SELECT org_user.subject_id, member.subject_id
   FROM orgs org
-  JOIN users org_user ON org.org_user_id = org_user.id
+  JOIN users org_user ON org.user_id = org_user.id
   JOIN org_members om ON om.organization_user_id = org_user.id
   JOIN users member ON om.member_user_id = member.id
   UNION ALL
@@ -377,7 +397,7 @@ CREATE VIEW resource_hierarchy(resource_id, parent_resource_id) AS (
   -- projects
   SELECT project.resource_id, org.resource_id
   FROM projects project
-  JOIN orgs org ON project.owner_user_id = org.org_user_id
+  JOIN orgs org ON project.owner_user_id = org.user_id
   UNION ALL
   -- teams
   SELECT team.resource_id, org.resource_id
@@ -430,3 +450,4 @@ AS $$
     WHERE user_id = $1 AND resource_id = $2 AND action = $3
   );
 $$ LANGUAGE SQL;
+
