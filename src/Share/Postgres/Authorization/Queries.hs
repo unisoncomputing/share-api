@@ -19,7 +19,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
 import Share.Prelude
-import Share.Web.Authorization.Types (Permission, ProjectMaintainerPermissions (..))
+import Share.Web.Authorization.Types (ProjectMaintainerPermissions (..), RolePermission)
 
 -- | Check if the given user has access to a provided project.
 -- If yes, return the UserId of the owner of that project.
@@ -116,7 +116,7 @@ causalIsInHistoryOf rootCausalId targetCausalId = do
 
 -- * NEW AuthZ * --
 
-userHasProjectPermission :: UserId -> ProjectId -> Permission -> PG.Transaction e Bool
+userHasProjectPermission :: UserId -> ProjectId -> RolePermission -> PG.Transaction e Bool
 userHasProjectPermission userId projectId permission = do
   PG.queryExpect1Col
     [PG.sql|
