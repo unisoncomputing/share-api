@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -73,13 +73,14 @@ library
       MonadRandom
     , aeson
     , base >=4.7 && <5
+    , base64-bytestring
     , binary
     , binary-instances
     , bytestring
     , case-insensitive
     , containers
     , cookie
-    , cryptonite
+    , crypton
     , hasql
     , hasql-interpolate
     , hedis
