@@ -85,7 +85,7 @@ userHasOrgPermission :: UserId -> UserId -> RolePermission -> PG.Transaction e B
 userHasOrgPermission userId orgUserId permission = do
   PG.queryExpect1Col
     [PG.sql|
-      SELECT user_has_permission(#{userId}, (SELECT org.resource_id FROM orgs WHERE org.user_id = #{orgUserId}), #{permission})
+      SELECT user_has_permission(#{userId}, (SELECT org.resource_id FROM orgs org WHERE org.user_id = #{orgUserId}), #{permission})
     |]
 
 -- | Find all the subjects which have access to a given resource.
