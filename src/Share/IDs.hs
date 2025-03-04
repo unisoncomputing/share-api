@@ -36,6 +36,8 @@ module Share.IDs
     ProjectBranchShortHand (..),
     SubjectId (..),
     ResourceId (..),
+    OrgId (..),
+    TeamId (..),
     projectBranchShortHandToBranchShortHand,
     JTI (..),
     CategoryName (..),
@@ -693,3 +695,13 @@ newtype ResourceId = ResourceId UUID
   deriving stock (Eq, Ord)
   deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
   deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "RES-" UUID)
+
+newtype OrgId = OrgId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "ORG-" UUID)
+
+newtype TeamId = TeamId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "TEAM-" UUID)

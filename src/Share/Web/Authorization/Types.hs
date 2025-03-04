@@ -1,12 +1,19 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Share.Web.Authorization.Types
   ( RolePermission (..),
+    RoleRef (..),
+    projectRoles,
     ProjectMaintainerPermissions (..),
     AuthSubject (..),
+    SubjectKind (..),
+    GenericAuthSubject,
+    ResolvedAuthSubject,
     _UserSubject,
     _OrgSubject,
     _TeamSubject,
+    RoleAssignment (..),
   )
 where
 
@@ -14,6 +21,7 @@ import Control.Lens hiding ((.=))
 import Data.Aeson (FromJSON, ToJSON (..), object, withObject, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON (..))
+import Data.Set qualified as Set
 import Hasql.Interpolate qualified as Hasql
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -45,14 +53,26 @@ data AuthSubject user org team
   | TeamSubject team
   deriving (Show)
 
+type GenericAuthSubject = AuthSubject SubjectId SubjectId SubjectId
+
+type ResolvedAuthSubject = AuthSubject UserId OrgId TeamId
+
 -- Decoder for (subject.id, subject.kind)
-instance Hasql.DecodeRow (AuthSubject SubjectId SubjectId SubjectId) where
+instance Hasql.DecodeRow GenericAuthSubject where
   decodeRow = do
     subjectId <- PG.decodeField @SubjectId
     PG.decodeField @SubjectKind >>= \case
       UserSubjectKind -> UserSubject <$> pure subjectId
       OrgSubjectKind -> OrgSubject <$> pure subjectId
       TeamSubjectKind -> TeamSubject <$> pure subjectId
+
+--  Decoder for (subject.kind, id :: UUID)
+instance Hasql.DecodeRow (AuthSubject UserId OrgId TeamId) where
+  decodeRow = do
+    PG.decodeField @SubjectKind >>= \case
+      UserSubjectKind -> UserSubject <$> PG.decodeField @UserId
+      OrgSubjectKind -> OrgSubject <$> PG.decodeField @OrgId
+      TeamSubjectKind -> TeamSubject <$> PG.decodeField @TeamId
 
 makePrisms ''AuthSubject
 
@@ -89,6 +109,90 @@ instance Hasql.EncodeValue RolePermission where
         OrgProjectCreate -> "org:project_create"
         TeamView -> "team:view"
         TeamManage -> "team:manage"
+
+-- | There are a set of builtin Unison roles.
+data RoleRef
+  = RoleOrgViewer
+  | RoleOrgContributor
+  | RoleOrgAdmin
+  | RoleOrgDefault
+  | RoleTeamAdmin
+  | RoleProjectViewer
+  | RoleProjectContributor
+  | RoleProjectOwner
+  deriving (Show, Eq, Ord)
+
+projectRoles :: Set RoleRef
+projectRoles = Set.fromList [RoleProjectViewer, RoleProjectContributor, RoleProjectOwner]
+
+instance ToJSON RoleRef where
+  toJSON = \case
+    RoleOrgViewer -> Aeson.String "org_viewer"
+    RoleOrgContributor -> Aeson.String "org_contributor"
+    RoleOrgAdmin -> Aeson.String "org_admin"
+    RoleOrgDefault -> Aeson.String "org_default"
+    RoleTeamAdmin -> Aeson.String "team_admin"
+    RoleProjectViewer -> Aeson.String "project_viewer"
+    RoleProjectContributor -> Aeson.String "project_contributor"
+    RoleProjectOwner -> Aeson.String "project_owner"
+
+instance FromJSON RoleRef where
+  parseJSON = Aeson.withText "RoleRef" \case
+    "org_viewer" -> pure RoleOrgViewer
+    "org_contributor" -> pure RoleOrgContributor
+    "org_admin" -> pure RoleOrgAdmin
+    "org_default" -> pure RoleOrgDefault
+    "team_admin" -> pure RoleTeamAdmin
+    "project_viewer" -> pure RoleProjectViewer
+    "project_contributor" -> pure RoleProjectContributor
+    "project_owner" -> pure RoleProjectOwner
+    _ -> fail "Invalid RoleRef"
+
+instance Hasql.DecodeValue RoleRef where
+  decodeValue =
+    Hasql.decodeValue @Text
+      & fmap \case
+        "org_viewer" -> RoleOrgViewer
+        "org_contributor" -> RoleOrgContributor
+        "org_admin" -> RoleOrgAdmin
+        "org_default" -> RoleOrgDefault
+        "team_admin" -> RoleTeamAdmin
+        "project_viewer" -> RoleProjectViewer
+        "project_contributor" -> RoleProjectContributor
+        "project_owner" -> RoleProjectOwner
+        _ -> error "Invalid RoleRef"
+
+instance Hasql.EncodeValue RoleRef where
+  encodeValue =
+    Hasql.encodeValue @Text
+      & contramap \case
+        RoleOrgViewer -> "org_viewer"
+        RoleOrgContributor -> "org_contributor"
+        RoleOrgAdmin -> "org_admin"
+        RoleOrgDefault -> "org_default"
+        RoleTeamAdmin -> "team_admin"
+        RoleProjectViewer -> "project_viewer"
+        RoleProjectContributor -> "project_contributor"
+        RoleProjectOwner -> "project_owner"
+
+data RoleAssignment subject = RoleAssignment
+  { subject :: subject,
+    roles :: Set RoleRef
+  }
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance (ToJSON user) => ToJSON (RoleAssignment user) where
+  toJSON RoleAssignment {..} =
+    object
+      [ "subject" Aeson..= subject,
+        "roles" Aeson..= roles
+      ]
+
+instance (FromJSON user) => FromJSON (RoleAssignment user) where
+  parseJSON = Aeson.withObject "RoleAssignment" $ \o -> do
+    subject <- o Aeson..: "subject"
+    roles <- o Aeson..: "roles"
+    pure RoleAssignment {..}
 
 data ProjectMaintainerPermissions = ProjectMaintainerPermissions
   { canView :: Bool,

@@ -19,7 +19,7 @@ where
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
-import Share.Web.Authorization.Types (AuthSubject, RolePermission)
+import Share.Web.Authorization.Types (AuthSubject (..), RolePermission)
 
 -- | A user has access if they own the repo, or if they're a member of an org which owns it.
 checkIsUserMaintainer :: UserId -> UserId -> PG.Transaction e Bool

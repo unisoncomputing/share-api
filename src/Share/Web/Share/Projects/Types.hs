@@ -17,7 +17,7 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
-import Share.Web.Authorization.Types (ProjectMaintainerPermissions)
+import Share.Web.Authorization.Types (RoleAssignment)
 import Share.Web.Share.Types (UserDisplayInfo)
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
@@ -253,7 +253,7 @@ instance Aeson.ToJSON CatalogCategory where
       ]
 
 data ListMaintainersResponse = ListMaintainersResponse
-  { maintainers :: [Maintainer UserDisplayInfo],
+  { maintainers :: [RoleAssignment UserDisplayInfo],
     -- Whether the project maintainers feature is active on this project.
     active :: Bool
   }
@@ -267,7 +267,7 @@ instance ToJSON ListMaintainersResponse where
       ]
 
 data AddMaintainersResponse = AddMaintainersResponse
-  { maintainers :: [Maintainer UserDisplayInfo]
+  { maintainers :: [RoleAssignment UserDisplayInfo]
   }
 
 instance ToJSON AddMaintainersResponse where
@@ -277,7 +277,7 @@ instance ToJSON AddMaintainersResponse where
       ]
 
 data UpdateMaintainersResponse = UpdateMaintainersResponse
-  { maintainers :: [Maintainer UserDisplayInfo]
+  { maintainers :: [RoleAssignment UserDisplayInfo]
   }
 
 instance ToJSON UpdateMaintainersResponse where
@@ -286,27 +286,8 @@ instance ToJSON UpdateMaintainersResponse where
       [ "maintainers" Aeson..= maintainers
       ]
 
-data Maintainer user = Maintainer
-  { user :: user,
-    permissions :: ProjectMaintainerPermissions
-  }
-  deriving (Show, Functor, Foldable, Traversable)
-
-instance (ToJSON user) => ToJSON (Maintainer user) where
-  toJSON Maintainer {..} =
-    object
-      [ "user" Aeson..= user,
-        "permissions" Aeson..= permissions
-      ]
-
-instance (FromJSON user) => FromJSON (Maintainer user) where
-  parseJSON = Aeson.withObject "Maintainer" $ \o -> do
-    user <- o Aeson..: "user"
-    permissions <- o Aeson..: "permissions"
-    pure Maintainer {..}
-
 data AddMaintainersRequest = AddMaintainersRequest
-  { maintainers :: [Maintainer UserId]
+  { maintainers :: [RoleAssignment UserId]
   }
   deriving (Show)
 
@@ -319,7 +300,7 @@ instance FromJSON AddMaintainersRequest where
 -- Note: This does NOT affect any maintainers which are not specified and does NOT
 -- remove any maintainers which are not specified.
 data UpdateMaintainersRequest = UpdateMaintainersRequest
-  { maintainers :: [Maintainer UserId]
+  { maintainers :: [RoleAssignment UserId]
   }
   deriving (Show)
 
