@@ -44,18 +44,19 @@ addProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transact
 addProjectRoles projId toAdd = do
   let addedRolesTable =
         toAdd
-          <&> \RoleAssignment {subject, roles} ->
-            let (kind, uuid) = resolvedAuthSubjectColumns subject
-             in (kind, uuid, toList roles)
+          & foldMap
+            ( \RoleAssignment {subject, roles} ->
+                let (kind, uuid) = resolvedAuthSubjectColumns subject
+                 in (kind,uuid,) <$> toList roles
+            )
   -- Insert the maintainers
   execute_
     [sql|
         WITH values(subject_id, role_id) AS (
           SELECT sbk.subject_id, role.id
-            FROM ^{toTable addedRolesTable} AS t(kind, resolved_id, role_refs)
+            FROM ^{toTable addedRolesTable} AS t(kind, resolved_id, role_ref)
             JOIN subjects_by_kind sbk ON sbk.kind = (t.kind::subject_kind) AND sbk.resolved_id = t.resolved_id
-            , UNNEST(t.role_refs) AS role_ref
-              JOIN roles role ON role.ref = role_ref
+            JOIN roles role ON role.ref = (t.role_ref::role_ref)
         ) INSERT INTO role_memberships (subject_id, resource_id, role_id)
           SELECT v.subject_id, (SELECT p.resource_id FROM projects p WHERE p.id = #{projId}) AS resource_id, v.role_id
             FROM values v
@@ -67,18 +68,19 @@ removeProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Trans
 removeProjectRoles projId toRemove = do
   let removedRolesTable =
         toRemove
-          <&> \RoleAssignment {subject, roles} ->
-            let (kind, uuid) = resolvedAuthSubjectColumns subject
-             in (kind, uuid, toList roles)
+          & foldMap
+            ( \RoleAssignment {subject, roles} ->
+                let (kind, uuid) = resolvedAuthSubjectColumns subject
+                 in (kind,uuid,) <$> toList roles
+            )
   -- Insert the maintainers
   execute_
     [sql|
         WITH values(subject_id, role_id) AS (
           SELECT sbk.subject_id, role.id
-            FROM ^{toTable removedRolesTable} AS t(kind, resolved_id, role_refs)
+            FROM ^{toTable removedRolesTable} AS t(kind, resolved_id, role_ref)
             JOIN subjects_by_kind sbk ON sbk.kind = (t.kind::subject_kind) AND sbk.resolved_id = t.resolved_id
-            , UNNEST(t.role_refs) AS role_ref
-              JOIN roles role ON role.ref = role_ref
+            JOIN roles role ON role.ref = (t.role_ref::role_ref)
         ) DELETE FROM role_memberships
           USING values v
           WHERE role_memberships.subject_id = v.subject_id
