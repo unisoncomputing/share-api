@@ -460,7 +460,6 @@ CREATE VIEW user_resource_permissions(user_id, resource_id, action) AS (
 CREATE FUNCTION user_has_permission(user_id UUID, resource_id UUID, action action)
 RETURNS BOOLEAN
 STABLE
-STRICT
 PARALLEL SAFE
 AS $$
   SELECT EXISTS (
