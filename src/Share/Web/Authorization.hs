@@ -12,7 +12,8 @@ module Share.Web.Authorization
     checkProjectBranchDiff,
     checkProjectReleaseRead,
     checkReadProjectRolesList,
-    checkUpdateProjectRolesList,
+    checkAddProjectRoles,
+    checkRemoveProjectRoles,
     checkUserIsAdmin,
     checkAdminSudo,
     checkBranchCreate,
@@ -79,6 +80,7 @@ import Share.OAuth.Session qualified as Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as Q
 import Share.Postgres.IDs (CausalId)
+import Share.Postgres.Projects.Queries qualified as PQ
 import Share.Prelude
 import Share.Project
 import Share.Release
@@ -473,11 +475,23 @@ checkReadProjectRolesList reqUserId projectId =
     assertUserHasProjectPermission ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
-checkUpdateProjectRolesList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
-checkUpdateProjectRolesList reqUserId projectId =
+checkAddProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkAddProjectRoles reqUserId projectId =
+  maybePermissionFailure (ProjectPermission (RolesEdit projectId)) $ do
+    -- In order to add new collaborators it must be a premium project.
+    assertIsPremiumProject projectId
+    assertUserHasProjectPermission ProjectManage reqUserId projectId
+    pure $ AuthZReceipt Nothing
+
+checkRemoveProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkRemoveProjectRoles reqUserId projectId =
   maybePermissionFailure (ProjectPermission (RolesEdit projectId)) $ do
     assertUserHasProjectPermission ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
+
+assertIsPremiumProject :: ProjectId -> MaybeT WebApp ()
+assertIsPremiumProject projectId = do
+  guardM $ PG.runTransaction $ PQ.isPremiumProject projectId
 
 checkListReleasesForProject :: Maybe UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
 checkListReleasesForProject reqUserId project@Project {projectId} =
