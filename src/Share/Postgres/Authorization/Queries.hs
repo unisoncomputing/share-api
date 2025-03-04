@@ -13,13 +13,16 @@ module Share.Postgres.Authorization.Queries
     userHasProjectPermission,
     userHasOrgPermission,
     listSubjectsWithResourcePermission,
+    subjectIdsForAuthSubjectsOf,
   )
 where
 
+import Control.Lens
+import Data.Int (Int32)
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
-import Share.Web.Authorization.Types (AuthSubject (..), RolePermission)
+import Share.Web.Authorization.Types
 
 -- | A user has access if they own the repo, or if they're a member of an org which owns it.
 checkIsUserMaintainer :: UserId -> UserId -> PG.Transaction e Bool
@@ -95,3 +98,46 @@ listSubjectsWithResourcePermission resourceId permission = do
       WHERE resource_id = #{resourceId}
         AND permission = #{permission}
     |]
+
+subjectIdsForAuthSubjectsOf :: Traversal s t ResolvedAuthSubject GenericAuthSubject -> s -> PG.Transaction e t
+subjectIdsForAuthSubjectsOf trav s =
+  s
+    & unsafePartsOf trav %%~ \resolvedAuthSubjects -> PG.pipelined do
+      let userIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _UserSubject)
+      let orgIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _OrgSubject)
+      let teamIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _TeamSubject)
+      userSubjects <-
+        PG.queryListCol @SubjectId
+          [PG.sql|
+            WITH values(ord, user_id) AS (
+              SELECT * FROM ^{PG.toTable userIds}
+            ) SELECT user.subject_id
+              FROM values
+                JOIN users user ON user.id = values.user_id
+                ORDER BY ord
+          |]
+      orgSubjects <-
+        PG.queryListCol @SubjectId
+          [PG.sql|
+            WITH values(ord, org_id) AS (
+              SELECT * FROM ^{PG.toTable orgIds}
+            ) SELECT org.subject_id
+              FROM values
+                JOIN orgs org ON org.user_id = values.org_id
+                ORDER BY ord
+          |]
+      teamSubjects <-
+        PG.queryListCol @SubjectId
+          [PG.sql|
+            WITH values(ord, team_id) AS (
+              SELECT * FROM ^{PG.toTable teamIds}
+            ) SELECT team.subject_id
+              FROM values
+                JOIN teams team ON team.id = values.team_id
+                ORDER BY ord
+          |]
+      pure $
+        resolvedAuthSubjects
+          & unsafePartsOf (traversed . _UserSubject) .~ userSubjects
+          & unsafePartsOf (traversed . _OrgSubject) .~ orgSubjects
+          & unsafePartsOf (traversed . _TeamSubject) .~ teamSubjects

@@ -17,8 +17,7 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
-import Share.Web.Authorization.Types (RoleAssignment)
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Authorization.Types (ResolvedAuthSubject, RoleAssignment)
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
 projectToAPI projectOwner Project {slug, visibility, createdAt, updatedAt, summary, tags} =
@@ -252,59 +251,56 @@ instance Aeson.ToJSON CatalogCategory where
         "projects" .= projects
       ]
 
-data ListMaintainersResponse = ListMaintainersResponse
-  { maintainers :: [RoleAssignment UserDisplayInfo],
-    -- Whether the project maintainers feature is active on this project.
+data ListRolesResponse = ListRolesResponse
+  { roles :: [RoleAssignment ResolvedAuthSubject],
+    -- Whether the project roles feature is active on this project.
     active :: Bool
   }
   deriving (Show)
 
-instance ToJSON ListMaintainersResponse where
-  toJSON ListMaintainersResponse {..} =
+instance ToJSON ListRolesResponse where
+  toJSON ListRolesResponse {..} =
     object
-      [ "maintainers" Aeson..= maintainers,
+      [ "roles" Aeson..= roles,
         "active" .= active
       ]
 
-data AddMaintainersResponse = AddMaintainersResponse
-  { maintainers :: [RoleAssignment UserDisplayInfo]
+data AddRolesResponse = AddRolesResponse
+  { roles :: [RoleAssignment ResolvedAuthSubject]
   }
 
-instance ToJSON AddMaintainersResponse where
-  toJSON AddMaintainersResponse {..} =
+instance ToJSON AddRolesResponse where
+  toJSON AddRolesResponse {..} =
     object
-      [ "maintainers" Aeson..= maintainers
+      [ "roles" Aeson..= roles
       ]
 
-data UpdateMaintainersResponse = UpdateMaintainersResponse
-  { maintainers :: [RoleAssignment UserDisplayInfo]
+data RemoveRolesResponse = RemoveRolesResponse
+  { roles :: [RoleAssignment ResolvedAuthSubject]
   }
 
-instance ToJSON UpdateMaintainersResponse where
-  toJSON UpdateMaintainersResponse {..} =
+instance ToJSON RemoveRolesResponse where
+  toJSON RemoveRolesResponse {..} =
     object
-      [ "maintainers" Aeson..= maintainers
+      [ "roles" Aeson..= roles
       ]
 
-data AddMaintainersRequest = AddMaintainersRequest
-  { maintainers :: [RoleAssignment UserId]
+data AddRolesRequest = AddRolesRequest
+  { roles :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
 
-instance FromJSON AddMaintainersRequest where
-  parseJSON = Aeson.withObject "AddMaintainersRequest" $ \o -> do
-    maintainers <- o Aeson..: "maintainers"
-    pure AddMaintainersRequest {..}
+instance FromJSON AddRolesRequest where
+  parseJSON = Aeson.withObject "AddRolesRequest" $ \o -> do
+    roles <- o Aeson..: "roles"
+    pure AddRolesRequest {..}
 
--- | For each listed maintainer, update their permissions.
--- Note: This does NOT affect any maintainers which are not specified and does NOT
--- remove any maintainers which are not specified.
-data UpdateMaintainersRequest = UpdateMaintainersRequest
-  { maintainers :: [RoleAssignment UserId]
+data RemoveRolesRequest = RemoveRolesRequest
+  { roles :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
 
-instance FromJSON UpdateMaintainersRequest where
-  parseJSON = Aeson.withObject "UpdateMaintainersRequest" $ \o -> do
-    maintainers <- o Aeson..: "maintainers"
-    pure UpdateMaintainersRequest {..}
+instance FromJSON RemoveRolesRequest where
+  parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do
+    roles <- o Aeson..: "roles"
+    pure RemoveRolesRequest {..}

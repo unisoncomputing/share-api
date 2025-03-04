@@ -11,8 +11,8 @@ module Share.Web.Authorization
     checkProjectBranchRead,
     checkProjectBranchDiff,
     checkProjectReleaseRead,
-    checkReadProjectMaintainersList,
-    checkUpdateProjectMaintainersList,
+    checkReadProjectRolesList,
+    checkUpdateProjectRolesList,
     checkUserIsAdmin,
     checkAdminSudo,
     checkBranchCreate,
@@ -145,8 +145,8 @@ data ProjectPermission
   | TicketUpdate ProjectId
   | TicketRead ProjectId
   | TicketTimelineGet ProjectId
-  | MaintainersList ProjectId
-  | MaintainersEdit ProjectId
+  | RolesList ProjectId
+  | RolesEdit ProjectId
   | -- (RootHash, TargetHash)
     AccessCausalHash CausalId CausalId
   deriving stock (Show, Eq, Ord)
@@ -204,8 +204,8 @@ instance Errors.ToServerError AuthZFailure where
       TicketUpdate _pid -> (ErrorID "authz:ticket:update", err403 {errBody = "Permission Denied: " <> msg})
       TicketRead _pid -> (ErrorID "authz:ticket:read", err403 {errBody = "Permission Denied: " <> msg})
       TicketTimelineGet _pid -> (ErrorID "authz:ticket:timeline", err403 {errBody = "Permission Denied: " <> msg})
-      MaintainersList _pid -> (ErrorID "authz:maintainers:list", err403 {errBody = "Permission Denied: " <> msg})
-      MaintainersEdit _pid -> (ErrorID "authz:maintainers:edit", err403 {errBody = "Permission Denied: " <> msg})
+      RolesList _pid -> (ErrorID "authz:maintainers:list", err403 {errBody = "Permission Denied: " <> msg})
+      RolesEdit _pid -> (ErrorID "authz:maintainers:edit", err403 {errBody = "Permission Denied: " <> msg})
       AccessCausalHash _ _ -> (ErrorID "authz:causal-hash", err403 {errBody = "Permission Denied: " <> msg})
     UserPermission userPermission ->
       case userPermission of
@@ -255,8 +255,8 @@ authZFailureMessage (AuthZFailure perm) = case perm of
     TicketUpdate _pid -> "Not permitted to update this ticket"
     TicketRead _pid -> "Not permitted to read this ticket"
     TicketTimelineGet _pid -> "Not permitted to read this ticket"
-    MaintainersList _pid -> "Not permitted to list maintainers"
-    MaintainersEdit _pid -> "Not permitted to edit maintainers"
+    RolesList _pid -> "Not permitted to list maintainers"
+    RolesEdit _pid -> "Not permitted to edit maintainers"
     AccessCausalHash _ _ -> "Not permitted to access this causal hash"
   UserPermission userPermission ->
     case userPermission of
@@ -467,15 +467,15 @@ checkProjectReleaseRead reqUserId project@Project {projectId} =
   where
     authzError = AuthZFailure $ ProjectPermission (ReleaseRead projectId)
 
-checkReadProjectMaintainersList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
-checkReadProjectMaintainersList reqUserId projectId =
-  maybePermissionFailure (ProjectPermission (MaintainersList projectId)) $ do
+checkReadProjectRolesList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReadProjectRolesList reqUserId projectId =
+  maybePermissionFailure (ProjectPermission (RolesList projectId)) $ do
     assertUserHasProjectPermission ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
-checkUpdateProjectMaintainersList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
-checkUpdateProjectMaintainersList reqUserId projectId =
-  maybePermissionFailure (ProjectPermission (MaintainersEdit projectId)) $ do
+checkUpdateProjectRolesList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkUpdateProjectRolesList reqUserId projectId =
+  maybePermissionFailure (ProjectPermission (RolesEdit projectId)) $ do
     assertUserHasProjectPermission ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
