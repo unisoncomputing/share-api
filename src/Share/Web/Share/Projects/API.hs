@@ -90,8 +90,8 @@ type ProjectReadmeEndpoint = Get '[JSON] (Cached JSON ReadmeResponse)
 
 type MaintainersResourceAPI =
   ( ListRolesEndpoint
-      :<|> AddRolesEndpoint
-      :<|> RemoveRolesEndpoint
+      :<|> ("add" :> AddRolesEndpoint)
+      :<|> ("remove" :> RemoveRolesEndpoint)
   )
 
 -- | List all maintainers of the project.
