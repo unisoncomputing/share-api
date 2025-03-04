@@ -439,7 +439,7 @@ CREATE VIEW subjects_by_user(user_id, subject_id) AS (
 CREATE VIEW subject_resource_permissions(subject_id, resource_id, action) AS (
   WITH base_permissions(subject_id, resource_id, action) AS (
     -- base permissions
-    SELECT rm.subject_id, rm.resource_id, r.action
+    SELECT rm.subject_id, rm.resource_id, action
     FROM role_memberships rm
     JOIN roles r ON rm.role_id = r.id
     , UNNEST(r.actions) AS action
@@ -470,7 +470,7 @@ AS $$
   );
 $$ LANGUAGE SQL;
 
-CREATE VIEW subjects_by_kind(subject_kind, subject_id, resolved_id) AS (
+CREATE VIEW subjects_by_kind(kind, subject_id, resolved_id) AS (
   -- Users
   SELECT 'user'::subject_kind, u.subject_id, u.subject_id
   FROM users u
