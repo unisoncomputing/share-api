@@ -37,8 +37,7 @@ CHECK (
 -- Create the new AuthZ tables we need
 
 -- Create an enum for subject kinds.
--- Orgs are currently represented as users, for better or worse.
-CREATE TYPE subject_kind AS ENUM ('user', 'team');
+CREATE TYPE subject_kind AS ENUM ('user', 'team', 'org');
 
 CREATE TABLE subjects (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -65,6 +64,18 @@ CREATE TABLE resources (
 
 CREATE INDEX resources_kind ON resources (kind) INCLUDE (id);
 
+-- Enum for internal 'blessed' role refs.
+CREATE TYPE role_ref AS ENUM (
+  'org_viewer',
+  'org_contributor',
+  'org_admin',
+  'org_default',
+  'team_admin',
+  'project_viewer',
+  'project_contributor',
+  'project_owner'
+);
+
 -- Roles are currently managed by Unison admins only, but we could add a resource for managing custom roles in the
 -- future.
 CREATE TABLE roles (
@@ -72,7 +83,7 @@ CREATE TABLE roles (
   name TEXT NOT NULL,
   -- An internal identifier for the role, this is used to look up the role in the code.
   -- It must be NULL for user-created roles.
-  ref TEXT UNIQUE NULL,
+  ref role_ref UNIQUE NULL,
   -- The list of actions _may_ be empty, not that it's terribly useful
   actions action[] NOT NULL
 );
@@ -80,35 +91,35 @@ CREATE INDEX roles_actions ON roles USING GIN (actions);
 
 INSERT INTO roles (ref, name, actions)
   VALUES
-    ('org_viewer',
+    ('org_viewer'::role_ref,
      'Organization Viewer',
      ARRAY['org:view', 'team:view', 'project:view']
     ),
-    ('org_contributor',
+    ('org_contributor'::role_ref,
      'Organization Contributor',
      ARRAY['org:view', 'team:view', 'project:view', 'project:contribute']
     ),
-    ('org_admin',
+    ('org_admin'::role_ref,
      'Organization Admin',
      ARRAY['org:view', 'org:manage', 'org:create_project', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
     ),
-    ('org_default',
+    ('org_default'::role_ref,
      'Organization Default', -- The same as the contributor role, but keeping it separate allows us to see which orgs have diverged from the default or not.
      ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:create', 'project:contribute']
     ),
-    ('team_admin',
+    ('team_admin'::role_ref,
      'Team Admin',
      ARRAY['team:view', 'team:manage']
     ),
-    ('project_viewer',
+    ('project_viewer'::role_ref,
      'Project Viewer',
      ARRAY['project:view']
      ),
-    ('project_contributor',
+    ('project_contributor'::role_ref,
      'Project Contributor',
      ARRAY['project:view', 'project:contribute']
     ),
-    ('project_owner',
+    ('project_owner'::role_ref,
      'Project Owner',
      ARRAY['project:view', 'project:manage', 'project:contribute']
     );
@@ -176,6 +187,11 @@ CREATE TABLE orgs (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   -- There's no subject_id on the org, since the org is a user, and the user has a subject_id.
   user_id UUID UNIQUE NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  -- Subject representing the org itself.
+  -- Note that orgs also have a subject on their associated user, but since you can't log in as a subject that
+  -- should be unused in practice.
+
+  subject_id UUID UNIQUE NOT NULL REFERENCES subjects (id),
   -- Resource for managing permissions on this organization itself.
   resource_id UUID UNIQUE NOT NULL REFERENCES resources (id),
 
@@ -187,6 +203,11 @@ CREATE TABLE orgs (
 CREATE FUNCTION trigger_create_org_resource()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Insert a subject for this org, assigning the subject_id to the new org.
+  INSERT INTO subjects(kind)
+    VALUES ('org')
+    RETURNING id INTO NEW.subject_id;
+
   -- Insert a new resource for this org, assigning the resource_id to the new org.
   INSERT INTO resources(kind)
     VALUES ('org')
@@ -208,9 +229,8 @@ DECLARE
   org_subject_id UUID;
   org_default_role_id UUID;
 BEGIN
-  SELECT org_user.subject_id INTO org_subject_id
+  SELECT org.subject_id INTO org_subject_id
     FROM orgs org
-    JOIN users org_user ON org.user_id = org_user.id
     WHERE org.id = NEW.id;
   SELECT role.id
     INTO org_default_role_id
@@ -375,10 +395,9 @@ ALTER TABLE projects ALTER COLUMN resource_id SET NOT NULL;
 -- View for expressing auth group membership.
 CREATE VIEW group_members(group_subject_id, member_subject_id) AS (
   -- Org groups
-  SELECT org_user.subject_id, member.subject_id
+  SELECT org.subject_id, member.subject_id
   FROM orgs org
-  JOIN users org_user ON org.user_id = org_user.id
-  JOIN org_members om ON om.organization_user_id = org_user.id
+  JOIN org_members om ON om.org_id = org.id
   JOIN users member ON om.member_user_id = member.id
   UNION ALL
   -- Team groups
@@ -451,3 +470,16 @@ AS $$
   );
 $$ LANGUAGE SQL;
 
+CREATE VIEW subjects_by_kind(subject_kind, subject_id, resolved_id) AS (
+  -- Users
+  SELECT 'user'::subject_kind, u.subject_id, u.subject_id
+  FROM users u
+  UNION ALL
+  -- Orgs
+  SELECT 'org'::subject_kind, o.subject_id, o.subject_id
+  FROM orgs o
+  UNION ALL
+  -- Teams
+  SELECT 'team'::subject_kind, t.subject_id, t.subject_id
+  FROM teams t
+);
