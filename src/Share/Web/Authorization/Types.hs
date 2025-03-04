@@ -14,6 +14,8 @@ module Share.Web.Authorization.Types
     _OrgSubject,
     _TeamSubject,
     RoleAssignment (..),
+    authSubjectKind,
+    resolvedAuthSubjectColumns,
   )
 where
 
@@ -22,6 +24,7 @@ import Data.Aeson (FromJSON, ToJSON (..), object, withObject, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON (..))
 import Data.Set qualified as Set
+import Data.UUID (UUID)
 import Hasql.Interpolate qualified as Hasql
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -57,6 +60,41 @@ type GenericAuthSubject = AuthSubject SubjectId SubjectId SubjectId
 
 type ResolvedAuthSubject = AuthSubject UserId OrgId TeamId
 
+authSubjectKind :: AuthSubject user org team -> SubjectKind
+authSubjectKind = \case
+  UserSubject _ -> UserSubjectKind
+  OrgSubject _ -> OrgSubjectKind
+  TeamSubject _ -> TeamSubjectKind
+
+resolvedAuthSubjectColumns :: ResolvedAuthSubject -> (SubjectKind, UUID)
+resolvedAuthSubjectColumns = \case
+  UserSubject id -> (UserSubjectKind, coerce id)
+  OrgSubject id -> (OrgSubjectKind, coerce id)
+  TeamSubject id -> (TeamSubjectKind, coerce id)
+
+instance ToJSON ResolvedAuthSubject where
+  toJSON = \case
+    UserSubject id -> object ["kind" .= ("user" :: Text), "id" .= id]
+    OrgSubject id -> object ["kind" .= ("org" :: Text), "id" .= id]
+    TeamSubject id -> object ["kind" .= ("team" :: Text), "id" .= id]
+
+instance FromJSON ResolvedAuthSubject where
+  parseJSON = withObject "ResolvedAuthSubject" $ \o -> do
+    kind <- o Aeson..: "kind"
+    case (kind :: Text) of
+      "user" -> UserSubject <$> o Aeson..: "id"
+      "org" -> OrgSubject <$> o Aeson..: "id"
+      "team" -> TeamSubject <$> o Aeson..: "id"
+      _ -> fail "Invalid ResolvedAuthSubject"
+
+--  Decoder for (subject.kind, id :: UUID)
+instance Hasql.DecodeRow ResolvedAuthSubject where
+  decodeRow = do
+    PG.decodeField @SubjectKind >>= \case
+      UserSubjectKind -> UserSubject <$> PG.decodeField @UserId
+      OrgSubjectKind -> OrgSubject <$> PG.decodeField @OrgId
+      TeamSubjectKind -> TeamSubject <$> PG.decodeField @TeamId
+
 -- Decoder for (subject.id, subject.kind)
 instance Hasql.DecodeRow GenericAuthSubject where
   decodeRow = do
@@ -65,14 +103,6 @@ instance Hasql.DecodeRow GenericAuthSubject where
       UserSubjectKind -> UserSubject <$> pure subjectId
       OrgSubjectKind -> OrgSubject <$> pure subjectId
       TeamSubjectKind -> TeamSubject <$> pure subjectId
-
---  Decoder for (subject.kind, id :: UUID)
-instance Hasql.DecodeRow (AuthSubject UserId OrgId TeamId) where
-  decodeRow = do
-    PG.decodeField @SubjectKind >>= \case
-      UserSubjectKind -> UserSubject <$> PG.decodeField @UserId
-      OrgSubjectKind -> OrgSubject <$> PG.decodeField @OrgId
-      TeamSubjectKind -> TeamSubject <$> PG.decodeField @TeamId
 
 makePrisms ''AuthSubject
 

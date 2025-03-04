@@ -2,21 +2,20 @@
 
 module Share.Postgres.Projects.Queries
   ( isPremiumProject,
-    listProjectMaintainers,
-    addMaintainers,
-    updateMaintainers,
+    listProjectRoles,
+    addProjectRoles,
+    removeProjectRoles,
     expectProjectShortHandsOf,
   )
 where
 
 import Control.Lens
-import Control.Monad.Except (runExceptT)
 import Data.Set qualified as Set
 import Share.IDs
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Prelude
-import Share.Web.Authorization.Types (GenericAuthSubject, ProjectMaintainerPermissions (..), ResolvedAuthSubject, RoleAssignment (..), RoleRef (..), projectRoles)
+import Share.Web.Authorization.Types (ResolvedAuthSubject, RoleAssignment (..), RoleRef (..), projectRoles, resolvedAuthSubjectColumns)
 
 isPremiumProject :: ProjectId -> Transaction e Bool
 isPremiumProject projId =
@@ -26,8 +25,8 @@ isPremiumProject projId =
     SELECT EXISTS (SELECT FROM premium_projects WHERE project_id = #{projId})
     |]
 
-listProjectMaintainers :: ProjectId -> Transaction e [(ResolvedAuthSubject, Set RoleRef)]
-listProjectMaintainers projId = do
+listProjectRoles :: ProjectId -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+listProjectRoles projId = do
   queryListRows @(ResolvedAuthSubject PG.:. Only ([RoleRef]))
     [sql|
       SELECT sbk.kind, sbk.resolved_id, array_agg(role.ref) as role_refs
@@ -39,68 +38,54 @@ listProjectMaintainers projId = do
         GROUP BY sbk.kind, sbk.resolved_id
         ORDER BY sbk.kind, sbk.resolved_id
     |]
-    <&> over _2 Set.fromList
+    <&> fmap \(subject PG.:. Only roleRefs) -> (RoleAssignment {subject, roles = Set.fromList roleRefs})
 
-addMaintainers :: ProjectId -> [RoleAssignment SubjectId] -> Transaction e [(ResolvedAuthSubject, Set RoleRef)]
-addMaintainers projId toAdd = do
-  let addedRolesTable = toAdd <&> \RoleAssignment {subject, roles} -> (subject, roles)
+addProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+addProjectRoles projId toAdd = do
+  let addedRolesTable =
+        toAdd
+          <&> \RoleAssignment {subject, roles} ->
+            let (kind, uuid) = resolvedAuthSubjectColumns subject
+             in (kind, uuid, toList roles)
   -- Insert the maintainers
   execute_
     [sql|
-        WITH values(subject_id, role_refs) AS (
-          SELECT t.subject_id, t.role_refs FROM ^{toTable addedRolesTable} AS t(project_id, user_id, role_refs)
+        WITH values(subject_id, role_id) AS (
+          SELECT sbk.subject_id, role.id
+            FROM ^{toTable addedRolesTable} AS t(kind, resolved_id, role_refs)
+            JOIN subjects_by_kind sbk ON sbk.kind = t.kind AND sbk.resolved_id = t.resolved_id
+            , UNNEST(t.role_refs) AS role_ref
+              JOIN roles role ON role.ref = role_ref
         ) INSERT INTO role_memberships (subject_id, resource_id, role_id)
-          SELECT values.subject_id, (SELECT p.resource_id FROM projects p WHERE p.id = #{projId}), r.id
-            FROM values, UNNEST(values.role_refs) AS role_ref
-            JOIN roles r ON r.ref = role_ref
+          SELECT v.subject_id, (SELECT p.resource_id FROM projects p WHERE p.id = #{projId}) AS resource_id, v.role_id
+            FROM values v
           ON CONFLICT DO NOTHING
         |]
-  listProjectMaintainers projId
+  listProjectRoles projId
 
-updateMaintainers :: ProjectId -> [RoleAssignment UserId] -> Transaction e (Either [UserId] [RoleAssignment UserId])
-updateMaintainers projId maintainers = runExceptT $ do
-  let userIds = fmap user maintainers
-  -- Check if any of the maintainers don't already exist
-  missingUserIds <-
-    lift $
-      queryListCol @UserId
-        [sql|
-      WITH values(user_id) AS (
-        SELECT * FROM ^{singleColumnTable userIds}
-      )
-      SELECT values.user_id FROM values
-          WHERE NOT EXISTS (SELECT FROM project_maintainers pm
-                             WHERE pm.project_id = #{projId}
-                               AND pm.user_id = values.user_id
-                           )
-    |]
-
-  case missingUserIds of
-    (_ : _) -> throwError missingUserIds
-    [] -> do
-      let updatedMaintainersTable = maintainers <&> \RoleAssignment {subject, roles = ProjectMaintainerPermissions {canView, canMaintain, canAdmin}} -> (projId, subject, canView, canMaintain, canAdmin)
-      lift $
-        execute_
-          [sql|
-        WITH values(project_id, user_id, can_view, can_maintain, can_admin) AS (
-          SELECT * FROM ^{toTable updatedMaintainersTable}
-        ) UPDATE project_maintainers
-          SET can_view = v.can_view, can_maintain = v.can_maintain, can_admin = v.can_admin
-            FROM values v
-          WHERE project_maintainers.project_id = v.project_id
-            AND project_maintainers.user_id = v.user_id
+removeProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+removeProjectRoles projId toRemove = do
+  let removedRolesTable =
+        toRemove
+          <&> \RoleAssignment {subject, roles} ->
+            let (kind, uuid) = resolvedAuthSubjectColumns subject
+             in (kind, uuid, toList roles)
+  -- Insert the maintainers
+  execute_
+    [sql|
+        WITH values(subject_id, role_id) AS (
+          SELECT sbk.subject_id, role.id
+            FROM ^{toTable removedRolesTable} AS t(kind, resolved_id, role_refs)
+            JOIN subjects_by_kind sbk ON sbk.kind = t.kind AND sbk.resolved_id = t.resolved_id
+            , UNNEST(t.role_refs) AS role_ref
+              JOIN roles role ON role.ref = role_ref
+        ) DELETE FROM role_memberships
+          USING values v
+          WHERE role_memberships.subject_id = v.subject_id
+            AND role_memberships.resource_id = (SELECT p.resource_id FROM projects p WHERE p.id = #{projId})
+            AND role_memberships.role_id = v.role_id
         |]
-      -- Delete any maintainers that have no permissions
-      lift $
-        execute_
-          [sql|
-          DELETE FROM project_maintainers pm
-            WHERE pm.project_id = #{projId}
-              AND pm.can_view = false
-              AND pm.can_maintain = false
-              AND pm.can_admin = false
-        |]
-      lift $ listProjectMaintainers projId
+  listProjectRoles projId
 
 expectProjectShortHandsOf :: Traversal s t ProjectId ProjectShortHand -> s -> Transaction e t
 expectProjectShortHandsOf trav s = do
