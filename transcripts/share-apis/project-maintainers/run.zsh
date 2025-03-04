@@ -14,29 +14,27 @@ fetch "$unauthorized_user" PATCH non-maintainer-project-update '/users/test/proj
     "summary": "update"
 }'
 
-fetch "$test_user" POST add-maintainers '/users/test/projects/privatetestproject/maintainers' "
+fetch "$test_user" POST add-maintainers '/users/test/projects/privatetestproject/maintainers/add' "
 {
-    \"maintainers\": 
-    [ { \"user\": \"${read_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": false
-        , \"canAdmin\": false
-        }
+    \"roles\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_viewer\"]
       }
-    , {\"user\": \"${maintain_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": true
-        , \"canAdmin\": false
-        }
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
       }
-    , {\"user\": \"${admin_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": true
-        , \"canAdmin\": true
-        }
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${admin_maintainer}\"}
+      , \"roles\": [\"project_owner\"]
+      }
+    ]
+}"
+
+# Non-owner should not be able to change roles
+fetch "$maintain_maintainer" POST non-owner-add-maintainers '/users/test/projects/privatetestproject/maintainers/add' "
+{
+    \"roles\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
       }
     ]
 }"
@@ -85,36 +83,29 @@ fetch "$admin_maintainer" PATCH admin-maintainer-project-update '/users/test/pro
 # Expire the project owner's cloud subscription, thus disabling project-maintainers.
 pg_sql "UPDATE public.cloud_subscribers SET is_active = false WHERE user_id = '${test_user##U-}'"
 
-
 # All maintainers should still be listed.
 fetch "$test_user" GET list-maintainers-non-premium '/users/test/projects/privatetestproject/maintainers'
 
-# maintainers should now lose their permissions.
-# E.g. read-maintainer should no longer be able to create tickets
-fetch "$read_maintainer" POST read-maintainer-non-premium-ticket-create '/users/test/projects/privatetestproject/tickets' '{
-    "title": "Ticket 3",
-    "description": "My description"
-}'
-
-# Can update maintainers' permissions
-# unmentioned users are left as-is,
-# maintainers with no valid permissions are removed.
-fetch "$test_user" PATCH update-maintainers '/users/test/projects/privatetestproject/maintainers' "
+# Should be unable to add new maintainers when the cloud subscription is expired.
+fetch "$test_user" POST add-maintainers-non-premium '/users/test/projects/privatetestproject/maintainers/add' "
 {
-    \"maintainers\": 
-    [ { \"user\": \"${read_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": true
-        , \"canAdmin\": false
-        }
+    \"roles\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
       }
-    , {\"user\": \"${maintain_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": false
-        , \"canMaintain\": false
-        , \"canAdmin\": false
-        }
+    ]
+}"
+
+# Can remove roles from users
+# unmentioned users are left as-is,
+fetch "$test_user" POST remove-maintainers '/users/test/projects/privatetestproject/maintainers/remove' "
+{
+    \"roles\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_viewer\"]
+      }
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
       }
     ]
 }"

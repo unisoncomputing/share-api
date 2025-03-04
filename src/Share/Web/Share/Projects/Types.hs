@@ -253,7 +253,7 @@ instance Aeson.ToJSON CatalogCategory where
 
 data ListRolesResponse = ListRolesResponse
   { roles :: [RoleAssignment ResolvedAuthSubject],
-    -- Whether the project roles feature is active on this project.
+    -- Whether the project is premium, a.k.a. can support adding collaborators
     active :: Bool
   }
   deriving (Show)

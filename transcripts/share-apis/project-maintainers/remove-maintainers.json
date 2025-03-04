@@ -3,25 +3,7 @@
     "roles": [
       {
         "roles": [
-          "project_viewer"
-        ],
-        "subject": {
-          "id": "U-<UUID>",
-          "kind": "user"
-        }
-      },
-      {
-        "roles": [
           "project_owner"
-        ],
-        "subject": {
-          "id": "U-<UUID>",
-          "kind": "user"
-        }
-      },
-      {
-        "roles": [
-          "project_contributor"
         ],
         "subject": {
           "id": "U-<UUID>",

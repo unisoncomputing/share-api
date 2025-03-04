@@ -1,44 +1,41 @@
 {
   "body": {
     "active": false,
-    "maintainers": [
+    "roles": [
       {
-        "permissions": {
-          "canAdmin": true,
-          "canMaintain": true,
-          "canView": true
-        },
-        "user": {
-          "avatarUrl": null,
-          "handle": "admin-maintainer",
-          "name": null,
-          "userId": "U-<UUID>"
+        "roles": [
+          "project_viewer"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
         }
       },
       {
-        "permissions": {
-          "canAdmin": false,
-          "canMaintain": true,
-          "canView": true
-        },
-        "user": {
-          "avatarUrl": null,
-          "handle": "maintain-maintainer",
-          "name": null,
-          "userId": "U-<UUID>"
+        "roles": [
+          "project_owner"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
         }
       },
       {
-        "permissions": {
-          "canAdmin": false,
-          "canMaintain": false,
-          "canView": true
-        },
-        "user": {
-          "avatarUrl": null,
-          "handle": "read-maintainer",
-          "name": null,
-          "userId": "U-<UUID>"
+        "roles": [
+          "project_contributor"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "project_owner"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
         }
       }
     ]
