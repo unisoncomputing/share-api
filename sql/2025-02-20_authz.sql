@@ -472,14 +472,30 @@ $$ LANGUAGE SQL;
 
 CREATE VIEW subjects_by_kind(kind, subject_id, resolved_id) AS (
   -- Users
-  SELECT 'user'::subject_kind, u.subject_id, u.subject_id
+  SELECT 'user'::subject_kind, u.subject_id, u.id
   FROM users u
   UNION ALL
   -- Orgs
-  SELECT 'org'::subject_kind, o.subject_id, o.subject_id
+  SELECT 'org'::subject_kind, o.subject_id, o.id
   FROM orgs o
   UNION ALL
   -- Teams
-  SELECT 'team'::subject_kind, t.subject_id, t.subject_id
+  SELECT 'team'::subject_kind, t.subject_id, t.id
   FROM teams t
+);
+
+CREATE VIEW debug_permissions(subject_kind, subject_id, resolved_id, resource_kind, resource_id, role_id, role_ref, actions) AS (
+  SELECT
+    sbk.kind AS subject_kind,
+    sbk.subject_id,
+    sbk.resolved_id,
+    r.kind AS resource_kind,
+    rm.resource_id,
+    rm.role_id,
+    role.ref AS role_ref,
+    role.actions
+  FROM subjects_by_kind sbk
+  JOIN role_memberships rm ON sbk.subject_id = rm.subject_id
+  JOIN roles role ON rm.role_id = role.id
+  JOIN resources r ON rm.resource_id = r.id
 );
