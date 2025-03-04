@@ -29,12 +29,12 @@ listProjectRoles :: ProjectId -> Transaction e [(RoleAssignment ResolvedAuthSubj
 listProjectRoles projId = do
   queryListRows @(ResolvedAuthSubject PG.:. Only ([RoleRef]))
     [sql|
-      SELECT sbk.kind, sbk.resolved_id, array_agg(role.ref) as role_refs
+      SELECT sbk.kind, sbk.resolved_id, array_agg(role.ref :: role_ref) as role_refs
       FROM role_memberships rm
       JOIN roles role ON rm.role_id = role.id
       JOIN subjects_by_kind sbk ON rm.subject_id = sbk.subject_id
       WHERE resource_id = (SELECT p.resource_id FROM projects p WHERE p.id = #{projId})
-        AND role.ref = ANY(#{toList projectRoles})
+        AND (role.ref::role_ref) = ANY(#{toList projectRoles}::role_ref[])
         GROUP BY sbk.kind, sbk.resolved_id
         ORDER BY sbk.kind, sbk.resolved_id
     |]
