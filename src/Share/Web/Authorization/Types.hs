@@ -25,6 +25,8 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON (..))
 import Data.Set qualified as Set
 import Data.UUID (UUID)
+import Hasql.Decoders qualified as HasqlDecode
+import Hasql.Encoders qualified as HasqlEncode
 import Hasql.Interpolate qualified as Hasql
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -35,20 +37,20 @@ data SubjectKind = UserSubjectKind | OrgSubjectKind | TeamSubjectKind
 
 instance Hasql.EncodeValue SubjectKind where
   encodeValue =
-    Hasql.encodeValue @Text
-      & contramap \case
+    HasqlEncode.enum
+      \case
         UserSubjectKind -> "user"
         OrgSubjectKind -> "org"
         TeamSubjectKind -> "team"
 
 instance Hasql.DecodeValue SubjectKind where
   decodeValue =
-    Hasql.decodeValue @Text
-      & fmap \case
-        "user" -> UserSubjectKind
-        "org" -> OrgSubjectKind
-        "team" -> TeamSubjectKind
-        _ -> error "Invalid SubjectKind"
+    HasqlDecode.enum
+      \case
+        "user" -> Just UserSubjectKind
+        "org" -> Just OrgSubjectKind
+        "team" -> Just TeamSubjectKind
+        _ -> Nothing
 
 data AuthSubject user org team
   = UserSubject user
@@ -180,22 +182,22 @@ instance FromJSON RoleRef where
 
 instance Hasql.DecodeValue RoleRef where
   decodeValue =
-    Hasql.decodeValue @Text
-      & fmap \case
-        "org_viewer" -> RoleOrgViewer
-        "org_contributor" -> RoleOrgContributor
-        "org_admin" -> RoleOrgAdmin
-        "org_default" -> RoleOrgDefault
-        "team_admin" -> RoleTeamAdmin
-        "project_viewer" -> RoleProjectViewer
-        "project_contributor" -> RoleProjectContributor
-        "project_owner" -> RoleProjectOwner
-        _ -> error "Invalid RoleRef"
+    HasqlDecode.enum $
+      \case
+        "org_viewer" -> Just RoleOrgViewer
+        "org_contributor" -> Just RoleOrgContributor
+        "org_admin" -> Just RoleOrgAdmin
+        "org_default" -> Just RoleOrgDefault
+        "team_admin" -> Just RoleTeamAdmin
+        "project_viewer" -> Just RoleProjectViewer
+        "project_contributor" -> Just RoleProjectContributor
+        "project_owner" -> Just RoleProjectOwner
+        _ -> Nothing
 
 instance Hasql.EncodeValue RoleRef where
   encodeValue =
-    Hasql.encodeValue @Text
-      & contramap \case
+    HasqlEncode.enum $
+      \case
         RoleOrgViewer -> "org_viewer"
         RoleOrgContributor -> "org_contributor"
         RoleOrgAdmin -> "org_admin"
