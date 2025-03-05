@@ -7,7 +7,7 @@ import GHC.Generics (Generic)
 import Servant
 import Share.IDs
 import Share.OAuth.Session (AuthenticatedUserId)
-import Share.Web.Authorization.Types (AddRolesRequest, AddRolesResponse, ListRolesResponse, RemoveRolesRequest, RemoveRolesResponse)
+import Share.Web.Authorization.Types (AddRolesRequest, ListRolesResponse, RemoveRolesRequest)
 
 type API = Capture "orgHandle" UserHandle :> NamedRoutes Routes
 
@@ -28,12 +28,12 @@ data OrgRolesRoutes mode
 type OrgRolesAddEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] AddRolesRequest
-    :> Post '[JSON] AddRolesResponse
+    :> Post '[JSON] ListRolesResponse
 
 type OrgRolesRemoveEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] RemoveRolesRequest
-    :> Post '[JSON] RemoveRolesResponse
+    :> Post '[JSON] ListRolesResponse
 
 type OrgRolesListEndpoint =
   AuthenticatedUserId
