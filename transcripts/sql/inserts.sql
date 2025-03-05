@@ -79,6 +79,12 @@ VALUES (
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
   'fe8921ca-aee7-40a2-8020-241ca78f2a5c');
 
+-- Make 'test' the owner of the unison org
+INSERT INTO role_memberships(subject_id, resource_id, role_id)
+  SELECT (SELECT u.subject_id FROM users u WHERE u.handle = 'test'),
+         (SELECT org.resource_id FROM orgs org JOIN users orgu ON org.user_id = orgu.id WHERE orgu.handle = 'unison'), 
+         (SELECT r.id FROM roles r WHERE r.ref = 'org_admin');
+
 INSERT INTO tours (
   user_id,
   tour_id)
