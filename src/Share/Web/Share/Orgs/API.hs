@@ -20,8 +20,8 @@ data Routes mode
 data OrgRolesRoutes mode
   = OrgRolesRoutes
   { list :: mode :- OrgRolesListEndpoint,
-    add :: mode :- OrgRolesAddEndpoint,
-    remove :: mode :- OrgRolesRemoveEndpoint
+    add :: mode :- "add" :> OrgRolesAddEndpoint,
+    remove :: mode :- "remove" :> OrgRolesRemoveEndpoint
   }
   deriving stock (Generic)
 
