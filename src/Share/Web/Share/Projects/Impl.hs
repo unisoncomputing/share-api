@@ -37,6 +37,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Authorization.Types
 import Share.Web.Errors
 import Share.Web.Share.Branches.Impl (branchesServer, getProjectBranchReadmeEndpoint)
 import Share.Web.Share.Contributions.Impl (contributionsByProjectServer)

@@ -16,6 +16,13 @@ module Share.Web.Authorization.Types
     RoleAssignment (..),
     authSubjectKind,
     resolvedAuthSubjectColumns,
+
+    -- * Generic request/response types
+    ListRolesResponse (..),
+    AddRolesResponse (..),
+    RemoveRolesResponse (..),
+    AddRolesRequest (..),
+    RemoveRolesRequest (..),
   )
 where
 
@@ -247,3 +254,58 @@ instance FromJSON ProjectMaintainerPermissions where
     canMaintain <- o Aeson..: "canMaintain"
     canAdmin <- o Aeson..: "canAdmin"
     pure ProjectMaintainerPermissions {canView, canMaintain, canAdmin}
+
+-- Generic request/response types
+data ListRolesResponse = ListRolesResponse
+  { -- Whether the caller is able to edit the roles.
+    active :: Bool,
+    roles :: [RoleAssignment ResolvedAuthSubject]
+  }
+  deriving (Show)
+
+instance ToJSON ListRolesResponse where
+  toJSON ListRolesResponse {..} =
+    object
+      [ "roles" Aeson..= roles,
+        "active" .= active
+      ]
+
+data AddRolesResponse = AddRolesResponse
+  { roles :: [RoleAssignment ResolvedAuthSubject]
+  }
+
+instance ToJSON AddRolesResponse where
+  toJSON AddRolesResponse {..} =
+    object
+      [ "roles" Aeson..= roles
+      ]
+
+data RemoveRolesResponse = RemoveRolesResponse
+  { roles :: [RoleAssignment ResolvedAuthSubject]
+  }
+
+instance ToJSON RemoveRolesResponse where
+  toJSON RemoveRolesResponse {..} =
+    object
+      [ "roles" Aeson..= roles
+      ]
+
+data AddRolesRequest = AddRolesRequest
+  { roles :: [RoleAssignment ResolvedAuthSubject]
+  }
+  deriving (Show)
+
+instance FromJSON AddRolesRequest where
+  parseJSON = Aeson.withObject "AddRolesRequest" $ \o -> do
+    roles <- o Aeson..: "roles"
+    pure AddRolesRequest {..}
+
+data RemoveRolesRequest = RemoveRolesRequest
+  { roles :: [RoleAssignment ResolvedAuthSubject]
+  }
+  deriving (Show)
+
+instance FromJSON RemoveRolesRequest where
+  parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do
+    roles <- o Aeson..: "roles"
+    pure RemoveRolesRequest {..}

@@ -8,6 +8,7 @@ import Share.IDs
 import Share.OAuth.Session (MaybeAuthenticatedSession)
 import Share.Utils.Caching (Cached)
 import Share.Utils.Servant (RequiredQueryParam)
+import Share.Web.Authorization.Types
 import Share.Web.Share.Branches.API (ProjectBranchesAPI)
 import Share.Web.Share.Contributions.API (ContributionsByProjectAPI)
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse, ShareTermDiffResponse, ShareTypeDiffResponse)

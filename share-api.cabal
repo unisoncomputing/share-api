@@ -139,6 +139,8 @@ library
       Share.Web.Share.Impl
       Share.Web.Share.Orgs.API
       Share.Web.Share.Orgs.Impl
+      Share.Web.Share.Orgs.Queries
+      Share.Web.Share.Orgs.Types
       Share.Web.Share.Projects.API
       Share.Web.Share.Projects.Impl
       Share.Web.Share.Projects.Types
