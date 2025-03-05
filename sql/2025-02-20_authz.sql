@@ -101,7 +101,7 @@ INSERT INTO roles (ref, name, actions)
     ),
     ('org_admin'::role_ref,
      'Organization Admin',
-     ARRAY['org:view', 'org:manage', 'org:create_project', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
+     ARRAY['org:view', 'org:manage', 'org:admin', 'org:create_project', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
     ),
     ('org_default'::role_ref,
      'Organization Default', -- The same as the contributor role, but keeping it separate allows us to see which orgs have diverged from the default or not.
