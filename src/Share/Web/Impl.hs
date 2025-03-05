@@ -22,6 +22,7 @@ import Share.Web.Authentication qualified as AuthN
 import Share.Web.Local.Impl qualified as Local
 import Share.Web.OAuth.Impl qualified as OAuth
 import Share.Web.Share.Impl qualified as Share
+import Share.Web.Share.Orgs.Impl qualified as Orgs
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Support.Impl qualified as Support
 import Share.Web.Types
@@ -69,6 +70,7 @@ server =
     :<|> OAuth.identityProviderServer
     :<|> Share.userCodebaseServer
     :<|> Share.userServer
+    :<|> Orgs.server
     :<|> Share.searchEndpoint
     :<|> Share.searchDefinitionNamesEndpoint
     :<|> Share.searchDefinitionsEndpoint
