@@ -6,9 +6,10 @@ module Share.Web.Share.Orgs.API (API, Routes (..), OrgRolesRoutes (..)) where
 import GHC.Generics (Generic)
 import Servant
 import Share.IDs
-import Share.Web.Authorization.Types (ResolvedAuthSubject, RoleAssignment)
+import Share.OAuth.Session (AuthenticatedUserId)
+import Share.Web.Authorization.Types (AddRolesRequest, AddRolesResponse, ListRolesResponse, RemoveRolesRequest, RemoveRolesResponse)
 
-type API = Capture "orgId" OrgId :> NamedRoutes Routes
+type API = Capture "orgHandle" UserHandle :> NamedRoutes Routes
 
 data Routes mode
   = Routes
@@ -25,12 +26,15 @@ data OrgRolesRoutes mode
   deriving stock (Generic)
 
 type OrgRolesAddEndpoint =
-  ReqBody '[JSON] [RoleAssignment ResolvedAuthSubject]
-    :> Post '[JSON] [RoleAssignment ResolvedAuthSubject]
+  AuthenticatedUserId
+    :> ReqBody '[JSON] AddRolesRequest
+    :> Post '[JSON] AddRolesResponse
 
 type OrgRolesRemoveEndpoint =
-  ReqBody '[JSON] [RoleAssignment ResolvedAuthSubject]
-    :> Post '[JSON] [RoleAssignment ResolvedAuthSubject]
+  AuthenticatedUserId
+    :> ReqBody '[JSON] RemoveRolesRequest
+    :> Post '[JSON] RemoveRolesResponse
 
 type OrgRolesListEndpoint =
-  Get '[JSON] [RoleAssignment ResolvedAuthSubject]
+  AuthenticatedUserId
+    :> Get '[JSON] ListRolesResponse

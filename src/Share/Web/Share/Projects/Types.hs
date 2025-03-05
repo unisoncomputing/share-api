@@ -17,7 +17,6 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
-import Share.Web.Authorization.Types (ResolvedAuthSubject, RoleAssignment)
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
 projectToAPI projectOwner Project {slug, visibility, createdAt, updatedAt, summary, tags} =
@@ -250,57 +249,3 @@ instance Aeson.ToJSON CatalogCategory where
       [ "name" .= name,
         "projects" .= projects
       ]
-
-data ListRolesResponse = ListRolesResponse
-  { roles :: [RoleAssignment ResolvedAuthSubject],
-    -- Whether the project is premium, a.k.a. can support adding collaborators
-    active :: Bool
-  }
-  deriving (Show)
-
-instance ToJSON ListRolesResponse where
-  toJSON ListRolesResponse {..} =
-    object
-      [ "roles" Aeson..= roles,
-        "active" .= active
-      ]
-
-data AddRolesResponse = AddRolesResponse
-  { roles :: [RoleAssignment ResolvedAuthSubject]
-  }
-
-instance ToJSON AddRolesResponse where
-  toJSON AddRolesResponse {..} =
-    object
-      [ "roles" Aeson..= roles
-      ]
-
-data RemoveRolesResponse = RemoveRolesResponse
-  { roles :: [RoleAssignment ResolvedAuthSubject]
-  }
-
-instance ToJSON RemoveRolesResponse where
-  toJSON RemoveRolesResponse {..} =
-    object
-      [ "roles" Aeson..= roles
-      ]
-
-data AddRolesRequest = AddRolesRequest
-  { roles :: [RoleAssignment ResolvedAuthSubject]
-  }
-  deriving (Show)
-
-instance FromJSON AddRolesRequest where
-  parseJSON = Aeson.withObject "AddRolesRequest" $ \o -> do
-    roles <- o Aeson..: "roles"
-    pure AddRolesRequest {..}
-
-data RemoveRolesRequest = RemoveRolesRequest
-  { roles :: [RoleAssignment ResolvedAuthSubject]
-  }
-  deriving (Show)
-
-instance FromJSON RemoveRolesRequest where
-  parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do
-    roles <- o Aeson..: "roles"
-    pure RemoveRolesRequest {..}

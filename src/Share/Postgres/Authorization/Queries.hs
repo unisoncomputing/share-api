@@ -81,11 +81,11 @@ userHasProjectPermission userId projectId permission = do
       SELECT user_has_permission(#{userId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
     |]
 
-userHasOrgPermission :: UserId -> UserId -> RolePermission -> PG.Transaction e Bool
-userHasOrgPermission userId orgUserId permission = do
+userHasOrgPermission :: UserId -> OrgId -> RolePermission -> PG.Transaction e Bool
+userHasOrgPermission userId orgId permission = do
   PG.queryExpect1Col
     [PG.sql|
-      SELECT user_has_permission(#{userId}, (SELECT org.resource_id FROM orgs org WHERE org.user_id = #{orgUserId}), #{permission})
+      SELECT user_has_permission(#{userId}, (SELECT org.resource_id FROM orgs org WHERE org.id = #{orgId}), #{permission})
     |]
 
 -- | Find all the subjects which have access to a given resource.

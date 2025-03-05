@@ -45,6 +45,8 @@ module Share.Web.Authorization
     checkUserUpdate,
     checkDownloadFromUserCodebase,
     checkDownloadFromProjectBranchCodebase,
+    checkReadOrgRolesList,
+    checkEditOrgRoles,
     permissionGuard,
     readPath,
     writePath,
@@ -93,6 +95,8 @@ import Share.Web.Errors
 import Share.Web.Errors qualified as Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Contributions.Types (UpdateContributionRequest (..))
+import Share.Web.Share.Orgs.Queries qualified as OrgQ
+import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Tickets.Types
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
@@ -105,6 +109,7 @@ data Permission
   = CodebasePermission CodebasePermission
   | ProjectPermission ProjectPermission
   | UserPermission UserPermission
+  | OrgPermission OrgPermission
   | AdminPermission
   | SudoPermission
   deriving stock (Show, Eq, Ord)
@@ -147,14 +152,19 @@ data ProjectPermission
   | TicketUpdate ProjectId
   | TicketRead ProjectId
   | TicketTimelineGet ProjectId
-  | RolesList ProjectId
-  | RolesEdit ProjectId
+  | ProjectRolesList ProjectId
+  | ProjectRolesEdit ProjectId
   | -- (RootHash, TargetHash)
     AccessCausalHash CausalId CausalId
   deriving stock (Show, Eq, Ord)
 
 data UserPermission
   = UserUpdate UserId
+  deriving stock (Show, Eq, Ord)
+
+data OrgPermission
+  = OrgRolesList OrgId
+  | OrgRolesEdit OrgId
   deriving stock (Show, Eq, Ord)
 
 data AuthZFailure = AuthZFailure Permission
@@ -206,12 +216,16 @@ instance Errors.ToServerError AuthZFailure where
       TicketUpdate _pid -> (ErrorID "authz:ticket:update", err403 {errBody = "Permission Denied: " <> msg})
       TicketRead _pid -> (ErrorID "authz:ticket:read", err403 {errBody = "Permission Denied: " <> msg})
       TicketTimelineGet _pid -> (ErrorID "authz:ticket:timeline", err403 {errBody = "Permission Denied: " <> msg})
-      RolesList _pid -> (ErrorID "authz:maintainers:list", err403 {errBody = "Permission Denied: " <> msg})
-      RolesEdit _pid -> (ErrorID "authz:maintainers:edit", err403 {errBody = "Permission Denied: " <> msg})
+      ProjectRolesList _pid -> (ErrorID "authz:maintainers:list", err403 {errBody = "Permission Denied: " <> msg})
+      ProjectRolesEdit _pid -> (ErrorID "authz:maintainers:edit", err403 {errBody = "Permission Denied: " <> msg})
       AccessCausalHash _ _ -> (ErrorID "authz:causal-hash", err403 {errBody = "Permission Denied: " <> msg})
     UserPermission userPermission ->
       case userPermission of
         UserUpdate _uid -> (ErrorID "authz:user:update", err403 {errBody = "Permission Denied: " <> msg})
+    OrgPermission orgPermission ->
+      case orgPermission of
+        OrgRolesEdit _orgId -> (ErrorID "authz:org:roles-edit", err403 {errBody = "Permission Denied: " <> msg})
+        OrgRolesList _orgId -> (ErrorID "authz:org:roles-list", err403 {errBody = "Permission Denied: " <> msg})
     AdminPermission ->
       (ErrorID "authz:admin", err403 {errBody = "Permission Denied: " <> msg})
     SudoPermission ->
@@ -257,12 +271,16 @@ authZFailureMessage (AuthZFailure perm) = case perm of
     TicketUpdate _pid -> "Not permitted to update this ticket"
     TicketRead _pid -> "Not permitted to read this ticket"
     TicketTimelineGet _pid -> "Not permitted to read this ticket"
-    RolesList _pid -> "Not permitted to list maintainers"
-    RolesEdit _pid -> "Not permitted to edit maintainers"
+    ProjectRolesList _pid -> "Not permitted to list maintainers"
+    ProjectRolesEdit _pid -> "Not permitted to edit maintainers"
     AccessCausalHash _ _ -> "Not permitted to access this causal hash"
   UserPermission userPermission ->
     case userPermission of
       UserUpdate _uid -> "Not permitted to update this user"
+  OrgPermission orgPermission ->
+    case orgPermission of
+      OrgRolesEdit _orgId -> "Not permitted to edit roles in this org"
+      OrgRolesList _orgId -> "Not permitted to list roles in this org"
   AdminPermission -> "Not permitted to access this resource"
   SudoPermission -> "Sudo mode required to perform this action. Please re-authenticate to enable sudo mode."
 
@@ -347,8 +365,12 @@ checkProjectCreate :: Maybe UserId -> UserId -> WebApp (Either AuthZFailure Auth
 checkProjectCreate mayReqUserId targetUserId = maybePermissionFailure (ProjectPermission (ProjectCreate targetUserId)) $ do
   reqUserId <- guardMaybe mayReqUserId
   -- Can create projects in their own user, or in any org they have permission to create projects in.
-  guard (reqUserId == targetUserId) <|> (assertUserHasOrgPermission reqUserId targetUserId OrgProjectCreate)
+  guard (reqUserId == targetUserId) <|> checkCreateInOrg reqUserId
   pure $ AuthZReceipt Nothing
+  where
+    checkCreateInOrg userId = do
+      Org {orgId} <- guardMaybeM $ PG.runTransaction $ OrgQ.orgByUserId targetUserId
+      assertUserHasOrgPermission userId orgId OrgProjectCreate
 
 checkProjectUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure ())
 checkProjectUpdate mayReqUserId targetProjectId = maybePermissionFailure (ProjectPermission (ProjectUpdate targetProjectId)) $ do
@@ -471,13 +493,13 @@ checkProjectReleaseRead reqUserId project@Project {projectId} =
 
 checkReadProjectRolesList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkReadProjectRolesList reqUserId projectId =
-  maybePermissionFailure (ProjectPermission (RolesList projectId)) $ do
+  maybePermissionFailure (ProjectPermission (ProjectRolesList projectId)) $ do
     assertUserHasProjectPermission ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
 checkAddProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkAddProjectRoles reqUserId projectId =
-  maybePermissionFailure (ProjectPermission (RolesEdit projectId)) $ do
+  maybePermissionFailure (ProjectPermission (ProjectRolesEdit projectId)) $ do
     -- In order to add new collaborators it must be a premium project.
     assertIsPremiumProject projectId
     assertUserHasProjectPermission ProjectManage reqUserId projectId
@@ -485,7 +507,7 @@ checkAddProjectRoles reqUserId projectId =
 
 checkRemoveProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkRemoveProjectRoles reqUserId projectId =
-  maybePermissionFailure (ProjectPermission (RolesEdit projectId)) $ do
+  maybePermissionFailure (ProjectPermission (ProjectRolesEdit projectId)) $ do
     assertUserHasProjectPermission ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
@@ -608,9 +630,9 @@ checkTicketTimelineRead mayReqUserId project@(Project {projectId}) =
   where
     authzError = AuthZFailure $ ProjectPermission (TicketTimelineGet projectId)
 
-assertUserHasOrgPermission :: UserId -> UserId -> RolePermission -> MaybeT WebApp ()
-assertUserHasOrgPermission reqUserId targetUserId rolePermission =
-  guardM . lift . PG.runTransaction $ Q.userHasOrgPermission reqUserId targetUserId rolePermission
+assertUserHasOrgPermission :: UserId -> OrgId -> RolePermission -> MaybeT WebApp ()
+assertUserHasOrgPermission reqUserId orgId rolePermission =
+  guardM . lift . PG.runTransaction $ Q.userHasOrgPermission reqUserId orgId rolePermission
 
 assertUserHasProjectPermission :: RolePermission -> UserId -> ProjectId -> MaybeT WebApp ()
 assertUserHasProjectPermission rolePermission reqUserId projId = do
@@ -637,6 +659,18 @@ checkUserIsOrgMember reqUserId orgUserId = do
   guardM $
     PG.runTransaction $
       Q.isOrgMember reqUserId orgUserId
+
+checkReadOrgRolesList :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReadOrgRolesList reqUserId orgId =
+  maybePermissionFailure (OrgPermission (OrgRolesList orgId)) $ do
+    assertUserHasOrgPermission reqUserId orgId OrgAdmin
+    pure $ AuthZReceipt Nothing
+
+checkEditOrgRoles :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkEditOrgRoles reqUserId orgId =
+  maybePermissionFailure (OrgPermission (OrgRolesEdit orgId)) $ do
+    assertUserHasOrgPermission reqUserId orgId OrgAdmin
+    pure $ AuthZReceipt Nothing
 
 -- | Check whether the given user has administrative privileges,
 -- and has a recently created session. This adds additional protection to
