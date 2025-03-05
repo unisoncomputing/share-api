@@ -1,0 +1,39 @@
+{
+  "body": {
+    "active": true,
+    "roles": [
+      {
+        "roles": [
+          "project_contributor"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "org_admin"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "org_default"
+        ],
+        "subject": {
+          "id": "ORG-<UUID>",
+          "kind": "org"
+        }
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
