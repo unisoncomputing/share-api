@@ -27,6 +27,7 @@ transcripts=(
     branch-browse transcripts/share-apis/branch-browse/
     code-browse transcripts/share-apis/code-browse/
     sync-apis transcripts/sync-apis/
+    roles transcripts/roles/
 )
 
 for transcript dir in "${(@kv)transcripts}"; do

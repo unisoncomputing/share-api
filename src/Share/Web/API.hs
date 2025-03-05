@@ -11,6 +11,7 @@ import Share.Prelude
 import Share.Web.Admin.API qualified as Admin
 import Share.Web.Local.API qualified as Local
 import Share.Web.Share.API qualified as Share
+import Share.Web.Share.Orgs.API qualified as Orgs
 import Share.Web.Share.Projects.API qualified as Projects
 import Share.Web.Support.API qualified as Support
 import Share.Web.Types
@@ -23,6 +24,7 @@ type API =
     :<|> OAuth.IdentityProviderAPI
     :<|> ("codebases" :> Share.UserPublicCodebaseAPI)
     :<|> ("users" :> Share.UserAPI)
+    :<|> ("orgs" :> Orgs.API)
     :<|> ("search" :> Share.SearchEndpoint)
     :<|> ("search-names" :> Share.SearchDefinitionNamesEndpoint)
     :<|> ("search-definitions" :> Share.SearchDefinitionsEndpoint)
