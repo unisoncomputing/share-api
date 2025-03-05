@@ -1,0 +1,30 @@
+{
+  "body": {
+    "active": true,
+    "roles": [
+      {
+        "roles": [
+          "org_admin"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "org_default"
+        ],
+        "subject": {
+          "id": "ORG-<UUID>",
+          "kind": "org"
+        }
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
