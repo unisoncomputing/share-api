@@ -20,7 +20,7 @@ orgByUserId :: UserId -> Transaction e (Maybe Org)
 orgByUserId orgUserId = do
   query1Row
     [sql|
-      SELECT org.id FROM orgs AS org
+      SELECT org.id FROM orgs org
       WHERE org.user_id = #{orgUserId}
     |]
 
@@ -28,9 +28,10 @@ orgByUserHandle :: UserHandle -> Transaction e (Maybe Org)
 orgByUserHandle orgHandle = do
   query1Row
     [sql|
-      SELECT org.id FROM orgs AS org
-        JOIN users AS user ON org.user_id = user.id
-      WHERE user.handle = #{orgHandle}
+      SELECT org.id
+        FROM orgs org
+        JOIN users u ON org.user_id = u.id
+      WHERE u.handle = #{orgHandle}
     |]
 
 listOrgRoles :: OrgId -> Transaction e [RoleAssignment ResolvedAuthSubject]
