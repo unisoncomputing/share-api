@@ -2,6 +2,7 @@ module Share.BackgroundJobs.EntityDepthMigration.Queries
   ( updateComponentDepths,
     updatePatchDepths,
     updateNamespaceDepths,
+    updateNamespaceWorkingSet,
     updateCausalDepths,
   )
 where
@@ -35,7 +36,7 @@ updateComponentDepths = do
               t.component_hash_id = ch.id
               AND cr_sub.type_id = t.id AND cd.depth IS NULL
         )
-        LIMIT 1
+        LIMIT 1000
         FOR UPDATE SKIP LOCKED
     ), updated(component_hash_id, x) AS (
         SELECT ch.component_hash_id, update_component_depth(ch.component_hash_id)
@@ -85,7 +86,7 @@ updatePatchDepths = do
               WHERE ptm.patch_id = p.id
                 AND cd.depth IS NULL
           )
-        LIMIT 1
+        LIMIT 1000
         FOR UPDATE SKIP LOCKED
     ), updated(patch_id, x) AS (
         SELECT up.patch_id, update_patch_depth(up.patch_id)
@@ -103,6 +104,27 @@ updateNamespaceDepths = do
     WITH updatable_namespaces(namespace_hash_id) AS (
       -- Find all namespaces which aren't missing depth info for any of their
       -- dependencies.
+      SELECT n.id
+        FROM unfinished_namespaces_working_set n
+        LIMIT 1000
+        FOR UPDATE SKIP LOCKED
+    ), updated(namespace_hash_id, x) AS (
+        SELECT un.namespace_hash_id, update_namespace_depth(un.namespace_hash_id)
+          FROM updatable_namespaces un
+    ), mark_finished_1 AS (
+        DELETE FROM unfinished_namespace_depths ufd
+        WHERE ufd.id IN (SELECT u.namespace_hash_id FROM updated u)
+    ), mark_finished_2 AS (
+        DELETE FROM unfinished_namespaces_working_set ws
+        WHERE ws.id IN (SELECT u.namespace_hash_id FROM updated u)
+    ) SELECT COUNT(*) FROM updated
+  |]
+
+updateNamespaceWorkingSet :: Transaction e Int64
+updateNamespaceWorkingSet = do
+  execute_
+    [sql|
+    INSERT INTO unfinished_namespaces_working_set (id)
       SELECT n.id
         FROM unfinished_namespace_depths n
         WHERE NOT EXISTS (
@@ -171,16 +193,9 @@ updateNamespaceDepths = do
               WHERE nt.namespace_hash_id = n.id
               AND cd.depth IS NULL
           )
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED
-    ), updated(namespace_hash_id, x) AS (
-        SELECT un.namespace_hash_id, update_namespace_depth(un.namespace_hash_id)
-          FROM updatable_namespaces un
-    ), mark_finished AS (
-        DELETE FROM unfinished_namespace_depths ufd
-        WHERE ufd.id IN (SELECT u.namespace_hash_id FROM updated u)
-    ) SELECT COUNT(*) FROM updated
+      ON CONFLICT DO NOTHING
   |]
+  queryExpect1Col [sql| SELECT COUNT(*) FROM unfinished_namespaces_working_set |]
 
 updateCausalDepths :: Transaction e Int64
 updateCausalDepths = do
@@ -204,7 +219,7 @@ updateCausalDepths = do
               WHERE ca.causal_id = c.id
               AND cd.depth IS NULL
         )
-        LIMIT 1
+        LIMIT 1000
         FOR UPDATE SKIP LOCKED
     ), updated(causal_id) AS (
         SELECT c.id, update_causal_depth(c.id)
@@ -231,8 +246,8 @@ updateCausalDepths = do
 --   WHERE cd.depth IS NULL;
 
 -- SELECT COUNT(*)
---   FROM branch_hashes bh
---   LEFT JOIN namespace_depth nd ON nd.namespace_hash_id = bh.id
+--   FROM namespaces n
+--   LEFT JOIN namespace_depth nd ON nd.namespace_hash_id = n.namespace_hash_id
 --   WHERE nd.depth IS NULL;
 
 -- SELECT COUNT(*)
