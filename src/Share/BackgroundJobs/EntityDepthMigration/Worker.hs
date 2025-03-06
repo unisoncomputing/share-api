@@ -55,16 +55,37 @@ computePatchDepths !_authZReceipt = do
       computePatchDepths _authZReceipt
 
 computeNamespaceAndCausalDepths :: AuthZ.AuthZReceipt -> Background ()
-computeNamespaceAndCausalDepths !authZReceipt = do
-  Logging.logInfoText $ "Computing namespace and causal depth for batch"
-  PG.runTransaction Q.updateNamespaceDepths >>= \case
-    namespaceN -> do
-      PG.runTransaction Q.updateCausalDepths >>= \case
-        causalN -> do
-          case (namespaceN, causalN) of
-            (0, 0) -> do
-              Logging.logInfoText $ "Done processing namespace and causal depth"
-              pure ()
-            (namespaceN, causalN) -> do
-              Logging.logInfoText $ "Computed Depth for " <> tShow namespaceN <> " namespaces and " <> tShow causalN <> " causals"
-              computeNamespaceAndCausalDepths authZReceipt
+computeNamespaceAndCausalDepths !_authZReceipt = do
+  doNamespaces
+  where
+    doNamespaces :: Background ()
+    doNamespaces = do
+      Logging.logInfoText $ "Computing namespace depth for batch"
+      PG.runTransaction Q.updateNamespaceDepths >>= \case
+        0 -> do
+          Logging.logInfoText $ "Recomputing namespace working set."
+          PG.runTransaction Q.updateNamespaceWorkingSet >>= \case
+            0 -> do
+              -- No more namespaces to compute, we may be done if there are no more causals
+              doCausals True
+            n -> do
+              Logging.logInfoText $ "Added " <> tShow n <> " namespaces to the working set"
+              -- Keep doing namespaces as long as we can.
+              doNamespaces
+        n -> do
+          Logging.logInfoText $ "Computed Depth for " <> tShow n <> " namespaces"
+          doNamespaces
+    doCausals :: Bool -> Background ()
+    doCausals finish = do
+      causalN <- PG.runTransaction Q.updateCausalDepths
+      case (causalN, finish) of
+        (0, True) -> do
+          Logging.logInfoText $ "Done processing namespace and causal depth"
+          pure ()
+        (0, False) -> do
+          -- We're done causals for now, might be finished, but there may be more namespaces.
+          doNamespaces
+        (n, _) -> do
+          Logging.logInfoText $ "Computed Depth for " <> tShow n <> " causals"
+          -- Keep doing causals.
+          doCausals False

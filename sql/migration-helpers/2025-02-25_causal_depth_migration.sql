@@ -15,6 +15,10 @@ CREATE TABLE unfinished_component_depths (
   id INTEGER PRIMARY KEY REFERENCES component_hashes (id) ON DELETE CASCADE
 );
 
+CREATE TABLE unfinished_namespaces_working_set (
+  id INTEGER PRIMARY KEY REFERENCES branch_hashes (id) ON DELETE CASCADE
+);
+
 INSERT INTO unfinished_causal_depths (id)
   SELECT c.id
     FROM causals c
@@ -48,3 +52,4 @@ DROP TABLE unfinished_causal_depths;
 DROP TABLE unfinished_namespace_depths;
 DROP TABLE unfinished_patch_depths;
 DROP TABLE unfinished_component_depths;
+DROP TABLE unfinished_namespaces_working_set;
