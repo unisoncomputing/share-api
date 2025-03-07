@@ -107,10 +107,17 @@ INSERT INTO namespaces(namespace_hash_id, contained_terms, deep_contained_terms,
   VALUES (0, 0, 0, 0, 0, 0, 0)
   ON CONFLICT DO NOTHING;
 
+INSERT INTO namespace_depth(namespace_hash_id, depth)
+  VALUES (0, 0)
+  ON CONFLICT DO NOTHING;
 
 -- Initialize the empty causal
 INSERT INTO causals(id, hash, namespace_hash_id)
   VALUES (0, 'sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg', 0)
+  ON CONFLICT DO NOTHING;
+
+INSERT INTO causal_depth(causal_id, depth)
+  VALUES (0, 0)
   ON CONFLICT DO NOTHING;
 
 -- Projects
