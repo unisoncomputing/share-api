@@ -54,6 +54,7 @@ newRowCursor namePrefix query =
     execute_ $
       declaration
         <> [sql|
+      BINARY
       NO SCROLL
       CURSOR
       WITHOUT HOLD
