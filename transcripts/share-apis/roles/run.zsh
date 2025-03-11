@@ -19,7 +19,7 @@ fetch "$test_user" GET org-roles-list '/orgs/unison/roles'
 # Typically you'd add the user to the org, but this is a good way to test JUST the resource role hierarchy.
 fetch "$test_user" POST grant-project-contributor '/orgs/unison/roles/add' "
 {
-    \"roles\": 
+    \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${some_user}\"}
       , \"roles\": [\"project_contributor\"]
       }
@@ -31,7 +31,7 @@ fetch "$some_user" GET maintainer-project-view '/users/unison/projects/privateor
 # Remove the user from the org again
 fetch "$test_user" POST revoke-project-contributor '/orgs/unison/roles/remove' "
 {
-    \"roles\": 
+    \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${some_user}\"}
       , \"roles\": [\"project_contributor\"]
       }

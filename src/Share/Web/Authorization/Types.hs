@@ -259,53 +259,53 @@ instance FromJSON ProjectMaintainerPermissions where
 data ListRolesResponse = ListRolesResponse
   { -- Whether the caller is able to edit the roles.
     active :: Bool,
-    roles :: [RoleAssignment ResolvedAuthSubject]
+    roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
 
 instance ToJSON ListRolesResponse where
   toJSON ListRolesResponse {..} =
     object
-      [ "roles" Aeson..= roles,
+      [ "role_assignments" Aeson..= roleAssignments,
         "active" .= active
       ]
 
 data AddRolesResponse = AddRolesResponse
-  { roles :: [RoleAssignment ResolvedAuthSubject]
+  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
 
 instance ToJSON AddRolesResponse where
   toJSON AddRolesResponse {..} =
     object
-      [ "roles" Aeson..= roles
+      [ "role_assignments" Aeson..= roleAssignments
       ]
 
 data RemoveRolesResponse = RemoveRolesResponse
-  { roles :: [RoleAssignment ResolvedAuthSubject]
+  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
 
 instance ToJSON RemoveRolesResponse where
   toJSON RemoveRolesResponse {..} =
     object
-      [ "roles" Aeson..= roles
+      [ "role_assignments" Aeson..= roleAssignments
       ]
 
 data AddRolesRequest = AddRolesRequest
-  { roles :: [RoleAssignment ResolvedAuthSubject]
+  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
 
 instance FromJSON AddRolesRequest where
   parseJSON = Aeson.withObject "AddRolesRequest" $ \o -> do
-    roles <- o Aeson..: "roles"
+    roleAssignments <- o Aeson..: "role_assignments"
     pure AddRolesRequest {..}
 
 data RemoveRolesRequest = RemoveRolesRequest
-  { roles :: [RoleAssignment ResolvedAuthSubject]
+  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
 
 instance FromJSON RemoveRolesRequest where
   parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do
-    roles <- o Aeson..: "roles"
+    roleAssignments <- o Aeson..: "role_assignments"
     pure RemoveRolesRequest {..}

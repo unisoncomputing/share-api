@@ -69,11 +69,13 @@ CREATE TYPE role_ref AS ENUM (
   'org_viewer',
   'org_contributor',
   'org_admin',
+  'org_owner',
   'org_default',
   'team_admin',
   'project_viewer',
   'project_contributor',
-  'project_owner'
+  'project_owner',
+  'project_admin'
 );
 
 -- Roles are currently managed by Unison admins only, but we could add a resource for managing custom roles in the
@@ -103,6 +105,10 @@ INSERT INTO roles (ref, name, actions)
      'Organization Admin',
      ARRAY['org:view', 'org:manage', 'org:admin', 'org:create_project', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
     ),
+    ('org_owner'::role_ref,
+     'Organization Owner',
+     ARRAY['org:view', 'org:manage', 'org:admin', 'org:create_project', 'org:delete', 'org:change_owner', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
+    ),
     ('org_default'::role_ref,
      'Organization Default', -- The same as the contributor role, but keeping it separate allows us to see which orgs have diverged from the default or not.
      ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:create', 'project:contribute']
@@ -119,9 +125,13 @@ INSERT INTO roles (ref, name, actions)
      'Project Contributor',
      ARRAY['project:view', 'project:contribute']
     ),
+    ('project_admin'::role_ref,
+     'Project Admin',
+     ARRAY['project:view', 'project:manage', 'project:contribute']
+    ),
     ('project_owner'::role_ref,
      'Project Owner',
-     ARRAY['project:view', 'project:manage', 'project:contribute']
+     ARRAY['project:view', 'project:manage', 'project:contribute', 'project:delete']
     );
 
 

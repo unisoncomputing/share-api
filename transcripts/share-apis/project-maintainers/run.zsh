@@ -16,7 +16,7 @@ fetch "$unauthorized_user" PATCH non-maintainer-project-update '/users/test/proj
 
 fetch "$test_user" POST add-maintainers '/users/test/projects/privatetestproject/maintainers/add' "
 {
-    \"roles\": 
+    \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
       , \"roles\": [\"project_viewer\"]
       }
@@ -32,7 +32,7 @@ fetch "$test_user" POST add-maintainers '/users/test/projects/privatetestproject
 # Non-owner should not be able to change roles
 fetch "$maintain_maintainer" POST non-owner-add-maintainers '/users/test/projects/privatetestproject/maintainers/add' "
 {
-    \"roles\": 
+    \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
       , \"roles\": [\"project_contributor\"]
       }
@@ -89,7 +89,7 @@ fetch "$test_user" GET list-maintainers-non-premium '/users/test/projects/privat
 # Should be unable to add new maintainers when the cloud subscription is expired.
 fetch "$test_user" POST add-maintainers-non-premium '/users/test/projects/privatetestproject/maintainers/add' "
 {
-    \"roles\": 
+    \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
       , \"roles\": [\"project_contributor\"]
       }
@@ -100,7 +100,7 @@ fetch "$test_user" POST add-maintainers-non-premium '/users/test/projects/privat
 # unmentioned users are left as-is,
 fetch "$test_user" POST remove-maintainers '/users/test/projects/privatetestproject/maintainers/remove' "
 {
-    \"roles\": 
+    \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
       , \"roles\": [\"project_viewer\"]
       }

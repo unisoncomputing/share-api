@@ -41,13 +41,13 @@ listRolesEndpoint orgHandle caller = do
   ListRolesResponse True <$> PG.runTransaction (OrgQ.listOrgRoles orgId)
 
 addRolesEndpoint :: UserHandle -> UserId -> AddRolesRequest -> WebApp ListRolesResponse
-addRolesEndpoint orgHandle caller (AddRolesRequest {roles}) = do
+addRolesEndpoint orgHandle caller (AddRolesRequest {roleAssignments}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
-  ListRolesResponse True <$> PG.runTransaction (OrgQ.addOrgRoles orgId roles)
+  ListRolesResponse True <$> PG.runTransaction (OrgQ.addOrgRoles orgId roleAssignments)
 
 removeRolesEndpoint :: UserHandle -> UserId -> RemoveRolesRequest -> WebApp ListRolesResponse
-removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roles}) = do
+removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
-  ListRolesResponse True <$> PG.runTransaction (OrgQ.removeOrgRoles orgId roles)
+  ListRolesResponse True <$> PG.runTransaction (OrgQ.removeOrgRoles orgId roleAssignments)

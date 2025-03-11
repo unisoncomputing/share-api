@@ -326,28 +326,28 @@ listRolesEndpoint session projectUserHandle projectSlug = do
   projectId <- PG.runTransactionOrRespondError $ do
     Q.projectIDFromHandleAndSlug projectUserHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadProjectRolesList caller projectId
-  (isPremiumProject, roles) <- PG.runTransaction $ do
-    roles <- ProjectsQ.listProjectRoles projectId
+  (isPremiumProject, roleAssignments) <- PG.runTransaction $ do
+    roleAssignments <- ProjectsQ.listProjectRoles projectId
     isPremiumProject <- ProjectsQ.isPremiumProject projectId
-    pure (isPremiumProject, roles)
-  pure $ ListRolesResponse {active = isPremiumProject, roles}
+    pure (isPremiumProject, roleAssignments)
+  pure $ ListRolesResponse {active = isPremiumProject, roleAssignments}
 
 addRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> AddRolesRequest -> WebApp AddRolesResponse
-addRolesEndpoint session projectUserHandle projectSlug (AddRolesRequest {roles}) = do
+addRolesEndpoint session projectUserHandle projectSlug (AddRolesRequest {roleAssignments}) = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
     Q.projectIDFromHandleAndSlug projectUserHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkAddProjectRoles caller projectId
   PG.runTransaction $ do
-    updatedRoles <- ProjectsQ.addProjectRoles projectId roles
-    pure $ AddRolesResponse {roles = updatedRoles}
+    updatedRoles <- ProjectsQ.addProjectRoles projectId roleAssignments
+    pure $ AddRolesResponse {roleAssignments = updatedRoles}
 
 removeRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> RemoveRolesRequest -> WebApp RemoveRolesResponse
-removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {roles}) = do
+removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {roleAssignments}) = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
     Q.projectIDFromHandleAndSlug projectUserHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkRemoveProjectRoles caller projectId
   PG.runTransaction $ do
-    updatedRoles <- ProjectsQ.removeProjectRoles projectId roles
-    pure $ RemoveRolesResponse {roles = updatedRoles}
+    updatedRoles <- ProjectsQ.removeProjectRoles projectId roleAssignments
+    pure $ RemoveRolesResponse {roleAssignments = updatedRoles}
