@@ -20,9 +20,9 @@ allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> Codebas
 allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   ownerUserId <- asks codebaseOwner
   -- Create a temp table for storing the dependencies we know the calling client already has.
-  execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER NULL ) ON COMMIT DROP |]
-  execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER NULL ) ON COMMIT DROP |]
-  execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER NULL ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -36,18 +36,21 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
       FROM dependencies_of_causals((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
     ), do_causals AS (
       INSERT INTO except_causals(causal_id)
-      SELECT causal.id
+      SELECT DISTINCT causal.id
       FROM the_causal_hashes tch
         JOIN causals causal ON tch.hash = causal.hash
+      ON CONFLICT DO NOTHING
     ), do_namespaces AS (
       INSERT INTO except_namespaces(branch_hash_ids)
-      SELECT bh.id
+      SELECT DISTINCT bh.id
       FROM dependency_hashes dh
         JOIN branch_hashes bh ON dh.hash = bh.base32
+      ON CONFLICT DO NOTHING
     ) INSERT INTO except_components(component_hash_id)
-      SELECT ch.id
+      SELECT DISTINCT ch.id
       FROM dependency_hashes dh
         JOIN component_hashes ch ON dh.hash = ch.base32
+      ON CONFLICT DO NOTHING
     |]
   cursor <-
     PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
