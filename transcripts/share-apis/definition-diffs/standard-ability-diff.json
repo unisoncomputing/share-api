@@ -52,11 +52,7 @@
             },
             {
               "annotation": null,
-              "segment": "\n"
-            },
-            {
-              "annotation": null,
-              "segment": "  "
+              "segment": " "
             }
           ]
         },
@@ -225,11 +221,7 @@
           },
           {
             "annotation": null,
-            "segment": "\n"
-          },
-          {
-            "annotation": null,
-            "segment": "  "
+            "segment": " "
           },
           {
             "annotation": {
@@ -334,11 +326,7 @@
           },
           {
             "annotation": null,
-            "segment": "\n"
-          },
-          {
-            "annotation": null,
-            "segment": "  "
+            "segment": " "
           },
           {
             "annotation": {
