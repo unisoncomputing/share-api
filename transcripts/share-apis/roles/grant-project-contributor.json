@@ -1,7 +1,7 @@
 {
   "body": {
     "active": true,
-    "roles": [
+    "role_assignments": [
       {
         "roles": [
           "project_contributor"

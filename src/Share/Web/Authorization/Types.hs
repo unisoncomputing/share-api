@@ -125,10 +125,13 @@ data RolePermission
     ProjectView
   | ProjectManage
   | ProjectContribute
+  | ProjectDelete
   | -- Org
     OrgView
   | OrgManage
   | OrgAdmin
+  | OrgDelete
+  | OrgChangeOwner
   | OrgProjectCreate
   | -- Team
     TeamView
@@ -142,9 +145,12 @@ instance Hasql.EncodeValue RolePermission where
         ProjectView -> "project:view"
         ProjectManage -> "project:manage"
         ProjectContribute -> "project:contribute"
+        ProjectDelete -> "project:delete"
         OrgView -> "org:view"
         OrgManage -> "org:manage"
         OrgAdmin -> "org:admin"
+        OrgDelete -> "org:delete"
+        OrgChangeOwner -> "org:change_owner"
         OrgProjectCreate -> "org:project_create"
         TeamView -> "team:view"
         TeamManage -> "team:manage"
@@ -154,11 +160,13 @@ data RoleRef
   = RoleOrgViewer
   | RoleOrgContributor
   | RoleOrgAdmin
+  | RoleOrgOwner
   | RoleOrgDefault
   | RoleTeamAdmin
   | RoleProjectViewer
   | RoleProjectContributor
   | RoleProjectOwner
+  | RoleProjectAdmin
   deriving (Show, Eq, Ord)
 
 projectRoles :: Set RoleRef
@@ -169,22 +177,26 @@ instance ToJSON RoleRef where
     RoleOrgViewer -> Aeson.String "org_viewer"
     RoleOrgContributor -> Aeson.String "org_contributor"
     RoleOrgAdmin -> Aeson.String "org_admin"
+    RoleOrgOwner -> Aeson.String "org_owner"
     RoleOrgDefault -> Aeson.String "org_default"
     RoleTeamAdmin -> Aeson.String "team_admin"
     RoleProjectViewer -> Aeson.String "project_viewer"
     RoleProjectContributor -> Aeson.String "project_contributor"
     RoleProjectOwner -> Aeson.String "project_owner"
+    RoleProjectAdmin -> Aeson.String "project_admin"
 
 instance FromJSON RoleRef where
   parseJSON = Aeson.withText "RoleRef" \case
     "org_viewer" -> pure RoleOrgViewer
     "org_contributor" -> pure RoleOrgContributor
     "org_admin" -> pure RoleOrgAdmin
+    "org_owner" -> pure RoleOrgOwner
     "org_default" -> pure RoleOrgDefault
     "team_admin" -> pure RoleTeamAdmin
     "project_viewer" -> pure RoleProjectViewer
     "project_contributor" -> pure RoleProjectContributor
     "project_owner" -> pure RoleProjectOwner
+    "project_admin" -> pure RoleProjectAdmin
     _ -> fail "Invalid RoleRef"
 
 instance Hasql.DecodeValue RoleRef where
@@ -194,11 +206,13 @@ instance Hasql.DecodeValue RoleRef where
         "org_viewer" -> Just RoleOrgViewer
         "org_contributor" -> Just RoleOrgContributor
         "org_admin" -> Just RoleOrgAdmin
+        "org_owner" -> Just RoleOrgOwner
         "org_default" -> Just RoleOrgDefault
         "team_admin" -> Just RoleTeamAdmin
         "project_viewer" -> Just RoleProjectViewer
         "project_contributor" -> Just RoleProjectContributor
         "project_owner" -> Just RoleProjectOwner
+        "project_admin" -> Just RoleProjectAdmin
         _ -> Nothing
 
 instance Hasql.EncodeValue RoleRef where
@@ -208,11 +222,13 @@ instance Hasql.EncodeValue RoleRef where
         RoleOrgViewer -> "org_viewer"
         RoleOrgContributor -> "org_contributor"
         RoleOrgAdmin -> "org_admin"
+        RoleOrgOwner -> "org_owner"
         RoleOrgDefault -> "org_default"
         RoleTeamAdmin -> "team_admin"
         RoleProjectViewer -> "project_viewer"
         RoleProjectContributor -> "project_contributor"
         RoleProjectOwner -> "project_owner"
+        RoleProjectAdmin -> "project_admin"
 
 data RoleAssignment subject = RoleAssignment
   { subject :: subject,

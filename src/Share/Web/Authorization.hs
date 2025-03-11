@@ -90,7 +90,7 @@ import Share.Ticket
 import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
-import Share.Web.Authorization.Types (RolePermission (..))
+import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.Errors qualified as Errors
 import Share.Web.Share.Comments
@@ -321,7 +321,7 @@ checkUploadToProjectBranchCodebase ::
 checkUploadToProjectBranchCodebase reqUserId projectId mayContributorUserId = maybePermissionFailure (CodebasePermission CodebaseUpload) do
   case mayContributorUserId of
     Nothing -> do
-      assertUserHasProjectPermission ProjectContribute reqUserId projectId
+      assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId projectId
       pure $ AuthZReceipt Nothing
     -- Only the contributor themself can upload to their contributor branches.
     -- We may wish to allow project maintainers to upload to contributor branches within their
@@ -370,17 +370,17 @@ checkProjectCreate mayReqUserId targetUserId = maybePermissionFailure (ProjectPe
   where
     checkCreateInOrg userId = do
       Org {orgId} <- guardMaybeM $ PG.runTransaction $ OrgQ.orgByUserId targetUserId
-      assertUserHasOrgPermission userId orgId OrgProjectCreate
+      assertUserHasOrgPermission userId orgId AuthZ.OrgProjectCreate
 
 checkProjectUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure ())
 checkProjectUpdate mayReqUserId targetProjectId = maybePermissionFailure (ProjectPermission (ProjectUpdate targetProjectId)) $ do
   reqUserId <- guardMaybe mayReqUserId
-  assertUserHasProjectPermission ProjectManage reqUserId targetProjectId
+  assertUserHasProjectPermission AuthZ.ProjectManage reqUserId targetProjectId
 
 checkProjectDelete :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure ())
 checkProjectDelete mayReqUserId targetProjectId = maybePermissionFailure (ProjectPermission (ProjectDelete targetProjectId)) $ do
   reqUserId <- guardMaybe mayReqUserId
-  assertUserHasProjectPermission ProjectManage reqUserId targetProjectId
+  assertUserHasProjectPermission AuthZ.ProjectDelete reqUserId targetProjectId
 
 checkProjectGet :: Maybe UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
 checkProjectGet reqUserId (Project {projectId, visibility}) = maybePermissionFailure (ProjectPermission (ProjectGet projectId)) $ do
@@ -388,7 +388,7 @@ checkProjectGet reqUserId (Project {projectId, visibility}) = maybePermissionFai
     ProjectPublic -> pure $ AuthZReceipt (Just CachingToken)
     ProjectPrivate -> do
       uid <- guardMaybe reqUserId
-      assertUserHasProjectPermission ProjectView uid projectId
+      assertUserHasProjectPermission AuthZ.ProjectView uid projectId
       pure $ AuthZReceipt Nothing
 
 -- | Currently you can access any branch within a project you can access.
@@ -411,7 +411,7 @@ checkReleaseGet mayCallerUserId project (Release {projectId, releaseId}) =
 checkBranchCreate :: UserId -> Project -> Maybe UserId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkBranchCreate reqUserId project@(Project {projectId = projectId}) mayContributorNamespace = maybePermissionFailure (ProjectPermission (BranchCreate projectId)) $ do
   case mayContributorNamespace of
-    Nothing -> assertUserHasProjectPermission ProjectContribute reqUserId projectId
+    Nothing -> assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId projectId
     Just contributorUserId -> do
       checkAllowedAsProjectContributor reqUserId project
       -- For now we allow only the contributor to access their branches. No project
@@ -423,7 +423,7 @@ checkBranchCreate reqUserId project@(Project {projectId = projectId}) mayContrib
 checkBranchDelete :: UserId -> Project -> Branch causal -> WebApp (Either AuthZFailure AuthZReceipt)
 checkBranchDelete reqUserId project@(Project {projectId = projectId}) Branch {contributorId = mayContributorNamespace} = maybePermissionFailure (ProjectPermission (BranchDelete projectId)) $ do
   case mayContributorNamespace of
-    Nothing -> assertUserHasProjectPermission ProjectContribute reqUserId projectId
+    Nothing -> assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId projectId
     Just contributorUserId -> do
       checkAllowedAsProjectContributor reqUserId project
       -- For now we allow only the contributor to manage their branches. No project
@@ -441,13 +441,13 @@ checkAllowedAsProjectContributor reqUserId project = do
 -- | Checks whether a user has access to create a release for the provided project.
 checkReleaseCreate :: UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
 checkReleaseCreate reqUserId Project {projectId = targetProjectId} = maybePermissionFailure (ProjectPermission (ReleaseCreate targetProjectId)) $ do
-  assertUserHasProjectPermission ProjectContribute reqUserId targetProjectId
+  assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId targetProjectId
   pure $ AuthZReceipt Nothing
 
 checkReleaseUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkReleaseUpdate mayReqUserId targetProjectId = maybePermissionFailure (ProjectPermission (ReleaseUpdate targetProjectId)) $ do
   reqUserId <- guardMaybe mayReqUserId
-  assertUserHasProjectPermission ProjectContribute reqUserId targetProjectId
+  assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId targetProjectId
   pure $ AuthZReceipt Nothing
 
 -- | Checks whether a user has access to set a core branch for the provided project to a
@@ -455,7 +455,7 @@ checkReleaseUpdate mayReqUserId targetProjectId = maybePermissionFailure (Projec
 checkBranchSet :: UserId -> Project -> Branch causal -> WebApp (Either AuthZFailure AuthZReceipt)
 checkBranchSet reqUserId project Branch {projectId = targetProjectId, contributorId = mayContributorNamespace} = maybePermissionFailure (ProjectPermission (BranchSet targetProjectId)) $ do
   case mayContributorNamespace of
-    Nothing -> assertUserHasProjectPermission ProjectContribute reqUserId targetProjectId
+    Nothing -> assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId targetProjectId
     Just contributorUserId -> do
       checkAllowedAsProjectContributor reqUserId project
       -- For now we allow only the contributor to access their branches. No project
@@ -494,7 +494,7 @@ checkProjectReleaseRead reqUserId project@Project {projectId} =
 checkReadProjectRolesList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkReadProjectRolesList reqUserId projectId =
   maybePermissionFailure (ProjectPermission (ProjectRolesList projectId)) $ do
-    assertUserHasProjectPermission ProjectManage reqUserId projectId
+    assertUserHasProjectPermission AuthZ.ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
 checkAddProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
@@ -502,13 +502,13 @@ checkAddProjectRoles reqUserId projectId =
   maybePermissionFailure (ProjectPermission (ProjectRolesEdit projectId)) $ do
     -- In order to add new collaborators it must be a premium project.
     assertIsPremiumProject projectId
-    assertUserHasProjectPermission ProjectManage reqUserId projectId
+    assertUserHasProjectPermission AuthZ.ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
 checkRemoveProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkRemoveProjectRoles reqUserId projectId =
   maybePermissionFailure (ProjectPermission (ProjectRolesEdit projectId)) $ do
-    assertUserHasProjectPermission ProjectManage reqUserId projectId
+    assertUserHasProjectPermission AuthZ.ProjectManage reqUserId projectId
     pure $ AuthZReceipt Nothing
 
 assertIsPremiumProject :: ProjectId -> MaybeT WebApp ()
@@ -541,16 +541,16 @@ checkContributionUpdate reqUserId (Contribution {projectId, author}) UpdateContr
     case newStatus of
       Just Merged -> do
         -- Only project maintainers can mark as merged
-        assertUserHasProjectPermission ProjectContribute reqUserId projectId
+        assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId projectId
         pure $ AuthZReceipt Nothing
       _ -> do
-        guard (reqUserId == author) <|> assertUserHasProjectPermission ProjectContribute reqUserId projectId
+        guard (reqUserId == author) <|> assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId projectId
         pure $ AuthZReceipt Nothing
 
 checkContributionMerge :: UserId -> Contribution -> WebApp (Either AuthZFailure AuthZReceipt)
 checkContributionMerge reqUserId (Contribution {projectId}) =
   maybePermissionFailure (ProjectPermission (ContributionUpdate projectId)) $ do
-    assertUserHasProjectPermission ProjectContribute reqUserId projectId
+    assertUserHasProjectPermission AuthZ.ProjectContribute reqUserId projectId
     pure $ AuthZReceipt Nothing
 
 checkContributionRead :: Maybe UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
@@ -613,7 +613,7 @@ checkTicketCreate reqUserId project@(Project {projectId}) =
 checkTicketUpdate :: UserId -> Ticket -> UpdateTicketRequest -> WebApp (Either AuthZFailure AuthZReceipt)
 checkTicketUpdate reqUserId (Ticket {projectId, author}) UpdateTicketRequest {} =
   maybePermissionFailure (ProjectPermission (TicketUpdate projectId)) $ do
-    guard (reqUserId == author) <|> assertUserHasProjectPermission (ProjectContribute) reqUserId projectId
+    guard (reqUserId == author) <|> assertUserHasProjectPermission (AuthZ.ProjectContribute) reqUserId projectId
     pure $ AuthZReceipt Nothing
 
 checkTicketRead :: Maybe UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
@@ -630,11 +630,11 @@ checkTicketTimelineRead mayReqUserId project@(Project {projectId}) =
   where
     authzError = AuthZFailure $ ProjectPermission (TicketTimelineGet projectId)
 
-assertUserHasOrgPermission :: UserId -> OrgId -> RolePermission -> MaybeT WebApp ()
+assertUserHasOrgPermission :: UserId -> OrgId -> AuthZ.RolePermission -> MaybeT WebApp ()
 assertUserHasOrgPermission reqUserId orgId rolePermission =
   guardM . lift . PG.runTransaction $ Q.userHasOrgPermission reqUserId orgId rolePermission
 
-assertUserHasProjectPermission :: RolePermission -> UserId -> ProjectId -> MaybeT WebApp ()
+assertUserHasProjectPermission :: AuthZ.RolePermission -> UserId -> ProjectId -> MaybeT WebApp ()
 assertUserHasProjectPermission rolePermission reqUserId projId = do
   guardM $ PG.runTransaction $ do
     Q.userHasProjectPermission reqUserId projId rolePermission
@@ -663,13 +663,13 @@ checkUserIsOrgMember reqUserId orgUserId = do
 checkReadOrgRolesList :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkReadOrgRolesList reqUserId orgId =
   maybePermissionFailure (OrgPermission (OrgRolesList orgId)) $ do
-    assertUserHasOrgPermission reqUserId orgId OrgAdmin
+    assertUserHasOrgPermission reqUserId orgId AuthZ.OrgAdmin
     pure $ AuthZReceipt Nothing
 
 checkEditOrgRoles :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkEditOrgRoles reqUserId orgId =
   maybePermissionFailure (OrgPermission (OrgRolesEdit orgId)) $ do
-    assertUserHasOrgPermission reqUserId orgId OrgAdmin
+    assertUserHasOrgPermission reqUserId orgId AuthZ.OrgAdmin
     pure $ AuthZReceipt Nothing
 
 -- | Check whether the given user has administrative privileges,

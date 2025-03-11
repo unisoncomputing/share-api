@@ -1,6 +1,15 @@
 {
   "body": {
-    "roles": [
+    "role_assignments": [
+      {
+        "roles": [
+          "project_contributor"
+        ],
+        "subject": {
+          "id": "U-<UUID>",
+          "kind": "user"
+        }
+      },
       {
         "roles": [
           "project_viewer"
@@ -13,15 +22,6 @@
       {
         "roles": [
           "project_owner"
-        ],
-        "subject": {
-          "id": "U-<UUID>",
-          "kind": "user"
-        }
-      },
-      {
-        "roles": [
-          "project_contributor"
         ],
         "subject": {
           "id": "U-<UUID>",
