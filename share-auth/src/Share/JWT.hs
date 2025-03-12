@@ -2,30 +2,36 @@
 
 -- | This module provides helpers for working with JSON Web Tokens (JWTs).
 module Share.JWT
-  ( JWTSettings,
+  ( -- * App setup
+    JWTSettings,
     defaultJWTSettings,
+
+    -- * Signing keys
     SupportedAlg (..),
     KeyDescription (..),
-    JWTParam (..),
-    StandardClaims (..),
-    ExtendedClaims (..),
-    KeyMap (..),
     KeyThumbprint (..),
+    KeyMap (..),
+    keyDescToJWK,
+    publicJWKSet,
+
+    -- * Claims and converting between types
+    StandardClaims (..),
     JWTClaimsMap,
     AsJWTClaims (..),
     JSONJWTClaims (..),
     addClaim,
     getClaim,
+
+    -- * JWT operations
     signJWT,
     signJWTWithJWK,
     verifyJWT,
-    keyDescToJWK,
 
-    -- * Additional Helpers
+    -- * Utilities
+    JWTParam (..),
     textToSignedJWT,
     signedJWTToText,
     createSignedCookie,
-    publicJWKSet,
 
     -- * Re-exports
     CryptoError (..),

@@ -1,11 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
+-- | Primitive types and functions for working with JSON Web Tokens (JWTs).
 module Share.JWT.Types
   ( JWTParam (..),
     JWTSettings (..),
     StandardClaims (..),
-    ExtendedClaims (..),
     SupportedAlg (..),
     KeyDescription (..),
     KeyMap (..),
@@ -30,7 +30,6 @@ import Data.Aeson (FromJSON, ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Aeson.Lens
 import Data.Aeson.Types (FromJSON (..))
 import Data.Binary
 import Data.ByteString qualified as BS
@@ -51,19 +50,9 @@ import Servant
 import Share.Utils.Show (Censored (..))
 import Prelude hiding (exp)
 
+-- | A map of claims which represent a JWT
 newtype JWTClaimsMap = JWTClaimsMap (Map Text Aeson.Value)
   deriving newtype (Show, Eq, Ord, ToJSON, FromJSON)
-
-addClaim :: (ToJSON a) => Text -> a -> JWTClaimsMap -> JWTClaimsMap
-addClaim k v (JWTClaimsMap m) = JWTClaimsMap (Map.insert k (Aeson.toJSON v) m)
-
-getClaim :: (FromJSON a) => Text -> JWTClaimsMap -> Either Text a
-getClaim k (JWTClaimsMap m) =
-  case Map.lookup k m of
-    Nothing -> Left $ "Claim not found: " <> k
-    Just v -> case Aeson.fromJSON v of
-      Aeson.Error err -> Left $ "Error decoding claim: " <> Text.pack err
-      Aeson.Success a -> Right a
 
 instance HasClaimsSet JWTClaimsMap where
   claimsSet = lens getClaims setClaims
@@ -77,14 +66,66 @@ instance HasClaimsSet JWTClaimsMap where
           Aeson.Success a -> a
           Aeson.Error err -> error $ err
 
-newtype JWTParam = JWTParam JWT.SignedJWT
-  deriving (Show) via (Censored JWTParam)
+-- | Class for converting a data type to/from a JWT claims map.
+--
+-- The mixed use of ToJSON/FromJSON ToJWT/FromJWT and HasClaimsSet between servant auth and
+-- jose is confusing and error prone, and makes it too easy to accidentally drop or miss
+-- validating key claims, so this class unifies them all.
+class AsJWTClaims a where
+  toClaims :: a -> JWTClaimsMap
+  fromClaims :: JWTClaimsMap -> Either Text a
+
+instance (ToJSON a, FromJSON a) => AsJWTClaims (JSONJWTClaims a) where
+  toClaims (JSONJWTClaims a) = toClaims . toJSON $ a
+  fromClaims c = do
+    v <- fromClaims c
+    case Aeson.fromJSON v of
+      Aeson.Error err -> Left (Text.pack err)
+      Aeson.Success a -> Right (JSONJWTClaims a)
+
+instance AsJWTClaims Aeson.Value where
+  toClaims = \case
+    Aeson.Object o ->
+      KeyMap.toMap o
+        & Map.mapKeys Key.toText
+        & JWTClaimsMap
+    _ -> error "Expected object."
+  fromClaims (JWTClaimsMap m) =
+    m
+      & Map.mapKeys Key.fromText
+      & KeyMap.fromMap
+      & Aeson.Object
+      & Right
+
+deriving via JSONJWTClaims JWT.ClaimsSet instance AsJWTClaims JWT.ClaimsSet
+
+instance AsJWTClaims JWTClaimsMap where
+  toClaims = id
+  fromClaims = Right
+
+-- | Newtype for deriving AsJWTClaims instances for types that have ToJSON/FromJSON instances
+-- using 'deriving via JSONJWTClaims Foo'
+newtype JSONJWTClaims a = JSONJWTClaims a
+
+-- | Add a claim to a JWTClaimsMap.
+addClaim :: (ToJSON a) => Text -> a -> JWTClaimsMap -> JWTClaimsMap
+addClaim k v (JWTClaimsMap m) = JWTClaimsMap (Map.insert k (Aeson.toJSON v) m)
+
+-- | Get a claim from a JWTClaimsMap.
+getClaim :: (FromJSON a) => Text -> JWTClaimsMap -> Either Text a
+getClaim k (JWTClaimsMap m) =
+  case Map.lookup k m of
+    Nothing -> Left $ "Claim not found: " <> k
+    Just v -> case Aeson.fromJSON v of
+      Aeson.Error err -> Left $ "Error decoding claim: " <> Text.pack err
+      Aeson.Success a -> Right a
 
 -- | Encode a signed JWT as text.
 signedJWTToText :: JWT.SignedJWT -> Text
 signedJWTToText =
   TL.toStrict . TL.decodeUtf8 . JWT.encodeCompact
 
+-- | Convert from Text to the jose SignedJWT type.
 textToSignedJWT :: Text -> Either JWT.JWTError JWT.SignedJWT
 textToSignedJWT jwtText = JWT.decodeCompact (TL.encodeUtf8 . TL.fromStrict $ jwtText)
 
@@ -152,49 +193,22 @@ instance FromJSON StandardClaims where
     cs <- parseJSON @JWT.ClaimsSet v
     either (fail . Text.unpack) pure $ standardClaimsFromClaimsSet cs
 
--- | All of the ToJWT/FromJWT and HasClaimsSet instances are confusing, complex, and error
--- prone, so instead of worrying about those we just use this type which is tougher to screw
--- up.
---
--- Specify the standard JWT claims using the 'StandardClaims' field, and any additional claims
--- using the 'additionalClaims' field via the JSON instances on this type.
-data ExtendedClaims a = ExtendedClaims
-  { standardClaims :: JWT.ClaimsSet,
-    additionalClaims :: Maybe a
-  }
-  deriving stock (Show, Eq)
-
-instance HasClaimsSet (ExtendedClaims a) where
-  claimsSet = lens (\ExtendedClaims {standardClaims} -> standardClaims) (\ec claims -> ec {standardClaims = claims})
-
-instance (ToJSON a) => ToJSON (ExtendedClaims a) where
-  toJSON (ExtendedClaims {standardClaims, additionalClaims}) =
-    case additionalClaims of
-      Nothing -> toJSON (standardClaims ^. JWT.claimsSet)
-      Just additionalClaims' ->
-        case toJSON additionalClaims' ^? _Object of
-          Nothing -> error "Additional claims must be an object."
-          Just additionalClaimsMap ->
-            (toJSON (standardClaims ^. JWT.claimsSet))
-              & _Object
-                %~ ( KeyMap.unionWithKey (\k _ _ -> error $ "Duplicate key when encoding ExtendedClaims: " <> show k) additionalClaimsMap
-                   )
-
-instance (FromJSON a) => FromJSON (ExtendedClaims a) where
-  parseJSON v = do
-    standardClaims <- Aeson.parseJSON v
-    additionalClaims <- Aeson.parseJSON v
-    pure ExtendedClaims {..}
-
+-- | Signing algorithms supported in Unison apps.
 data SupportedAlg = HS256 | Ed25519
   deriving (Eq, Ord)
 
+-- | A description of a key used to sign or verify JWTs.
 data KeyDescription = KeyDescription {alg :: SupportedAlg, key :: BS.ByteString}
   deriving (Eq, Ord)
 
+-- | A thumbprint of an encryption key
 newtype KeyThumbprint = KeyThumbprint Text
   deriving newtype (Eq, Ord)
 
+-- | Storage mechanism for keys used to sign and verify JWTs.
+--
+-- Mostly exists just to implement the 'JWT.VerificationKeyStore' instance for interop with
+-- jose.
 data KeyMap = KeyMap
   { byKeyId :: (Map KeyThumbprint JWT.JWK),
     -- | The key from before the introduction of key ids.
@@ -217,6 +231,10 @@ instance (Applicative m) => JWT.VerificationKeyStore m (JWT.JWSHeader ()) payloa
             pure key
           _ -> empty
 
+-- | A newtype for JWTs which provides the appropriate encoding/decoding instances.
+newtype JWTParam = JWTParam JWT.SignedJWT
+  deriving (Show) via (Censored JWTParam)
+
 instance ToHttpApiData JWTParam where
   toQueryParam (JWTParam signed) = signedJWTToText signed
 
@@ -237,40 +255,3 @@ instance Binary JWTParam where
               Left err -> fail (Text.unpack err)
               Right a -> pure a
           )
-
--- | Class for converting a data type to/from a JWT claims map.
-class AsJWTClaims a where
-  toClaims :: a -> JWTClaimsMap
-  fromClaims :: JWTClaimsMap -> Either Text a
-
--- | Newtype for deriving AsJWTClaims instances for types that have ToJSON/FromJSON instances
--- using 'deriving via JSONJWTClaims Foo'
-newtype JSONJWTClaims a = JSONJWTClaims a
-
-instance (ToJSON a, FromJSON a) => AsJWTClaims (JSONJWTClaims a) where
-  toClaims (JSONJWTClaims a) = toClaims . toJSON $ a
-  fromClaims c = do
-    v <- fromClaims c
-    case Aeson.fromJSON v of
-      Aeson.Error err -> Left (Text.pack err)
-      Aeson.Success a -> Right (JSONJWTClaims a)
-
-instance AsJWTClaims Aeson.Value where
-  toClaims = \case
-    Aeson.Object o ->
-      KeyMap.toMap o
-        & Map.mapKeys Key.toText
-        & JWTClaimsMap
-    _ -> error "Expected object."
-  fromClaims (JWTClaimsMap m) =
-    m
-      & Map.mapKeys Key.fromText
-      & KeyMap.fromMap
-      & Aeson.Object
-      & Right
-
-deriving via JSONJWTClaims JWT.ClaimsSet instance AsJWTClaims JWT.ClaimsSet
-
-instance AsJWTClaims JWTClaimsMap where
-  toClaims = id
-  fromClaims = Right
