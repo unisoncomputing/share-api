@@ -32,6 +32,7 @@ import Data.Aeson
 import Data.Binary
 import Data.Binary.Instances.Time ()
 import Data.ByteString qualified as BS
+import Data.Coerce (coerce)
 import Data.Kind (Type)
 import Data.Set (Set)
 import Data.Text (Text)
@@ -226,15 +227,15 @@ instance ToJSON Session where
           exp = sessionExpiry,
           iss = sessionIssuer,
           aud = sessionAudience,
-          jti = IDs.toText sessionId
+          jti = IDs.toText (coerce @SessionId @JTI sessionId)
         }
 
 instance FromJSON Session where
   parseJSON v = do
     StandardClaims {..} <- parseJSON v
-    sessionId <- either (fail . Text.unpack) pure $ IDs.fromText jti
+    JTI sessionId <- either (fail . Text.unpack) pure $ IDs.fromText jti
     sessionUserId <- either (fail . Text.unpack) pure $ IDs.fromText sub
-    pure Session {sessionId, sessionUserId, sessionCreated = iat, sessionExpiry = exp, sessionIssuer = iss, sessionAudience = aud}
+    pure Session {sessionId = SessionId sessionId, sessionUserId, sessionCreated = iat, sessionExpiry = exp, sessionIssuer = iss, sessionAudience = aud}
 
 data PendingSession = PendingSession
   { pendingId :: PendingSessionId,
