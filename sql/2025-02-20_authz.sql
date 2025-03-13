@@ -162,7 +162,7 @@ DECLARE
 BEGIN
   FOR user_id IN SELECT id FROM users WHERE subject_id IS NULL LOOP
     INSERT INTO subjects(kind)
-      VALUES ('user')
+      VALUES ('user'::subject_kind)
       RETURNING id INTO new_subject_id;
     UPDATE users
       SET subject_id = new_subject_id
@@ -180,7 +180,7 @@ RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a new subject for this user, returning the new subject_id.
   INSERT INTO subjects(kind)
-    VALUES ('user')
+    VALUES ('user'::subject_kind)
     RETURNING id INTO NEW.subject_id;
   RETURN NEW;
 END;
@@ -209,28 +209,28 @@ CREATE TABLE orgs (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Trigger to create an org resource when an org is created.
-CREATE FUNCTION trigger_create_org_resource()
+-- Trigger to create an org resource and subject when an org is created.
+CREATE FUNCTION trigger_create_org()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Insert a subject for this org, assigning the subject_id to the new org.
   INSERT INTO subjects(kind)
-    VALUES ('org')
+    VALUES ('org'::subject_kind)
     RETURNING id INTO NEW.subject_id;
 
   -- Insert a new resource for this org, assigning the resource_id to the new org.
   INSERT INTO resources(kind)
-    VALUES ('org')
+    VALUES ('org'::resource_kind)
     RETURNING id INTO NEW.resource_id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE TRIGGER orgs_create_resource
+CREATE TRIGGER orgs_create
   BEFORE INSERT ON orgs
   FOR EACH ROW
-  EXECUTE FUNCTION trigger_create_org_resource();
+  EXECUTE FUNCTION trigger_create_org();
 
 CREATE FUNCTION set_default_org_permissions()
 RETURNS TRIGGER AS $$
