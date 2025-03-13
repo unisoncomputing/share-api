@@ -14,7 +14,7 @@ fetch "$unauthorized_user" PATCH non-maintainer-project-update '/users/test/proj
     "summary": "update"
 }'
 
-fetch "$test_user" POST add-maintainers '/users/test/projects/privatetestproject/maintainers/add' "
+fetch "$test_user" POST add-roles '/users/test/projects/privatetestproject/roles/add' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
@@ -30,7 +30,7 @@ fetch "$test_user" POST add-maintainers '/users/test/projects/privatetestproject
 }"
 
 # Non-owner should not be able to change roles
-fetch "$maintain_maintainer" POST non-owner-add-maintainers '/users/test/projects/privatetestproject/maintainers/add' "
+fetch "$maintain_maintainer" POST non-owner-add-roles '/users/test/projects/privatetestproject/roles/add' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
@@ -39,7 +39,7 @@ fetch "$maintain_maintainer" POST non-owner-add-maintainers '/users/test/project
     ]
 }"
 
-fetch "$test_user" GET list-maintainers '/users/test/projects/privatetestproject/maintainers'
+fetch "$test_user" GET list-roles '/users/test/projects/privatetestproject/roles'
 
 # Project owner can create tickets
 fetch "$test_user" POST owner-ticket-create '/users/test/projects/privatetestproject/tickets' '{
@@ -80,14 +80,14 @@ fetch "$admin_maintainer" PATCH admin-maintainer-project-update '/users/test/pro
     "summary": "update"
 }'
 
-# Expire the project owner's cloud subscription, thus disabling project-maintainers.
+# Expire the project owner's cloud subscription, thus disabling project-roles.
 pg_sql "UPDATE public.cloud_subscribers SET is_active = false WHERE user_id = '${test_user##U-}'"
 
-# All maintainers should still be listed.
-fetch "$test_user" GET list-maintainers-non-premium '/users/test/projects/privatetestproject/maintainers'
+# All roles should still be listed.
+fetch "$test_user" GET list-roles-non-premium '/users/test/projects/privatetestproject/roles'
 
-# Should be unable to add new maintainers when the cloud subscription is expired.
-fetch "$test_user" POST add-maintainers-non-premium '/users/test/projects/privatetestproject/maintainers/add' "
+# Should be unable to add new roles when the cloud subscription is expired.
+fetch "$test_user" POST add-roles-non-premium '/users/test/projects/privatetestproject/roles/add' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
@@ -98,7 +98,7 @@ fetch "$test_user" POST add-maintainers-non-premium '/users/test/projects/privat
 
 # Can remove roles from users
 # unmentioned users are left as-is,
-fetch "$test_user" POST remove-maintainers '/users/test/projects/privatetestproject/maintainers/remove' "
+fetch "$test_user" POST remove-roles '/users/test/projects/privatetestproject/roles/remove' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}

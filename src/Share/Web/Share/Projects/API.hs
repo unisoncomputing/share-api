@@ -41,7 +41,7 @@ type ProjectResourceAPI =
       :<|> GetProjectEndpoint
       :<|> ( "fav" :> FavProjectEndpoint
            )
-      :<|> "maintainers" :> MaintainersResourceAPI
+      :<|> "roles" :> MaintainersResourceAPI
   )
 
 type ProjectDiffNamespacesEndpoint =
