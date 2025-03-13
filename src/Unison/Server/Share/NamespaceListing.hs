@@ -173,8 +173,8 @@ serve rootCausalId mayRelativeTo mayNamespaceName = runMaybeT $ do
   -- to look up the namespace listing and present shallow name, so that the
   -- definition "base.List.Nonempty.map", simple has the name "map"
   --
-  let relativeToPath = fromMaybe Path.empty mayRelativeTo
-  let namespacePath = fromMaybe Path.empty mayNamespaceName
+  let relativeToPath = fromMaybe mempty mayRelativeTo
+  let namespacePath = fromMaybe mempty mayNamespaceName
   let path = relativeToPath <> namespacePath
   listingCausal <- MaybeT $ Codebase.loadCausalNamespaceAtPath rootCausalId path
   listingBranch <- lift $ V2Causal.value listingCausal
