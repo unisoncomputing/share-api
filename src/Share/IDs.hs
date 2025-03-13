@@ -34,6 +34,10 @@ module Share.IDs
     ProjectReleaseShortHand (..),
     ProjectShortHand (..),
     ProjectBranchShortHand (..),
+    SubjectId (..),
+    ResourceId (..),
+    OrgId (..),
+    TeamId (..),
     projectBranchShortHandToBranchShortHand,
     JTI (..),
     CategoryName (..),
@@ -681,3 +685,23 @@ instance (FromHttpApiData h, KnownSymbol prefix) => FromJSON (PrefixedHash prefi
           bareHash <- Text.stripPrefix prefix txt
           h <- eitherToMaybe $ parseUrlPiece bareHash
           pure (PrefixedHash h)
+
+newtype SubjectId = SubjectId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "SUB-" UUID)
+
+newtype ResourceId = ResourceId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "RES-" UUID)
+
+newtype OrgId = OrgId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "ORG-" UUID)
+
+newtype TeamId = TeamId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "TEAM-" UUID)
