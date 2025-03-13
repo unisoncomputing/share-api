@@ -3,7 +3,7 @@
     "role_assignments": [
       {
         "roles": [
-          "project_contributor"
+          "project_viewer"
         ],
         "subject": {
           "id": "U-<UUID>",
@@ -12,7 +12,7 @@
       },
       {
         "roles": [
-          "project_viewer"
+          "project_contributor"
         ],
         "subject": {
           "id": "U-<UUID>",
