@@ -122,10 +122,10 @@ browseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle relativeTo name
     Codebase.runCodebaseTransactionOrRespondError codebase $ do
       NL.serve rootCausalId relativeTo namespace `whenNothingM` throwError (EntityMissing (ErrorID "no-namespace") $ "No namespace found at " <> Path.toText namespacePrefix)
   where
-    cacheParams = [tShow $ fromMaybe Path.empty relativeTo, tShow $ fromMaybe Path.empty namespace]
+    cacheParams = [tShow $ fromMaybe mempty relativeTo, tShow $ fromMaybe mempty namespace]
     namespacePrefix :: Path.Path
     namespacePrefix =
-      fromMaybe Path.empty relativeTo <> fromMaybe Path.empty namespace
+      fromMaybe mempty relativeTo <> fromMaybe mempty namespace
 
 definitionsByNameEndpoint ::
   Maybe Session ->
@@ -146,13 +146,13 @@ definitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle name
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-name" cacheParams rootCausalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe Path.empty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
-    cacheParams = [HQ.toTextWith Name.toText name, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
     authPath =
-      let prefix = fromMaybe Path.empty relativeTo
-          suffix = maybe Path.empty Path.fromName $ HQ.toName name
+      let prefix = fromMaybe mempty relativeTo
+          suffix = maybe mempty Path.fromName $ HQ.toName name
        in prefix <> suffix
 
 definitionsByHashEndpoint ::
@@ -167,7 +167,7 @@ definitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle refe
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported within loose-code")
   codebaseOwner@(User {user_id = codebaseOwnerUserId}) <- PGO.expectUserByHandle userHandle
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
-  let authPath = fromMaybe Path.empty relativeTo
+  let authPath = fromMaybe mempty relativeTo
   let shortHash = Referent.toShortHash referent
   let query = HQ.HashOnly shortHash
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
@@ -176,9 +176,9 @@ definitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle refe
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-hash" cacheParams rootCausalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe Path.empty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
-    cacheParams = [toUrlPiece referent, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 termSummaryEndpoint ::
   Maybe Session ->
@@ -200,11 +200,11 @@ termSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
     Codebase.runCodebaseTransaction codebase $ do
       serveTermSummary ref mayName rootCausalId relativeTo renderWidth
   where
-    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
     authPath =
-      let prefix = fromMaybe Path.empty relativeTo
-          suffix = maybe Path.empty Path.fromName mayName
+      let prefix = fromMaybe mempty relativeTo
+          suffix = maybe mempty Path.fromName mayName
        in prefix <> suffix
 
 typeSummaryEndpoint ::
@@ -227,11 +227,11 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
     Codebase.runCodebaseTransaction codebase $ do
       serveTypeSummary ref mayName renderWidth
   where
-    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
     authPath =
-      let prefix = fromMaybe Path.empty relativeTo
-          suffix = maybe Path.empty Path.fromName mayName
+      let prefix = fromMaybe mempty relativeTo
+          suffix = maybe mempty Path.fromName mayName
        in prefix <> suffix
 
 findEndpoint ::
@@ -246,7 +246,7 @@ findEndpoint ::
   WebApp [(Fuzzy.Alignment, Fuzzy.FoundResult)]
 findEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle mayRelativeTo limit renderWidth query searchDependencies rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported within loose-code")
-  let relativeTo = fromMaybe Path.empty mayRelativeTo
+  let relativeTo = fromMaybe mempty mayRelativeTo
   let authPath = relativeTo
   codebaseOwner@(User {user_id = codebaseOwnerUserId}) <- PGO.expectUserByHandle userHandle
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
@@ -265,7 +265,7 @@ namespacesByNameEndpoint ::
   Maybe Pretty.Width ->
   Maybe CausalHash ->
   WebApp (Cached JSON NamespaceDetails)
-namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (fromMaybe Path.Empty -> path) renderWidth rootHash = do
+namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (fromMaybe mempty -> path) renderWidth rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported within loose-code")
   codebaseOwner@(User {user_id = codebaseOwnerUserId}) <- PGO.expectUserByHandle userHandle
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId

@@ -25,6 +25,7 @@ source-repository head
 library
   exposed-modules:
       Share.JWT
+      Share.JWT.Types
       Share.OAuth.API
       Share.OAuth.Errors
       Share.OAuth.IdentityProvider.Share

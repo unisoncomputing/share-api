@@ -124,7 +124,7 @@ projectReleaseBrowseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle p
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
 
-    cacheParams = [IDs.toText projectReleaseShortHand, tShow $ fromMaybe Path.empty relativeTo, tShow $ fromMaybe Path.empty namespace]
+    cacheParams = [IDs.toText projectReleaseShortHand, tShow $ fromMaybe mempty relativeTo, tShow $ fromMaybe mempty namespace]
 
 projectReleaseDefinitionsByNameEndpoint ::
   Maybe Session ->
@@ -145,10 +145,10 @@ projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-name" cacheParams releaseHead $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe Path.empty relativeTo) releaseHead renderWidth (Suffixify False) rt name
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
-    cacheParams = [IDs.toText projectReleaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectReleaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectReleaseDefinitionsByHashEndpoint ::
   Maybe Session ->
@@ -171,10 +171,10 @@ projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-hash" cacheParams releaseHead $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe Path.empty relativeTo) releaseHead renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
-    cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece referent, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectReleaseTermSummaryEndpoint ::
   Maybe Session ->
@@ -198,7 +198,7 @@ projectReleaseTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
       serveTermSummary ref mayName releaseHead relativeTo renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
-    cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectReleaseTypeSummaryEndpoint ::
   Maybe Session ->
@@ -222,7 +222,7 @@ projectReleaseTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
       serveTypeSummary ref mayName renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
-    cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe Path.empty relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectReleaseFindEndpoint ::
   Maybe Session ->
@@ -238,7 +238,7 @@ projectReleaseFindEndpoint ::
   WebApp [(Fuzzy.Alignment, Fuzzy.FoundResult)]
 projectReleaseFindEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion mayRelativeTo limit renderWidth query searchDependencies rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
-  let relativeTo = fromMaybe Path.empty mayRelativeTo
+  let relativeTo = fromMaybe mempty mayRelativeTo
   (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
@@ -267,7 +267,7 @@ projectReleaseNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-namespaces-by-name" cacheParams releaseHead $ do
     Codebase.runCodebaseTransactionOrRespondError codebase $ do
-      ND.namespaceDetails rt (fromMaybe Path.Empty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
+      ND.namespaceDetails rt (fromMaybe mempty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
   where
     cacheParams = [IDs.toText projectReleaseShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -304,7 +304,7 @@ getProjectReleaseReadmeEndpoint ::
 getProjectReleaseReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion = do
   (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
-  let rootPath = Path.empty
+  let rootPath = mempty
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
@@ -341,7 +341,7 @@ getProjectReleaseDocEndpoint ::
 getProjectReleaseDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion = do
   (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
-  let rootPath = Path.empty
+  let rootPath = mempty
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase

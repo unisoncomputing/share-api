@@ -5,17 +5,15 @@
 module Share.Web.Authentication.AccessToken where
 
 import Control.Lens hiding ((.=))
-import Crypto.JWT qualified as Crypto.JWT
-import Data.Aeson qualified as Aeson
-import Data.Map qualified as Map
+import Data.Either (fromRight)
 import Data.Set qualified as Set
-import Data.Text qualified as Text
 import Data.Time
 import Network.URI (URI)
-import Servant.Auth.JWT
 import Share.App
 import Share.IDs (SessionId, UserId (..))
+import Share.IDs qualified as IDs
 import Share.JWT (JWTParam (..))
+import Share.JWT qualified as JWT
 import Share.OAuth.Scopes
 import Share.OAuth.Types (AccessToken (..))
 import Share.Postgres.Ops qualified as PGO
@@ -39,22 +37,17 @@ data AccessTokenClaims = AccessTokenClaims
   }
 
 accessTokenUser :: AccessTokenClaims -> UserId
-accessTokenUser = JWT.sub . standardClaims
+accessTokenUser = fromRight (error "Invalid UserID in AccessTokenClaims") . IDs.fromText . JWT.sub . standardClaims
 
-instance ToJWT AccessTokenClaims where
-  encodeJWT (AccessTokenClaims standardClaims scope) =
-    JWT.encodeStandardClaims standardClaims (Map.fromList [("scope", Aeson.toJSON scope)])
+instance JWT.AsJWTClaims AccessTokenClaims where
+  toClaims (AccessTokenClaims {standardClaims, scope}) =
+    JWT.toClaims standardClaims
+      & JWT.addClaim "scope" scope
 
-instance FromJWT AccessTokenClaims where
-  decodeJWT :: Crypto.JWT.ClaimsSet -> Either Text AccessTokenClaims
-  decodeJWT claims = do
-    (standardClaims, extra) <- JWT.decodeStandardClaims claims
-    scope <- fromMaybe (Left "Invalid scope") (extra ^? ix "scope" . to (resultEither . Aeson.fromJSON))
-    pure (AccessTokenClaims {..})
-    where
-      resultEither = \case
-        Aeson.Error err -> Left (Text.pack err)
-        Aeson.Success a -> Right a
+  fromClaims claims = do
+    standardClaims <- JWT.fromClaims @JWT.StandardClaims claims
+    scope <- JWT.getClaim "scope" claims
+    pure $ AccessTokenClaims {..}
 
 -- | A version of verifyAccessToken which returns an Either rather than throwing an exception.
 verifyAccessToken' :: Scopes -> AccessToken -> AppM reqCtx (Either AuthenticationErr AccessTokenClaims)

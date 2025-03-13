@@ -72,7 +72,7 @@ termSummaryForReferent ::
 termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayWidth = do
   let shortHash = V2Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
-  let relativeToPath = fromMaybe Path.empty relativeTo
+  let relativeToPath = fromMaybe mempty relativeTo
   let termReference = V2Referent.toReference referent
   let deps = Type.labeledDependencies typeSig
   namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
