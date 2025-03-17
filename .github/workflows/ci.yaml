@@ -31,15 +31,15 @@ jobs:
         with:
           # Don't need to format the unison submodule
           submodules: false
-      # - name: Get changed files
-      #   id: changed-files
-      #   uses:
-      #   with:
-      #     # globs copied from default settings for run-ormolu
-      #     files: |
-      #       **/*.hs
-      #       **/*.hs-boot
-      #     separator: "\n"
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@0874344d6ebbaa00a27da73276ae7162fadcaf69 # v44.3.0
+        with:
+          # globs copied from default settings for run-ormolu
+          files: |
+            **/*.hs
+            **/*.hs-boot
+          separator: "\n"
       - uses: haskell-actions/run-ormolu@15b0083a0ef416915994fb511652b187f6026a40 # v15.0.0
         with:
           version: ${{ env.ormolu_version }}
