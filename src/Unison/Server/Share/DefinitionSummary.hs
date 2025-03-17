@@ -26,6 +26,7 @@ import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
+import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as CV
 import Unison.HashQualified qualified as HQ
@@ -39,9 +40,7 @@ import Unison.Reference qualified as Reference
 import Unison.Referent (Referent)
 import Unison.Server.Backend (BackendError (..))
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
-import Unison.Server.Types
-  ( mayDefaultWidth,
-  )
+import Unison.Server.Types (mayDefaultWidth)
 import Unison.Symbol (Symbol)
 import Unison.Type qualified as Type
 import Unison.Util.Pretty (Width)
@@ -72,7 +71,7 @@ termSummaryForReferent ::
 termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayWidth = do
   let shortHash = V2Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
-  let relativeToPath = fromMaybe Path.empty relativeTo
+  let relativeToPath = fromMaybe (mempty @Path) relativeTo
   let termReference = V2Referent.toReference referent
   let deps = Type.labeledDependencies typeSig
   namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
