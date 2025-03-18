@@ -114,9 +114,10 @@ data DefinitionDiffs name r = DefinitionDiffs
     -- Removed terms. These names for these definitions were removed, and there are no newly
     -- added names for these definitions.
     removed :: Map name r,
-    -- Updated terms. These names exist in both the old and new namespace, but the definitions
-    -- assigned to them have changed.
+    -- Updated terms, split into non-propagated (`updated`) and propagated (`propagated`) updates. These names exist in
+    -- both the old and new namespace, but the definitions assigned to them have changed.
     updated :: Map name (r {- old -}, r {- new -}),
+    propagated :: Map name (r {- old -}, r {- new -}),
     -- Renamed terms. These definitions exist in both the old and new namespace, but the names have
     -- changed.
     renamed :: Map r (NESet name {- old names for this ref -}, NESet name {- new names for this ref -}),
@@ -169,6 +170,7 @@ instance (Ord r) => Semigroup (DefinitionDiffs Name r) where
       { added = added d1 <> added d2,
         removed = removed d1 <> removed d2,
         updated = updated d1 <> updated d2,
+        propagated = propagated d1 <> propagated d2,
         renamed = Map.unionWith (\(a1, b1) (a2, b2) -> (a1 <> a2, b1 <> b2)) (renamed d1) (renamed d2),
         newAliases = Map.unionWith (\(a1, b1) (a2, b2) -> (a1 <> a2, b1 <> b2)) (newAliases d1) (newAliases d2)
       }
@@ -179,6 +181,7 @@ instance (Ord r) => Monoid (DefinitionDiffs Name r) where
       { added = mempty,
         removed = mempty,
         updated = mempty,
+        propagated = mempty,
         renamed = mempty,
         newAliases = mempty
       }
@@ -624,7 +627,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
                   HumanDiffOp'Add ref -> mempty {added = Map.singleton name ref}
                   HumanDiffOp'Delete ref -> mempty {removed = Map.singleton name ref}
                   HumanDiffOp'Update refs -> mempty {updated = Map.singleton name (refs.old, refs.new)}
-                  HumanDiffOp'PropagatedUpdate _ -> mempty
+                  HumanDiffOp'PropagatedUpdate refs -> mempty {propagated = Map.singleton name (refs.old, refs.new)}
                   HumanDiffOp'AliasOf ref names ->
                     mempty {newAliases = Map.singleton ref (names, NESet.singleton name)}
                   HumanDiffOp'RenamedFrom ref names ->
