@@ -20,9 +20,9 @@ allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> Codebas
 allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   ownerUserId <- asks codebaseOwner
   -- Create a temp table for storing the dependencies we know the calling client already has.
-  execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER NULL ) ON COMMIT DROP |]
-  execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER NULL ) ON COMMIT DROP |]
-  execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER NULL ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -36,21 +36,24 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
       FROM dependencies_of_causals((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
     ), do_causals AS (
       INSERT INTO except_causals(causal_id)
-      SELECT causal.id
+      SELECT DISTINCT causal.id
       FROM the_causal_hashes tch
         JOIN causals causal ON tch.hash = causal.hash
+      ON CONFLICT DO NOTHING
     ), do_namespaces AS (
       INSERT INTO except_namespaces(branch_hash_ids)
-      SELECT bh.id
+      SELECT DISTINCT bh.id
       FROM dependency_hashes dh
         JOIN branch_hashes bh ON dh.hash = bh.base32
+      ON CONFLICT DO NOTHING
     ) INSERT INTO except_components(component_hash_id)
-      SELECT ch.id
+      SELECT DISTINCT ch.id
       FROM dependency_hashes dh
         JOIN component_hashes ch ON dh.hash = ch.base32
+      ON CONFLICT DO NOTHING
     |]
   cursor <-
-    PGCursor.newRowCursor
+    PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
       "serialized_entities"
       [sql|
         WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id) AS (
@@ -173,32 +176,45 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                     WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = ref.component_hash_id)
             )
         )
-           (SELECT bytes.bytes, ch.base32
+           (SELECT bytes.bytes, ch.base32, cd.depth
              FROM transitive_components tc
                JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND tc.component_hash_id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_hashes ch ON tc.component_hash_id = ch.id
+               LEFT JOIN component_depth cd ON ch.id = cd.component_hash_id
            )
            UNION ALL
-           (SELECT bytes.bytes, ap.patch_hash
+           (SELECT bytes.bytes, ap.patch_hash, pd.depth
              FROM all_patches ap
                JOIN serialized_patches sp ON ap.patch_id = sp.patch_id
                JOIN bytes ON sp.bytes_id = bytes.id
+               LEFT JOIN patch_depth pd ON ap.patch_id = pd.patch_id
            )
            UNION ALL
-           (SELECT bytes.bytes, an.namespace_hash
+           (SELECT bytes.bytes, an.namespace_hash, nd.depth
              FROM all_namespaces an
                JOIN serialized_namespaces sn ON an.namespace_hash_id = sn.namespace_hash_id
                JOIN bytes ON sn.bytes_id = bytes.id
+               LEFT JOIN namespace_depth nd ON an.namespace_hash_id = nd.namespace_hash_id
            )
            UNION ALL
-           (SELECT bytes.bytes, tc.causal_hash
+           (SELECT bytes.bytes, tc.causal_hash, cd.depth
              FROM transitive_causals tc
                JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
                JOIN bytes ON sc.bytes_id = bytes.id
+               LEFT JOIN causal_depth cd ON tc.causal_id = cd.causal_id
            )
+           -- Put them in dependency order, nulls come first because we want to bail and
+           -- report an error if we are somehow missing a depth.
+           ORDER BY depth ASC NULLS FIRST
   |]
-  pure cursor
+  pure
+    ( cursor <&> \(bytes, hash, depth) -> case depth of
+        -- This should never happen, but is a sanity check in case we're missing a depth.
+        -- Better than silently omitting a required result.
+        Nothing -> error $ "allSerializedDependenciesOfCausalCursor: Missing depth for entity: " <> show hash
+        Just _ -> (bytes, hash)
+    )
 
 spineAndLibDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
 spineAndLibDependenciesOfCausalCursor cid = do

@@ -485,7 +485,7 @@ compressNameTree (diffs Cofree.:< children) =
                   (childDiffs Cofree.:< nestedChildren)
                     | null childDiffs,
                       [(k, v)] <- Map.toList nestedChildren ->
-                        (ns Path.:< k, v)
+                        (Path.prefix (Path.singleton ns) (Path.Relative k), v)
                     | otherwise ->
                         (Path.singleton ns, child)
             )

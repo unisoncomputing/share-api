@@ -233,6 +233,7 @@ savePatch maySerialized patchHash PatchFull.Patch {termEdits, typeEdits} = do
               LEFT JOIN types to_type
                 ON to_type.component_hash_id = to_type_component_hash_id AND to_type.component_index = to_type_component_index
           |]
+      execute_ [sql| SELECT update_patch_depth(#{patchId}) |]
       pure patchId
     termsTable :: [(Maybe ComponentHashId, Maybe Int64 {- from comp index -}, Maybe TextId, Maybe ComponentHashId, Maybe Int64 {- to comp index -}, Maybe TextId, Maybe PatchFullTermEdit.Typing, Bool)]
     constructorsTable :: [(ComponentHashId, Int64 {- from comp index -}, Int64 {- from constr index -}, Maybe ComponentHashId, Maybe Int64 {- to comp index-}, Maybe Int64 {- to constr index -}, Maybe PatchFullTermEdit.Typing, Bool)]

@@ -34,7 +34,7 @@ import Share.Utils.Aeson (PreEncoded (PreEncoded))
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
-import Unison.Codebase.Path qualified as Path
+import Unison.Codebase.Path (Path)
 import Unison.Codebase.SqliteCodebase.Conversions (referent1to2)
 import Unison.ConstructorReference (ConstructorReference)
 import Unison.Merge (DiffOp (..), TwoOrThreeWay (..), TwoWay (..))
@@ -198,7 +198,7 @@ diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
 
 getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe (Either ConstructorReference TermDefinition))
 getTermDefinition (codebase, bhId, name) = do
-  let perspective = Path.empty
+  let perspective = mempty @Path
   (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
   let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
@@ -227,7 +227,7 @@ diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
 
 getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TypeDefinition)
 getTypeDefinition (codebase, bhId, name) = do
-  let perspective = Path.empty
+  let perspective = mempty @Path
   (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
   let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
