@@ -342,7 +342,8 @@ addRolesEndpoint session projectUserHandle projectSlug (AddRolesRequest {roleAss
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkAddProjectRoles caller projectId
   PG.runTransaction $ do
     updatedRoles <- ProjectsQ.addProjectRoles projectId roleAssignments
-    pure $ AddRolesResponse {roleAssignments = updatedRoles}
+    roleAssignments <- displaySubjectsOf (traversed . traversed) updatedRoles
+    pure $ AddRolesResponse {roleAssignments}
 
 removeRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> RemoveRolesRequest -> WebApp RemoveRolesResponse
 removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {roleAssignments}) = do
@@ -352,4 +353,5 @@ removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {r
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkRemoveProjectRoles caller projectId
   PG.runTransaction $ do
     updatedRoles <- ProjectsQ.removeProjectRoles projectId roleAssignments
-    pure $ RemoveRolesResponse {roleAssignments = updatedRoles}
+    roleAssignments <- displaySubjectsOf (traversed . traversed) updatedRoles
+    pure $ RemoveRolesResponse {roleAssignments}

@@ -298,7 +298,7 @@ instance ToJSON ListRolesResponse where
       ]
 
 data AddRolesResponse = AddRolesResponse
-  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
+  { roleAssignments :: [RoleAssignment DisplayAuthSubject]
   }
 
 instance ToJSON AddRolesResponse where
@@ -308,7 +308,7 @@ instance ToJSON AddRolesResponse where
       ]
 
 data RemoveRolesResponse = RemoveRolesResponse
-  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
+  { roleAssignments :: [RoleAssignment DisplayAuthSubject]
   }
 
 instance ToJSON RemoveRolesResponse where
