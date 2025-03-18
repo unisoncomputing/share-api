@@ -7,7 +7,12 @@
           "org_admin"
         ],
         "subject": {
-          "id": "U-<UUID>",
+          "data": {
+            "avatarUrl": null,
+            "handle": "test",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
           "kind": "user"
         }
       },
@@ -16,7 +21,15 @@
           "org_default"
         ],
         "subject": {
-          "id": "ORG-<UUID>",
+          "data": {
+            "orgId": "ORG-<UUID>",
+            "user": {
+              "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+              "handle": "unison",
+              "name": "Unison Org",
+              "userId": "U-<UUID>"
+            }
+          },
           "kind": "org"
         }
       }
