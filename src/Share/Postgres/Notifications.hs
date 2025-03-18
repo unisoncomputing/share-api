@@ -5,12 +5,15 @@
 module Share.Postgres.Notifications
   ( initialize,
     waitOnChannel,
+    notifyChannel,
+    ChannelKind (..),
   )
 where
 
 import Control.Concurrent.STM (TVar)
 import Control.Concurrent.STM qualified as STM
 import Data.Set qualified as Set
+import Data.Text.Encoding qualified as Text
 import Hasql.ListenNotify qualified as Hasql
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Errors qualified as Background
@@ -40,11 +43,11 @@ initialize scope = void $ Ki.fork scope $ forever do
   result <- UnliftIO.try $ do
     PG.runSession $ do
       for_ [minBound .. maxBound] \kind -> do
-        PG.statement () $ Hasql.listen (toChannelId kind)
+        PG.statement () $ Hasql.listen (Hasql.Identifier . Text.encodeUtf8 $ toChannelText kind)
       -- Wait for notifications
       let loop = do
             Hasql.Notification {channel} <- lift $ Hasql.await
-            fromChannelId channel & \case
+            fromChannelText channel & \case
               Just kind -> do
                 liftIO . STM.atomically $ STM.modifyTVar' notifs $ Set.insert kind
                 loop
@@ -62,18 +65,19 @@ data ChannelKind
   | ContributionDiffChannel
   deriving stock (Eq, Ord, Show, Bounded, Enum)
 
-toChannelId :: ChannelKind -> Hasql.Identifier
-toChannelId = \case
-  DefinitionSyncChannel -> Hasql.Identifier "definition_sync"
-  ContributionDiffChannel -> Hasql.Identifier "contribution_diff"
+toChannelText :: ChannelKind -> Text
+toChannelText = \case
+  DefinitionSyncChannel -> "definition_sync"
+  ContributionDiffChannel -> "contribution_diff"
 
-fromChannelId :: Text -> Maybe ChannelKind
-fromChannelId = \case
+fromChannelText :: Text -> Maybe ChannelKind
+fromChannelText = \case
   "definition_sync" -> Just DefinitionSyncChannel
   "contribution_diff" -> Just ContributionDiffChannel
   _ -> Nothing
 
--- | Wait on a channel for notifications, OR until the max polling time has been reached
+-- | Block waiting on a channel until either we get a notification OR until the max polling time has been reached
+--
 -- The channel notifications can help ensure we process items as they come in, but they're not
 -- robust in spite of restarts or within a cluster setting, so we also have a max polling time
 -- to ensure any missed notifications are eventually processed.
@@ -86,3 +90,10 @@ waitOnChannel kind maxPollInterval =
     channels <- STM.readTVar notifs
     guard (Set.member kind channels)
     STM.modifyTVar' notifs $ Set.delete kind
+
+-- | Send a notification to a channel, workers will only be notified if the transaction
+-- commits.
+notifyChannel :: (PG.QueryA m) => ChannelKind -> m ()
+notifyChannel kind = do
+  let payload = ""
+  PG.statement (Hasql.Notify (toChannelText kind) payload) $ Hasql.notify

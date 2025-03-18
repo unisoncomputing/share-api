@@ -8,6 +8,7 @@ import Data.Foldable (toList)
 import Data.Set (Set)
 import Share.IDs
 import Share.Postgres
+import Share.Postgres.Notifications qualified as Notif
 
 submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
 submitContributionsToBeDiffed contributions = do
@@ -20,6 +21,7 @@ submitContributionsToBeDiffed contributions = do
       SELECT nc.contribution_id FROM new_contributions nc
       ON CONFLICT DO NOTHING
     |]
+  Notif.notifyChannel Notif.ContributionDiffChannel
 
 -- | Claim the oldest contribution in the queue to be diffed.
 claimContributionToDiff :: Transaction e (Maybe ContributionId)
