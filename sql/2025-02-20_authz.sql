@@ -282,6 +282,8 @@ CREATE TABLE teams (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   org_id UUID NOT NULL REFERENCES orgs (id),
 
+  name TEXT NOT NULL CHECK (name <> ''),
+
   subject_id UUID UNIQUE NOT NULL REFERENCES subjects (id),
   -- Resource for managing permissions on this team itself.
   resource_id UUID UNIQUE NOT NULL REFERENCES resources (id),
