@@ -6,7 +6,12 @@
           "project_viewer"
         ],
         "subject": {
-          "id": "U-<UUID>",
+          "data": {
+            "avatarUrl": null,
+            "handle": "read-maintainer",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
           "kind": "user"
         }
       },
@@ -15,7 +20,12 @@
           "project_contributor"
         ],
         "subject": {
-          "id": "U-<UUID>",
+          "data": {
+            "avatarUrl": null,
+            "handle": "maintain-maintainer",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
           "kind": "user"
         }
       },
@@ -24,7 +34,12 @@
           "project_owner"
         ],
         "subject": {
-          "id": "U-<UUID>",
+          "data": {
+            "avatarUrl": null,
+            "handle": "admin-maintainer",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
           "kind": "user"
         }
       },
@@ -33,7 +48,12 @@
           "project_owner"
         ],
         "subject": {
-          "id": "U-<UUID>",
+          "data": {
+            "avatarUrl": null,
+            "handle": "test",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
           "kind": "user"
         }
       }
