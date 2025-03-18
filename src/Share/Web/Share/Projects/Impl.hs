@@ -46,6 +46,7 @@ import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDi
 import Share.Web.Share.Projects.API qualified as API
 import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.Impl (getProjectReleaseReadmeEndpoint, releasesServer)
+import Share.Web.Share.Roles.Queries (displaySubjectsOf)
 import Share.Web.Share.Tickets.Impl (ticketsByProjectServer)
 import Share.Web.Share.Types
 import Unison.Name (Name)
@@ -327,7 +328,8 @@ listRolesEndpoint session projectUserHandle projectSlug = do
     Q.projectIDFromHandleAndSlug projectUserHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadProjectRolesList caller projectId
   (isPremiumProject, roleAssignments) <- PG.runTransaction $ do
-    roleAssignments <- ProjectsQ.listProjectRoles projectId
+    projectRoles <- ProjectsQ.listProjectRoles projectId
+    roleAssignments <- displaySubjectsOf (traversed . traversed) projectRoles
     isPremiumProject <- ProjectsQ.isPremiumProject projectId
     pure (isPremiumProject, roleAssignments)
   pure $ ListRolesResponse {active = isPremiumProject, roleAssignments}

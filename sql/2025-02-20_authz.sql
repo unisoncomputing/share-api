@@ -283,6 +283,7 @@ CREATE TABLE teams (
   org_id UUID NOT NULL REFERENCES orgs (id),
 
   name TEXT NOT NULL CHECK (name <> ''),
+  avatar_url text NULL CHECK (avatar_url <> ''),
 
   subject_id UUID UNIQUE NOT NULL REFERENCES subjects (id),
   -- Resource for managing permissions on this team itself.

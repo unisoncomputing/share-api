@@ -6,15 +6,20 @@ module Share.Web.Share.Orgs.Queries
     listOrgRoles,
     addOrgRoles,
     removeOrgRoles,
+    orgDisplayInfoOf,
+    userDisplayInfoByOrgIdOf,
   )
 where
 
+import Control.Lens
 import Data.Set qualified as Set
 import Share.IDs (OrgId, UserHandle, UserId)
 import Share.Postgres
 import Share.Prelude
+import Share.Utils.URI
 import Share.Web.Authorization.Types
 import Share.Web.Share.Orgs.Types (Org)
+import Share.Web.Share.Types (OrgDisplayInfo (..), UserDisplayInfo (..))
 
 orgByUserId :: UserId -> Transaction e (Maybe Org)
 orgByUserId orgUserId = do
@@ -33,6 +38,38 @@ orgByUserHandle orgHandle = do
         JOIN users u ON org.user_id = u.id
       WHERE u.handle = #{orgHandle}
     |]
+
+-- | Efficiently resolve Org Display Info for OrgIds within a structure.
+orgDisplayInfoOf :: (QueryA m) => Traversal s t OrgId OrgDisplayInfo -> s -> m t
+orgDisplayInfoOf trav s = do
+  s
+    & unsafePartsOf trav %%~ \orgIds -> do
+      userDisplayInfos <- userDisplayInfoByOrgIdOf traversed orgIds
+      pure $ zipWith (\orgId userDisplayInfo -> OrgDisplayInfo {orgId, user = userDisplayInfo}) orgIds userDisplayInfos
+
+userDisplayInfoByOrgIdOf :: (QueryA m) => Traversal s t OrgId UserDisplayInfo -> s -> m t
+userDisplayInfoByOrgIdOf trav s = do
+  s
+    & unsafePartsOf trav %%~ \orgIds ->
+      do
+        let orgTable = zip [0 :: Int32 ..] orgIds
+        queryListRows
+          [sql|
+      WITH values(ord, org_id) AS (
+        SELECT * FROM ^{toTable orgTable} AS t(ord, org_id)
+      ) SELECT u.handle, u.name, u.avatar_url, u.id
+          FROM values
+          JOIN orgs org ON org.id = values.org_id
+          JOIN users u ON u.id = org.user_id
+        ORDER BY ord
+        |]
+          <&> fmap \(handle, name, avatarUrl, userId) ->
+            UserDisplayInfo
+              { handle,
+                name,
+                avatarUrl = unpackURI <$> avatarUrl,
+                userId
+              }
 
 listOrgRoles :: OrgId -> Transaction e [RoleAssignment ResolvedAuthSubject]
 listOrgRoles orgId = do

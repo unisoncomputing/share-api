@@ -1,5 +1,7 @@
 module Share.Web.Share.Orgs.Impl (server) where
 
+import Control.Lens
+import Data.Either (isRight)
 import Servant
 import Servant.Server.Generic
 import Share.IDs
@@ -12,6 +14,7 @@ import Share.Web.Errors
 import Share.Web.Share.Orgs.API as API
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (Org (..))
+import Share.Web.Share.Roles.Queries (displaySubjectsOf)
 
 server :: ServerT API.API WebApp
 server orgHandle =
@@ -38,16 +41,23 @@ listRolesEndpoint :: UserHandle -> UserId -> WebApp ListRolesResponse
 listRolesEndpoint orgHandle caller = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadOrgRolesList caller orgId
-  ListRolesResponse True <$> PG.runTransaction (OrgQ.listOrgRoles orgId)
+  callerCanEdit <- isRight <$> AuthZ.checkEditOrgRoles caller orgId
+  PG.runTransaction do
+    orgRoles <- OrgQ.listOrgRoles orgId
+    ListRolesResponse callerCanEdit <$> displaySubjectsOf (traversed . traversed) orgRoles
 
 addRolesEndpoint :: UserHandle -> UserId -> AddRolesRequest -> WebApp ListRolesResponse
 addRolesEndpoint orgHandle caller (AddRolesRequest {roleAssignments}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
-  ListRolesResponse True <$> PG.runTransaction (OrgQ.addOrgRoles orgId roleAssignments)
+  PG.runTransaction do
+    orgRoles <- OrgQ.addOrgRoles orgId roleAssignments
+    ListRolesResponse True <$> displaySubjectsOf (traversed . traversed) orgRoles
 
 removeRolesEndpoint :: UserHandle -> UserId -> RemoveRolesRequest -> WebApp ListRolesResponse
 removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
-  ListRolesResponse True <$> PG.runTransaction (OrgQ.removeOrgRoles orgId roleAssignments)
+  PG.runTransaction do
+    orgRoles <- OrgQ.removeOrgRoles orgId roleAssignments
+    ListRolesResponse True <$> displaySubjectsOf (traversed . traversed) orgRoles

@@ -10,6 +10,7 @@ module Share.Web.Authorization.Types
     SubjectKind (..),
     GenericAuthSubject,
     ResolvedAuthSubject,
+    DisplayAuthSubject,
     _UserSubject,
     _OrgSubject,
     _TeamSubject,
@@ -38,6 +39,7 @@ import Hasql.Interpolate qualified as Hasql
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
+import Share.Web.Share.Types (OrgDisplayInfo, TeamDisplayInfo, UserDisplayInfo)
 
 data SubjectKind = UserSubjectKind | OrgSubjectKind | TeamSubjectKind
   deriving (Show)
@@ -65,9 +67,14 @@ data AuthSubject user org team
   | TeamSubject team
   deriving (Show)
 
+makePrisms ''AuthSubject
+
 type GenericAuthSubject = AuthSubject SubjectId SubjectId SubjectId
 
 type ResolvedAuthSubject = AuthSubject UserId OrgId TeamId
+
+-- | Auth subject with info needed by the frontend
+type DisplayAuthSubject = AuthSubject UserDisplayInfo OrgDisplayInfo TeamDisplayInfo
 
 authSubjectKind :: AuthSubject user org team -> SubjectKind
 authSubjectKind = \case
@@ -86,6 +93,12 @@ instance ToJSON ResolvedAuthSubject where
     UserSubject id -> object ["kind" .= ("user" :: Text), "id" .= id]
     OrgSubject id -> object ["kind" .= ("org" :: Text), "id" .= id]
     TeamSubject id -> object ["kind" .= ("team" :: Text), "id" .= id]
+
+instance ToJSON DisplayAuthSubject where
+  toJSON = \case
+    UserSubject user -> object ["kind" .= ("user" :: Text), "data" .= user]
+    OrgSubject org -> object ["kind" .= ("org" :: Text), "data" .= org]
+    TeamSubject team -> object ["kind" .= ("team" :: Text), "data" .= team]
 
 instance FromJSON ResolvedAuthSubject where
   parseJSON = withObject "ResolvedAuthSubject" $ \o -> do
@@ -112,8 +125,6 @@ instance Hasql.DecodeRow GenericAuthSubject where
       UserSubjectKind -> UserSubject <$> pure subjectId
       OrgSubjectKind -> OrgSubject <$> pure subjectId
       TeamSubjectKind -> TeamSubject <$> pure subjectId
-
-makePrisms ''AuthSubject
 
 -- | Permissions which are actually tracked on Roles, as opposed to permissions which exist at
 -- the application level, which may be mapped onto these.
@@ -275,7 +286,7 @@ instance FromJSON ProjectMaintainerPermissions where
 data ListRolesResponse = ListRolesResponse
   { -- Whether the caller is able to edit the roles.
     active :: Bool,
-    roleAssignments :: [RoleAssignment ResolvedAuthSubject]
+    roleAssignments :: [RoleAssignment DisplayAuthSubject]
   }
   deriving (Show)
 
