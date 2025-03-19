@@ -26,7 +26,6 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
 import Share.Web.Authorization.Types
-import Unison.Util.Monoid qualified as Monoid
 
 -- | A user has access if they own the repo, or if they're a member of an org which owns it.
 checkIsUserMaintainer :: UserId -> UserId -> PG.Transaction e Bool
@@ -78,11 +77,20 @@ causalIsInHistoryOf rootCausalId targetCausalId = do
 
 -- * NEW AuthZ * --
 
-userHasProjectPermission :: UserId -> ProjectId -> RolePermission -> PG.Transaction e Bool
-userHasProjectPermission userId projectId permission = do
+userHasProjectPermission :: Maybe UserId -> ProjectId -> RolePermission -> PG.Transaction e Bool
+userHasProjectPermission mayUserId projectId permission = do
   PG.queryExpect1Col
     [PG.sql|
-      SELECT user_has_permission(#{userId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
+      SELECT
+        user_has_permission(#{mayUserId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
+        OR
+        EXISTS (
+          SELECT FROM roles r
+          WHERE r.ref = 'project_public_access'
+            AND #{permission} = ANY(r.permissions)
+            AND (SELECT NOT p.private FROM projects p WHERE p.id = #{projectId})
+        )
+
     |]
 
 userHasOrgPermission :: UserId -> OrgId -> RolePermission -> PG.Transaction e Bool
@@ -148,19 +156,19 @@ subjectIdsForAuthSubjectsOf trav s =
 
 permissionsForProject :: Maybe UserId -> ProjectId -> PG.Transaction e (Set RolePermission)
 permissionsForProject mayUserId projectId = do
-  PG.queryExpect1Row @([RolePermission], Bool)
+  PG.queryListCol @RolePermission
     [PG.sql|
-        SELECT COALESCE(ARRAY_AGG(permission), '{}'::TEXT[]), (SELECT p.private FROM projects p WHERE p.id = #{projectId})
-          FROM user_resource_permissions urp
-          JOIN projects p ON p.resource_id = urp.resource_id
-          WHERE urp.user_id = #{mayUserId}
-                AND p.id = #{projectId}
+      (SELECT permission FROM
+        user_resource_permissions urp
+        JOIN projects p ON p.resource_id = urp.resource_id
+        WHERE urp.user_id = #{mayUserId}
+              AND p.id = #{projectId}
+        )
+      UNION
+        (SELECT permission
+          FROM roles r, UNNEST(r.permissions) AS permission
+          WHERE r.ref = 'project_public_access'
+                AND (SELECT NOT p.private FROM projects p WHERE p.id = #{projectId})
+        )
       |]
-    <&> \case
-      (permissions, private) ->
-        Set.fromList permissions
-          <> Monoid.whenM (not private) defaultPublicProjectRolePermissions
-  where
-    defaultPublicProjectRolePermissions :: Set RolePermission
-    defaultPublicProjectRolePermissions =
-      Set.singleton ProjectView
+    <&> Set.fromList
