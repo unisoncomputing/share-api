@@ -67,6 +67,7 @@ CREATE INDEX resources_kind ON resources (kind) INCLUDE (id);
 -- Enum for internal 'blessed' role refs.
 CREATE TYPE role_ref AS ENUM (
   'org_viewer',
+  'org_maintainer',
   'org_contributor',
   'org_admin',
   'org_owner',
@@ -74,8 +75,10 @@ CREATE TYPE role_ref AS ENUM (
   'team_admin',
   'project_viewer',
   'project_contributor',
+  'project_maintainer',
   'project_owner',
-  'project_admin'
+  'project_admin',
+  'project_public_access'
 );
 
 -- Roles are currently managed by Unison admins only, but we could add a resource for managing custom roles in the
@@ -101,17 +104,21 @@ INSERT INTO roles (ref, name, permissions)
      'Organization Contributor',
      ARRAY['org:view', 'team:view', 'project:view', 'project:contribute']
     ),
+    ('org_maintainer'::role_ref,
+     'Organization Maintainer',
+     ARRAY['org:view', 'team:view', 'project:view', 'project:contribute', 'project:maintain']
+    ),
     ('org_admin'::role_ref,
      'Organization Admin',
-     ARRAY['org:view', 'org:manage', 'org:admin', 'org:create_project', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
+     ARRAY['org:view', 'org:manage', 'org:admin', 'org:create_project', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute', 'project:delete', 'project:maintain']
     ),
     ('org_owner'::role_ref,
      'Organization Owner',
-     ARRAY['org:view', 'org:manage', 'org:admin', 'org:create_project', 'org:delete', 'org:change_owner', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute']
+     ARRAY['org:view', 'org:manage', 'org:admin', 'org:create_project', 'org:delete', 'org:change_owner', 'team:view', 'team:manage', 'project:view', 'project:manage', 'project:contribute', 'project:delete', 'project:maintain']
     ),
     ('org_default'::role_ref,
      'Organization Default', -- The same as the contributor role, but keeping it separate allows us to see which orgs have diverged from the default or not.
-     ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:create', 'project:contribute']
+     ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:create', 'project:maintain', 'project:contribute']
     ),
     ('team_admin'::role_ref,
      'Team Admin',
@@ -121,17 +128,28 @@ INSERT INTO roles (ref, name, permissions)
      'Project Viewer',
      ARRAY['project:view']
      ),
+    -- Can submit contributor branches, but not merge them or update core branches.
     ('project_contributor'::role_ref,
      'Project Contributor',
      ARRAY['project:view', 'project:contribute']
     ),
+    -- Can merge contributor branches, update core branches, but not change critical project settings or delete the project.
+    ('project_maintainer'::role_ref,
+     'Project Maintainer',
+     ARRAY['project:view', 'project:contribute', 'project:maintain']
+    ),
     ('project_admin'::role_ref,
      'Project Admin',
-     ARRAY['project:view', 'project:manage', 'project:contribute']
+     ARRAY['project:view', 'project:manage', 'project:contribute', 'project:maintain']
     ),
     ('project_owner'::role_ref,
      'Project Owner',
-     ARRAY['project:view', 'project:manage', 'project:contribute', 'project:delete']
+     ARRAY['project:view', 'project:manage', 'project:contribute', 'project:delete', 'project:maintain']
+    ),
+    -- A role containing permissions which are valid for ALL users when the project is marked as public.
+    ('project_public_access'::role_ref,
+     'Project Public Access',
+     ARRAY['project:view', 'project:contribute']
     );
 
 

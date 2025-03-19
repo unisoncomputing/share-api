@@ -141,6 +141,7 @@ data RolePermission
     ProjectView
   | ProjectManage
   | ProjectContribute
+  | ProjectMaintain
   | ProjectDelete
   | -- Org
     OrgView
@@ -159,6 +160,7 @@ rolePermissionToText = \case
   ProjectView -> "project:view"
   ProjectManage -> "project:manage"
   ProjectContribute -> "project:contribute"
+  ProjectMaintain -> "project:maintain"
   ProjectDelete -> "project:delete"
   OrgView -> "org:view"
   OrgManage -> "org:manage"
