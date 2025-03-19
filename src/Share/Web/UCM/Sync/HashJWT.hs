@@ -12,11 +12,11 @@ import Control.Monad.Trans.Except (except)
 import Data.Either.Combinators qualified as Either
 import Share.IDs
 import Share.IDs qualified as IDs
-import Share.JWT qualified as OAuthJWT
+import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Web.App
 import Share.Web.Authentication.HashJWT qualified as HashJWT
-import Share.Web.Authentication.JWT qualified as JWT
+import Share.Web.Authentication.JWT qualified as AuthJWT
 import Share.Web.Authentication.Types qualified as AuthN
 import System.IO.Unsafe (unsafePerformIO)
 import Unison.Hash32 (Hash32)
@@ -60,7 +60,7 @@ publicHashJWTCache = unsafePerformIO $ Cache.semispaceCache publicHashJWTCacheSi
 
 -- | Sign a hash for a particular user, which allows them to download the associated entity later.
 -- A 'Nothing' user ID indicates that this hash is publicly available.
-signHashesForUser :: Traversable t => Maybe UserId -> t Hash32 -> WebApp (t Share.HashJWT)
+signHashesForUser :: (Traversable t) => Maybe UserId -> t Hash32 -> WebApp (t Share.HashJWT)
 signHashesForUser mayUserId hashes = do
   case mayUserId of
     Nothing ->
@@ -70,7 +70,7 @@ signHashesForUser mayUserId hashes = do
   where
     signJWT :: Hash32 -> WebApp Share.HashJWT
     signJWT hash = do
-      Share.HashJWT . OAuthJWT.signedJWTToText <$> HashJWT.signHashJWT (Share.HashJWTClaims {Share.hash = hash, Share.userId = IDs.toText <$> mayUserId})
+      Share.HashJWT . JWT.signedJWTToText <$> HashJWT.signHashJWT (Share.HashJWTClaims {Share.hash = hash, Share.userId = IDs.toText <$> mayUserId})
 
 signHashForUser :: Maybe UserId -> Hash32 -> WebApp HashJWT
 signHashForUser mayUserId hash = fmap runIdentity $ signHashesForUser mayUserId (Identity hash)
@@ -80,13 +80,14 @@ signHashForUser mayUserId hash = fmap runIdentity $ signHashesForUser mayUserId 
 -- indicates that the requested hash is publicly available.
 verifyHashJWT :: Maybe UserId -> HashJWT -> WebApp (Either AuthN.AuthenticationErr HashJWTClaims)
 verifyHashJWT mayUserId (HashJWT jwtText) = runExceptT $ do
-  signedJWT <- except . Either.mapLeft AuthN.JWTErr $ OAuthJWT.textToSignedJWT jwtText
-  ExceptT $ JWT.verifyJWT signedJWT userIdCheck
+  signedJWT <- except . Either.mapLeft AuthN.JWTErr $ JWT.textToSignedJWT jwtText
+  JWT.JSONJWTClaims hashJWTValue <- ExceptT $ AuthJWT.verifyJWT signedJWT userIdCheck
+  pure hashJWTValue
   where
     -- user id on hash jwt must match the current user,
     -- if user id on hash jwt is 'Nothing' then anyone, including unauthenticated callers,
     -- may use it; it's a public definition.
-    userIdCheck (Share.HashJWTClaims {Share.userId = hashJWTUserId}) =
+    userIdCheck (JWT.JSONJWTClaims (Share.HashJWTClaims {Share.userId = hashJWTUserId})) =
       case hashJWTUserId of
         Nothing -> Nothing
         hjUser
