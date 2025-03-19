@@ -14,7 +14,7 @@ fetch "$unauthorized_user" PATCH non-maintainer-project-update '/users/test/proj
     "summary": "update"
 }'
 
-fetch "$test_user" POST add-roles '/users/test/projects/privatetestproject/roles/add' "
+fetch "$test_user" POST add-roles '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
@@ -30,7 +30,7 @@ fetch "$test_user" POST add-roles '/users/test/projects/privatetestproject/roles
 }"
 
 # Non-owner should not be able to change roles
-fetch "$maintain_maintainer" POST non-owner-add-roles '/users/test/projects/privatetestproject/roles/add' "
+fetch "$maintain_maintainer" POST non-owner-add-roles '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
@@ -87,7 +87,7 @@ pg_sql "UPDATE public.cloud_subscribers SET is_active = false WHERE user_id = '$
 fetch "$test_user" GET list-roles-non-premium '/users/test/projects/privatetestproject/roles'
 
 # Should be unable to add new roles when the cloud subscription is expired.
-fetch "$test_user" POST add-roles-non-premium '/users/test/projects/privatetestproject/roles/add' "
+fetch "$test_user" POST add-roles-non-premium '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
@@ -98,7 +98,7 @@ fetch "$test_user" POST add-roles-non-premium '/users/test/projects/privatetestp
 
 # Can remove roles from users
 # unmentioned users are left as-is,
-fetch "$test_user" POST remove-roles '/users/test/projects/privatetestproject/roles/remove' "
+fetch "$test_user" DELETE remove-roles '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
     [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}

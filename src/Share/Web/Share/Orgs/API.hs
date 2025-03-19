@@ -20,8 +20,8 @@ data Routes mode
 data OrgRolesRoutes mode
   = OrgRolesRoutes
   { list :: mode :- OrgRolesListEndpoint,
-    add :: mode :- "add" :> OrgRolesAddEndpoint,
-    remove :: mode :- "remove" :> OrgRolesRemoveEndpoint
+    add :: mode :- OrgRolesAddEndpoint,
+    remove :: mode :- OrgRolesRemoveEndpoint
   }
   deriving stock (Generic)
 
@@ -33,7 +33,7 @@ type OrgRolesAddEndpoint =
 type OrgRolesRemoveEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] RemoveRolesRequest
-    :> Post '[JSON] ListRolesResponse
+    :> Delete '[JSON] ListRolesResponse
 
 type OrgRolesListEndpoint =
   AuthenticatedUserId

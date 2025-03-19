@@ -91,8 +91,8 @@ type ProjectReadmeEndpoint = Get '[JSON] (Cached JSON ReadmeResponse)
 
 type MaintainersResourceAPI =
   ( ListRolesEndpoint
-      :<|> ("add" :> AddRolesEndpoint)
-      :<|> ("remove" :> RemoveRolesEndpoint)
+      :<|> AddRolesEndpoint
+      :<|> RemoveRolesEndpoint
   )
 
 -- | List all maintainers of the project.
@@ -110,4 +110,4 @@ type RemoveRolesEndpoint =
   ReqBody '[JSON] RemoveRolesRequest
     :>
     -- Return the updated list of maintainers
-    Post '[JSON] RemoveRolesResponse
+    Delete '[JSON] RemoveRolesResponse
