@@ -20,6 +20,7 @@ import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
+import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.Ops qualified as PGO
@@ -296,15 +297,16 @@ getProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp GetPr
 getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug = do
   projectId <- PG.runTransaction (Q.projectIDFromHandleAndSlug userHandle projectSlug) `or404` (EntityMissing (ErrorID "project:missing") "Project not found")
   addRequestTag "project-id" (IDs.toText projectId)
-  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats) <- PG.runTransactionOrRespondError do
+  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats, permissionsForProject) <- PG.runTransactionOrRespondError do
     projectWithMeta <- (Q.projectByIdWithMetadata callerUserId projectId) `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     releaseDownloads <- Q.releaseDownloadStatsForProject projectId
     contributionStats <- Q.contributionStatsForProject projectId
     ticketStats <- Q.ticketStatsForProject projectId
-    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats)
+    permissionsForProject <- PermissionsInfo <$> AuthZQ.permissionsForProject callerUserId projectId
+    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats, permissionsForProject)
   let releaseDownloadStats = ReleaseDownloadStats {releaseDownloads}
   AuthZ.permissionGuard $ AuthZ.checkProjectGet callerUserId project
-  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats)
+  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats :++ permissionsForProject)
 
 favProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> FavProjectRequest -> WebApp NoContent
 favProjectEndpoint sess userHandle projectSlug (FavProjectRequest {isFaved}) = do

@@ -17,6 +17,7 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
+import Share.Web.Authorization.Types (PermissionsInfo)
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
 projectToAPI projectOwner Project {slug, visibility, createdAt, updatedAt, summary, tags} =
@@ -202,6 +203,7 @@ type GetProjectResponse =
     :++ ReleaseDownloadStats
     :++ ContributionStats
     :++ TicketStats
+    :++ PermissionsInfo
 
 data ListProjectsResponse = ListProjectsResponse
   { projects :: [APIProject :++ FavData]

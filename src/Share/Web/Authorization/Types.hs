@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -6,6 +7,7 @@ module Share.Web.Authorization.Types
     RoleRef (..),
     projectRoles,
     ProjectMaintainerPermissions (..),
+    PermissionsInfo (..),
     AuthSubject (..),
     SubjectKind (..),
     GenericAuthSubject,
@@ -32,13 +34,16 @@ import Data.Aeson (FromJSON, ToJSON (..), object, withObject, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON (..))
 import Data.Set qualified as Set
+import Data.Text qualified as Text
 import Data.UUID (UUID)
 import Hasql.Decoders qualified as HasqlDecode
+import Hasql.Decoders qualified as HasqlDecoders
 import Hasql.Encoders qualified as HasqlEncode
 import Hasql.Interpolate qualified as Hasql
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
+import Share.Utils.API (AtKey (..))
 import Share.Web.Share.Types (OrgDisplayInfo, TeamDisplayInfo, UserDisplayInfo)
 
 data SubjectKind = UserSubjectKind | OrgSubjectKind | TeamSubjectKind
@@ -147,24 +152,58 @@ data RolePermission
   | -- Team
     TeamView
   | TeamManage
-  deriving (Show)
+  deriving (Show, Eq, Ord)
+
+rolePermissionToText :: RolePermission -> Text
+rolePermissionToText = \case
+  ProjectView -> "project:view"
+  ProjectManage -> "project:manage"
+  ProjectContribute -> "project:contribute"
+  ProjectDelete -> "project:delete"
+  OrgView -> "org:view"
+  OrgManage -> "org:manage"
+  OrgAdmin -> "org:admin"
+  OrgDelete -> "org:delete"
+  OrgChangeOwner -> "org:change_owner"
+  OrgProjectCreate -> "org:project_create"
+  TeamView -> "team:view"
+  TeamManage -> "team:manage"
+
+rolePermissionFromText :: Text -> Maybe RolePermission
+rolePermissionFromText = \case
+  "project:view" -> Just ProjectView
+  "project:manage" -> Just ProjectManage
+  "project:contribute" -> Just ProjectContribute
+  "project:delete" -> Just ProjectDelete
+  "org:view" -> Just OrgView
+  "org:manage" -> Just OrgManage
+  "org:admin" -> Just OrgAdmin
+  "org:delete" -> Just OrgDelete
+  "org:change_owner" -> Just OrgChangeOwner
+  "org:project_create" -> Just OrgProjectCreate
+  "team:view" -> Just TeamView
+  "team:manage" -> Just TeamManage
+  _ -> Nothing
 
 instance Hasql.EncodeValue RolePermission where
   encodeValue =
     Hasql.encodeValue @Text
-      & contramap \case
-        ProjectView -> "project:view"
-        ProjectManage -> "project:manage"
-        ProjectContribute -> "project:contribute"
-        ProjectDelete -> "project:delete"
-        OrgView -> "org:view"
-        OrgManage -> "org:manage"
-        OrgAdmin -> "org:admin"
-        OrgDelete -> "org:delete"
-        OrgChangeOwner -> "org:change_owner"
-        OrgProjectCreate -> "org:project_create"
-        TeamView -> "team:view"
-        TeamManage -> "team:manage"
+      & contramap rolePermissionToText
+
+instance Hasql.DecodeValue RolePermission where
+  decodeValue =
+    Hasql.decodeValue @Text
+      & HasqlDecoders.refine \a -> case rolePermissionFromText a of
+        Just x -> Right x
+        Nothing -> Left $ "Invalid RolePermission: " <> a
+
+instance ToJSON RolePermission where
+  toJSON = Aeson.String . rolePermissionToText
+
+instance FromJSON RolePermission where
+  parseJSON = Aeson.withText "RolePermission" \a -> case rolePermissionFromText a of
+    Just x -> pure x
+    Nothing -> fail $ "Invalid RolePermission: " <> Text.unpack a
 
 -- | There are a set of builtin Unison roles.
 data RoleRef
@@ -259,6 +298,11 @@ instance (FromJSON user) => FromJSON (RoleAssignment user) where
     subject <- o Aeson..: "subject"
     roles <- o Aeson..: "roles"
     pure RoleAssignment {..}
+
+-- | A type for mixing in permissions info on a response for a resource.
+newtype PermissionsInfo = PermissionsInfo (Set RolePermission)
+  deriving (Show)
+  deriving (ToJSON) via (AtKey "permissions" (Set RolePermission))
 
 data ProjectMaintainerPermissions = ProjectMaintainerPermissions
   { canView :: Bool,

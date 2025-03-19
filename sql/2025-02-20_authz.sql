@@ -21,15 +21,15 @@
 --     model. Group membership can ADD new permissions to a subject, but it cannot REMOVE permissions from a subject.
 --     The default permissions of an organization are inherited by their users using groups for example.
 -- * resource: The object/thing that is being accessed by the subject. This could be a project, search, code, etc.
--- * action/permission: The verb that the subject is trying to perform on the resource. This could be read, write, delete, etc.
+-- * permission: The verb that the subject is trying to perform on the resource. This could be read, write, delete, etc.
 -- * role: A collection of permissions that can be assigned to a subject x resource pair.
 
 
--- All actions are scoped to a specific resource type, this is important since
--- permissable actions can be inherited via the resource hierarchy.
+-- All permissions are scoped to a specific resource type, this is important since
+-- permissions can be inherited via the resource hierarchy.
 --
 -- E.g. 'project:read' is a different permission than 'org:read'.
-CREATE DOMAIN action AS TEXT
+CREATE DOMAIN permission AS TEXT
 CHECK (
     VALUE ~ '^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$'
 );
@@ -87,11 +87,11 @@ CREATE TABLE roles (
   -- It must be NULL for user-created roles.
   ref role_ref UNIQUE NULL,
   -- The list of actions _may_ be empty, not that it's terribly useful
-  actions action[] NOT NULL
+  permissions permission[] NOT NULL
 );
-CREATE INDEX roles_actions ON roles USING GIN (actions);
+CREATE INDEX roles_permissions ON roles USING GIN (permissions);
 
-INSERT INTO roles (ref, name, actions)
+INSERT INTO roles (ref, name, permissions)
   VALUES
     ('org_viewer'::role_ref,
      'Organization Viewer',
@@ -135,7 +135,7 @@ INSERT INTO roles (ref, name, actions)
     );
 
 
--- Assign (subject, resources) pairs actions via roles.
+-- Assign (subject, resources) pairs permissions via roles.
 CREATE TABLE role_memberships (
   subject_id UUID NOT NULL REFERENCES subjects (id) ON DELETE CASCADE,
   resource_id UUID NOT NULL REFERENCES resources (id) ON DELETE CASCADE,
@@ -449,28 +449,28 @@ CREATE VIEW subjects_by_user(user_id, subject_id) AS (
   JOIN group_members gm ON u.subject_id = gm.member_subject_id
 );
 
-CREATE VIEW subject_resource_permissions(subject_id, resource_id, action) AS (
-  WITH base_permissions(subject_id, resource_id, action) AS (
+CREATE VIEW subject_resource_permissions(subject_id, resource_id, permission) AS (
+  WITH base_permissions(subject_id, resource_id, permission) AS (
     -- base permissions
-    SELECT rm.subject_id, rm.resource_id, action
+    SELECT rm.subject_id, rm.resource_id, permission
     FROM role_memberships rm
     JOIN roles r ON rm.role_id = r.id
-    , UNNEST(r.actions) AS action
+    , UNNEST(r.permissions) AS permission
   ) SELECT * FROM base_permissions
   UNION
   -- Inherit permissions from parent resources
-  SELECT bp.subject_id, rh.resource_id, bp.action
+  SELECT bp.subject_id, rh.resource_id, bp.permission
     FROM base_permissions bp
     JOIN resource_hierarchy rh ON bp.resource_id = rh.parent_resource_id
 );
 
-CREATE VIEW user_resource_permissions(user_id, resource_id, action) AS (
-  SELECT sbu.user_id, srp.resource_id, action
+CREATE VIEW user_resource_permissions(user_id, resource_id, permission) AS (
+  SELECT sbu.user_id, srp.resource_id, permission
   FROM subjects_by_user sbu
   JOIN subject_resource_permissions srp ON sbu.subject_id = srp.subject_id
 );
 
-CREATE FUNCTION user_has_permission(user_id UUID, resource_id UUID, action action)
+CREATE FUNCTION user_has_permission(user_id UUID, resource_id UUID, permission permission)
 RETURNS BOOLEAN
 STABLE
 PARALLEL SAFE
@@ -478,7 +478,7 @@ AS $$
   SELECT EXISTS (
     SELECT
     FROM user_resource_permissions
-    WHERE user_id = $1 AND resource_id = $2 AND action = $3
+    WHERE user_id = $1 AND resource_id = $2 AND permission = $3
   );
 $$ LANGUAGE SQL;
 
@@ -496,7 +496,7 @@ CREATE VIEW subjects_by_kind(kind, subject_id, resolved_id) AS (
   FROM teams t
 );
 
-CREATE VIEW debug_permissions(subject_kind, subject_id, resolved_id, resource_kind, resource_id, role_id, role_ref, actions) AS (
+CREATE VIEW debug_permissions(subject_kind, subject_id, resolved_id, resource_kind, resource_id, role_id, role_ref, permissions) AS (
   SELECT
     sbk.kind AS subject_kind,
     sbk.subject_id,
@@ -505,7 +505,7 @@ CREATE VIEW debug_permissions(subject_kind, subject_id, resolved_id, resource_ki
     rm.resource_id,
     rm.role_id,
     role.ref AS role_ref,
-    role.actions
+    role.permissions
   FROM subjects_by_kind sbk
   JOIN role_memberships rm ON sbk.subject_id = rm.subject_id
   JOIN roles role ON rm.role_id = role.id

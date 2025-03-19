@@ -14,15 +14,19 @@ module Share.Postgres.Authorization.Queries
     userHasOrgPermission,
     listSubjectsWithResourcePermission,
     subjectIdsForAuthSubjectsOf,
+    permissionsForProject,
   )
 where
 
 import Control.Lens
 import Data.Int (Int32)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
 import Share.Web.Authorization.Types
+import Unison.Util.Monoid qualified as Monoid
 
 -- | A user has access if they own the repo, or if they're a member of an org which owns it.
 checkIsUserMaintainer :: UserId -> UserId -> PG.Transaction e Bool
@@ -141,3 +145,22 @@ subjectIdsForAuthSubjectsOf trav s =
           & unsafePartsOf (traversed . _UserSubject) .~ userSubjects
           & unsafePartsOf (traversed . _OrgSubject) .~ orgSubjects
           & unsafePartsOf (traversed . _TeamSubject) .~ teamSubjects
+
+permissionsForProject :: Maybe UserId -> ProjectId -> PG.Transaction e (Set RolePermission)
+permissionsForProject mayUserId projectId = do
+  PG.queryExpect1Row @([RolePermission], Bool)
+    [PG.sql|
+        SELECT COALESCE(ARRAY_AGG(permission), '{}'::TEXT[]), (SELECT p.private FROM projects p WHERE p.id = #{projectId})
+          FROM user_resource_permissions urp
+          JOIN projects p ON p.resource_id = urp.resource_id
+          WHERE urp.user_id = #{mayUserId}
+                AND p.id = #{projectId}
+      |]
+    <&> \case
+      (permissions, private) ->
+        Set.fromList permissions
+          <> Monoid.whenM (not private) defaultPublicProjectRolePermissions
+  where
+    defaultPublicProjectRolePermissions :: Set RolePermission
+    defaultPublicProjectRolePermissions =
+      Set.singleton ProjectView

@@ -16,6 +16,10 @@
       "name": "Unison Org",
       "type": "organization"
     },
+    "permissions": [
+      "project:view",
+      "project:contribute"
+    ],
     "releaseDownloads": [],
     "slug": "privateorgproject",
     "summary": "Private Unison Project",
