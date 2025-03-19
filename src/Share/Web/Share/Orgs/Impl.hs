@@ -14,6 +14,7 @@ import Share.Web.Errors
 import Share.Web.Share.Orgs.API as API
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (Org (..))
+import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
 import Share.Web.Share.Roles.Queries (displaySubjectsOf)
 
 server :: ServerT API.API WebApp
@@ -44,7 +45,7 @@ listRolesEndpoint orgHandle caller = do
   callerCanEdit <- isRight <$> AuthZ.checkEditOrgRoles caller orgId
   PG.runTransaction do
     orgRoles <- OrgQ.listOrgRoles orgId
-    ListRolesResponse callerCanEdit <$> displaySubjectsOf (traversed . traversed) orgRoles
+    ListRolesResponse callerCanEdit . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
 
 addRolesEndpoint :: UserHandle -> UserId -> AddRolesRequest -> WebApp ListRolesResponse
 addRolesEndpoint orgHandle caller (AddRolesRequest {roleAssignments}) = do
@@ -52,7 +53,7 @@ addRolesEndpoint orgHandle caller (AddRolesRequest {roleAssignments}) = do
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
   PG.runTransaction do
     orgRoles <- OrgQ.addOrgRoles orgId roleAssignments
-    ListRolesResponse True <$> displaySubjectsOf (traversed . traversed) orgRoles
+    ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
 
 removeRolesEndpoint :: UserHandle -> UserId -> RemoveRolesRequest -> WebApp ListRolesResponse
 removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
@@ -60,4 +61,4 @@ removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
   PG.runTransaction do
     orgRoles <- OrgQ.removeOrgRoles orgId roleAssignments
-    ListRolesResponse True <$> displaySubjectsOf (traversed . traversed) orgRoles
+    ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles

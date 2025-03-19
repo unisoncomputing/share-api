@@ -147,6 +147,7 @@ library
       Share.Web.Share.Releases.API
       Share.Web.Share.Releases.Impl
       Share.Web.Share.Releases.Types
+      Share.Web.Share.Roles
       Share.Web.Share.Roles.Queries
       Share.Web.Share.Teams.Queries
       Share.Web.Share.Tickets.API

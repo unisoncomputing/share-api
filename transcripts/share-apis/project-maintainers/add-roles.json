@@ -3,12 +3,12 @@
     "role_assignments": [
       {
         "roles": [
-          "project_viewer"
+          "project_owner"
         ],
         "subject": {
           "data": {
             "avatarUrl": null,
-            "handle": "read-maintainer",
+            "handle": "admin-maintainer",
             "name": null,
             "userId": "U-<UUID>"
           },
@@ -31,12 +31,12 @@
       },
       {
         "roles": [
-          "project_owner"
+          "project_viewer"
         ],
         "subject": {
           "data": {
             "avatarUrl": null,
-            "handle": "admin-maintainer",
+            "handle": "read-maintainer",
             "name": null,
             "userId": "U-<UUID>"
           },

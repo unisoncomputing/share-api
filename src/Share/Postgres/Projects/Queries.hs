@@ -10,7 +10,6 @@ module Share.Postgres.Projects.Queries
 where
 
 import Control.Lens
-import Data.List qualified as List
 import Data.Set qualified as Set
 import Share.IDs
 import Share.Postgres
@@ -28,9 +27,8 @@ isPremiumProject projId =
 
 listProjectRoles :: ProjectId -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
 listProjectRoles projId = do
-  roleAssignments <-
-    queryListRows @(ResolvedAuthSubject PG.:. Only ([RoleRef]))
-      [sql|
+  queryListRows @(ResolvedAuthSubject PG.:. Only ([RoleRef]))
+    [sql|
       SELECT sbk.kind, sbk.resolved_id, array_agg(role.ref :: role_ref) as role_refs
       FROM role_memberships rm
       JOIN roles role ON rm.role_id = role.id
@@ -40,11 +38,7 @@ listProjectRoles projId = do
         GROUP BY sbk.kind, sbk.resolved_id
         ORDER BY sbk.kind, sbk.resolved_id
     |]
-      <&> fmap \(subject PG.:. Only roleRefs) -> (RoleAssignment {subject, roles = Set.fromList roleRefs})
-  -- This sort is completely arbitrary, it's just here to ensure transcripts are deterministic
-  -- even when uuids are not.
-  let sortedRoleAssignments = List.sortOn (\RoleAssignment {roles} -> roles) roleAssignments
-  pure sortedRoleAssignments
+    <&> fmap \(subject PG.:. Only roleRefs) -> (RoleAssignment {subject, roles = Set.fromList roleRefs})
 
 addProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
 addProjectRoles projId toAdd = do

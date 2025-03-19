@@ -46,6 +46,7 @@ import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDi
 import Share.Web.Share.Projects.API qualified as API
 import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.Impl (getProjectReleaseReadmeEndpoint, releasesServer)
+import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
 import Share.Web.Share.Roles.Queries (displaySubjectsOf)
 import Share.Web.Share.Tickets.Impl (ticketsByProjectServer)
 import Share.Web.Share.Types
@@ -329,7 +330,7 @@ listRolesEndpoint session projectUserHandle projectSlug = do
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadProjectRolesList caller projectId
   (isPremiumProject, roleAssignments) <- PG.runTransaction $ do
     projectRoles <- ProjectsQ.listProjectRoles projectId
-    roleAssignments <- displaySubjectsOf (traversed . traversed) projectRoles
+    roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) projectRoles
     isPremiumProject <- ProjectsQ.isPremiumProject projectId
     pure (isPremiumProject, roleAssignments)
   pure $ ListRolesResponse {active = isPremiumProject, roleAssignments}
@@ -342,7 +343,7 @@ addRolesEndpoint session projectUserHandle projectSlug (AddRolesRequest {roleAss
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkAddProjectRoles caller projectId
   PG.runTransaction $ do
     updatedRoles <- ProjectsQ.addProjectRoles projectId roleAssignments
-    roleAssignments <- displaySubjectsOf (traversed . traversed) updatedRoles
+    roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
     pure $ AddRolesResponse {roleAssignments}
 
 removeRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> RemoveRolesRequest -> WebApp RemoveRolesResponse
@@ -353,5 +354,5 @@ removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {r
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkRemoveProjectRoles caller projectId
   PG.runTransaction $ do
     updatedRoles <- ProjectsQ.removeProjectRoles projectId roleAssignments
-    roleAssignments <- displaySubjectsOf (traversed . traversed) updatedRoles
+    roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
     pure $ RemoveRolesResponse {roleAssignments}
