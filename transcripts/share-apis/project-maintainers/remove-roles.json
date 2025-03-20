@@ -8,7 +8,21 @@
         "subject": {
           "data": {
             "avatarUrl": null,
-            "handle": "admin-maintainer",
+            "handle": "admin-user",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "project_contributor"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "contributor-user",
             "name": null,
             "userId": "U-<UUID>"
           },

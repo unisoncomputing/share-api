@@ -212,44 +212,53 @@ instance FromJSON RolePermission where
 data RoleRef
   = RoleOrgViewer
   | RoleOrgContributor
+  | RoleOrgMaintainer
   | RoleOrgAdmin
   | RoleOrgOwner
   | RoleOrgDefault
   | RoleTeamAdmin
   | RoleProjectViewer
   | RoleProjectContributor
-  | RoleProjectOwner
+  | RoleProjectMaintainer
   | RoleProjectAdmin
+  | RoleProjectOwner
+  | RoleProjectPublicAccess
   deriving (Show, Eq, Ord)
 
 projectRoles :: Set RoleRef
-projectRoles = Set.fromList [RoleProjectViewer, RoleProjectContributor, RoleProjectOwner]
+projectRoles = Set.fromList [RoleProjectViewer, RoleProjectContributor, RoleProjectOwner, RoleProjectAdmin, RoleProjectMaintainer]
 
 instance ToJSON RoleRef where
   toJSON = \case
     RoleOrgViewer -> Aeson.String "org_viewer"
     RoleOrgContributor -> Aeson.String "org_contributor"
+    RoleOrgMaintainer -> Aeson.String "org_maintainer"
     RoleOrgAdmin -> Aeson.String "org_admin"
     RoleOrgOwner -> Aeson.String "org_owner"
     RoleOrgDefault -> Aeson.String "org_default"
     RoleTeamAdmin -> Aeson.String "team_admin"
     RoleProjectViewer -> Aeson.String "project_viewer"
     RoleProjectContributor -> Aeson.String "project_contributor"
-    RoleProjectOwner -> Aeson.String "project_owner"
+    RoleProjectMaintainer -> "project_maintainer"
     RoleProjectAdmin -> Aeson.String "project_admin"
+    RoleProjectOwner -> Aeson.String "project_owner"
+    RoleProjectPublicAccess -> Aeson.String "project_public_access"
 
 instance FromJSON RoleRef where
   parseJSON = Aeson.withText "RoleRef" \case
     "org_viewer" -> pure RoleOrgViewer
     "org_contributor" -> pure RoleOrgContributor
+    "org_maintainer" -> pure RoleOrgMaintainer
     "org_admin" -> pure RoleOrgAdmin
     "org_owner" -> pure RoleOrgOwner
     "org_default" -> pure RoleOrgDefault
     "team_admin" -> pure RoleTeamAdmin
     "project_viewer" -> pure RoleProjectViewer
     "project_contributor" -> pure RoleProjectContributor
-    "project_owner" -> pure RoleProjectOwner
+    "project_maintainer" -> pure RoleProjectMaintainer
     "project_admin" -> pure RoleProjectAdmin
+    "project_owner" -> pure RoleProjectOwner
+    "project_public_access" -> pure RoleProjectPublicAccess
     _ -> fail "Invalid RoleRef"
 
 instance Hasql.DecodeValue RoleRef where
@@ -258,14 +267,17 @@ instance Hasql.DecodeValue RoleRef where
       \case
         "org_viewer" -> Just RoleOrgViewer
         "org_contributor" -> Just RoleOrgContributor
+        "org_maintainer" -> Just RoleOrgMaintainer
         "org_admin" -> Just RoleOrgAdmin
         "org_owner" -> Just RoleOrgOwner
         "org_default" -> Just RoleOrgDefault
         "team_admin" -> Just RoleTeamAdmin
         "project_viewer" -> Just RoleProjectViewer
         "project_contributor" -> Just RoleProjectContributor
-        "project_owner" -> Just RoleProjectOwner
+        "project_maintainer" -> Just RoleProjectMaintainer
         "project_admin" -> Just RoleProjectAdmin
+        "project_owner" -> Just RoleProjectOwner
+        "project_public_access" -> Just RoleProjectPublicAccess
         _ -> Nothing
 
 instance Hasql.EncodeValue RoleRef where
@@ -274,14 +286,17 @@ instance Hasql.EncodeValue RoleRef where
       \case
         RoleOrgViewer -> "org_viewer"
         RoleOrgContributor -> "org_contributor"
+        RoleOrgMaintainer -> "org_maintainer"
         RoleOrgAdmin -> "org_admin"
         RoleOrgOwner -> "org_owner"
         RoleOrgDefault -> "org_default"
         RoleTeamAdmin -> "team_admin"
         RoleProjectViewer -> "project_viewer"
         RoleProjectContributor -> "project_contributor"
-        RoleProjectOwner -> "project_owner"
+        RoleProjectMaintainer -> "project_maintainer"
         RoleProjectAdmin -> "project_admin"
+        RoleProjectOwner -> "project_owner"
+        RoleProjectPublicAccess -> "project_public_access"
 
 data RoleAssignment subject = RoleAssignment
   { subject :: subject,

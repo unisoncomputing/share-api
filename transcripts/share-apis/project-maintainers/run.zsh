@@ -4,41 +4,46 @@ set -e
 
 source "../../transcript_helpers.sh"
 
-read_maintainer="$(create_user read-maintainer)"
-maintain_maintainer="$(create_user maintain-maintainer)"
-admin_maintainer="$(create_user admin-maintainer)"
+read_user="$(create_user read-user)"
+maintain_user="$(create_user maintain-user)"
+contributor_user="$(create_user contributor-user)"
+admin_user="$(create_user admin-user)"
 
 # Should fail
-fetch "$unauthorized_user" GET non-maintainer-project-view '/users/test/projects/privatetestproject'
-fetch "$unauthorized_user" PATCH non-maintainer-project-update '/users/test/projects/privatetestproject' '{
+fetch "$unauthorized_user" GET non-maintainer-private-project-view '/users/test/projects/privatetestproject'
+fetch "$unauthorized_user" PATCH non-maintainer-private-project-update '/users/test/projects/privatetestproject' '{
     "summary": "update"
 }'
 
 fetch "$test_user" POST add-roles '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
-    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_user}\"}
       , \"roles\": [\"project_viewer\"]
       }
-      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_maintainer}\"}
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_user}\"}
+      , \"roles\": [\"project_maintainer\"]
+      }
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${contributor_user}\"}
       , \"roles\": [\"project_contributor\"]
       }
-      , { \"subject\": {\"kind\": \"user\", \"id\": \"${admin_maintainer}\"}
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${admin_user}\"}
       , \"roles\": [\"project_owner\"]
       }
     ]
 }"
 
 # Non-owner should not be able to change roles
-fetch "$maintain_maintainer" POST non-owner-add-roles '/users/test/projects/privatetestproject/roles' "
+fetch "$maintain_user" POST non-owner-add-roles '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
-    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_user}\"}
       , \"roles\": [\"project_contributor\"]
       }
     ]
 }"
 
+# Project owner can list roles
 fetch "$test_user" GET list-roles '/users/test/projects/privatetestproject/roles'
 
 # Project owner can create tickets
@@ -47,36 +52,37 @@ fetch "$test_user" POST owner-ticket-create '/users/test/projects/privatetestpro
     "description": "My description"
 }'
 
-fetch "$read_maintainer" GET read-maintainer-project-view '/users/test/projects/privatetestproject'
+# Project viewer can view the project
+fetch "$read_user" GET read-maintainer-project-view '/users/test/projects/privatetestproject'
 
-# Read maintainer should be able to create tickets
-fetch "$read_maintainer" POST read-maintainer-ticket-create '/users/test/projects/privatetestproject/tickets' '{
+# Contributor user should be able to create tickets
+fetch "$contributor_user" POST contributor-maintainer-ticket-create '/users/test/projects/privatetestproject/tickets' '{
     "title": "Ticket 2",
     "description": "My description"
 }'
 
 # Read maintainers can't update the project
-fetch "$read_maintainer" PATCH read-maintainer-project-update '/users/test/projects/privatetestproject' '{
+fetch "$read_user" PATCH read-maintainer-project-update '/users/test/projects/privatetestproject' '{
     "summary": "update"
 }'
 
 # Read maintainers can't close other's tickets
-fetch "$read_maintainer" PATCH read-maintainer-ticket-close '/users/test/projects/privatetestproject/tickets/1' '{
+fetch "$read_user" PATCH read-maintainer-ticket-close '/users/test/projects/privatetestproject/tickets/1' '{
     "status": "closed"
 }'
 
 # Maintain maintainers can close any ticket
-fetch "$maintain_maintainer" PATCH maintain-maintainer-ticket-close '/users/test/projects/privatetestproject/tickets/1' '{
+fetch "$maintain_user" PATCH maintain-maintainer-ticket-close '/users/test/projects/privatetestproject/tickets/1' '{
     "status": "closed"
 }'
 
 # Maintain maintainers can't update the project
-fetch "$maintain_maintainer" PATCH maintain-maintainer-project-update '/users/test/projects/privatetestproject' '{
+fetch "$maintain_user" PATCH maintain-maintainer-project-update '/users/test/projects/privatetestproject' '{
     "summary": "update"
 }'
 
 # Admin maintainers can update the project
-fetch "$admin_maintainer" PATCH admin-maintainer-project-update '/users/test/projects/privatetestproject' '{
+fetch "$admin_user" PATCH admin-maintainer-project-update '/users/test/projects/privatetestproject' '{
     "summary": "update"
 }'
 
@@ -90,8 +96,8 @@ fetch "$test_user" GET list-roles-non-premium '/users/test/projects/privatetestp
 fetch "$test_user" POST add-roles-non-premium '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
-    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
-      , \"roles\": [\"project_contributor\"]
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_user}\"}
+      , \"roles\": [\"project_maintainer\"]
       }
     ]
 }"
@@ -101,11 +107,11 @@ fetch "$test_user" POST add-roles-non-premium '/users/test/projects/privatetestp
 fetch "$test_user" DELETE remove-roles '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
-    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_user}\"}
       , \"roles\": [\"project_viewer\"]
       }
-      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_maintainer}\"}
-      , \"roles\": [\"project_contributor\"]
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_user}\"}
+      , \"roles\": [\"project_maintainer\"]
       }
     ]
 }"
