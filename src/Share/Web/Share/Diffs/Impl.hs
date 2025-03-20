@@ -285,7 +285,16 @@ instance ToJSON RenderedNamespaceAndLibdepsDiff where
 
       typeDefinitionDiffToJSON :: TypeDefinitionDiff -> Value
       typeDefinitionDiffToJSON (TypeDefinitionDiff {left, right, diff}) = object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
-      namespaceTreeDiffJSON :: NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff -> Value
+
+      namespaceTreeDiffJSON ::
+        NamespaceTreeDiff
+          (TermTag, ShortHash)
+          (TypeTag, ShortHash)
+          TermDefinition
+          TypeDefinition
+          TermDefinitionDiff
+          TypeDefinitionDiff ->
+        Value
       namespaceTreeDiffJSON (diffs Cofree.:< children) =
         let changesJSON =
               diffs

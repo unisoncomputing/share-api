@@ -281,14 +281,21 @@ diffAtPathTermDiffs_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
     <&> \termDiffsAtPath -> DiffAtPath {typeDiffsAtPath, termDiffsAtPath}
 
 witherDiffAtPathTermDiffs ::
+  forall f reference referent renderedTerm renderedType termDiff termDiff' typeDiff.
   (Monad f, Ord termDiff', Ord referent, Ord renderedTerm) =>
   (termDiff -> f (Maybe termDiff')) ->
   DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff ->
-  f (DiffAtPath referent reference renderedTerm renderedType termDiff' typeDiff)
+  f (Maybe (DiffAtPath referent reference renderedTerm renderedType termDiff' typeDiff))
 witherDiffAtPathTermDiffs f DiffAtPath {termDiffsAtPath, typeDiffsAtPath} =
-  DiffAtPath
-    <$> Set.forMaybe termDiffsAtPath (runMaybeT . (definitionDiffDiffs_ (MaybeT . f)))
-    <*> pure typeDiffsAtPath
+  g <$> Set.forMaybe termDiffsAtPath (runMaybeT . (definitionDiffDiffs_ (MaybeT . f)))
+  where
+    g ::
+      Set (DefinitionDiff referent renderedTerm termDiff') ->
+      Maybe (DiffAtPath referent reference renderedTerm renderedType termDiff' typeDiff)
+    g termDiffsAtPath =
+      if Set.null termDiffsAtPath && Set.null typeDiffsAtPath
+        then Nothing
+        else Just DiffAtPath {termDiffsAtPath, typeDiffsAtPath}
 
 -- | A traversal over all the type diffs in a `DiffAtPath`.
 diffAtPathTypeDiffs_ :: (Ord typeDiff', Ord reference, Ord renderedType) => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff') typeDiff typeDiff'
@@ -303,14 +310,21 @@ diffAtPathTermDiffKinds_ f (DiffAtPath terms types) = do
   pure $ DiffAtPath newTerms types
 
 witherDiffAtPathTermDiffKinds ::
+  forall f reference referent referent' renderedTerm renderedTerm' renderedType termDiff termDiff' typeDiff.
   (Applicative f, Ord renderedTerm', Ord termDiff', Ord referent') =>
   (DefinitionDiffKind referent renderedTerm termDiff -> f (Maybe (DefinitionDiffKind referent' renderedTerm' termDiff'))) ->
   DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff ->
-  f (DiffAtPath referent' reference renderedTerm' renderedType termDiff' typeDiff)
-witherDiffAtPathTermDiffKinds f (DiffAtPath terms types) =
-  DiffAtPath
-    <$> Set.forMaybe terms (runMaybeT . definitionDiffKind_ (MaybeT . f))
-    <*> pure types
+  f (Maybe (DiffAtPath referent' reference renderedTerm' renderedType termDiff' typeDiff))
+witherDiffAtPathTermDiffKinds f DiffAtPath {termDiffsAtPath, typeDiffsAtPath} =
+  g <$> Set.forMaybe termDiffsAtPath (runMaybeT . definitionDiffKind_ (MaybeT . f))
+  where
+    g ::
+      Set (DefinitionDiff referent' renderedTerm' termDiff') ->
+      Maybe (DiffAtPath referent' reference renderedTerm' renderedType termDiff' typeDiff)
+    g termDiffsAtPath =
+      if Set.null termDiffsAtPath && Set.null typeDiffsAtPath
+        then Nothing
+        else Just DiffAtPath {termDiffsAtPath, typeDiffsAtPath}
 
 diffAtPathTypeDiffKinds_ :: (Ord renderedType', Ord typeDiff', Ord reference') => Traversal (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff) (DiffAtPath referent reference' renderedTerm renderedType' termDiff typeDiff') (DefinitionDiffKind reference renderedType typeDiff) (DefinitionDiffKind reference' renderedType' typeDiff')
 diffAtPathTypeDiffKinds_ f (DiffAtPath terms types) = do
@@ -344,12 +358,27 @@ namespaceTreeDiffTermDiffs_ :: (Ord termDiff', Ord referent, Ord renderedTerm) =
 namespaceTreeDiffTermDiffs_ = traversed . traversed . diffAtPathTermDiffs_
 
 witherNamespaceTreeDiffTermDiffs ::
+  forall f k reference referent renderedTerm renderedType termDiff termDiff' typeDiff.
   (Monad f, Ord termDiff', Ord referent, Ord renderedTerm) =>
   (termDiff -> f (Maybe termDiff')) ->
   GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff ->
   f (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff' typeDiff)
-witherNamespaceTreeDiffTermDiffs =
-  traversed . traversed . witherDiffAtPathTermDiffs
+witherNamespaceTreeDiffTermDiffs f =
+  fmap (fromMaybe (Map.empty Cofree.:< Map.empty)) . go
+  where
+    go ::
+      GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff ->
+      f (Maybe (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff' typeDiff))
+    go (x Cofree.:< xs) =
+      g <$> wither (witherDiffAtPathTermDiffs f) x <*> wither go xs
+
+    g ::
+      Map NameSegment (DiffAtPath referent reference renderedTerm renderedType termDiff' typeDiff) ->
+      Map k (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff' typeDiff) ->
+      Maybe (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff' typeDiff)
+    g x xs
+      | Map.null x && Map.null xs = Nothing
+      | otherwise = Just (x Cofree.:< xs)
 
 namespaceTreeDiffTypeDiffs_ :: (Ord typeDiff', Ord reference, Ord renderedType) => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff') typeDiff typeDiff'
 namespaceTreeDiffTypeDiffs_ = traversed . traversed . diffAtPathTypeDiffs_
@@ -358,11 +387,27 @@ namespaceTreeTermDiffKinds_ :: (Ord renderedTerm', Ord termDiff', Ord referent')
 namespaceTreeTermDiffKinds_ = traversed . traversed . diffAtPathTermDiffKinds_
 
 witherNamespaceTreeTermDiffKinds ::
+  forall f k reference referent referent' renderedTerm renderedTerm' renderedType termDiff termDiff' typeDiff.
   (Monad f, Ord renderedTerm', Ord termDiff', Ord referent') =>
   (DefinitionDiffKind referent renderedTerm termDiff -> f (Maybe (DefinitionDiffKind referent' renderedTerm' termDiff'))) ->
   GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff ->
   f (GNamespaceTreeDiff k referent' reference renderedTerm' renderedType termDiff' typeDiff)
-witherNamespaceTreeTermDiffKinds = traversed . traversed . witherDiffAtPathTermDiffKinds
+witherNamespaceTreeTermDiffKinds f =
+  fmap (fromMaybe (Map.empty Cofree.:< Map.empty)) . go
+  where
+    go ::
+      GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff ->
+      f (Maybe (GNamespaceTreeDiff k referent' reference renderedTerm' renderedType termDiff' typeDiff))
+    go (x Cofree.:< xs) =
+      g <$> wither (witherDiffAtPathTermDiffKinds f) x <*> wither go xs
+
+    g ::
+      Map NameSegment (DiffAtPath referent' reference renderedTerm' renderedType termDiff' typeDiff) ->
+      Map k (GNamespaceTreeDiff k referent' reference renderedTerm' renderedType termDiff' typeDiff) ->
+      Maybe (GNamespaceTreeDiff k referent' reference renderedTerm' renderedType termDiff' typeDiff)
+    g x xs
+      | Map.null x && Map.null xs = Nothing
+      | otherwise = Just (x Cofree.:< xs)
 
 namespaceTreeTypeDiffKinds_ :: (Ord renderedType', Ord typeDiff', Ord reference') => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference' renderedTerm renderedType' termDiff typeDiff') (DefinitionDiffKind reference renderedType typeDiff) (DefinitionDiffKind reference' renderedType' typeDiff')
 namespaceTreeTypeDiffKinds_ = traversed . traversed . diffAtPathTypeDiffKinds_
@@ -424,7 +469,7 @@ definitionDiffsToTree dd =
 --
 -- >>> import qualified Unison.Syntax.Name as NS
 -- >>> expandNameTree $ Map.fromList [(NS.unsafeParseText "a.b", "a.b"), (NS.unsafeParseText "a.c", "a.c"), (NS.unsafeParseText "x.y.z", "x.y.z")]
--- fromList [] :< fromList [(a,fromList [(b,"a.b"),(c,"a.c")] :< fromList []),(x,fromList [] :< fromList [(y,fromList [(z,"x.y.z")] :< fromList [])])]
+-- fromList [] :< fromList [(NameSegment {toUnescapedText = "a"},fromList [(NameSegment {toUnescapedText = "b"},"a.b"),(NameSegment {toUnescapedText = "c"},"a.c")] :< fromList []),(NameSegment {toUnescapedText = "x"},fromList [] :< fromList [(NameSegment {toUnescapedText = "y"},fromList [(NameSegment {toUnescapedText = "z"},"x.y.z")] :< fromList [])])]
 expandNameTree :: forall a. Map Name a -> Cofree (Map NameSegment) (Map NameSegment a)
 expandNameTree m =
   let (here, children) =
@@ -436,7 +481,7 @@ expandNameTree m =
         children
           & Map.fromListWith Map.union
           & fmap expandNameTree
-   in (Map.fromList here) Cofree.:< childMap
+   in Map.fromList here Cofree.:< childMap
   where
     splitNames :: (Name, a) -> Either (NameSegment, a) (NameSegment, Map Name a)
     splitNames (n, a) =
