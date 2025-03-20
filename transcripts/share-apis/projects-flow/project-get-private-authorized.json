@@ -16,6 +16,12 @@
       "name": "Transcript User",
       "type": "user"
     },
+    "permissions": [
+      "project:view",
+      "project:manage",
+      "project:contribute",
+      "project:delete"
+    ],
     "releaseDownloads": [],
     "slug": "containers",
     "summary": "This is my project",

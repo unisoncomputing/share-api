@@ -14,34 +14,32 @@ fetch "$unauthorized_user" PATCH non-maintainer-project-update '/users/test/proj
     "summary": "update"
 }'
 
-fetch "$test_user" POST add-maintainers '/users/test/projects/privatetestproject/maintainers' "
+fetch "$test_user" POST add-roles '/users/test/projects/privatetestproject/roles' "
 {
-    \"maintainers\": 
-    [ { \"user\": \"${read_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": false
-        , \"canAdmin\": false
-        }
+    \"role_assignments\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_viewer\"]
       }
-    , {\"user\": \"${maintain_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": true
-        , \"canAdmin\": false
-        }
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
       }
-    , {\"user\": \"${admin_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": true
-        , \"canAdmin\": true
-        }
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${admin_maintainer}\"}
+      , \"roles\": [\"project_owner\"]
       }
     ]
 }"
 
-fetch "$test_user" GET list-maintainers '/users/test/projects/privatetestproject/maintainers'
+# Non-owner should not be able to change roles
+fetch "$maintain_maintainer" POST non-owner-add-roles '/users/test/projects/privatetestproject/roles' "
+{
+    \"role_assignments\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
+      }
+    ]
+}"
+
+fetch "$test_user" GET list-roles '/users/test/projects/privatetestproject/roles'
 
 # Project owner can create tickets
 fetch "$test_user" POST owner-ticket-create '/users/test/projects/privatetestproject/tickets' '{
@@ -82,39 +80,32 @@ fetch "$admin_maintainer" PATCH admin-maintainer-project-update '/users/test/pro
     "summary": "update"
 }'
 
-# Expire the project owner's cloud subscription, thus disabling project-maintainers.
+# Expire the project owner's cloud subscription, thus disabling project-roles.
 pg_sql "UPDATE public.cloud_subscribers SET is_active = false WHERE user_id = '${test_user##U-}'"
 
+# All roles should still be listed.
+fetch "$test_user" GET list-roles-non-premium '/users/test/projects/privatetestproject/roles'
 
-# All maintainers should still be listed.
-fetch "$test_user" GET list-maintainers-non-premium '/users/test/projects/privatetestproject/maintainers'
-
-# maintainers should now lose their permissions.
-# E.g. read-maintainer should no longer be able to create tickets
-fetch "$read_maintainer" POST read-maintainer-non-premium-ticket-create '/users/test/projects/privatetestproject/tickets' '{
-    "title": "Ticket 3",
-    "description": "My description"
-}'
-
-# Can update maintainers' permissions
-# unmentioned users are left as-is,
-# maintainers with no valid permissions are removed.
-fetch "$test_user" PATCH update-maintainers '/users/test/projects/privatetestproject/maintainers' "
+# Should be unable to add new roles when the cloud subscription is expired.
+fetch "$test_user" POST add-roles-non-premium '/users/test/projects/privatetestproject/roles' "
 {
-    \"maintainers\": 
-    [ { \"user\": \"${read_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": true
-        , \"canMaintain\": true
-        , \"canAdmin\": false
-        }
+    \"role_assignments\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
       }
-    , {\"user\": \"${maintain_maintainer}\"
-      , \"permissions\": 
-        { \"canView\": false
-        , \"canMaintain\": false
-        , \"canAdmin\": false
-        }
+    ]
+}"
+
+# Can remove roles from users
+# unmentioned users are left as-is,
+fetch "$test_user" DELETE remove-roles '/users/test/projects/privatetestproject/roles' "
+{
+    \"role_assignments\": 
+    [ { \"subject\": {\"kind\": \"user\", \"id\": \"${read_maintainer}\"}
+      , \"roles\": [\"project_viewer\"]
+      }
+      , { \"subject\": {\"kind\": \"user\", \"id\": \"${maintain_maintainer}\"}
+      , \"roles\": [\"project_contributor\"]
       }
     ]
 }"

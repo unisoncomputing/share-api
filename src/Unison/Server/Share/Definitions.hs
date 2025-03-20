@@ -258,7 +258,7 @@ hqNameQuery ::
   PG.Transaction e QueryResult
 hqNameQuery NameSearch {typeSearch, termSearch} hqs = do
   -- Split the query into hash-only and hash-qualified-name queries.
-  let (hashes, hqnames) = partitionEithers (map HQ'.fromHQ hqs)
+  let (hashes, hqnames) = partitionEithers (map HQ'.fromHQ2 hqs)
   -- Find the terms with those hashes.
   termRefs <-
     filter (not . Set.null . snd) . zip hashes

@@ -1,0 +1,39 @@
+{
+  "body": {
+    "role_assignments": [
+      {
+        "roles": [
+          "project_owner"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "admin-maintainer",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "project_owner"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "test",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
