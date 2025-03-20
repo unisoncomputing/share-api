@@ -17,8 +17,7 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
-import Share.Web.Authorization.Types (ProjectMaintainerPermissions)
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Authorization.Types (PermissionsInfo)
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
 projectToAPI projectOwner Project {slug, visibility, createdAt, updatedAt, summary, tags} =
@@ -204,6 +203,7 @@ type GetProjectResponse =
     :++ ReleaseDownloadStats
     :++ ContributionStats
     :++ TicketStats
+    :++ PermissionsInfo
 
 data ListProjectsResponse = ListProjectsResponse
   { projects :: [APIProject :++ FavData]
@@ -251,79 +251,3 @@ instance Aeson.ToJSON CatalogCategory where
       [ "name" .= name,
         "projects" .= projects
       ]
-
-data ListMaintainersResponse = ListMaintainersResponse
-  { maintainers :: [Maintainer UserDisplayInfo],
-    -- Whether the project maintainers feature is active on this project.
-    active :: Bool
-  }
-  deriving (Show)
-
-instance ToJSON ListMaintainersResponse where
-  toJSON ListMaintainersResponse {..} =
-    object
-      [ "maintainers" Aeson..= maintainers,
-        "active" .= active
-      ]
-
-data AddMaintainersResponse = AddMaintainersResponse
-  { maintainers :: [Maintainer UserDisplayInfo]
-  }
-
-instance ToJSON AddMaintainersResponse where
-  toJSON AddMaintainersResponse {..} =
-    object
-      [ "maintainers" Aeson..= maintainers
-      ]
-
-data UpdateMaintainersResponse = UpdateMaintainersResponse
-  { maintainers :: [Maintainer UserDisplayInfo]
-  }
-
-instance ToJSON UpdateMaintainersResponse where
-  toJSON UpdateMaintainersResponse {..} =
-    object
-      [ "maintainers" Aeson..= maintainers
-      ]
-
-data Maintainer user = Maintainer
-  { user :: user,
-    permissions :: ProjectMaintainerPermissions
-  }
-  deriving (Show, Functor, Foldable, Traversable)
-
-instance (ToJSON user) => ToJSON (Maintainer user) where
-  toJSON Maintainer {..} =
-    object
-      [ "user" Aeson..= user,
-        "permissions" Aeson..= permissions
-      ]
-
-instance (FromJSON user) => FromJSON (Maintainer user) where
-  parseJSON = Aeson.withObject "Maintainer" $ \o -> do
-    user <- o Aeson..: "user"
-    permissions <- o Aeson..: "permissions"
-    pure Maintainer {..}
-
-data AddMaintainersRequest = AddMaintainersRequest
-  { maintainers :: [Maintainer UserId]
-  }
-  deriving (Show)
-
-instance FromJSON AddMaintainersRequest where
-  parseJSON = Aeson.withObject "AddMaintainersRequest" $ \o -> do
-    maintainers <- o Aeson..: "maintainers"
-    pure AddMaintainersRequest {..}
-
--- | For each listed maintainer, update their permissions.
--- Note: This does NOT affect any maintainers which are not specified and does NOT
--- remove any maintainers which are not specified.
-data UpdateMaintainersRequest = UpdateMaintainersRequest
-  { maintainers :: [Maintainer UserId]
-  }
-  deriving (Show)
-
-instance FromJSON UpdateMaintainersRequest where
-  parseJSON = Aeson.withObject "UpdateMaintainersRequest" $ \o -> do
-    maintainers <- o Aeson..: "maintainers"
-    pure UpdateMaintainersRequest {..}

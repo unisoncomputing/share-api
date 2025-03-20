@@ -19,14 +19,13 @@ import Share.Utils.URI (URIParam (..))
 import Share.Web.Share.Types
 
 -- | Efficiently resolve User Display Info for UserIds within a structure.
-userDisplayInfoOf :: Traversal s t UserId UserDisplayInfo -> s -> PG.Transaction e t
+userDisplayInfoOf :: (PG.QueryA m) => Traversal s t UserId UserDisplayInfo -> s -> m t
 userDisplayInfoOf trav s = do
   s
     & unsafePartsOf trav %%~ \userIds -> do
       let usersTable = zip [0 :: Int32 ..] userIds
-      result <-
-        PG.queryListRows @(UserHandle, Maybe Text, Maybe URIParam, UserId)
-          [PG.sql|
+      PG.queryListRows @(UserHandle, Maybe Text, Maybe URIParam, UserId)
+        [PG.sql|
       WITH values(ord, user_id) AS (
         SELECT * FROM ^{PG.toTable usersTable}
       )
@@ -35,16 +34,19 @@ userDisplayInfoOf trav s = do
           JOIN users ON users.id = values.user_id
       ORDER BY ord
       |]
-          <&> fmap \(handle, name, avatarUrl, userId) ->
-            UserDisplayInfo
-              { handle,
-                name,
-                avatarUrl = unpackURI <$> avatarUrl,
-                userId
-              }
-      if length result /= length userIds
-        then error "userDisplayInfoOf: Missing user display info."
-        else pure result
+        <&> fmap
+          ( \(handle, name, avatarUrl, userId) ->
+              UserDisplayInfo
+                { handle,
+                  name,
+                  avatarUrl = unpackURI <$> avatarUrl,
+                  userId
+                }
+          )
+        <&> \result ->
+          if length result /= length userIds
+            then error "userDisplayInfoOf: Missing user display info."
+            else result
 
 userProfileById :: UserId -> PG.Transaction e (Maybe UserProfile)
 userProfileById userId = do

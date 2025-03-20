@@ -382,13 +382,13 @@ queryListRows sql = statement () (Interp.interp prepareStatements sql)
 queryVectorRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m (Vector r)
 queryVectorRows sql = statement () (Interp.interp prepareStatements sql)
 
-query1Row :: forall r m. (QueryM m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
+query1Row :: forall r m. (QueryA m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
 query1Row sql = listToMaybe <$> queryListRows sql
 
-query1Col :: forall a m. (QueryM m, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
+query1Col :: forall a m. (QueryA m, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
 query1Col sql = listToMaybe <$> queryListCol sql
 
-queryListCol :: forall a m. (QueryM m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
+queryListCol :: forall a m. (QueryA m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
 queryListCol sql = queryListRows @(Interp.OneColumn a) sql <&> coerce @[Interp.OneColumn a] @[a]
 
 execute_ :: (QueryA m) => Interp.Sql -> m ()

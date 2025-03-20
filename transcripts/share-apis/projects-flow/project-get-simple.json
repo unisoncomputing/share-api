@@ -16,6 +16,10 @@
       "name": null,
       "type": "user"
     },
+    "permissions": [
+      "project:view",
+      "project:contribute"
+    ],
     "releaseDownloads": [],
     "slug": "publictestproject",
     "summary": "test project summary",

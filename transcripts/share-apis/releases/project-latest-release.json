@@ -16,6 +16,13 @@
       "name": null,
       "type": "user"
     },
+    "permissions": [
+      "project:view",
+      "project:manage",
+      "project:contribute",
+      "project:maintain",
+      "project:delete"
+    ],
     "releaseDownloads": [],
     "slug": "publictestproject",
     "summary": "test project summary",

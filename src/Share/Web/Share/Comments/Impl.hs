@@ -14,6 +14,7 @@ import Share.Postgres.Comments.Queries qualified as CommentsQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
+import Share.Project (Project (..))
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
@@ -31,9 +32,9 @@ createCommentEndpoint ::
   WebApp (CommentEvent UserDisplayInfo)
 createCommentEndpoint session userHandle projectSlug contributionOrTicketId (CreateCommentRequest {content}) = do
   callerUserId <- AuthN.requireAuthenticatedUser session
-  project <- PG.runTransactionOrRespondError $ do
+  Project {projectId} <- PG.runTransactionOrRespondError $ do
     Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkCommentCreate callerUserId project
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkCommentCreate callerUserId projectId
 
   PG.runTransaction $ do
     commentEvent <- CommentsQ.createComment callerUserId contributionOrTicketId content

@@ -1,0 +1,53 @@
+{
+  "body": {
+    "role_assignments": [
+      {
+        "roles": [
+          "project_owner"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "admin-user",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "project_contributor"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "contributor-user",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "project_owner"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "test",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

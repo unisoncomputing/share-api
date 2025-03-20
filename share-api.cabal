@@ -137,12 +137,19 @@ library
       Share.Web.Share.Diffs.Impl
       Share.Web.Share.Diffs.Types
       Share.Web.Share.Impl
+      Share.Web.Share.Orgs.API
+      Share.Web.Share.Orgs.Impl
+      Share.Web.Share.Orgs.Queries
+      Share.Web.Share.Orgs.Types
       Share.Web.Share.Projects.API
       Share.Web.Share.Projects.Impl
       Share.Web.Share.Projects.Types
       Share.Web.Share.Releases.API
       Share.Web.Share.Releases.Impl
       Share.Web.Share.Releases.Types
+      Share.Web.Share.Roles
+      Share.Web.Share.Roles.Queries
+      Share.Web.Share.Teams.Queries
       Share.Web.Share.Tickets.API
       Share.Web.Share.Tickets.Impl
       Share.Web.Share.Tickets.Types

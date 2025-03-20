@@ -145,7 +145,7 @@ data UserDisplayInfo = UserDisplayInfo
     avatarUrl :: Maybe URI,
     userId :: UserId
   }
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord)
 
 instance ToJSON UserDisplayInfo where
   toJSON UserDisplayInfo {handle, name, avatarUrl, userId} =
@@ -154,6 +154,35 @@ instance ToJSON UserDisplayInfo where
         "name" Aeson..= name,
         "avatarUrl" Aeson..= avatarUrl,
         "userId" Aeson..= userId
+      ]
+
+-- | Common type for displaying an Org.
+data OrgDisplayInfo = OrgDisplayInfo
+  { user :: UserDisplayInfo,
+    orgId :: OrgId
+  }
+  deriving (Show, Eq, Ord)
+
+instance ToJSON OrgDisplayInfo where
+  toJSON OrgDisplayInfo {user, orgId} =
+    Aeson.object
+      [ "user" Aeson..= user,
+        "orgId" Aeson..= orgId
+      ]
+
+data TeamDisplayInfo = TeamDisplayInfo
+  { teamId :: TeamId,
+    name :: Text,
+    avatarUrl :: Maybe URI
+  }
+  deriving (Show, Eq, Ord)
+
+instance ToJSON TeamDisplayInfo where
+  toJSON TeamDisplayInfo {teamId, name, avatarUrl} =
+    Aeson.object
+      [ "teamId" Aeson..= teamId,
+        "name" Aeson..= name,
+        "avatarUrl" Aeson..= avatarUrl
       ]
 
 data DefinitionNameSearchResult = DefinitionNameSearchResult

@@ -63,11 +63,11 @@ type BranchNameParam = Text
 getProjectEndpoint :: Maybe Session -> Maybe ProjectIdParam -> Maybe ProjectShortHandParam -> WebApp UCMProjects.GetProjectResponse
 getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) mayUcmProjectId mayUcmProjectSH = toResponse $ do
   projectId <- lift (runMaybeT (projectIdByName <|> projectIdQueryParam)) `whenNothingM` throwError (UCMProjects.GetProjectResponseNotFound (UCMProjects.NotFound "Project not found"))
-  (project@Project {slug = projectSlug}, User {handle}, defaultBranch, latestRelease) <- pgT $ do
+  (Project {slug = projectSlug}, User {handle}, defaultBranch, latestRelease) <- pgT $ do
     (project@Project {ownerUserId}, _favData, _projectOwner, defaultBranch, latestRelease) <- Q.projectByIdWithMetadata callerUserId projectId `orThrow` UCMProjects.GetProjectResponseNotFound (UCMProjects.NotFound "Project not found")
     user <- Q.userByUserId ownerUserId `orThrow` UCMProjects.GetProjectResponseNotFound (UCMProjects.NotFound "User not found")
     pure (project, user, fmap IDs.toText defaultBranch, fmap IDs.toText latestRelease)
-  _authZReceipt <- AuthZ.checkProjectGet callerUserId project `ifUnauthorized` UCMProjects.GetProjectResponseUnauthorized
+  _authZReceipt <- AuthZ.checkProjectGet callerUserId projectId `ifUnauthorized` UCMProjects.GetProjectResponseUnauthorized
   let apiProject = UCMProjects.Project {projectId = IDs.toText projectId, projectName = IDs.toText (ProjectShortHand {userHandle = handle, projectSlug}), latestRelease, defaultBranch}
   pure $ UCMProjects.GetProjectResponseSuccess apiProject
   where
@@ -113,8 +113,8 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
     pure (project, projectOwnerUser, mayContributorUser)
 
   authZReceipt <- case branchOrRelease of
-    Left branch -> AuthZ.checkBranchGet mayCallerUserId project branch `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
-    Right release -> AuthZ.checkReleaseGet mayCallerUserId project release `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
+    Left branch -> AuthZ.checkBranchGet mayCallerUserId branch `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
+    Right release -> AuthZ.checkReleaseGet mayCallerUserId release `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
 
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId (user_id <$> mayContributor)
   let codebaseEnv = Codebase.codebaseEnv authZReceipt codebaseLoc
@@ -337,12 +337,12 @@ setProjectBranchOrReleaseHeadEndpoint session (UCMProjects.SetProjectBranchHeadR
 setProjectBranchHead :: UserId -> ProjectId -> BranchId -> (Maybe CausalHash) -> CausalHash -> WebApp UCMProjects.SetProjectBranchHeadResponse
 setProjectBranchHead callerUserId projectId branchId mayOldCausalHash newCausalHash = toResponse do
   lift $ addRequestTag "branch-id" (IDs.toText branchId)
-  (project@Project {ownerUserId}, branch@Branch {contributorId}) <- pgT do
+  (Project {ownerUserId}, branch@Branch {contributorId}) <- pgT do
     branch <- (Q.branchById branchId) `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Branch not found")
     project <- (Q.projectById projectId) `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Project not found")
     pure (project, branch)
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase ownerUserId contributorId
-  authZReceipt <- AuthZ.checkBranchSet callerUserId project branch `ifUnauthorized` UCMProjects.SetProjectBranchHeadResponseUnauthorized
+  authZReceipt <- AuthZ.checkBranchSet callerUserId branch `ifUnauthorized` UCMProjects.SetProjectBranchHeadResponseUnauthorized
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   -- Mitigation for the sync bug where sometimes causals get stuck in temp.
   newCausalId <- lift (SyncQ.ensureCausalIsFlushed codebase newCausalHash) `whenNothingM` throwError (UCMProjects.SetProjectBranchHeadResponseMissingCausalHash (causalHashToHash32 newCausalHash))

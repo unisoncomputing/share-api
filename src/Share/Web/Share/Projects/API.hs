@@ -8,6 +8,7 @@ import Share.IDs
 import Share.OAuth.Session (MaybeAuthenticatedSession)
 import Share.Utils.Caching (Cached)
 import Share.Utils.Servant (RequiredQueryParam)
+import Share.Web.Authorization.Types
 import Share.Web.Share.Branches.API (ProjectBranchesAPI)
 import Share.Web.Share.Contributions.API (ContributionsByProjectAPI)
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse, ShareTermDiffResponse, ShareTypeDiffResponse)
@@ -40,7 +41,7 @@ type ProjectResourceAPI =
       :<|> GetProjectEndpoint
       :<|> ( "fav" :> FavProjectEndpoint
            )
-      :<|> "maintainers" :> MaintainersResourceAPI
+      :<|> "roles" :> MaintainersResourceAPI
   )
 
 type ProjectDiffNamespacesEndpoint =
@@ -89,26 +90,24 @@ type ProjectCatalogEndpoint = Get '[JSON] [CatalogCategory]
 type ProjectReadmeEndpoint = Get '[JSON] (Cached JSON ReadmeResponse)
 
 type MaintainersResourceAPI =
-  ( ListMaintainersEndpoint
-      :<|> AddMaintainersEndpoint
-      :<|> UpdateMaintainersEndpoint
+  ( ListRolesEndpoint
+      :<|> AddRolesEndpoint
+      :<|> RemoveRolesEndpoint
   )
 
 -- | List all maintainers of the project.
-type ListMaintainersEndpoint = Get '[JSON] ListMaintainersResponse
+type ListRolesEndpoint = Get '[JSON] ListRolesResponse
 
 -- | Add new maintainers to the project.
-type AddMaintainersEndpoint =
-  ReqBody '[JSON] AddMaintainersRequest
+type AddRolesEndpoint =
+  ReqBody '[JSON] AddRolesRequest
     :>
     -- Return the updated list of maintainers
-    Post '[JSON] AddMaintainersResponse
+    Post '[JSON] AddRolesResponse
 
--- | For each listed maintainer, update their permissions.
--- Note: This does NOT affect any maintainers which are not specified and does NOT
--- remove any maintainers which are not specified.
-type UpdateMaintainersEndpoint =
-  ReqBody '[JSON] UpdateMaintainersRequest
+-- | Remove maintainers from the project.
+type RemoveRolesEndpoint =
+  ReqBody '[JSON] RemoveRolesRequest
     :>
     -- Return the updated list of maintainers
-    Patch '[JSON] UpdateMaintainersResponse
+    Delete '[JSON] RemoveRolesResponse

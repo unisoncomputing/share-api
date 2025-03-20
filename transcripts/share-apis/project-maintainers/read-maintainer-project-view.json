@@ -16,6 +16,9 @@
       "name": null,
       "type": "user"
     },
+    "permissions": [
+      "project:view"
+    ],
     "releaseDownloads": [],
     "slug": "privatetestproject",
     "summary": "private summary",
