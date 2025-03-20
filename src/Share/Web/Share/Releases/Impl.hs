@@ -114,9 +114,9 @@ projectReleaseBrowseEndpoint ::
   WebApp (Cached JSON NamespaceListing)
 projectReleaseBrowseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion relativeTo namespace rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-browse" cacheParams releaseHead $ do
     Codebase.runCodebaseTransactionOrRespondError codebase $ do
@@ -138,8 +138,8 @@ projectReleaseDefinitionsByNameEndpoint ::
   WebApp (Cached JSON DefinitionDisplayResults)
 projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion name relativeTo renderWidth rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
@@ -162,8 +162,8 @@ projectReleaseDefinitionsByHashEndpoint ::
   WebApp (Cached JSON DefinitionDisplayResults)
 projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion referent relativeTo renderWidth rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let shortHash = Referent.toShortHash referent
   let query = HQ.HashOnly shortHash
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
@@ -189,8 +189,8 @@ projectReleaseTermSummaryEndpoint ::
   WebApp (Cached JSON TermSummary)
 projectReleaseTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion ref mayName relativeTo renderWidth rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-term-summary" cacheParams releaseHead $ do
@@ -213,8 +213,8 @@ projectReleaseTypeSummaryEndpoint ::
   WebApp (Cached JSON TypeSummary)
 projectReleaseTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion ref mayName relativeTo renderWidth rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-type-summary" cacheParams releaseHead $ do
@@ -239,8 +239,8 @@ projectReleaseFindEndpoint ::
 projectReleaseFindEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion mayRelativeTo limit renderWidth query searchDependencies rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
   let relativeTo = fromMaybe Path.empty mayRelativeTo
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.runCodebaseTransaction codebase $ do
@@ -260,8 +260,8 @@ projectReleaseNamespacesByNameEndpoint ::
   WebApp (Cached JSON NamespaceDetails)
 projectReleaseNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion path renderWidth rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
@@ -280,16 +280,15 @@ getProjectReleaseEndpoint ::
   WebApp APIRelease
 getProjectReleaseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion = do
   addRequestTag "release" (IDs.toText projectReleaseShortHand)
-  (project, release) <- PG.runTransactionOrRespondError $ do
-    release@Release {projectId} <-
+  release <- PG.runTransactionOrRespondError $ do
+    release <-
       Q.releaseByProjectReleaseShortHand projectReleaseShortHand
         `whenNothingM` throwError (EntityMissing (ErrorID "missing-project-release") "Release could not be found")
     releaseWithHandle <- forOf releaseUsers_ release \uid -> do
       User.handle <$> Q.userByUserId uid `whenNothingM` throwError (EntityMissing (ErrorID "missing-user") "User could not be found")
-    project <- Q.expectProjectById projectId
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandle
-    pure (project, releaseWithCausalHashes)
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReleaseGet callerUserId project release
+    pure releaseWithCausalHashes
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReleaseGet callerUserId release
   pure $ API.releaseToAPIRelease (ProjectShortHand {userHandle, projectSlug}) release
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -302,8 +301,8 @@ getProjectReleaseReadmeEndpoint ::
   ReleaseVersion ->
   WebApp (Cached JSON ReadmeResponse)
 getProjectReleaseReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let rootPath = Path.empty
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
@@ -339,8 +338,8 @@ getProjectReleaseDocEndpoint ::
   ReleaseVersion ->
   WebApp (Cached JSON DocResponse)
 getProjectReleaseDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = releaseHead}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let rootPath = Path.empty
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
@@ -364,9 +363,9 @@ listReleasesByProjectEndpoint ::
   WebApp (Paged ListReleasesCursor APIRelease)
 listReleasesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug mayCursor mayLimit mayVersionPrefix mayStatusFilter = do
   let projectShortHand = ProjectShortHand {userHandle, projectSlug}
-  (project@Project {projectId}) <- PG.runTransactionOrRespondError do
+  (Project {projectId}) <- PG.runTransactionOrRespondError do
     (Q.projectByShortHand projectShortHand) `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @ProjectShortHand projectShortHand))
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkListReleasesForProject callerUserId project
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkListReleasesForProject callerUserId projectId
   releases <- PG.runTransaction do
     Q.listReleasesByProject limit mayCursor mayVersionPrefix (fromMaybe defaultStatusFilter mayStatusFilter) projectId
   shareReleases <-

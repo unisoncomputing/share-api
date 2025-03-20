@@ -155,7 +155,7 @@ diffNamespacesEndpoint ::
 diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand = do
   project@Project {projectId} <- PG.runTransactionOrRespondError do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId projectId
   (oldCodebase, oldCausalId, _oldBranchId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
   (newCodebase, newCausalId, _newBranchId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
 
@@ -191,7 +191,7 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
   do
     project@Project {projectId} <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId projectId
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
@@ -225,7 +225,7 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
   do
     project@Project {projectId} <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId projectId
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
@@ -305,7 +305,7 @@ getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug
     permissionsForProject <- PermissionsInfo <$> AuthZQ.permissionsForProject callerUserId projectId
     pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats, permissionsForProject)
   let releaseDownloadStats = ReleaseDownloadStats {releaseDownloads}
-  AuthZ.permissionGuard $ AuthZ.checkProjectGet callerUserId project
+  AuthZ.permissionGuard $ AuthZ.checkProjectGet callerUserId projectId
   pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats :++ permissionsForProject)
 
 favProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> FavProjectRequest -> WebApp NoContent
