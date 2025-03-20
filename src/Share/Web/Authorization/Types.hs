@@ -143,8 +143,10 @@ data RolePermission
   | ProjectContribute
   | ProjectMaintain
   | ProjectDelete
+  | ProjectCreate
   | -- Org
     OrgView
+  | OrgEdit
   | OrgManage
   | OrgAdmin
   | OrgDelete
@@ -162,12 +164,14 @@ rolePermissionToText = \case
   ProjectContribute -> "project:contribute"
   ProjectMaintain -> "project:maintain"
   ProjectDelete -> "project:delete"
+  ProjectCreate -> "project:create"
   OrgView -> "org:view"
+  OrgEdit -> "org:edit"
   OrgManage -> "org:manage"
   OrgAdmin -> "org:admin"
   OrgDelete -> "org:delete"
   OrgChangeOwner -> "org:change_owner"
-  OrgProjectCreate -> "org:project_create"
+  OrgProjectCreate -> "org:create_project"
   TeamView -> "team:view"
   TeamManage -> "team:manage"
 
@@ -177,13 +181,15 @@ rolePermissionFromText = \case
   "project:manage" -> Just ProjectManage
   "project:contribute" -> Just ProjectContribute
   "project:delete" -> Just ProjectDelete
+  "project:create" -> Just ProjectCreate
   "project:maintain" -> Just ProjectMaintain
   "org:view" -> Just OrgView
+  "org:edit" -> Just OrgEdit
   "org:manage" -> Just OrgManage
   "org:admin" -> Just OrgAdmin
   "org:delete" -> Just OrgDelete
   "org:change_owner" -> Just OrgChangeOwner
-  "org:project_create" -> Just OrgProjectCreate
+  "org:create_project" -> Just OrgProjectCreate
   "team:view" -> Just TeamView
   "team:manage" -> Just TeamManage
   _ -> Nothing

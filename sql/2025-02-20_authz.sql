@@ -28,7 +28,7 @@
 -- All permissions are scoped to a specific resource type, this is important since
 -- permissions can be inherited via the resource hierarchy.
 --
--- E.g. 'project:read' is a different permission than 'org:read'.
+-- E.g. 'project:view' is a different permission than 'org:view'.
 CREATE DOMAIN permission AS TEXT
 CHECK (
     VALUE ~ '^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$'
