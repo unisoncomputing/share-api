@@ -17,7 +17,8 @@
       "type": "user"
     },
     "permissions": [
-      "project:view"
+      "project:view",
+      "project:contribute"
     ],
     "releaseDownloads": [],
     "slug": "publictestproject",

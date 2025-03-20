@@ -29,6 +29,10 @@ fetch "$transcript_user" GET project-get-private-authorized '/users/transcripts/
 
 fetch "$transcript_user" GET project-list '/users/transcripts/projects'
 
+fetch "$unauthorized_user" GET project-private-unauthorized-get '/users/transcripts/projects/containers'
+
+fetch "$unauthenticated_user" GET project-private-unauthenticated-get '/users/transcripts/projects/containers'
+
 fetch "$transcript_user" PATCH project-update '/users/transcripts/projects/containers' '{
     "summary": null,
     "visibility": "public"
@@ -46,15 +50,9 @@ fetch "$transcript_user" PUT project-unfav '/users/transcripts/projects/containe
   "isFaved": false
 }'
 
-# Now make some calls with an unauthorized user to ensure our auth checks work.
-
-fetch "$unauthorized_user" GET project-unauthorized-get '/users/transcripts/projects/containers'
-
 fetch "$unauthorized_user" PATCH project-unauthorized-update '/users/transcripts/projects/containers' '{
     "summary": "new summary"
 }'
-
-fetch "$unauthenticated_user" GET project-unauthenticated-get '/users/transcripts/projects/containers'
 
 fetch "$unauthorized_user" POST project-catalog-add-is-admin-only '/admin/catalog/category' '[
 { "categoryName": "data"
