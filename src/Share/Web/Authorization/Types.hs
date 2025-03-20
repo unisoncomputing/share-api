@@ -177,6 +177,7 @@ rolePermissionFromText = \case
   "project:manage" -> Just ProjectManage
   "project:contribute" -> Just ProjectContribute
   "project:delete" -> Just ProjectDelete
+  "project:maintain" -> Just ProjectMaintain
   "org:view" -> Just OrgView
   "org:manage" -> Just OrgManage
   "org:admin" -> Just OrgAdmin
