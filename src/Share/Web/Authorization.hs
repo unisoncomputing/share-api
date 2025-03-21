@@ -14,7 +14,7 @@ module Share.Web.Authorization
     checkReadProjectRolesList,
     checkAddProjectRoles,
     checkRemoveProjectRoles,
-    checkUserIsAdmin,
+    checkUserIsSuperadmin,
     checkAdminSudo,
     checkBranchCreate,
     checkBranchSet,
@@ -45,6 +45,7 @@ module Share.Web.Authorization
     checkUserUpdate,
     checkDownloadFromUserCodebase,
     checkDownloadFromProjectBranchCodebase,
+    checkCreateOrg,
     checkReadOrgRolesList,
     checkEditOrgRoles,
     permissionGuard,
@@ -168,6 +169,7 @@ data UserPermission
 data OrgPermission
   = OrgRolesList OrgId
   | OrgRolesEdit OrgId
+  | OrgCreate UserId
   deriving stock (Show, Eq, Ord)
 
 data AuthZFailure = AuthZFailure WrapperPermissions
@@ -229,6 +231,7 @@ instance Errors.ToServerError AuthZFailure where
       case orgPermission of
         OrgRolesEdit _orgId -> (ErrorID "authz:org:roles-edit", err403 {errBody = "Permission Denied: " <> msg})
         OrgRolesList _orgId -> (ErrorID "authz:org:roles-list", err403 {errBody = "Permission Denied: " <> msg})
+        OrgCreate _uid -> (ErrorID "authz:org:create", err403 {errBody = "Permission Denied: " <> msg})
     AdminPermission ->
       (ErrorID "authz:admin", err403 {errBody = "Permission Denied: " <> msg})
     SudoPermission ->
@@ -284,6 +287,7 @@ authZFailureMessage (AuthZFailure perm) = case perm of
     case orgPermission of
       OrgRolesEdit _orgId -> "Not permitted to edit roles in this org"
       OrgRolesList _orgId -> "Not permitted to list roles in this org"
+      OrgCreate _uid -> "Not permitted to create an org for this user"
   AdminPermission -> "Not permitted to access this resource"
   SudoPermission -> "Sudo mode required to perform this action. Please re-authenticate to enable sudo mode."
 
@@ -643,11 +647,10 @@ maybePermissionFailure perm m = do
     Just a -> pure (Right a)
 
 -- | Check whether the given user has administrative privileges
--- Currently this means checking whether the user is a member of the Unison org.
-checkUserIsAdmin :: UserId -> WebApp (Either AuthZFailure ())
-checkUserIsAdmin userId = do
+checkUserIsSuperadmin :: UserId -> WebApp (Either AuthZFailure ())
+checkUserIsSuperadmin userId = do
   PG.runTransaction $
-    Q.isUnisonEmployee userId <&> \case
+    Q.isSuperadmin userId <&> \case
       False -> Left (AuthZFailure AdminPermission)
       True -> Right ()
 
@@ -656,6 +659,11 @@ checkUserIsOrgMember reqUserId orgUserId = do
   guardM $
     PG.runTransaction $
       Q.isOrgMember reqUserId orgUserId
+
+checkCreateOrg :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkCreateOrg reqUserId ownerUserId = maybePermissionFailure (OrgPermission (OrgCreate ownerUserId)) $ do
+  guardM . PG.runTransaction $ Q.isSuperadmin reqUserId
+  pure $ AuthZReceipt Nothing
 
 checkReadOrgRolesList :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZReceipt)
 checkReadOrgRolesList reqUserId orgId =
@@ -675,7 +683,7 @@ checkEditOrgRoles reqUserId orgId =
 checkAdminSudo :: Session.Session -> WebApp (Either AuthZFailure ())
 checkAdminSudo Session.Session {sessionUserId, sessionCreated} = runExceptT $ do
   now <- liftIO Time.getCurrentTime
-  ExceptT $ checkUserIsAdmin sessionUserId
+  ExceptT $ checkUserIsSuperadmin sessionUserId
   ExceptT $
     if Time.diffUTCTime now sessionCreated < sudoTTL
       then pure (Right ())

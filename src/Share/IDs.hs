@@ -16,6 +16,7 @@ module Share.IDs
     PrefixedID (..),
     PrefixedHash (..),
     UserHandle (..),
+    OrgHandle (..),
     TourId (..),
     ProjectSlug (..),
     ProjectId (..),
@@ -152,6 +153,12 @@ instance IsID UserHandle where
     | Text.length handleTxt > 50 = Left "User handle must not be longer than 50 characters"
     | Just ('-', _) <- Text.uncons handleTxt = Left "User handle must not start with a hyphen"
     | otherwise = Right $ UserHandle handleTxt
+
+newtype OrgHandle = OrgHandle Text
+  deriving stock (Show, Eq, Ord)
+  deriving (Binary, Hasql.EncodeValue, Hasql.DecodeValue) via Text
+  deriving (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via (UsingID UserHandle)
+  deriving (IsID) via UserHandle
 
 -- | The name of a project, used in URLs, when paired with a user can be resolved to a project ID
 newtype ProjectSlug = ProjectSlug (CI Text)

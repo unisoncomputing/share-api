@@ -36,7 +36,7 @@ import Share.OAuth.Types (AccessToken, AuthenticationRequest (..), Code, GrantTy
 import Share.OAuth.Types qualified as OAuth
 import Share.Postgres qualified as PG
 import Share.Postgres.Ops qualified as PGO
-import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.User (User (User))
 import Share.User qualified as User
@@ -144,7 +144,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
     -- The user has an already valid session, we can use that.
     (_, _, Just session) -> do
       user <- (PGO.expectUserById (sessionUserId session))
-      pure (Q.PreExisting user)
+      pure (UserQ.PreExisting user)
     -- The user has completed the Github flow, we can log them in or create a new user.
     (Just githubCode, Just statePSID, _noSession) -> do
       completeGithubFlow githubCode statePSID cookiePSID
@@ -152,8 +152,8 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       respondError $ MissingCode
     (_, Nothing, _) -> do
       respondError $ MissingState
-  let (User {User.user_id = uid}) = Q.getNewOrPreExisting newOrPreExistingUser
-  when (Q.isNew newOrPreExistingUser) do
+  let (User {User.user_id = uid}) = UserQ.getNewOrPreExisting newOrPreExistingUser
+  when (UserQ.isNew newOrPreExistingUser) do
     Metrics.tickUserSignup
   Env.Env {cookieSettings} <- ask
   iss <- shareIssuer
@@ -189,7 +189,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       ( OAuth.Code ->
         PendingSessionId ->
         PendingSessionId ->
-        WebApp (Q.NewOrPreExisting User)
+        WebApp (UserQ.NewOrPreExisting User)
       )
     completeGithubFlow githubCode statePSID cookiePSID = do
       when (statePSID /= cookiePSID) do
@@ -198,17 +198,17 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       token <- Github.githubTokenForCode githubCode
       ghUser <- Github.githubUser token
       ghEmail <- Github.primaryGithubEmail token
-      PG.runTransaction (Q.findOrCreateGithubUser ghUser ghEmail) >>= \case
-        Left (Q.UserHandleTaken _) -> do
+      PG.tryRunTransaction (UserQ.findOrCreateGithubUser ghUser ghEmail) >>= \case
+        Left (UserQ.UserHandleTaken _) -> do
           errorRedirect AccountCreationHandleAlreadyTaken
-        Left (Q.InvalidUserHandle err handle) -> do
+        Left (UserQ.InvalidUserHandle err handle) -> do
           Logging.logErrorText ("Invalid user handle: " <> handle <> " " <> err)
           errorRedirect AccountCreationInvalidHandle
         Right u -> pure u
 
-    mkLoginLandingPageURI :: Q.NewOrPreExisting User -> WebApp URI
-    mkLoginLandingPageURI (Q.New {}) = shareUIPathQ [] (Map.singleton "event" "new-user-log-in")
-    mkLoginLandingPageURI (Q.PreExisting {}) = shareUIPathQ [] (Map.singleton "event" "log-in")
+    mkLoginLandingPageURI :: UserQ.NewOrPreExisting User -> WebApp URI
+    mkLoginLandingPageURI (UserQ.New {}) = shareUIPathQ [] (Map.singleton "event" "new-user-log-in")
+    mkLoginLandingPageURI (UserQ.PreExisting {}) = shareUIPathQ [] (Map.singleton "event" "log-in")
     mkUCMLoginSuccessLandingPageURI :: WebApp URI
     mkUCMLoginSuccessLandingPageURI = shareUIPath ["ucm-connected"]
     ensurePendingSession :: PendingSessionId -> WebApp PendingSession
@@ -283,10 +283,10 @@ setSessionCookie sess = do
       pure Nothing
     Right cookie -> pure . Just $ addHeader @"Set-Cookie" cookie
 
-clearSessionCookie :: AddHeader "Set-Cookie" SetCookie orig new => Cookies.CookieSettings -> Text -> orig -> new
+clearSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> Text -> orig -> new
 clearSessionCookie cookieSettings sessionCookieKey = addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings sessionCookieKey)
 
 -- | Clear the pending session
-clearPendingSessionCookie :: AddHeader "Set-Cookie" SetCookie orig new => Cookies.CookieSettings -> orig -> new
+clearPendingSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> orig -> new
 clearPendingSessionCookie cookieSettings =
   addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings OAuth.pendingSessionCookieKey)

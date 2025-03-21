@@ -78,7 +78,6 @@ import Control.Monad.State
 import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
 import Data.Maybe
-import Data.Text qualified as Text
 import Data.Time.Clock (picosecondsToDiffTime)
 import Data.Time.Clock.System (getSystemTime, systemToTAITime)
 import Data.Time.Clock.TAI (diffAbsoluteTime)
@@ -99,6 +98,7 @@ import Share.Postgres.Orphans ()
 import Share.Prelude
 import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Postgres (likeEscape)
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
@@ -433,9 +433,6 @@ newtype Only a = Only {fromOnly :: a}
 
 instance (Interp.DecodeField a) => Interp.DecodeRow (Only a) where
   decodeRow = Only <$> decodeField
-
-likeEscape :: Text -> Text
-likeEscape = Text.replace "%" "\\%" . Text.replace "_" "\\_"
 
 -- | Helper for encoding a single-column table using PG.toTable.
 --

@@ -1,18 +1,23 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Web.Share.Orgs.API (API, Routes (..), OrgRolesRoutes (..)) where
+module Share.Web.Share.Orgs.API (API, ResourceRoutes (..), OrgRolesRoutes (..)) where
 
 import GHC.Generics (Generic)
 import Servant
 import Share.IDs
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Web.Authorization.Types (AddRolesRequest, ListRolesResponse, RemoveRolesRequest)
+import Share.Web.Share.Orgs.Types
+import Share.Web.Share.Types (OrgDisplayInfo)
 
-type API = Capture "orgHandle" UserHandle :> NamedRoutes Routes
+type API =
+  CreateOrgEndpoint
+    :<|> ( Capture "orgHandle" UserHandle :> NamedRoutes ResourceRoutes
+         )
 
-data Routes mode
-  = Routes
+data ResourceRoutes mode
+  = ResourceRoutes
   { roles :: mode :- "roles" :> NamedRoutes OrgRolesRoutes
   }
   deriving stock (Generic)
@@ -38,3 +43,8 @@ type OrgRolesRemoveEndpoint =
 type OrgRolesListEndpoint =
   AuthenticatedUserId
     :> Get '[JSON] ListRolesResponse
+
+type CreateOrgEndpoint =
+  AuthenticatedUserId
+    :> ReqBody '[JSON] CreateOrgRequest
+    :> Post '[JSON] OrgDisplayInfo
