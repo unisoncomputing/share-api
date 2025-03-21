@@ -15,25 +15,27 @@ import Share.Metrics qualified as Metrics
 import Share.NamespaceDiffs (NamespaceDiffError (MissingEntityError))
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
+import Share.Postgres.Notifications qualified as Notif
 import Share.Postgres.Queries qualified as Q
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..), ErrorID (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
-import UnliftIO.Concurrent qualified as UnliftIO
 
-pollingIntervalSeconds :: Int
-pollingIntervalSeconds = 10
+-- | Check every 10 minutes if we haven't heard on the notifications channel.
+-- Just in case we missed a notification.
+maxPollingIntervalSeconds :: Int
+maxPollingIntervalSeconds = 10 * 60
 
 worker :: Ki.Scope -> Background ()
 worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
   newWorker scope "diffs:contributions" $ forever do
+    Notif.waitOnChannel Notif.ContributionDiffChannel (maxPollingIntervalSeconds * 1000000)
     processDiffs authZReceipt >>= \case
       Left e -> reportError e
       Right _ -> pure ()
-    liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
 
 processDiffs :: AuthZ.AuthZReceipt -> Background (Either NamespaceDiffError ())
 processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT $ do

@@ -42,6 +42,7 @@ import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
 import Share.Metrics (requestMetricsMiddleware, serveMetricsMiddleware)
 import Share.OAuth.Session (AuthCheckCtx, MaybeAuthenticatedUserId, addAuthCheckCtx)
+import Share.Postgres.Notifications qualified as PGNotif
 import Share.Prelude
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging (LogMsg (..), logErrorText)
@@ -65,7 +66,8 @@ startApp :: Env.Env () -> IO ()
 startApp env = do
   app <- mkShareServer env
   Ki.scoped \scope -> do
-    runBackground env "background-jobs" $ BackgroundJobs.startWorkers scope
+    runBackground env "notifications-init" $ do PGNotif.initialize scope
+    runBackground env "background-jobs" $ do BackgroundJobs.startWorkers scope
     run (Env.serverPort env) app
 
 newtype UncaughtException err = UncaughtException err

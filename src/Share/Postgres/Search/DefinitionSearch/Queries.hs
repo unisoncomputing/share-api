@@ -27,6 +27,7 @@ import Servant.Server (err500)
 import Share.BackgroundJobs.Search.DefinitionSync.Types
 import Share.IDs (ProjectId, ReleaseId, UserId)
 import Share.Postgres
+import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
 import Share.Utils.API (Limit, Query (Query))
 import Share.Utils.Logging qualified as Logging
@@ -60,6 +61,7 @@ submitReleaseToBeSynced releaseId = do
     INSERT INTO global_definition_search_release_queue (release_id)
     VALUES (#{releaseId})
     |]
+  Notif.notifyChannel Notif.DefinitionSyncChannel
 
 -- | Claim the oldest unsynced release to be indexed.
 claimUnsyncedRelease :: Transaction e (Maybe ReleaseId)

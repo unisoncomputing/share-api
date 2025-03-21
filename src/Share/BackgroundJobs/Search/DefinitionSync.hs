@@ -31,6 +31,7 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NL
+import Share.Postgres.Notifications qualified as Notif
 import Share.Postgres.Queries qualified as PG
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
@@ -63,16 +64,16 @@ import Unison.Util.Monoid qualified as Monoid
 import Unison.Util.Recursion qualified as Rec
 import Unison.Util.Set qualified as Set
 import Unison.Var qualified as Var
-import UnliftIO.Concurrent qualified as UnliftIO
 
 data DefnIndexingFailure
   = NoTypeSigForTerm Name Referent
   | NoDeclForType Name TypeReference
   deriving stock (Show)
 
--- | How often to poll for new releases to sync in seconds.
-pollingIntervalSeconds :: Int
-pollingIntervalSeconds = 10
+-- | Check every 10 minutes if we haven't heard on the notifications channel.
+-- Just in case we missed a notification.
+maxPollingIntervalSeconds :: Int
+maxPollingIntervalSeconds = 10 * 60 -- 10 minutes
 
 -- | How many definitions to hold in memory at a time while syncing
 defnBatchSize :: Int32
@@ -82,8 +83,8 @@ worker :: Ki.Scope -> Background ()
 worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
   newWorker scope "search:defn-sync" $ forever do
+    Notif.waitOnChannel Notif.DefinitionSyncChannel (maxPollingIntervalSeconds * 1000000)
     processReleases authZReceipt
-    liftIO $ UnliftIO.threadDelay $ pollingIntervalSeconds * 1000000
   where
     processReleases authZReceipt = do
       (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransaction $ do
