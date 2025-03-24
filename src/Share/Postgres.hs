@@ -32,6 +32,7 @@ module Share.Postgres
     runTransactionMode,
     tryRunTransaction,
     tryRunTransactionMode,
+    catchTransaction,
     unliftTransaction,
     runTransactionOrRespondError,
     runSession,
@@ -505,3 +506,10 @@ timeTransaction label ma =
       transactionUnsafeIO $ putStrLn $ "Finished " ++ label ++ " in " ++ show cpuDiff ++ " (cpu), " ++ show systemDiff ++ " (system)"
       pure a
     else ma
+
+catchTransaction :: Transaction e a -> Transaction e' (Either e a)
+catchTransaction (Transaction t) = Transaction do
+  t >>= \case
+    Left (Err e) -> pure (Right (Left e))
+    Left (Unrecoverable err) -> pure (Left (Unrecoverable err))
+    Right a -> pure (Right (Right a))

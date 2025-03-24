@@ -48,6 +48,7 @@ import Share.Utils.URI (URIParam (URIParam), unpackURI)
 import Share.Utils.URI qualified as URI
 import Share.Web.App
 import Share.Web.Authentication.AccessToken qualified as AccessToken
+import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.OAuth.Clients (validateOAuthClientForTokenExchange, validateOAuthClientRedirectURI)
 import Web.Cookie as Cookie (SetCookie (..))
@@ -198,7 +199,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       token <- Github.githubTokenForCode githubCode
       ghUser <- Github.githubUser token
       ghEmail <- Github.primaryGithubEmail token
-      PG.tryRunTransaction (UserQ.findOrCreateGithubUser ghUser ghEmail) >>= \case
+      PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail) >>= \case
         Left (UserQ.UserHandleTaken _) -> do
           errorRedirect AccountCreationHandleAlreadyTaken
         Left (UserQ.InvalidUserHandle err handle) -> do

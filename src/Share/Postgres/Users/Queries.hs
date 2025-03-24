@@ -19,12 +19,16 @@ module Share.Postgres.Users.Queries
     searchUsersByNameOrHandlePrefix,
     UserCreationError (..),
     allUsers,
+    createUser,
   )
 where
 
 import Control.Lens
 import Control.Monad.Except
+import Data.ByteString.Lazy qualified as BL
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
+import Servant qualified
 import Share.Codebase qualified as Codebase
 import Share.Github
 import Share.IDs
@@ -36,10 +40,11 @@ import Share.Prelude
 import Share.User
 import Share.UserProfile (UserProfile (..))
 import Share.Utils.API
+import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres
 import Share.Utils.URI (URIParam (..))
-import Share.Web.Authorization qualified as AuthZ
-import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
+import Share.Web.Authorization.Types qualified as AuthZ
+import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..), ToServerError (..))
 import Share.Web.Share.Types
 
 -- | Efficiently resolve User Display Info for UserIds within a structure.
@@ -168,20 +173,20 @@ userByHandle handle = do
         WHERE u.handle = lower(#{handle})
       |]
 
-createFromGithubUser :: GithubUser -> GithubEmail -> PG.Transaction UserCreationError User
-createFromGithubUser (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail = do
+createFromGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> PG.Transaction UserCreationError User
+createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail = do
   let (GithubEmail {github_email_email = user_email, github_email_verified = emailVerified}) = primaryEmail
   userHandle <- case IDs.fromText @UserHandle (Text.toLower githubHandle) of
     Left err -> throwError (InvalidUserHandle err githubHandle)
     Right handle -> pure handle
-  userId <- createUser user_email user_name (Just avatar_url) userHandle emailVerified
+  userId <- createUser authzReceipt user_email user_name (Just avatar_url) userHandle emailVerified
   PG.execute_
     [PG.sql|
           INSERT INTO github_users
             (github_user_id, unison_user_id)
             VALUES (#{githubUserId}, #{userId})
         |]
-  let codebase = Codebase.codebaseEnv AuthZ.userCreationOverride (Codebase.codebaseLocationForUserCodebase userId)
+  let codebase = Codebase.codebaseEnv authzReceipt (Codebase.codebaseLocationForUserCodebase userId)
   Codebase.codebaseMToTransaction codebase LCQ.initialize
   let visibility = UserPublic
   pure $
@@ -197,8 +202,8 @@ createFromGithubUser (GithubUser githubHandle githubUserId avatar_url user_name)
 -- | Note: Since there's currently no way to choose a handle during user creation,
 -- manually creating users that aren't mapped to a github user WILL lock out any github
 -- user by that name from creating a share account. Use caution.
-createUser :: Text -> Maybe Text -> Maybe URIParam -> UserHandle -> Bool -> PG.Transaction UserCreationError UserId
-createUser userEmail userName avatarUrl userHandle emailVerified = do
+createUser :: AuthZ.AuthZReceipt -> Text -> Maybe Text -> Maybe URIParam -> UserHandle -> Bool -> PG.Transaction UserCreationError UserId
+createUser !_authZReceipt userEmail userName avatarUrl userHandle emailVerified = do
   handleExists <-
     PG.queryExpect1Col
       [PG.sql|
@@ -232,13 +237,13 @@ isNew :: NewOrPreExisting a -> Bool
 isNew New {} = True
 isNew _ = False
 
-findOrCreateGithubUser :: GithubUser -> GithubEmail -> PG.Transaction UserCreationError (NewOrPreExisting User)
-findOrCreateGithubUser ghu@(GithubUser _login githubUserId _avatarUrl _name) primaryEmail = do
+findOrCreateGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> PG.Transaction UserCreationError (NewOrPreExisting User)
+findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarUrl _name) primaryEmail = do
   user <- userByGithubUserId githubUserId
   case user of
     Just user' -> pure (PreExisting user')
     Nothing -> do
-      New <$> createFromGithubUser ghu primaryEmail
+      New <$> createFromGithubUser authZReceipt ghu primaryEmail
 
 searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [User]
 searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
@@ -259,6 +264,20 @@ data UserCreationError
     -- This shouldn't happen for Github Handles, but in the case it does, we throw an error.
     -- (Error Message, Invalid Handle)
     InvalidUserHandle Text Text
+
+instance Logging.Loggable UserCreationError where
+  toLog = \case
+    UserHandleTaken handle ->
+      Logging.textLog ("User handle taken: " <> Text.pack (show handle))
+        & Logging.withSeverity Logging.UserFault
+    InvalidUserHandle err handle ->
+      Logging.textLog ("Invalid user handle: " <> Text.pack (show err) <> " " <> handle)
+        & Logging.withSeverity Logging.UserFault
+
+instance ToServerError UserCreationError where
+  toServerError = \case
+    UserHandleTaken {} -> (ErrorID "user-creation:handle-taken", Servant.err409 {Servant.errBody = "User handle taken."})
+    InvalidUserHandle err _handle -> (ErrorID "user-creation:invalid-handle", Servant.err400 {Servant.errBody = "Invalid user handle: " <> BL.fromStrict (Text.encodeUtf8 err)})
 
 allUsers :: PG.Transaction e [UserId]
 allUsers = do

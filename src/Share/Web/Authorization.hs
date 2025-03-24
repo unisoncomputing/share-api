@@ -58,13 +58,13 @@ module Share.Web.Authorization
     WrapperPermissions (..),
     CodebasePermission (..),
     ProjectPermission (..),
-    CachingToken,
+    AuthZ.CachingToken,
     AuthZFailure,
 
     -- * Utils
     authZFailureMessage,
-    AuthZReceipt,
-    getCacheability,
+    AuthZ.AuthZReceipt,
+    AuthZ.getCacheability,
   )
 where
 
@@ -102,9 +102,6 @@ import Share.Web.Share.Tickets.Types
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.NameSegment.Internal (NameSegment (..))
-
--- | Proof that an auth check has been run at some point.
-data AuthZReceipt = AuthZReceipt {getCacheability :: Maybe CachingToken}
 
 -- | Represents higher-level permissions, representing the ability to perform an individual
 -- task. Distinct from 'RolePermission's which are the actual permissions stored in the
@@ -297,10 +294,6 @@ readPath path = UserCodebaseReadPath (Path.toList path)
 writePath :: Path -> CodebasePermission
 writePath path = UserCodebaseWritePath (Path.toList path)
 
--- | Requests should only be cached if they're for a public endpoint.
--- Obtaining a caching token is proof that the resource was public and can be cached.
-data CachingToken = CachingToken
-
 -- | Checks that A given causal is accessible from the other, useful for determining that a
 -- rootHash is attached to a branch head that we can validate access to.
 --
@@ -311,11 +304,11 @@ assertCausalHashAccessibleFromRoot rootCausalId targetCausalId = permissionGuard
 
 -- | This is deprecated, permissions are all done at the project level now.
 -- For back-compat, this simply checks whether the caller is the same as the target user.
-checkReadUserCodebase :: Maybe UserId -> User -> Path -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReadUserCodebase :: Maybe UserId -> User -> Path -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkReadUserCodebase mayRequestingUser (User {user_id = targetUserId}) (Path.toList -> path) = maybePermissionFailure (CodebasePermission $ UserCodebaseReadPath path) do
   reqUserId <- guardMaybe mayRequestingUser
   deprecatedUserEqualityCheck reqUserId targetUserId
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check that the caller is allowed to upload to the specified codebase.
 checkUploadToProjectBranchCodebase ::
@@ -324,26 +317,26 @@ checkUploadToProjectBranchCodebase ::
   ProjectId ->
   -- | Contributor user Id
   Maybe UserId ->
-  WebApp (Either AuthZFailure AuthZReceipt)
+  WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkUploadToProjectBranchCodebase reqUserId projectId mayContributorUserId = maybePermissionFailure (CodebasePermission CodebaseUpload) do
   case mayContributorUserId of
     -- If we're not namespaced to a contributor branch, we're uploading to a core branch and
     -- need maintain permissions.
     Nothing -> do
       assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) projectId
-      pure $ AuthZReceipt Nothing
+      pure $ AuthZ.UnsafeAuthZReceipt Nothing
     -- Only the contributor themself can upload to their contributor branches.
     -- We may wish to allow project maintainers to upload to contributor branches within their
     -- projects in the future.
     Just contributorId -> do
       assertUserHasProjectPermission AuthZ.ProjectContribute (Just reqUserId) projectId
       guard (contributorId == reqUserId)
-      pure $ AuthZReceipt Nothing
+      pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkUserUpdate :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkUserUpdate :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkUserUpdate reqUserId targetUserId = maybePermissionFailure (UserPermission (UserUpdate targetUserId)) $ do
   guard (reqUserId == targetUserId) <|> checkUserIsOrgMember reqUserId targetUserId
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check that the caller is allowed to upload to the specified codebase.
 --
@@ -354,29 +347,29 @@ checkUploadToUserCodebase ::
   UserId ->
   -- | Codebase owner user
   UserId ->
-  WebApp (Either AuthZFailure AuthZReceipt)
+  WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkUploadToUserCodebase reqUserId codebaseOwnerUserId = maybePermissionFailure (CodebasePermission CodebaseUpload) do
   deprecatedUserEqualityCheck reqUserId codebaseOwnerUserId
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | The download endpoint currently does all of its own auth using HashJWTs,
 -- So we don't add any other authz checks here, the HashJWT check is sufficient.
-checkDownloadFromUserCodebase :: WebApp (Either AuthZFailure AuthZReceipt)
+checkDownloadFromUserCodebase :: WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkDownloadFromUserCodebase =
-  pure . Right $ AuthZReceipt Nothing
+  pure . Right $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | The download endpoint currently does all of its own auth using HashJWTs,
 -- So we don't add any other authz checks here, the HashJWT check is sufficient.
-checkDownloadFromProjectBranchCodebase :: WebApp (Either AuthZFailure AuthZReceipt)
+checkDownloadFromProjectBranchCodebase :: WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkDownloadFromProjectBranchCodebase =
-  pure . Right $ AuthZReceipt Nothing
+  pure . Right $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkProjectCreate :: Maybe UserId -> UserId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkProjectCreate :: Maybe UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkProjectCreate mayReqUserId targetUserId = maybePermissionFailure (ProjectPermission (ProjectCreate targetUserId)) $ do
   reqUserId <- guardMaybe mayReqUserId
   -- Can create projects in their own user, or in any org they have permission to create projects in.
   guard (reqUserId == targetUserId) <|> checkCreateInOrg reqUserId
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
   where
     checkCreateInOrg userId = do
       Org {orgId} <- guardMaybeM $ PG.runTransaction $ OrgQ.orgByUserId targetUserId
@@ -392,22 +385,22 @@ checkProjectDelete mayReqUserId targetProjectId = maybePermissionFailure (Projec
   reqUserId <- guardMaybe mayReqUserId
   assertUserHasProjectPermission AuthZ.ProjectDelete (Just reqUserId) targetProjectId
 
-checkProjectGet :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkProjectGet :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkProjectGet reqUserId projectId = maybePermissionFailure (ProjectPermission (ProjectGet projectId)) $ do
   assertUserHasProjectPermission AuthZ.ProjectView reqUserId projectId
   case reqUserId of
-    Nothing -> pure $ AuthZReceipt Nothing
-    Just _ -> pure $ AuthZReceipt $ Just CachingToken
+    Nothing -> pure $ AuthZ.UnsafeAuthZReceipt Nothing
+    Just _ -> pure $ AuthZ.UnsafeAuthZReceipt $ Just AuthZ.CachingToken
 
 -- | Currently you can access any branch within a project you can access.
-checkBranchGet :: Maybe UserId -> Branch causal -> WebApp (Either AuthZFailure AuthZReceipt)
+checkBranchGet :: Maybe UserId -> Branch causal -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkBranchGet mayCallerUserId (Branch {projectId, branchId}) =
   mapLeft (const authzError) <$> do
     checkProjectGet mayCallerUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (BranchGet branchId projectId)
 
-checkReleaseGet :: Maybe UserId -> Release causal v -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReleaseGet :: Maybe UserId -> Release causal v -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkReleaseGet mayCallerUserId (Release {projectId, releaseId}) =
   mapLeft (const authzError) <$> do
     checkProjectGet mayCallerUserId projectId
@@ -416,7 +409,7 @@ checkReleaseGet mayCallerUserId (Release {projectId, releaseId}) =
 
 -- | Checks whether a user has access to create a core branch for the provided project, within
 -- an optional contributor namespace.
-checkBranchCreate :: UserId -> Project -> Maybe UserId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkBranchCreate :: UserId -> Project -> Maybe UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkBranchCreate reqUserId (Project {projectId = projectId}) mayContributorNamespace = maybePermissionFailure (ProjectPermission (BranchCreate projectId)) $ do
   case mayContributorNamespace of
     Nothing -> assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) projectId
@@ -425,10 +418,10 @@ checkBranchCreate reqUserId (Project {projectId = projectId}) mayContributorName
       -- For now we allow only the contributor to access their branches. No project
       -- maintainers yet due to concerns with the swear-word problem.
       guard (contributorUserId == reqUserId)
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Checks whether a user has access to delete a branch for the provided project
-checkBranchDelete :: UserId -> Project -> Branch causal -> WebApp (Either AuthZFailure AuthZReceipt)
+checkBranchDelete :: UserId -> Project -> Branch causal -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkBranchDelete reqUserId (Project {projectId = projectId}) Branch {contributorId = mayContributorNamespace} = maybePermissionFailure (ProjectPermission (BranchDelete projectId)) $ do
   case mayContributorNamespace of
     Nothing -> assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) projectId
@@ -437,23 +430,23 @@ checkBranchDelete reqUserId (Project {projectId = projectId}) Branch {contributo
       -- For now we allow only the contributor to manage their branches. No project
       -- maintainers yet due to concerns with the swear-word problem.
       guard (contributorUserId == reqUserId)
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Checks whether a user has access to create a release for the provided project.
-checkReleaseCreate :: UserId -> Project -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReleaseCreate :: UserId -> Project -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkReleaseCreate reqUserId Project {projectId = targetProjectId} = maybePermissionFailure (ProjectPermission (ReleaseCreate targetProjectId)) $ do
   assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) targetProjectId
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkReleaseUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReleaseUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkReleaseUpdate mayReqUserId targetProjectId = maybePermissionFailure (ProjectPermission (ReleaseUpdate targetProjectId)) $ do
   reqUserId <- guardMaybe mayReqUserId
   assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) targetProjectId
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Checks whether a user has access to set a core branch for the provided project to a
 -- new Causal
-checkBranchSet :: UserId -> Branch causal -> WebApp (Either AuthZFailure AuthZReceipt)
+checkBranchSet :: UserId -> Branch causal -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkBranchSet reqUserId Branch {projectId = targetProjectId, contributorId = mayContributorNamespace} = maybePermissionFailure (ProjectPermission (BranchSet targetProjectId)) $ do
   case mayContributorNamespace of
     Nothing -> assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) targetProjectId
@@ -462,169 +455,169 @@ checkBranchSet reqUserId Branch {projectId = targetProjectId, contributorId = ma
       -- For now we allow only the contributor to access their branches. No project
       -- maintainers yet due to concerns with the swear-word problem.
       guard (contributorUserId == reqUserId)
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkProjectBranchRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkProjectBranchRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkProjectBranchRead reqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet reqUserId projectId
   where
     authzError = AuthZFailure $ (ProjectPermission (ProjectBranchBrowse projectId))
 
-checkProjectBranchDiff :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkProjectBranchDiff :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkProjectBranchDiff reqUserId projectId =
   bimap (const authzError) makeCacheable <$> do
     checkProjectGet reqUserId projectId
   where
     authzError = AuthZFailure $ (ProjectPermission (ProjectBranchDiff projectId))
 
-checkListBranchesForProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkListBranchesForProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkListBranchesForProject reqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet reqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (ProjectBranchList projectId)
 
-checkProjectReleaseRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkProjectReleaseRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkProjectReleaseRead reqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet reqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (ReleaseRead projectId)
 
-checkReadProjectRolesList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReadProjectRolesList :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkReadProjectRolesList reqUserId projectId =
   maybePermissionFailure (ProjectPermission (ProjectRolesList projectId)) $ do
     assertUserHasProjectPermission AuthZ.ProjectManage (Just reqUserId) projectId
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkAddProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkAddProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkAddProjectRoles reqUserId projectId =
   maybePermissionFailure (ProjectPermission (ProjectRolesEdit projectId)) $ do
     -- In order to add new collaborators it must be a premium project.
     assertIsPremiumProject projectId
     assertUserHasProjectPermission AuthZ.ProjectManage (Just reqUserId) projectId
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkRemoveProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkRemoveProjectRoles :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkRemoveProjectRoles reqUserId projectId =
   maybePermissionFailure (ProjectPermission (ProjectRolesEdit projectId)) $ do
     assertUserHasProjectPermission AuthZ.ProjectManage (Just reqUserId) projectId
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 assertIsPremiumProject :: ProjectId -> MaybeT WebApp ()
 assertIsPremiumProject projectId = do
   guardM $ PG.runTransaction $ PQ.isPremiumProject projectId
 
-checkListReleasesForProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkListReleasesForProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkListReleasesForProject reqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet reqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (ProjectReleaseList projectId)
 
-checkContributionListByProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionListByProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkContributionListByProject reqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet reqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (ContributionList projectId)
 
-checkContributionCreate :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionCreate :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkContributionCreate reqUserId projectId =
   maybePermissionFailure (ProjectPermission (ContributionCreate projectId)) $ do
     assertUserHasProjectPermission AuthZ.ProjectContribute (Just reqUserId) projectId
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkContributionUpdate :: UserId -> Contribution -> UpdateContributionRequest -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionUpdate :: UserId -> Contribution -> UpdateContributionRequest -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkContributionUpdate reqUserId (Contribution {projectId, author}) UpdateContributionRequest {status = newStatus} =
   maybePermissionFailure (ProjectPermission (ContributionUpdate projectId)) $ do
     case newStatus of
       Just Merged -> do
         -- Only project maintainers can mark as merged
         assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) projectId
-        pure $ AuthZReceipt Nothing
+        pure $ AuthZ.UnsafeAuthZReceipt Nothing
       _ -> do
         guard (reqUserId == author) <|> assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) projectId
-        pure $ AuthZReceipt Nothing
+        pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkContributionMerge :: UserId -> Contribution -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionMerge :: UserId -> Contribution -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkContributionMerge reqUserId (Contribution {projectId}) =
   maybePermissionFailure (ProjectPermission (ContributionUpdate projectId)) $ do
     assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) projectId
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkContributionRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkContributionRead mayReqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet mayReqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (ContributionRead projectId)
 
-checkContributionDiffRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionDiffRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkContributionDiffRead mayReqUserId projectId =
   bimap (const authzError) makeCacheable <$> checkProjectGet mayReqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (ContributionRead projectId)
 
-checkContributionTimelineRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkContributionTimelineRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkContributionTimelineRead mayReqUserId projectId =
   mapLeft (const authzError) <$> do
     checkContributionRead mayReqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (ContributionTimelineGet projectId)
 
-checkCommentCreate :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkCommentCreate :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkCommentCreate userId projectId =
   mapLeft (const authzError) <$> do
     checkContributionRead (Just userId) projectId
   where
     authzError = AuthZFailure $ ProjectPermission (CommentCreate projectId)
 
-checkCommentUpdate :: UserId -> Comment UserId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkCommentUpdate :: UserId -> Comment UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkCommentUpdate userId (Comment {actor = authorUserId, commentId}) =
   if (userId == authorUserId)
-    then pure $ Right $ AuthZReceipt Nothing
+    then pure $ Right $ AuthZ.UnsafeAuthZReceipt Nothing
     else pure $ Left authzError
   where
     authzError = AuthZFailure $ ProjectPermission (CommentUpdate commentId)
 
 -- TODO: Allow project maintainers to delete comments
-checkCommentDelete :: UserId -> Comment UserId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkCommentDelete :: UserId -> Comment UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkCommentDelete userId (Comment {actor = authorUserId, commentId}) =
   if (userId == authorUserId)
-    then pure $ Right $ AuthZReceipt Nothing
+    then pure $ Right $ AuthZ.UnsafeAuthZReceipt Nothing
     else pure $ Left authzError
   where
     authzError = AuthZFailure $ ProjectPermission (CommentDelete commentId)
 
-checkTicketListByProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkTicketListByProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkTicketListByProject reqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet reqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (TicketList projectId)
 
-checkTicketCreate :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkTicketCreate :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkTicketCreate reqUserId projectId =
   maybePermissionFailure (ProjectPermission (TicketCreate projectId)) $ do
     assertUserHasProjectPermission AuthZ.ProjectContribute (Just reqUserId) projectId
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkTicketUpdate :: UserId -> Ticket -> UpdateTicketRequest -> WebApp (Either AuthZFailure AuthZReceipt)
+checkTicketUpdate :: UserId -> Ticket -> UpdateTicketRequest -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkTicketUpdate reqUserId (Ticket {projectId, author}) UpdateTicketRequest {} =
   maybePermissionFailure (ProjectPermission (TicketUpdate projectId)) $ do
     guard (reqUserId == author) <|> assertUserHasProjectPermission (AuthZ.ProjectMaintain) (Just reqUserId) projectId
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkTicketRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkTicketRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkTicketRead mayReqUserId projectId =
   mapLeft (const authzError) <$> do
     checkProjectGet mayReqUserId projectId
   where
     authzError = AuthZFailure $ ProjectPermission (TicketRead projectId)
 
-checkTicketTimelineRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkTicketTimelineRead :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkTicketTimelineRead mayReqUserId projectId =
   mapLeft (const authzError) <$> do
     checkTicketRead mayReqUserId projectId
@@ -660,22 +653,22 @@ checkUserIsOrgMember reqUserId orgUserId = do
     PG.runTransaction $
       Q.isOrgMember reqUserId orgUserId
 
-checkCreateOrg :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkCreateOrg :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkCreateOrg reqUserId ownerUserId = maybePermissionFailure (OrgPermission (OrgCreate ownerUserId)) $ do
   guardM . PG.runTransaction $ Q.isSuperadmin reqUserId
-  pure $ AuthZReceipt Nothing
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkReadOrgRolesList :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkReadOrgRolesList :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkReadOrgRolesList reqUserId orgId =
   maybePermissionFailure (OrgPermission (OrgRolesList orgId)) $ do
     assertUserHasOrgPermission reqUserId orgId AuthZ.OrgAdmin
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkEditOrgRoles :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZReceipt)
+checkEditOrgRoles :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkEditOrgRoles reqUserId orgId =
   maybePermissionFailure (OrgPermission (OrgRolesEdit orgId)) $ do
     assertUserHasOrgPermission reqUserId orgId AuthZ.OrgAdmin
-    pure $ AuthZReceipt Nothing
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check whether the given user has administrative privileges,
 -- and has a recently created session. This adds additional protection to
@@ -693,20 +686,20 @@ checkAdminSudo Session.Session {sessionUserId, sessionCreated} = runExceptT $ do
 
 -- | Get an auth token for admin endpoints.
 -- Only use this after already checking administrative auth.
-adminOverride :: AuthZReceipt
-adminOverride = AuthZReceipt Nothing
+adminOverride :: AuthZ.AuthZReceipt
+adminOverride = AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Get an auth token for migrations.
-migrationOverride :: AuthZReceipt
-migrationOverride = AuthZReceipt Nothing
+migrationOverride :: AuthZ.AuthZReceipt
+migrationOverride = AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | An auth token for a user we just created.
 -- Only use this during a user creation flow.
-userCreationOverride :: AuthZReceipt
-userCreationOverride = AuthZReceipt Nothing
+userCreationOverride :: AuthZ.AuthZReceipt
+userCreationOverride = AuthZ.UnsafeAuthZReceipt Nothing
 
-backgroundJobAuthZ :: Background AuthZReceipt
-backgroundJobAuthZ = pure $ AuthZReceipt Nothing
+backgroundJobAuthZ :: Background AuthZ.AuthZReceipt
+backgroundJobAuthZ = pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 permissionGuard :: WebApp (Either AuthZFailure a) -> WebApp a
 permissionGuard m =
@@ -717,8 +710,8 @@ permissionGuard m =
 -- | Make an auth receipt cacheable.
 -- useful when we're re-using an existing auth receipt, but know that the current endpoint is
 -- cacheable for authed users even if the original isn't.
-makeCacheable :: AuthZReceipt -> AuthZReceipt
-makeCacheable (AuthZReceipt _) = AuthZReceipt (Just CachingToken)
+makeCacheable :: AuthZ.AuthZReceipt -> AuthZ.AuthZReceipt
+makeCacheable (AuthZ.UnsafeAuthZReceipt _) = AuthZ.UnsafeAuthZReceipt (Just AuthZ.CachingToken)
 
 -- | Helper for checking deprecated User Codebase permissions.
 -- It mostly serves as a marker of places in code that can be cleaned up once user codebase

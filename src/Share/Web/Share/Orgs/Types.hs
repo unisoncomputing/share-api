@@ -22,7 +22,8 @@ data CreateOrgRequest = CreateOrgRequest
   { name :: Text,
     handle :: OrgHandle,
     avatarUrl :: Maybe URIParam,
-    owner :: UserHandle
+    owner :: UserHandle,
+    email :: Text
   }
   deriving (Show, Eq)
 
@@ -32,4 +33,5 @@ instance FromJSON CreateOrgRequest where
     handle <- o .: "handle"
     avatarUrl <- o .:? "avatarUrl"
     owner <- o .: "owner"
+    email <- o .: "email"
     pure CreateOrgRequest {..}

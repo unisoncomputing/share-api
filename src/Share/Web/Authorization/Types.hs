@@ -26,6 +26,10 @@ module Share.Web.Authorization.Types
     RemoveRolesResponse (..),
     AddRolesRequest (..),
     RemoveRolesRequest (..),
+
+    -- * AuthZReceipt
+    AuthZReceipt (..),
+    CachingToken (..),
   )
 where
 
@@ -404,3 +408,10 @@ instance FromJSON RemoveRolesRequest where
   parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do
     roleAssignments <- o Aeson..: "role_assignments"
     pure RemoveRolesRequest {..}
+
+-- | Proof that an auth check has been run at some point.
+data AuthZReceipt = UnsafeAuthZReceipt {getCacheability :: Maybe CachingToken}
+
+-- | Requests should only be cached if they're for a public endpoint.
+-- Obtaining a caching token is proof that the resource was public and can be cached.
+data CachingToken = CachingToken
