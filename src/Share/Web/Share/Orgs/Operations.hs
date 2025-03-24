@@ -20,7 +20,7 @@ createOrg !authZReceipt name (OrgHandle handle) email avatarUrl owner = do
     queryExpect1Row
       [sql|
     INSERT INTO orgs (user_id) VALUES (#{orgUserId})
-      RETURNING (id, resource_id)
+      RETURNING id, resource_id
     |]
   RoleQ.assignUserRoleMembership authZReceipt owner orgResourceId AuthZ.RoleOrgOwner
   pure orgId

@@ -45,5 +45,5 @@ assignRoleMembership !_authZReceipt subjectId resourceId roleRef = do
     INSERT INTO role_memberships (subject_id, resource_id, role_id)
       SELECT #{subjectId}, #{resourceId}, r.id
       FROM roles r
-      WHERE r.ref = #{roleRef}
+      WHERE r.ref = #{roleRef}::role_ref
     |]
