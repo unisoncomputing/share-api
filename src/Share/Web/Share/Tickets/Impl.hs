@@ -81,12 +81,12 @@ listTicketsByProjectEndpoint ::
   Maybe TicketStatus ->
   WebApp (Paged ListTicketsCursor (ShareTicket UserDisplayInfo))
 listTicketsByProjectEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) handle projectSlug cursor mayLimit authorFilter statusFilter = do
-  (project@Project {projectId}, authorUserId) <- PG.runTransactionOrRespondError $ do
+  (Project {projectId}, authorUserId) <- PG.runTransactionOrRespondError $ do
     project <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     authorFilterID <- for authorFilter \(IDs.PrefixedID authorHandle) -> do
       User.user_id <$> Q.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     pure (project, authorFilterID)
-  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketListByProject mayCallerUserId project
+  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketListByProject mayCallerUserId projectId
   (nextCursor, tickets) <- PG.runTransaction do
     TicketsQ.listTicketsByProjectId projectId limit cursor authorUserId statusFilter
       >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)
@@ -103,10 +103,10 @@ createTicketEndpoint ::
   WebApp (ShareTicket UserDisplayInfo)
 createTicketEndpoint session userHandle projectSlug (CreateTicketRequest {title, description}) = do
   callerUserId <- AuthN.requireAuthenticatedUser session
-  project@Project {projectId} <- PG.runTransactionOrRespondError $ do
+  Project {projectId} <- PG.runTransactionOrRespondError $ do
     project <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     pure project
-  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketCreate callerUserId project
+  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketCreate callerUserId projectId
   PG.runTransactionOrRespondError $ do
     (_, ticketNumber) <- TicketsQ.createTicket callerUserId projectId title description Open
     TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (InternalServerError "create-ticket-error" internalServerError)
@@ -121,13 +121,13 @@ getTicketByNumberEndpoint ::
   IDs.TicketNumber ->
   WebApp (ShareTicket UserDisplayInfo)
 getTicketByNumberEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug ticketNumber = do
-  (project, shareTicket) <- PG.runTransactionOrRespondError $ do
-    project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+  (projectId, shareTicket) <- PG.runTransactionOrRespondError $ do
+    Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     shareTicket <-
       TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (EntityMissing (ErrorID "ticket:missing") "Ticket not found")
         >>= UsersQ.userDisplayInfoOf traversed
-    pure (project, shareTicket)
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketRead mayCallerUserId project
+    pure (projectId, shareTicket)
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketRead mayCallerUserId projectId
   pure shareTicket
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
@@ -162,14 +162,14 @@ getTicketTimelineEndpoint ::
   Maybe Limit ->
   WebApp (Paged TicketTimelineCursor (TicketTimelineEvent UserDisplayInfo))
 getTicketTimelineEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug ticketNumber mayCursor mayLimit = do
-  (project, shareTicketTimeline, nextCursor) <- PG.runTransactionOrRespondError $ do
-    project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "project:missing") "Project not found")
+  (projectId, shareTicketTimeline, nextCursor) <- PG.runTransactionOrRespondError $ do
+    Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "project:missing") "Project not found")
     (nextCursor, shareTicketTimeline) <- TicketsQ.getPagedShareTicketTimelineByProjectIdAndNumber projectId ticketNumber (unCursor <$> mayCursor) limit
     shareTicketsTimelineWithUserInfo <-
       shareTicketTimeline
         & UsersQ.userDisplayInfoOf (traverse . traverse)
-    pure (project, shareTicketsTimelineWithUserInfo, nextCursor)
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketRead mayCallerUserId project
+    pure (projectId, shareTicketsTimelineWithUserInfo, nextCursor)
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketRead mayCallerUserId projectId
   pure $ Paged {items = shareTicketTimeline, cursor = Cursor <$> nextCursor}
   where
     limit = fromMaybe 20 mayLimit
