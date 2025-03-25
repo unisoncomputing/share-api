@@ -22,6 +22,7 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -425,7 +426,7 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
              in Just $ Cursor (updatedAt, branchId)
 
     userIdForHandle handle = do
-      fmap user_id <$> PG.runTransaction (Q.userByHandle handle)
+      fmap user_id <$> PG.runTransaction (UserQ.userByHandle handle)
     limit = fromMaybe defaultLimit mayLimit
     defaultLimit = Limit 20
     defaultKindFilter = AllBranchKinds
@@ -477,7 +478,7 @@ listBranchesByUserEndpoint ::
   WebApp (Paged ListBranchesCursor ShareBranch)
 listBranchesByUserEndpoint (AuthN.MaybeAuthedUserID callerUserId) contributorHandle mayCursor mayProjectShortHand mayLimit mayNamePrefix = do
   branches <- PG.runTransactionOrRespondError $ do
-    contributorUser <- Q.userByHandle contributorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user-not-found") ("User not found: " <> IDs.toText @UserHandle contributorHandle))
+    contributorUser <- UserQ.userByHandle contributorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user-not-found") ("User not found: " <> IDs.toText @UserHandle contributorHandle))
     mayProjectId <- for mayProjectShortHand \projSH -> do
       Project.projectId <$> (Q.projectByShortHand projSH) `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @ProjectShortHand projSH))
     Q.listContributorBranchesOfUserAccessibleToCaller (user_id contributorUser) callerUserId limit mayCursor mayNamePrefix mayProjectId

@@ -26,7 +26,7 @@ import Servant
 import Share.Postgres.IDs (BranchHashId (..), CausalId (..))
 import Share.Prelude
 import Share.Web.App
-import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Authorization.Types qualified as AuthZ
 
 data Cached ct a
   = Cached BS.ByteString

@@ -6,22 +6,32 @@ import Servant
 import Servant.Server.Generic
 import Share.IDs
 import Share.Postgres qualified as PG
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
+import Share.User (User (..))
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Authorization.Types
 import Share.Web.Errors
 import Share.Web.Share.Orgs.API as API
+import Share.Web.Share.Orgs.Operations qualified as OrgOps
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
-import Share.Web.Share.Orgs.Types (Org (..))
+import Share.Web.Share.Orgs.Types (CreateOrgRequest (..), Org (..))
 import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
 import Share.Web.Share.Roles.Queries (displaySubjectsOf)
+import Share.Web.Share.Types
 
 server :: ServerT API.API WebApp
-server orgHandle =
-  API.Routes
-    { API.roles = rolesServer orgHandle
-    }
+server =
+  let orgResourceServer orgHandle = API.ResourceRoutes {API.roles = rolesServer orgHandle}
+   in orgCreateEndpoint :<|> orgResourceServer
+
+orgCreateEndpoint :: UserId -> CreateOrgRequest -> WebApp OrgDisplayInfo
+orgCreateEndpoint callerUserId (CreateOrgRequest {name, handle, avatarUrl, email, owner = ownerHandle}) = do
+  User {user_id = ownerUserId} <- PG.runTransaction (UserQ.userByHandle ownerHandle) `whenNothingM` respondError (EntityMissing (ErrorID "missing-user") "Owner not found")
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkCreateOrg callerUserId ownerUserId
+  orgId <- PG.runTransactionOrRespondError $ OrgOps.createOrg authZReceipt name handle email avatarUrl ownerUserId
+  PG.runTransaction $ OrgQ.orgDisplayInfoOf id orgId
 
 rolesServer :: UserHandle -> API.OrgRolesRoutes (AsServerT WebApp)
 rolesServer orgHandle =

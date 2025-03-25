@@ -25,6 +25,7 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.Release (Release (..), releaseCausals_, releaseUsers_)
@@ -285,7 +286,7 @@ getProjectReleaseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proj
       Q.releaseByProjectReleaseShortHand projectReleaseShortHand
         `whenNothingM` throwError (EntityMissing (ErrorID "missing-project-release") "Release could not be found")
     releaseWithHandle <- forOf releaseUsers_ release \uid -> do
-      User.handle <$> Q.userByUserId uid `whenNothingM` throwError (EntityMissing (ErrorID "missing-user") "User could not be found")
+      User.handle <$> UserQ.userByUserId uid `whenNothingM` throwError (EntityMissing (ErrorID "missing-user") "User could not be found")
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandle
     pure releaseWithCausalHashes
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReleaseGet callerUserId release
@@ -436,9 +437,9 @@ createRelease session userHandle projectSlug CreateReleaseRequest {releaseVersio
   -- Separate transaction to ensure squashing and name lookups make progress even on failure.
   Codebase.runCodebaseTransactionOrRespondError codebase $ do
     release <- Q.createRelease nlReceipt projectId releaseVersion squashedCausalId unsquashedCausalId callerUserId
-    releaseWithHandles <- forOf releaseUsers_ release \userId -> (fmap User.handle <$> Q.userByUserId userId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
+    releaseWithHandles <- forOf releaseUsers_ release \userId -> (fmap User.handle <$> UserQ.userByUserId userId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandles
-    User {handle = projectOwnerHandle} <- (Q.userByUserId ownerUserId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
+    User {handle = projectOwnerHandle} <- (UserQ.userByUserId ownerUserId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
     let projectShortHand =
           ProjectShortHand
             { userHandle = projectOwnerHandle,

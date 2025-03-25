@@ -472,3 +472,6 @@ CSV HEADER;
 
 INSERT INTO public.cloud_subscribers(user_id, is_active, tier_name) VALUES
   ('d32f4ddf-2423-4f10-a4de-465939951354', true, 'Starter');
+
+INSERT INTO superadmins(user_id) VALUES
+  ('fe8921ca-aee7-40a2-8020-241ca78f2a5c');

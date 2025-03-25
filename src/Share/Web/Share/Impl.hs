@@ -24,6 +24,7 @@ import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DSQ
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -282,7 +283,7 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
 getUserProfileEndpoint :: UserHandle -> WebApp DescribeUserProfile
 getUserProfileEndpoint userHandle = do
   UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <- PG.runTransactionOrRespondError do
-    User {user_id} <- Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    User {user_id} <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
     UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
   pure $
     DescribeUserProfile
@@ -299,7 +300,7 @@ getUserProfileEndpoint userHandle = do
 updateUserEndpoint :: UserHandle -> UserId -> UpdateUserRequest -> WebApp DescribeUserProfile
 updateUserEndpoint userHandle callerUserId (UpdateUserRequest {name, avatarUrl, bio, website, location, twitterHandle, pronouns}) = do
   User {user_id = toUpdateUserId} <- PG.runTransactionOrRespondError $ do
-    Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkUserUpdate callerUserId toUpdateUserId
   UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <- PG.runTransactionOrRespondError $ do
     UsersQ.updateUser toUpdateUserId name avatarUrl bio website location twitterHandle pronouns
@@ -350,7 +351,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
       & Text.splitOn "/"
       & \case
         (userQuery : projectQueryText : _rest) -> do
-          mayUserId <- PG.runTransaction $ fmap User.user_id <$> Q.userByHandle (UserHandle userQuery)
+          mayUserId <- PG.runTransaction $ fmap User.user_id <$> UserQ.userByHandle (UserHandle userQuery)
           pure (Query query, (mayUserId, Query projectQueryText))
         [projectOrUserQuery] -> pure (Query projectOrUserQuery, (Nothing, Query projectOrUserQuery))
         -- This is impossible
@@ -359,7 +360,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
   -- of 5 users (who match the query as a prefix), then return the rest of the results from
   -- projects.
   (users, projects) <- PG.runTransaction $ do
-    users <- Q.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+    users <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
     projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
     pure (users, projects)
   let userResults =
@@ -425,7 +426,7 @@ resolveProjectAndReleaseFilter projectFilter releaseFilter = do
 resolveUserFilter :: Maybe UserHandle -> MaybeT WebApp DDQ.DefnNameSearchFilter
 resolveUserFilter userFilter = do
   userHandle <- hoistMaybe userFilter
-  User {user_id} <- lift $ PG.runTransactionOrRespondError $ Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+  User {user_id} <- lift $ PG.runTransactionOrRespondError $ UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
   pure $ DDQ.UserFilter user_id
 
 searchDefinitionsEndpoint ::

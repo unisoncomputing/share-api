@@ -20,7 +20,7 @@ import Share.OAuth.Session (Session)
 import Share.OAuth.Session qualified as Session
 import Share.OAuth.Types (AccessToken (..))
 import Share.Postgres qualified as PG
-import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.User
 import Share.Utils.Deployment qualified as Deployment
@@ -38,7 +38,7 @@ localLoginEndpoint ::
   UserHandle -> WebApp (Headers '[Header "Set-Cookie" SetCookie] Text)
 localLoginEndpoint userHandle = do
   (User {user_id}) <-
-    PG.runTransaction (Q.userByHandle userHandle) >>= \case
+    PG.runTransaction (UserQ.userByHandle userHandle) >>= \case
       Nothing -> Errors.respondError $ Errors.EntityMissing (ErrorID "no-user-for-handle") "No user for this handle"
       Just u -> pure u
 
@@ -66,7 +66,7 @@ localAccessTokenEndpoint ::
   WebApp Text
 localAccessTokenEndpoint userHandle = do
   (User {user_id}) <-
-    PG.runTransaction (Q.userByHandle userHandle) >>= \case
+    PG.runTransaction (UserQ.userByHandle userHandle) >>= \case
       Nothing -> Errors.respondError $ Errors.EntityMissing (ErrorID "no-user-for-handle") "No user for this handle"
       Just u -> pure u
   sessionID <- randomIO

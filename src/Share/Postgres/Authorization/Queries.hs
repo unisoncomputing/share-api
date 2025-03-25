@@ -7,7 +7,7 @@
 
 module Share.Postgres.Authorization.Queries
   ( checkIsUserMaintainer,
-    isUnisonEmployee,
+    isSuperadmin,
     isOrgMember,
     causalIsInHistoryOf,
     userHasProjectPermission,
@@ -42,14 +42,11 @@ checkIsUserMaintainer requestingUserId codebaseOwnerUserId
         )
       |]
 
-isUnisonEmployee :: UserId -> PG.Transaction e Bool
-isUnisonEmployee uid = do
+isSuperadmin :: UserId -> PG.Transaction e Bool
+isSuperadmin uid = do
   PG.queryExpect1Col
     [PG.sql|
-        SELECT EXISTS (SELECT FROM org_members org
-                      JOIN users AS org_user ON org.organization_user_id = org_user.id
-                      WHERE org.member_user_id = #{uid}
-                            AND org_user.handle = 'unison')
+        SELECT EXISTS (SELECT FROM superadmins s WHERE s.user_id = #{uid})
       |]
 
 isOrgMember :: UserId -> UserId -> PG.Transaction e Bool

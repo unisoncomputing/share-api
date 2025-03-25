@@ -32,6 +32,7 @@ import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.Queries qualified as BranchQ
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project
@@ -133,7 +134,7 @@ listContributionsByProjectEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) han
   (Project {projectId}, authorUserId) <- PG.runTransactionOrRespondError $ do
     project <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     authorFilterID <- for authorFilter \(IDs.PrefixedID authorHandle) -> do
-      User.user_id <$> Q.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
+      User.user_id <$> UserQ.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     pure (project, authorFilterID)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionListByProject mayCallerUserId projectId
   (nextCursor, contributions) <- PG.runTransaction $ do
@@ -243,7 +244,7 @@ listContributionsByUserEndpoint ::
   WebApp (Paged ListContributionsCursor (ShareContribution UserDisplayInfo))
 listContributionsByUserEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle mayCursor mayLimit statusFilter kindFilter = do
   (contributions, nextCursor) <- PG.runTransactionOrRespondError $ do
-    user <- Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
+    user <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     (nextCursor, contributions) <-
       ContributionsQ.listContributionsByUserId mayCallerUserId (User.user_id user) limit mayCursor statusFilter kindFilter
         >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)

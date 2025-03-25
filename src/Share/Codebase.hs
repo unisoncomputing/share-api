@@ -98,8 +98,8 @@ import Share.Utils.Caching qualified as Caching
 import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
-import Share.Web.Authorization (AuthZReceipt)
-import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Authorization.Types (AuthZReceipt)
+import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors
 import U.Codebase.Branch qualified as V2
 import U.Codebase.Causal qualified as Causal
