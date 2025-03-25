@@ -17,6 +17,7 @@ import Share.JWT qualified as JWT
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
+import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.IDs (CausalHash)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as PQ
@@ -46,6 +47,9 @@ import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.Orgs.Queries qualified as OrgQ
+import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
 import Unison.Codebase.Path qualified as Path
@@ -86,13 +90,14 @@ userServer :: ServerT Share.UserAPI WebApp
 userServer session handle =
   hoistServerWithContext (Proxy @Share.UserResourceAPI) ctxType addTags $
     ( getUserReadmeEndpoint session handle
-        :<|> getUserProfileEndpoint handle
+        :<|> getUserProfileEndpoint mayCallerId handle
         :<|> updateUserEndpoint handle
         :<|> Projects.projectServer session handle
         :<|> Branches.listBranchesByUserEndpoint session handle
         :<|> Contributions.listContributionsByUserEndpoint session handle
     )
   where
+    mayCallerId = sessionUserId <$> session
     ctxType = Proxy @(AuthCheckCtx .++ '[Cookies.CookieSettings, JWT.JWTSettings])
     addTags :: forall x. WebApp x -> WebApp x
     addTags m = do
@@ -280,11 +285,18 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
   where
     cacheParams = [tShow path]
 
-getUserProfileEndpoint :: UserHandle -> WebApp DescribeUserProfile
-getUserProfileEndpoint userHandle = do
-  UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <- PG.runTransactionOrRespondError do
+getUserProfileEndpoint :: Maybe UserId -> UserHandle -> WebApp DescribeUserProfile
+getUserProfileEndpoint callerUserId userHandle = do
+  (UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns}, kind, permissions) <- PG.runTransactionOrRespondError do
     User {user_id} <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-    UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    profile <- UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    (kind, permissions) <-
+      OrgQ.orgByUserId user_id >>= \case
+        Just (Org {orgId}) -> do
+          permissionsWithinOrg <- AuthZQ.permissionsForOrg callerUserId orgId
+          pure (OrgKind, permissionsWithinOrg)
+        Nothing -> pure (UserKind, mempty)
+    pure (profile, kind, permissions)
   pure $
     DescribeUserProfile
       { handle = userHandle,
@@ -294,7 +306,9 @@ getUserProfileEndpoint userHandle = do
         website = website,
         location = location,
         twitterHandle = twitterHandle,
-        pronouns = pronouns
+        pronouns = pronouns,
+        kind,
+        permissions
       }
 
 updateUserEndpoint :: UserHandle -> UserId -> UpdateUserRequest -> WebApp DescribeUserProfile
@@ -302,20 +316,9 @@ updateUserEndpoint userHandle callerUserId (UpdateUserRequest {name, avatarUrl, 
   User {user_id = toUpdateUserId} <- PG.runTransactionOrRespondError $ do
     UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkUserUpdate callerUserId toUpdateUserId
-  UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <- PG.runTransactionOrRespondError $ do
+  PG.runTransaction $ do
     UsersQ.updateUser toUpdateUserId name avatarUrl bio website location twitterHandle pronouns
-    UsersQ.userProfileById toUpdateUserId `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-  pure $
-    DescribeUserProfile
-      { handle = userHandle,
-        name = user_name,
-        avatarUrl = avatar_url,
-        bio = bio,
-        website = website,
-        location = location,
-        twitterHandle = twitterHandle,
-        pronouns = pronouns
-      }
+  getUserProfileEndpoint (Just callerUserId) userHandle
 
 -- | Gets the readme for a user.
 -- This was separated from the user profile endpoint because fetching the readme from the

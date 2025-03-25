@@ -13,13 +13,13 @@ import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Authorization.Types
 import Share.Web.Errors
+import Share.Web.Share.DisplayInfo (OrgDisplayInfo)
 import Share.Web.Share.Orgs.API as API
 import Share.Web.Share.Orgs.Operations qualified as OrgOps
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (CreateOrgRequest (..), Org (..))
 import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
 import Share.Web.Share.Roles.Queries (displaySubjectsOf)
-import Share.Web.Share.Types
 
 server :: ServerT API.API WebApp
 server =
