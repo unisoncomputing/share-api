@@ -64,7 +64,7 @@ data DescribeUserProfile = DescribeUserProfile
   deriving (Show)
 
 instance ToJSON DescribeUserProfile where
-  toJSON DescribeUserProfile {..} =
+  toJSON (DescribeUserProfile handle name avatarUrl bio website location twitterHandle pronouns kind permissions) =
     Aeson.object
       [ "handle" .= fromId @UserHandle @Text handle,
         "name" .= name,
@@ -73,7 +73,9 @@ instance ToJSON DescribeUserProfile where
         "website" .= website,
         "location" .= location,
         "twitterHandle" .= twitterHandle,
-        "pronouns" .= pronouns
+        "pronouns" .= pronouns,
+        "kind" .= kind,
+        "permissions" Aeson..= permissions
       ]
 
 data ReadmeResponse = ReadmeResponse

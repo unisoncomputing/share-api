@@ -23,3 +23,6 @@ fetch "$admin_user" POST org-create-by-admin '/orgs' '{
   "owner": "transcripts",
   "email": "wile.e.coyote@example.com"
 }'
+
+# Permissions within an org should show in the get-user endpoint
+fetch "$transcript_user" GET org-get-profile '/users/acme' 
