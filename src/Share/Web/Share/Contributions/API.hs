@@ -14,7 +14,7 @@ import Share.Utils.Servant (RequiredQueryParam)
 import Share.Web.Share.Comments.API qualified as Comments
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse, ShareTermDiffResponse, ShareTypeDiffResponse)
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo (UserDisplayInfo)
 import Unison.Name (Name)
 
 type ContributionsByUserAPI = ListContributionsByUserEndpoint

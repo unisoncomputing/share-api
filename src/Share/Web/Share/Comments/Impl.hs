@@ -21,7 +21,7 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Comments.Types
-import Share.Web.Share.Types
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 
 createCommentEndpoint ::
   Maybe Session ->

@@ -8,8 +8,8 @@ import Servant
 import Share.IDs
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Web.Authorization.Types (AddRolesRequest, ListRolesResponse, RemoveRolesRequest)
+import Share.Web.Share.DisplayInfo (OrgDisplayInfo)
 import Share.Web.Share.Orgs.Types
-import Share.Web.Share.Types (OrgDisplayInfo)
 
 type API =
   CreateOrgEndpoint

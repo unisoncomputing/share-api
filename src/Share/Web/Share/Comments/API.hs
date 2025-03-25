@@ -3,11 +3,11 @@
 
 module Share.Web.Share.Comments.API (CommentsServer) where
 
+import Servant
 import Share.IDs
 import Share.Web.Share.Comments
 import Share.Web.Share.Comments.Types
-import Share.Web.Share.Types (UserDisplayInfo)
-import Servant
+import Share.Web.Share.DisplayInfo (UserDisplayInfo)
 
 type CommentResourceServer = UpdateComment :<|> DeleteComment
 

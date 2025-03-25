@@ -48,7 +48,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.API (AtKey (..))
-import Share.Web.Share.Types (OrgDisplayInfo, TeamDisplayInfo, UserDisplayInfo)
+import Share.Web.Share.DisplayInfo
 
 data SubjectKind = UserSubjectKind | OrgSubjectKind | TeamSubjectKind
   deriving (Show)
