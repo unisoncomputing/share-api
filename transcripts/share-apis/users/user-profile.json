@@ -3,8 +3,10 @@
     "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
     "bio": "A transcript!",
     "handle": "transcripts",
+    "kind": "user",
     "location": "Unison Share",
     "name": "Transcript User",
+    "permissions": [],
     "pronouns": "they/them",
     "twitterHandle": "@unisonTranscript",
     "website": "https://unison-lang.org"

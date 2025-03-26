@@ -18,8 +18,8 @@ import Share.Postgres
 import Share.Prelude
 import Share.Utils.URI
 import Share.Web.Authorization.Types
+import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
 import Share.Web.Share.Orgs.Types (Org)
-import Share.Web.Share.Types (OrgDisplayInfo (..), UserDisplayInfo (..))
 
 orgByUserId :: UserId -> Transaction e (Maybe Org)
 orgByUserId orgUserId = do

@@ -15,6 +15,7 @@ module Share.Postgres.Authorization.Queries
     listSubjectsWithResourcePermission,
     subjectIdsForAuthSubjectsOf,
     permissionsForProject,
+    permissionsForOrg,
   )
 where
 
@@ -167,5 +168,17 @@ permissionsForProject mayUserId projectId = do
           WHERE r.ref = 'project_public_access'
                 AND (SELECT NOT p.private FROM projects p WHERE p.id = #{projectId})
         )
+      |]
+    <&> Set.fromList
+
+permissionsForOrg :: Maybe UserId -> OrgId -> PG.Transaction e (Set RolePermission)
+permissionsForOrg mayUserId orgId = do
+  PG.queryListCol @RolePermission
+    [PG.sql|
+      SELECT permission
+      FROM user_resource_permissions urp
+      JOIN orgs org ON org.resource_id = urp.resource_id
+      WHERE urp.user_id = #{mayUserId}
+            AND org.id = #{orgId}
       |]
     <&> Set.fromList

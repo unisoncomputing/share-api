@@ -1,0 +1,33 @@
+{
+  "body": {
+    "avatarUrl": "https://example.com/anvil.png",
+    "bio": null,
+    "handle": "acme",
+    "kind": "org",
+    "location": null,
+    "name": "ACME",
+    "permissions": [
+      "project:view",
+      "project:manage",
+      "project:contribute",
+      "project:maintain",
+      "project:delete",
+      "org:view",
+      "org:manage",
+      "org:admin",
+      "org:delete",
+      "org:change_owner",
+      "org:create_project",
+      "team:view",
+      "team:manage"
+    ],
+    "pronouns": null,
+    "twitterHandle": null,
+    "website": null
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

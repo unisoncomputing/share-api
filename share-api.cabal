@@ -136,6 +136,7 @@ library
       Share.Web.Share.DefinitionSearch
       Share.Web.Share.Diffs.Impl
       Share.Web.Share.Diffs.Types
+      Share.Web.Share.DisplayInfo
       Share.Web.Share.Impl
       Share.Web.Share.Orgs.API
       Share.Web.Share.Orgs.Impl

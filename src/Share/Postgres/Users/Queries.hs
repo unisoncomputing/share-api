@@ -45,7 +45,7 @@ import Share.Utils.Postgres
 import Share.Utils.URI (URIParam (..))
 import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..), ToServerError (..))
-import Share.Web.Share.Types
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 
 -- | Efficiently resolve User Display Info for UserIds within a structure.
 userDisplayInfoOf :: (PG.QueryA m) => Traversal s t UserId UserDisplayInfo -> s -> m t

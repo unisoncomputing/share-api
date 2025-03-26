@@ -14,7 +14,7 @@ import Share.Prelude
 import Share.Ticket (TicketStatus)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Web.Share.Comments
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 
 data ShareTicket user = ShareTicket
   { ticketId :: TicketId,
@@ -70,7 +70,7 @@ data StatusChangeEvent user = StatusChangeEvent
   }
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-instance PG.DecodeField user => PG.DecodeRow (StatusChangeEvent user) where
+instance (PG.DecodeField user) => PG.DecodeRow (StatusChangeEvent user) where
   decodeRow = do
     oldStatus <- PG.decodeField
     newStatus <- PG.decodeField
@@ -88,7 +88,7 @@ eventTimestamp = \case
   TicketTimelineStatusChange StatusChangeEvent {timestamp} -> timestamp
   TicketTimelineComment commentEvent -> commentEventTimestamp commentEvent
 
-instance ToJSON user => ToJSON (TicketTimelineEvent user) where
+instance (ToJSON user) => ToJSON (TicketTimelineEvent user) where
   toJSON = \case
     TicketTimelineStatusChange StatusChangeEvent {..} ->
       object

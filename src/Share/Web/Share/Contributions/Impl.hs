@@ -53,7 +53,7 @@ import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 import Unison.Name (Name)
 import Unison.Server.Types
 import Unison.Syntax.Name qualified as Name

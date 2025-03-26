@@ -5,7 +5,7 @@ import Share.IDs
 import Share.Postgres
 import Share.Prelude
 import Share.Utils.URI (URIParam (..))
-import Share.Web.Share.Types
+import Share.Web.Share.DisplayInfo (TeamDisplayInfo (..))
 
 -- | Efficiently resolve Team Display Info for TeamIds within a structure.
 teamDisplayInfoOf :: (QueryA m) => Traversal s t TeamId TeamDisplayInfo -> s -> m t

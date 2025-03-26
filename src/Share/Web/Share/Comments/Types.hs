@@ -9,7 +9,7 @@ module Share.Web.Share.Comments.Types where
 import Data.Aeson
 import Share.Prelude
 import Share.Web.Share.Comments (CommentEvent (..), RevisionNumber)
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo (UserDisplayInfo)
 
 data CreateCommentRequest = CreateCommentRequest
   { content :: Text
