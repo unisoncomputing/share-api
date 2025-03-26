@@ -86,6 +86,7 @@ dependencies:
 - hasql
 - hasql-pool
 - hasql-interpolate
+- hasql-listen-notify
 - prometheus-client
 - prometheus-metrics-ghc
 - random

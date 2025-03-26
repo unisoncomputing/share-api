@@ -67,6 +67,7 @@ library
       Share.Postgres.NameLookups.Queries
       Share.Postgres.NameLookups.Types
       Share.Postgres.NamespaceDiffs
+      Share.Postgres.Notifications
       Share.Postgres.Ops
       Share.Postgres.Orphans
       Share.Postgres.Patches.Queries
@@ -241,6 +242,7 @@ library
     , generic-lens
     , hasql
     , hasql-interpolate
+    , hasql-listen-notify
     , hasql-pool
     , hedis
     , here
@@ -389,6 +391,7 @@ executable share-api
     , generic-lens
     , hasql
     , hasql-interpolate
+    , hasql-listen-notify
     , hasql-pool
     , hedis
     , here
