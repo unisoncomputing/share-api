@@ -22,11 +22,11 @@ CREATE TYPE notification_topic AS ENUM (
 
 CREATE TABLE notification_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    occurred_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
     topic notification_topic NOT NULL,
     -- The effective scope of this event. The user_id of the relevant user or org.
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scope_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     data JSONB NOT NULL
 );
 
@@ -50,7 +50,19 @@ CREATE TABLE notification_subscriptions (
     filter JSONB NOT NULL
 );
 
+CREATE TRIGGER notification_subscriptions_updated_at
+  BEFORE UPDATE ON notification_subscriptions
+  FOR EACH ROW
+  EXECUTE PROCEDURE moddatetime (updated_at);
+
 CREATE INDEX notification_subscriptions_topic ON notification_subscriptions(topic, scope_user_id);
+
+-- Which notifications were triggered by which subscription for each event.
+CREATE TABLE notification_providence_log (
+  event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
+  subscription_id UUID REFERENCES notification_subscriptions(id) ON DELETE CASCADE,
+  PRIMARY KEY (event_id, subscription_id)
+);
 
 CREATE TABLE notification_webhooks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -64,6 +76,11 @@ CREATE TABLE notification_webhooks (
     url TEXT NOT NULL CHECK (url <> '')
 );
 
+CREATE TRIGGER notification_webhooks_updated_at
+  BEFORE UPDATE ON notification_webhooks
+  FOR EACH ROW
+  EXECUTE PROCEDURE moddatetime (updated_at);
+
 CREATE TABLE notification_by_webhook (
   subscription_id UUID REFERENCES notification_subscriptions(id) ON DELETE CASCADE,
   webhook_id UUID REFERENCES notification_webhooks(id) ON DELETE CASCADE,
@@ -72,14 +89,20 @@ CREATE TABLE notification_by_webhook (
 
 CREATE TABLE notification_emails (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     -- Who owns (and can edit) this delivery method
     subscriber_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
     -- The email address to send the email to.
-    email TEXT NOT NULL CHECK (email <> '')
+    email TEXT NOT NULL CHECK (email <> ''),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TRIGGER notification_emails_updated_at
+  BEFORE UPDATE ON notification_emails
+  FOR EACH ROW
+  EXECUTE PROCEDURE moddatetime (updated_at);
 
 CREATE TABLE notification_by_email (
   subscription_id UUID REFERENCES notification_subscriptions(id) ON DELETE CASCADE,
@@ -115,3 +138,79 @@ CREATE TABLE notification_email_queue (
 -- Allow efficiently grabbing the oldest undelivered emails we're still trying to deliver.
 CREATE INDEX notification_email_queue_undelivered ON notification_email_queue(created_at ASC)
   WHERE NOT delivered AND delivery_attempts_remaining > 0;
+
+CREATE TYPE notification_status AS ENUM (
+    'unread',
+    'read',
+    'archived'
+);
+
+CREATE TABLE notification_hub_entries (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status notification_status NOT NULL DEFAULT 'unread',
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+)
+
+CREATE UNIQUE INDEX notification_hub_entries_event_user ON notification_hub_entries(event_id, user_id);
+
+CREATE TRIGGER notification_hub_entries_updated_at
+  BEFORE UPDATE ON notification_hub_entries
+  FOR EACH ROW
+  EXECUTE PROCEDURE moddatetime (updated_at);
+
+-- Add a trigger to automatically add to notification queues for relevant subscriptions.
+CREATE FUNCTION trigger_notification_event_subscriptions()
+RETURNS TRIGGER AS $$
+DECLARE
+  the_subscription_id UUID;
+  the_event_id UUID;
+  the_subscriber UUID;
+BEGIN
+  SELECT NEW.id INTO the_event_id;
+  FOR the_subscription_id, the_subscriber IN
+    (SELECT ns.id FROM notification_subscriptions ns
+      WHERE ns.scope_user_id = NEW.scope_user_id
+        AND ns.topic = NEW.topic
+        AND NEW.data @> ns.filter
+    )
+  LOOP
+    -- Log that this event triggered this subscription.
+    INSERT INTO notification_providence_log (event_id, subscription_id)
+      VALUES (the_event_id, the_subscription_id);
+
+    -- Add to the relevant queues.
+    -- Each delivery method _may_ be triggered by multiple subscriptions,
+    -- we need ON CONFLICT DO NOTHING.
+    INSERT INTO notification_webhook_queue (event_id, webhook_id)
+      SELECT the_event_id, nbw.webhook_id
+      FROM notification_by_webhook nbw
+      WHERE nbw.subscription_id = the_subscription_id
+      ON CONFLICT DO NOTHING;
+
+    INSERT INTO notification_email_queue (event_id, email_id)
+      SELECT the_event_id AS event_id, nbe.email_id
+      FROM notification_by_email nbe
+      WHERE nbe.subscription_id = the_subscription_id
+      ON CONFLICT DO NOTHING;
+
+    -- Also add the notification to the hub.
+    -- It's possible it was already added by another subscription for this user,
+    -- in which case we just carry on.
+    INSERT INTO notification_hub_entries (event_id, user_id)
+      VALUES (the_event_id, the_subscriber)
+      ON CONFLICT DO NOTHING;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER notification_event_subscriptions
+  AFTER INSERT ON notification_events
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_notification_event_subscriptions();
+
