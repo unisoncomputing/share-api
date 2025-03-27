@@ -36,6 +36,7 @@ import Share.Postgres.Queries qualified as PG
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
+import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Project (Project (..))
 import Share.Release (Release (..))
 import Share.Utils.Logging qualified as Logging
@@ -52,7 +53,6 @@ import Unison.Name qualified as Name
 import Unison.NameSegment (libSegment)
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
-import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Reference (TypeReference)
 import Unison.Reference qualified as Reference
 import Unison.Server.Share.DefinitionSummary qualified as Summary
@@ -124,10 +124,10 @@ syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
     let codebaseLoc = Codebase.codebaseLocationForProjectRelease ownerUserId
     let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
     Codebase.codebaseMToTransaction codebase $ do
-      termsCursor <- lift $ NLOps.termsWithinNamespace nlReceipt bhId
+      termsCursor <- lift $ NLOps.projectTermsWithinRoot nlReceipt bhId
 
       termErrs <- syncTerms namesPerspective bhId projectId releaseId termsCursor
-      typesCursor <- lift $ NLOps.typesWithinNamespace nlReceipt bhId
+      typesCursor <- lift $ NLOps.projectTypesWithinRoot nlReceipt bhId
       typeErrs <- syncTypes namesPerspective projectId releaseId typesCursor
       pure (termErrs <> typeErrs)
 

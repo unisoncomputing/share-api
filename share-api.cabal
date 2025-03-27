@@ -46,6 +46,7 @@ library
       Share.IDs
       Share.Metrics
       Share.Monitoring
+      Share.Names.Postgres
       Share.NamespaceDiffs
       Share.Postgres
       Share.Postgres.Admin
@@ -85,6 +86,7 @@ library
       Share.Postgres.Users.Queries
       Share.Prelude
       Share.Prelude.Orphans
+      Share.PrettyPrintEnvDecl.Postgres
       Share.Project
       Share.Redis
       Share.Release
@@ -170,7 +172,6 @@ library
       Share.Web.UCM.SyncV2.Impl
       Share.Web.UCM.SyncV2.Queries
       Share.Web.UCM.SyncV2.Types
-      Unison.PrettyPrintEnvDecl.Postgres
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
       Unison.Server.Share.DefinitionSummary
@@ -295,6 +296,7 @@ library
     , unison-core1
     , unison-hash
     , unison-hashing-v2
+    , unison-merge
     , unison-parser-typechecker
     , unison-prelude
     , unison-pretty-printer
@@ -445,6 +447,7 @@ executable share-api
     , unison-core1
     , unison-hash
     , unison-hashing-v2
+    , unison-merge
     , unison-parser-typechecker
     , unison-prelude
     , unison-pretty-printer
