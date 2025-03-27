@@ -95,6 +95,7 @@ userServer session handle =
         :<|> Projects.projectServer session handle
         :<|> Branches.listBranchesByUserEndpoint session handle
         :<|> Contributions.listContributionsByUserEndpoint session handle
+        :<|> Notifications.server session handle
     )
   where
     mayCallerId = sessionUserId <$> session
