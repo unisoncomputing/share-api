@@ -50,7 +50,7 @@ CREATE TABLE notification_subscriptions (
     filter JSONB NOT NULL
 );
 
-CREATE INDEX notification_subscriptions_topic ON notification_subscriptions(topic, user_id_scope);
+CREATE INDEX notification_subscriptions_topic ON notification_subscriptions(topic, scope_user_id);
 
 CREATE TABLE notification_webhooks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -83,7 +83,7 @@ CREATE TABLE notification_emails (
 
 CREATE TABLE notification_by_email (
   subscription_id UUID REFERENCES notification_subscriptions(id) ON DELETE CASCADE,
-  email_id UUID REFERENCES notification_email_delivery(id) ON DELETE CASCADE,
+  email_id UUID REFERENCES notification_emails(id) ON DELETE CASCADE,
   PRIMARY KEY (subscription_id, email_id)
 );
 
@@ -98,15 +98,14 @@ CREATE TABLE notification_webhook_queue (
 );
 
 -- Allow efficiently grabbing the oldest undelivered webhooks we're still trying to deliver.
-CREATE INDEX notification_webhook_queue_delivered
-  WHERE delivered = FALSE AND delivery_attempts_remaining > 0
-  ORDER BY created_at ASC;
+CREATE INDEX notification_webhook_queue_undelivered ON notification_webhook_queue(created_at ASC)
+  WHERE NOT delivered AND delivery_attempts_remaining > 0;
 
 
 CREATE TABLE notification_email_queue (
   event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
   email_id UUID REFERENCES notification_emails(id) ON DELETE CASCADE,
-  delivery_attempts INTEGER NOT NULL DEFAULT 3,
+  delivery_attempts_remaining INTEGER NOT NULL DEFAULT 3,
   delivered BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
@@ -114,7 +113,5 @@ CREATE TABLE notification_email_queue (
 );
 
 -- Allow efficiently grabbing the oldest undelivered emails we're still trying to deliver.
-CREATE INDEX notification_email_queue_delivered
-  WHERE delivered = FALSE AND delivery_attempts_remaining > 0
-  ORDER BY created_at ASC;
-
+CREATE INDEX notification_email_queue_undelivered ON notification_email_queue(created_at ASC)
+  WHERE NOT delivered AND delivery_attempts_remaining > 0;
