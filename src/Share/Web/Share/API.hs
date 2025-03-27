@@ -5,6 +5,7 @@ module Share.Web.Share.API where
 
 import Servant
 import Share.IDs
+import Share.Notifications.API qualified as Notifications
 import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
 import Share.Prelude (NonEmpty)
 import Share.Utils.API
@@ -29,6 +30,7 @@ type UserResourceAPI =
     :<|> ("projects" :> ProjectsAPI)
     :<|> ("branches" :> UserBranchesAPI)
     :<|> ("contributions" :> ContributionsByUserAPI)
+    :<|> ("notifications" :> Notifications.API)
 
 -- | PATCH /users/:user_handle
 -- Update the user's profile

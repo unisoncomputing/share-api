@@ -47,7 +47,8 @@ library
       Share.Metrics
       Share.Monitoring
       Share.NamespaceDiffs
-      Share.Notifications
+      Share.Notifications.API
+      Share.Notifications.Impl
       Share.Notifications.Queries
       Share.Notifications.Types
       Share.Postgres

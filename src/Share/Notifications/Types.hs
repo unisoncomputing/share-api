@@ -7,12 +7,14 @@ module Share.Notifications.Types
     Subscription (..),
     ProjectBranchData (..),
     ProjectContributionData (..),
+    NotificationHubEntry (..),
     eventTopic,
   )
 where
 
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Time (UTCTime)
 import Hasql.Decoders qualified as HasqlDecoders
 import Hasql.Encoders qualified as HasqlEncoders
 import Share.IDs
@@ -32,6 +34,35 @@ instance PG.DecodeValue NotificationTopic where
   decodeValue = HasqlDecoders.enum \case
     "project:branch:updated" -> Just ProjectBranchUpdated
     "project:contribution:created" -> Just ProjectContributionCreated
+    _ -> Nothing
+
+instance Aeson.ToJSON NotificationTopic where
+  toJSON = \case
+    ProjectBranchUpdated -> "project:branch:updated"
+    ProjectContributionCreated -> "project:contribution:created"
+
+data NotificationStatus
+  = Unread
+  | Read
+  | Archived
+
+instance Aeson.ToJSON NotificationStatus where
+  toJSON = \case
+    Unread -> "unread"
+    Read -> "read"
+    Archived -> "archived"
+
+instance PG.EncodeValue NotificationStatus where
+  encodeValue = HasqlEncoders.enum \case
+    Unread -> "unread"
+    Read -> "read"
+    Archived -> "archived"
+
+instance PG.DecodeValue NotificationStatus where
+  decodeValue = HasqlDecoders.enum \case
+    "unread" -> Just Unread
+    "read" -> Just Read
+    "archived" -> Just Archived
     _ -> Nothing
 
 newtype NotificationFilter = NotificationFilter (Map Text Text)
@@ -72,6 +103,18 @@ data NotificationEventData
   = ProjectBranchUpdatedData ProjectBranchData
   | ProjectContributionCreatedData ProjectContributionData
 
+instance Aeson.ToJSON NotificationEventData where
+  toJSON ned =
+    Aeson.object
+      [ "topic" Aeson..= topic,
+        "data" Aeson..= body
+      ]
+    where
+      topic = eventTopic ned
+      body = case ned of
+        ProjectBranchUpdatedData d -> Aeson.toJSON d
+        ProjectContributionCreatedData d -> Aeson.toJSON d
+
 instance PG.EncodeValue NotificationEventData where
   encodeValue =
     HasqlEncoders.jsonb
@@ -92,6 +135,15 @@ data NotificationEvent id occurredAt = NotificationEvent
     eventScope :: UserId
   }
 
+instance Aeson.ToJSON (NotificationEvent NotificationEventId UTCTime) where
+  toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope} =
+    Aeson.object
+      [ "id" Aeson..= eventId,
+        "occurredAt" Aeson..= eventOccurredAt,
+        "data" Aeson..= eventData,
+        "scope" Aeson..= eventScope
+      ]
+
 type NewNotificationEvent = NotificationEvent () ()
 
 data Subscription id = Subscription
@@ -101,3 +153,17 @@ data Subscription id = Subscription
     subscriptionTopic :: NotificationTopic,
     subscriptionFilter :: NotificationFilter
   }
+
+data NotificationHubEntry = NotificationHubEntry
+  { hubEntryId :: NotificationHubEntryId,
+    hubEntryEvent :: NotificationEvent NotificationEventId UTCTime,
+    hubEntryStatus :: NotificationStatus
+  }
+
+instance Aeson.ToJSON NotificationHubEntry where
+  toJSON NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus} =
+    Aeson.object
+      [ "id" Aeson..= hubEntryId,
+        "event" Aeson..= hubEntryEvent,
+        "status" Aeson..= hubEntryStatus
+      ]

@@ -39,6 +39,8 @@ module Share.IDs
     ResourceId (..),
     OrgId (..),
     TeamId (..),
+    NotificationHubEntryId (..),
+    NotificationEventId (..),
     projectBranchShortHandToBranchShortHand,
     JTI (..),
     CategoryName (..),
@@ -712,3 +714,13 @@ newtype TeamId = TeamId UUID
   deriving stock (Eq, Ord)
   deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
   deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "TEAM-" UUID)
+
+newtype NotificationHubEntryId = NotificationHubEntryId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NOT-" UUID)
+
+newtype NotificationEventId = NotificationEventId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "EVENT-" UUID)
