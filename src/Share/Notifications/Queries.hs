@@ -3,19 +3,13 @@ module Share.Notifications.Queries
   )
 where
 
-import Share.Notifications.Types (NewNotificationEvent)
+import Share.Notifications.Types
 import Share.Postgres
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
-recordEvent (NotificationEvent {eventData}) = do
+recordEvent (NotificationEvent {eventScope, eventData}) = do
   execute_
     [sql|
-
-    |]
-
-subscriptionsForEvent :: (QueryA m) => NewNotificationEvent -> m [Subscription]
-subscriptionsForEvent (NotificationEvent {}) = do
-  queryListCol
-    [sql| 
-
+      INSERT INTO notification_events (topic, scope_user_id, data)
+      VALUES (#{eventTopic eventData}, #{eventScope}, #{eventData})
     |]

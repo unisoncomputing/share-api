@@ -16,8 +16,8 @@
 -- which is then sent via the *email* *delivery method* and marked completed.
 
 CREATE TYPE notification_topic AS ENUM (
-    'contribution:created',
-    'branch:updated'
+    "project:branch:updated"
+    'project:contribution:created'
 );
 
 CREATE TABLE notification_events (
@@ -147,15 +147,17 @@ CREATE TYPE notification_status AS ENUM (
 
 CREATE TABLE notification_hub_entries (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
   status notification_status NOT NULL DEFAULT 'unread',
 
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 )
 
-CREATE UNIQUE INDEX notification_hub_entries_event_user ON notification_hub_entries(event_id, user_id);
+CREATE UNIQUE INDEX notification_hub_entries_event_user ON notification_hub_entries(user_id, event_id);
+CREATE INDEX notification_hub_entries_by_user_chronological ON notification_hub_entries(user_id, created_at DESC)
+  WHERE status <> 'archived';
 
 CREATE TRIGGER notification_hub_entries_updated_at
   BEFORE UPDATE ON notification_hub_entries
