@@ -5,58 +5,28 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Postgres.Authorization.Queries where
+module Share.Postgres.Authorization.Queries
+  ( checkIsUserMaintainer,
+    isSuperadmin,
+    isOrgMember,
+    causalIsInHistoryOf,
+    userHasProjectPermission,
+    userHasOrgPermission,
+    listSubjectsWithResourcePermission,
+    subjectIdsForAuthSubjectsOf,
+    permissionsForProject,
+    permissionsForOrg,
+  )
+where
 
+import Control.Lens
+import Data.Int (Int32)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
-import Share.Prelude
-import Share.Web.Authorization.Types (ProjectMaintainerPermissions (..))
-
--- | Check if the given user has access to a provided project.
--- If yes, return the UserId of the owner of that project.
---
--- A user has access if they own the project, if they're a member of an org which owns it,
--- or (if they're in the list of project maintainers AND (the project is public OR the owner pays a subscription).
-getUserProjectPermissions :: UserId -> ProjectId -> PG.Transaction e ProjectMaintainerPermissions
-getUserProjectPermissions requestingUserId projectID = do
-  PG.query1Row @(Bool, Bool, Bool)
-    [PG.sql|
-    -- Project owner can admin
-    (SELECT true AS can_view, true AS can_maintain, true AS can_admin
-        FROM projects
-        WHERE projects.owner_user_id = #{requestingUserId} AND projects.id = #{projectID})
-      UNION
-    -- Members of an org which owns the project can admin.
-    (SELECT true AS can_view, true AS can_maintain, true AS can_admin
-      FROM org_members AS org
-        JOIN projects
-          ON org.organization_user_id = projects.owner_user_id
-        WHERE
-          org.member_user_id = #{requestingUserId}
-          AND projects.id = #{projectID}
-    )
-      UNION
-    -- Project maintainers each have their own granular permissions
-    ( SELECT pm.can_view, pm.can_maintain, pm.can_admin
-        FROM project_maintainers pm
-        WHERE pm.project_id = #{projectID}
-          AND pm.user_id = #{requestingUserId}
-          -- Project maintainers are a premium feature
-          AND EXISTS (SELECT FROM premium_projects
-                            WHERE premium_projects.project_id = pm.project_id
-                     )
-    )
-    LIMIT 1
-      |]
-    <&> \case
-      Just (canView, canMaintain, canAdmin) ->
-        ProjectMaintainerPermissions
-          { canView,
-            canMaintain,
-            canAdmin
-          }
-      Nothing -> ProjectMaintainerPermissions False False False
+import Share.Web.Authorization.Types
 
 -- | A user has access if they own the repo, or if they're a member of an org which owns it.
 checkIsUserMaintainer :: UserId -> UserId -> PG.Transaction e Bool
@@ -73,14 +43,11 @@ checkIsUserMaintainer requestingUserId codebaseOwnerUserId
         )
       |]
 
-isUnisonEmployee :: UserId -> PG.Transaction e Bool
-isUnisonEmployee uid = do
+isSuperadmin :: UserId -> PG.Transaction e Bool
+isSuperadmin uid = do
   PG.queryExpect1Col
     [PG.sql|
-        SELECT EXISTS (SELECT FROM org_members org
-                      JOIN users AS org_user ON org.organization_user_id = org_user.id
-                      WHERE org.member_user_id = #{uid}
-                            AND org_user.handle = 'unison')
+        SELECT EXISTS (SELECT FROM superadmins s WHERE s.user_id = #{uid})
       |]
 
 isOrgMember :: UserId -> UserId -> PG.Transaction e Bool
@@ -103,3 +70,115 @@ causalIsInHistoryOf rootCausalId targetCausalId = do
           WHERE ch.causal_id = ( #{targetCausalId} )
           )
       |]
+
+--------------------------------------------------------------------------------
+
+-- * NEW AuthZ * --
+
+userHasProjectPermission :: Maybe UserId -> ProjectId -> RolePermission -> PG.Transaction e Bool
+userHasProjectPermission mayUserId projectId permission = do
+  PG.queryExpect1Col
+    [PG.sql|
+      SELECT
+        user_has_permission(#{mayUserId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
+        OR
+        EXISTS (
+          SELECT FROM roles r
+          WHERE r.ref = 'project_public_access'
+            AND #{permission} = ANY(r.permissions)
+            AND (SELECT NOT p.private FROM projects p WHERE p.id = #{projectId})
+        )
+
+    |]
+
+userHasOrgPermission :: UserId -> OrgId -> RolePermission -> PG.Transaction e Bool
+userHasOrgPermission userId orgId permission = do
+  PG.queryExpect1Col
+    [PG.sql|
+      SELECT user_has_permission(#{userId}, (SELECT org.resource_id FROM orgs org WHERE org.id = #{orgId}), #{permission})
+    |]
+
+-- | Find all the subjects which have access to a given resource.
+listSubjectsWithResourcePermission :: ResourceId -> RolePermission -> PG.Transaction e [AuthSubject SubjectId SubjectId SubjectId]
+listSubjectsWithResourcePermission resourceId permission = do
+  PG.queryListRows @(AuthSubject SubjectId SubjectId SubjectId)
+    [PG.sql|
+      SELECT subject.id, subject.kind
+      FROM subject_resource_permissions
+      WHERE resource_id = #{resourceId}
+        AND permission = #{permission}
+    |]
+
+subjectIdsForAuthSubjectsOf :: Traversal s t ResolvedAuthSubject GenericAuthSubject -> s -> PG.Transaction e t
+subjectIdsForAuthSubjectsOf trav s =
+  s
+    & unsafePartsOf trav %%~ \resolvedAuthSubjects -> PG.pipelined do
+      let userIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _UserSubject)
+      let orgIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _OrgSubject)
+      let teamIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _TeamSubject)
+      userSubjects <-
+        PG.queryListCol @SubjectId
+          [PG.sql|
+            WITH values(ord, user_id) AS (
+              SELECT * FROM ^{PG.toTable userIds}
+            ) SELECT user.subject_id
+              FROM values
+                JOIN users user ON user.id = values.user_id
+                ORDER BY ord
+          |]
+      orgSubjects <-
+        PG.queryListCol @SubjectId
+          [PG.sql|
+            WITH values(ord, org_id) AS (
+              SELECT * FROM ^{PG.toTable orgIds}
+            ) SELECT org.subject_id
+              FROM values
+                JOIN orgs org ON org.user_id = values.org_id
+                ORDER BY ord
+          |]
+      teamSubjects <-
+        PG.queryListCol @SubjectId
+          [PG.sql|
+            WITH values(ord, team_id) AS (
+              SELECT * FROM ^{PG.toTable teamIds}
+            ) SELECT team.subject_id
+              FROM values
+                JOIN teams team ON team.id = values.team_id
+                ORDER BY ord
+          |]
+      pure $
+        resolvedAuthSubjects
+          & unsafePartsOf (traversed . _UserSubject) .~ userSubjects
+          & unsafePartsOf (traversed . _OrgSubject) .~ orgSubjects
+          & unsafePartsOf (traversed . _TeamSubject) .~ teamSubjects
+
+permissionsForProject :: Maybe UserId -> ProjectId -> PG.Transaction e (Set RolePermission)
+permissionsForProject mayUserId projectId = do
+  PG.queryListCol @RolePermission
+    [PG.sql|
+      (SELECT permission FROM
+        user_resource_permissions urp
+        JOIN projects p ON p.resource_id = urp.resource_id
+        WHERE urp.user_id = #{mayUserId}
+              AND p.id = #{projectId}
+        )
+      UNION
+        (SELECT permission
+          FROM roles r, UNNEST(r.permissions) AS permission
+          WHERE r.ref = 'project_public_access'
+                AND (SELECT NOT p.private FROM projects p WHERE p.id = #{projectId})
+        )
+      |]
+    <&> Set.fromList
+
+permissionsForOrg :: Maybe UserId -> OrgId -> PG.Transaction e (Set RolePermission)
+permissionsForOrg mayUserId orgId = do
+  PG.queryListCol @RolePermission
+    [PG.sql|
+      SELECT permission
+      FROM user_resource_permissions urp
+      JOIN orgs org ON org.resource_id = urp.resource_id
+      WHERE urp.user_id = #{mayUserId}
+            AND org.id = #{orgId}
+      |]
+    <&> Set.fromList

@@ -1,0 +1,8 @@
+{
+  "body": "Permission Denied: Not permitted to create an org for this user",
+  "status": [
+    {
+      "status_code": 403
+    }
+  ]
+}

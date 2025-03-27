@@ -42,7 +42,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Data.UUID (UUID)
-import Share.JWT
+import Share.JWT.Types
 import Share.OAuth.Scopes
 import Share.Utils.Binary (JSONBinary (..))
 import Share.Utils.IDs

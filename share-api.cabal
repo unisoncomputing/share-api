@@ -68,6 +68,7 @@ library
       Share.Postgres.NameLookups.Queries
       Share.Postgres.NameLookups.Types
       Share.Postgres.NamespaceDiffs
+      Share.Postgres.Notifications
       Share.Postgres.Ops
       Share.Postgres.Orphans
       Share.Postgres.Patches.Queries
@@ -138,13 +139,22 @@ library
       Share.Web.Share.DefinitionSearch
       Share.Web.Share.Diffs.Impl
       Share.Web.Share.Diffs.Types
+      Share.Web.Share.DisplayInfo
       Share.Web.Share.Impl
+      Share.Web.Share.Orgs.API
+      Share.Web.Share.Orgs.Impl
+      Share.Web.Share.Orgs.Operations
+      Share.Web.Share.Orgs.Queries
+      Share.Web.Share.Orgs.Types
       Share.Web.Share.Projects.API
       Share.Web.Share.Projects.Impl
       Share.Web.Share.Projects.Types
       Share.Web.Share.Releases.API
       Share.Web.Share.Releases.Impl
       Share.Web.Share.Releases.Types
+      Share.Web.Share.Roles
+      Share.Web.Share.Roles.Queries
+      Share.Web.Share.Teams.Queries
       Share.Web.Share.Tickets.API
       Share.Web.Share.Tickets.Impl
       Share.Web.Share.Tickets.Types
@@ -233,6 +243,7 @@ library
     , generic-lens
     , hasql
     , hasql-interpolate
+    , hasql-listen-notify
     , hasql-pool
     , hedis
     , here
@@ -382,6 +393,7 @@ executable share-api
     , generic-lens
     , hasql
     , hasql-interpolate
+    , hasql-listen-notify
     , hasql-pool
     , hedis
     , here

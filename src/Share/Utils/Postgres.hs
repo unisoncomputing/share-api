@@ -3,10 +3,12 @@ module Share.Utils.Postgres
     ordered,
     RawBytes (..),
     RawLazyBytes (..),
+    likeEscape,
   )
 where
 
 import Data.ByteString.Lazy qualified as BL
+import Data.Text qualified as Text
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Hasql
@@ -48,3 +50,6 @@ instance Hasql.EncodeValue RawLazyBytes where
 
 instance Hasql.DecodeValue RawLazyBytes where
   decodeValue = RawLazyBytes . BL.fromStrict <$> Decoders.bytea
+
+likeEscape :: Text -> Text
+likeEscape = Text.replace "%" "\\%" . Text.replace "_" "\\_"

@@ -1,0 +1,57 @@
+{
+  "body": {
+    "active": true,
+    "role_assignments": [
+      {
+        "roles": [
+          "project_contributor"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "some-user",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "org_admin"
+        ],
+        "subject": {
+          "data": {
+            "avatarUrl": null,
+            "handle": "test",
+            "name": null,
+            "userId": "U-<UUID>"
+          },
+          "kind": "user"
+        }
+      },
+      {
+        "roles": [
+          "org_default"
+        ],
+        "subject": {
+          "data": {
+            "orgId": "ORG-<UUID>",
+            "user": {
+              "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+              "handle": "unison",
+              "name": "Unison Org",
+              "userId": "U-<UUID>"
+            }
+          },
+          "kind": "org"
+        }
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

@@ -16,6 +16,7 @@ module Share.IDs
     PrefixedID (..),
     PrefixedHash (..),
     UserHandle (..),
+    OrgHandle (..),
     TourId (..),
     ProjectSlug (..),
     ProjectId (..),
@@ -34,6 +35,10 @@ module Share.IDs
     ProjectReleaseShortHand (..),
     ProjectShortHand (..),
     ProjectBranchShortHand (..),
+    SubjectId (..),
+    ResourceId (..),
+    OrgId (..),
+    TeamId (..),
     projectBranchShortHandToBranchShortHand,
     JTI (..),
     CategoryName (..),
@@ -148,6 +153,12 @@ instance IsID UserHandle where
     | Text.length handleTxt > 50 = Left "User handle must not be longer than 50 characters"
     | Just ('-', _) <- Text.uncons handleTxt = Left "User handle must not start with a hyphen"
     | otherwise = Right $ UserHandle handleTxt
+
+newtype OrgHandle = OrgHandle Text
+  deriving stock (Show, Eq, Ord)
+  deriving (Binary, Hasql.EncodeValue, Hasql.DecodeValue) via Text
+  deriving (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via (UsingID UserHandle)
+  deriving (IsID) via UserHandle
 
 -- | The name of a project, used in URLs, when paired with a user can be resolved to a project ID
 newtype ProjectSlug = ProjectSlug (CI Text)
@@ -681,3 +692,23 @@ instance (FromHttpApiData h, KnownSymbol prefix) => FromJSON (PrefixedHash prefi
           bareHash <- Text.stripPrefix prefix txt
           h <- eitherToMaybe $ parseUrlPiece bareHash
           pure (PrefixedHash h)
+
+newtype SubjectId = SubjectId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "SUB-" UUID)
+
+newtype ResourceId = ResourceId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "RES-" UUID)
+
+newtype OrgId = OrgId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "ORG-" UUID)
+
+newtype TeamId = TeamId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "TEAM-" UUID)

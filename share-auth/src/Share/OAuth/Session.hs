@@ -26,18 +26,15 @@ module Share.OAuth.Session
 where
 
 import Control.Applicative
-import Control.Lens hiding ((:>))
 import Control.Monad.Random
 import Control.Monad.Trans.Maybe (MaybeT (..))
-import Crypto.JWT qualified as JWT
 import Data.Aeson
 import Data.Binary
 import Data.Binary.Instances.Time ()
 import Data.ByteString qualified as BS
+import Data.Coerce (coerce)
 import Data.Kind (Type)
 import Data.Set (Set)
-import Data.Set qualified as Set
-import Data.Set.Lens (setOf)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -48,7 +45,7 @@ import Network.URI
 import Network.Wai qualified as Wai
 import Servant
 import Servant.Server.Experimental.Auth qualified as ServantAuth
-import Share.JWT qualified
+import Share.JWT
 import Share.OAuth.Types
 import Share.Utils.Binary
 import Share.Utils.IDs qualified as IDs
@@ -219,40 +216,26 @@ data Session = Session
   }
   deriving stock (Show)
   deriving (Binary) via JSONBinary Session
-
-instance Share.JWT.ToJWT Session where
-  encodeJWT (Session (SessionId sessionId) userID created expiry issuer aud) =
-    JWT.emptyClaimsSet
-      & JWT.claimSub ?~ (JWT.string # IDs.toText userID)
-      & JWT.claimJti ?~ IDs.toText (JTI sessionId)
-      & JWT.claimIat ?~ JWT.NumericDate created
-      & JWT.claimExp ?~ JWT.NumericDate expiry
-      & JWT.claimIss ?~ (JWT.uri # issuer)
-      & JWT.claimAud ?~ JWT.Audience (review JWT.uri <$> Set.toList aud)
-
-instance Share.JWT.FromJWT Session where
-  decodeJWT claims = do
-    sessionUserId <- maybeToEither "Missing sub claim" (claims ^? JWT.claimSub . _Just . JWT.string) >>= IDs.fromText
-    sessionId <-
-      maybeToEither "Missing jti claim" (claims ^? JWT.claimJti . _Just) >>= \txt -> do
-        JTI uuid <- IDs.fromText txt
-        pure $ SessionId uuid
-    sessionCreated <- maybeToEither "Missing iat claim" (claims ^? JWT.claimIat . _Just . to (\(JWT.NumericDate utcTime) -> utcTime))
-    sessionExpiry <- maybeToEither "Missing exp claim" (claims ^? JWT.claimExp . _Just . to (\(JWT.NumericDate utcTime) -> utcTime))
-    sessionIssuer <- maybeToEither "Missing iss claim" (claims ^? JWT.claimIss . _Just . JWT.uri)
-    let sessionAudience = claims & setOf (JWT.claimAud . _Just . folding (\(JWT.Audience auds) -> auds) . JWT.uri)
-    pure $ Session {..}
-    where
-      maybeToEither :: e -> Maybe a -> Either e a
-      maybeToEither e = maybe (Left e) Right
+  deriving (AsJWTClaims) via JSONJWTClaims Session
 
 instance ToJSON Session where
-  toJSON s = toJSON $ Share.JWT.encodeJWT s
+  toJSON Session {..} =
+    toJSON $
+      StandardClaims
+        { sub = IDs.toText sessionUserId,
+          iat = sessionCreated,
+          exp = sessionExpiry,
+          iss = sessionIssuer,
+          aud = sessionAudience,
+          jti = IDs.toText (coerce @SessionId @JTI sessionId)
+        }
 
 instance FromJSON Session where
   parseJSON v = do
-    claims <- parseJSON v
-    either (fail . Text.unpack) pure $ Share.JWT.decodeJWT claims
+    StandardClaims {..} <- parseJSON v
+    JTI sessionId <- either (fail . Text.unpack) pure $ IDs.fromText jti
+    sessionUserId <- either (fail . Text.unpack) pure $ IDs.fromText sub
+    pure Session {sessionId = SessionId sessionId, sessionUserId, sessionCreated = iat, sessionExpiry = exp, sessionIssuer = iss, sessionAudience = aud}
 
 data PendingSession = PendingSession
   { pendingId :: PendingSessionId,

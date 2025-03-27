@@ -27,7 +27,6 @@ import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
-import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as CV
 import Unison.HashQualified qualified as HQ
@@ -71,7 +70,7 @@ termSummaryForReferent ::
 termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayWidth = do
   let shortHash = V2Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
-  let relativeToPath = fromMaybe (mempty @Path) relativeTo
+  let relativeToPath = fromMaybe mempty relativeTo
   let termReference = V2Referent.toReference referent
   let deps = Type.labeledDependencies typeSig
   namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)

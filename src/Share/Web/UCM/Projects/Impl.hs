@@ -24,6 +24,7 @@ import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project
 import Share.Release (Release (..))
@@ -63,11 +64,11 @@ type BranchNameParam = Text
 getProjectEndpoint :: Maybe Session -> Maybe ProjectIdParam -> Maybe ProjectShortHandParam -> WebApp UCMProjects.GetProjectResponse
 getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) mayUcmProjectId mayUcmProjectSH = toResponse $ do
   projectId <- lift (runMaybeT (projectIdByName <|> projectIdQueryParam)) `whenNothingM` throwError (UCMProjects.GetProjectResponseNotFound (UCMProjects.NotFound "Project not found"))
-  (project@Project {slug = projectSlug}, User {handle}, defaultBranch, latestRelease) <- pgT $ do
+  (Project {slug = projectSlug}, User {handle}, defaultBranch, latestRelease) <- pgT $ do
     (project@Project {ownerUserId}, _favData, _projectOwner, defaultBranch, latestRelease) <- Q.projectByIdWithMetadata callerUserId projectId `orThrow` UCMProjects.GetProjectResponseNotFound (UCMProjects.NotFound "Project not found")
-    user <- Q.userByUserId ownerUserId `orThrow` UCMProjects.GetProjectResponseNotFound (UCMProjects.NotFound "User not found")
+    user <- UserQ.userByUserId ownerUserId `orThrow` UCMProjects.GetProjectResponseNotFound (UCMProjects.NotFound "User not found")
     pure (project, user, fmap IDs.toText defaultBranch, fmap IDs.toText latestRelease)
-  _authZReceipt <- AuthZ.checkProjectGet callerUserId project `ifUnauthorized` UCMProjects.GetProjectResponseUnauthorized
+  _authZReceipt <- AuthZ.checkProjectGet callerUserId projectId `ifUnauthorized` UCMProjects.GetProjectResponseUnauthorized
   let apiProject = UCMProjects.Project {projectId = IDs.toText projectId, projectName = IDs.toText (ProjectShortHand {userHandle = handle, projectSlug}), latestRelease, defaultBranch}
   pure $ UCMProjects.GetProjectResponseSuccess apiProject
   where
@@ -87,7 +88,7 @@ createProjectEndpoint :: Maybe Session -> UCMProjects.CreateProjectRequest -> We
 createProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) (UCMProjects.CreateProjectRequest {projectName}) = toResponse do
   ProjectShortHand {userHandle, projectSlug} <- lift $ parseParam @ProjectShortHand "projectName" projectName
   User {user_id = targetUserId} <- pgT do
-    Q.userByHandle userHandle `orThrow` UCMProjects.CreateProjectResponseNotFound (UCMProjects.NotFound "User not found")
+    UserQ.userByHandle userHandle `orThrow` UCMProjects.CreateProjectResponseNotFound (UCMProjects.NotFound "User not found")
   AuthZ.checkProjectCreate callerUserId targetUserId `ifUnauthorized` UCMProjects.CreateProjectResponseUnauthorized
   let visibility = ProjectPrivate
   let summary = Nothing
@@ -105,16 +106,16 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
     -- We lump the project not found and user not found errors together here because if the
     -- project exists, the user MUST exist because of the foreign key constraint,
     -- so this error should never happen.
-    projectOwnerUser <- Q.userByUserId ownerUserId `orThrow` UCMProjects.GetProjectBranchResponseProjectNotFound (UCMProjects.NotFound "User not found")
+    projectOwnerUser <- UserQ.userByUserId ownerUserId `orThrow` UCMProjects.GetProjectBranchResponseProjectNotFound (UCMProjects.NotFound "User not found")
     let contributorId = case branchOrRelease of
           Left Branch {contributorId} -> contributorId
           Right _ -> Nothing
-    mayContributorUser <- for contributorId \cid -> Q.userByUserId cid `orThrow` UCMProjects.GetProjectBranchResponseProjectNotFound (UCMProjects.NotFound "User not found")
+    mayContributorUser <- for contributorId \cid -> UserQ.userByUserId cid `orThrow` UCMProjects.GetProjectBranchResponseProjectNotFound (UCMProjects.NotFound "User not found")
     pure (project, projectOwnerUser, mayContributorUser)
 
   authZReceipt <- case branchOrRelease of
-    Left branch -> AuthZ.checkBranchGet mayCallerUserId project branch `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
-    Right release -> AuthZ.checkReleaseGet mayCallerUserId project release `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
+    Left branch -> AuthZ.checkBranchGet mayCallerUserId branch `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
+    Right release -> AuthZ.checkReleaseGet mayCallerUserId release `ifUnauthorized` UCMProjects.GetProjectBranchResponseUnauthorized
 
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId (user_id <$> mayContributor)
   let codebaseEnv = Codebase.codebaseEnv authZReceipt codebaseLoc
@@ -233,7 +234,7 @@ createProjectBranch
       (project@Project {projectId, ownerUserId, slug}, mayContributorUserId) <- pgT $ do
         project <- Q.projectById projectId `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Project not found")
         mayContributorUserId <- for contributorHandle \ch -> do
-          User {user_id = contributorUserId} <- Q.userByHandle ch `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Contributor not found")
+          User {user_id = contributorUserId} <- UserQ.userByHandle ch `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Contributor not found")
           pure contributorUserId
         pure (project, mayContributorUserId)
       let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase ownerUserId mayContributorUserId
@@ -257,7 +258,7 @@ createProjectBranch
       signedBranchHead <- lift $ HashJWT.signHashForUser (Just callerUserId) (causalHashToHash32 branchCausalHash)
       apiBranch <- pgT $ do
         branchId <- Q.createBranch nameLookupReceipt projectId branchName mayContributorUserId branchCausalId mayMergeMergeTargetBranchId callerUserId
-        User {handle = projectOwnerHandle} <- Q.userByUserId ownerUserId `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Project owner not found")
+        User {handle = projectOwnerHandle} <- UserQ.userByUserId ownerUserId `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Project owner not found")
         let projectShortHand =
               ProjectShortHand
                 { userHandle = projectOwnerHandle,
@@ -299,7 +300,7 @@ createProjectRelease callerUserId projectId unsquashedCausalHash releaseName = t
   signedSquashedCausalHash <- lift $ HashJWT.signHashForUser (Just callerUserId) (causalHashToHash32 squashedCausalHash)
   apiRelease <- pgT $ do
     Release {releaseId} <- Q.createRelease nlReceipt projectId releaseName squashedCausalId unsquashedCausalId callerUserId
-    User {handle = projectOwnerHandle} <- Q.userByUserId ownerUserId `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Project owner not found")
+    User {handle = projectOwnerHandle} <- UserQ.userByUserId ownerUserId `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Project owner not found")
     let projectShortHand =
           ProjectShortHand
             { userHandle = projectOwnerHandle,
@@ -337,12 +338,12 @@ setProjectBranchOrReleaseHeadEndpoint session (UCMProjects.SetProjectBranchHeadR
 setProjectBranchHead :: UserId -> ProjectId -> BranchId -> (Maybe CausalHash) -> CausalHash -> WebApp UCMProjects.SetProjectBranchHeadResponse
 setProjectBranchHead callerUserId projectId branchId mayOldCausalHash newCausalHash = toResponse do
   lift $ addRequestTag "branch-id" (IDs.toText branchId)
-  (project@Project {ownerUserId}, branch@Branch {contributorId}) <- pgT do
+  (Project {ownerUserId}, branch@Branch {contributorId}) <- pgT do
     branch <- (Q.branchById branchId) `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Branch not found")
     project <- (Q.projectById projectId) `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Project not found")
     pure (project, branch)
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase ownerUserId contributorId
-  authZReceipt <- AuthZ.checkBranchSet callerUserId project branch `ifUnauthorized` UCMProjects.SetProjectBranchHeadResponseUnauthorized
+  authZReceipt <- AuthZ.checkBranchSet callerUserId branch `ifUnauthorized` UCMProjects.SetProjectBranchHeadResponseUnauthorized
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   -- Mitigation for the sync bug where sometimes causals get stuck in temp.
   newCausalId <- lift (SyncQ.ensureCausalIsFlushed codebase newCausalHash) `whenNothingM` throwError (UCMProjects.SetProjectBranchHeadResponseMissingCausalHash (causalHashToHash32 newCausalHash))
@@ -360,7 +361,7 @@ setProjectBranchHead callerUserId projectId branchId mayOldCausalHash newCausalH
             -- No-op
             pure ()
         | otherwise -> do
-            User {handle = callingUserHandle} <- Q.userByUserId callerUserId `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "User not found")
+            User {handle = callingUserHandle} <- UserQ.userByUserId callerUserId `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "User not found")
             let description = "Pushed by " <> (IDs.toText $ PrefixedID @"@" callingUserHandle)
             newNamespaceId <- HashQ.expectNamespaceIdsByCausalIdsOf id newCausalId
             nlReceipt <- NLOps.ensureNameLookupForBranchId newNamespaceId

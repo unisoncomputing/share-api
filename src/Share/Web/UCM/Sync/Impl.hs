@@ -38,6 +38,7 @@ import Share.Postgres.IDs
 import Share.Postgres.Queries qualified as PGQ
 import Share.Postgres.Sync.Queries (entityLocations)
 import Share.Postgres.Sync.Queries qualified as SyncQ
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.User (User (..))
@@ -122,7 +123,7 @@ getCausalHashByPathEndpoint callerUserId (GetCausalHashByPathRequest sharePath) 
     addRequestTag "repo-info" (unRepoInfo repoInfo)
     IDs.PrefixedID userHandle <- lift . parseParam @(IDs.PrefixedID "@" UserHandle) "path" $ unRepoInfo repoInfo
     codebaseOwner@User {user_id = codebaseOwnerUserId} <- ExceptT . PG.tryRunTransaction $ do
-      PGQ.userByHandle userHandle `whenNothingM` throwError Share.GetCausalHashByPathUserNotFound
+      UserQ.userByHandle userHandle `whenNothingM` throwError Share.GetCausalHashByPathUserNotFound
     let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
     mayCausalAtPath <-
       lift (AuthZ.checkReadUserCodebase callerUserId codebaseOwner localPath) >>= \case
@@ -146,7 +147,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
       case repoInfoKind repoInfo of
         Left err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesInvalidRepoInfo err repoInfo)
         Right (RepoInfoUser userHandle) -> do
-          User {user_id = repoOwnerUserId} <- lift (PG.runTransaction (PGQ.userByHandle userHandle)) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesUserNotFound $ IDs.toText @UserHandle userHandle)
+          User {user_id = repoOwnerUserId} <- lift (PG.runTransaction (UserQ.userByHandle userHandle)) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesUserNotFound $ IDs.toText @UserHandle userHandle)
           authZToken <- lift AuthZ.checkDownloadFromUserCodebase `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
           let codebaseLoc = Codebase.codebaseLocationForUserCodebase repoOwnerUserId
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
@@ -154,7 +155,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
           let projectShortHand = ProjectShortHand {userHandle, projectSlug}
           (Project {ownerUserId = projectOwnerUserId}, contributorId) <- ExceptT . PG.tryRunTransaction $ do
             project <- (PGQ.projectByShortHand projectShortHand) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesProjectNotFound $ IDs.toText @ProjectShortHand projectShortHand)
-            mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (PGQ.userByHandle ch) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesUserNotFound $ IDs.toText @UserHandle ch)
+            mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (UserQ.userByHandle ch) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesUserNotFound $ IDs.toText @UserHandle ch)
             pure (project, mayContributorUserId)
           authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
           let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
@@ -194,7 +195,7 @@ uploadEntitiesEndpoint callingUserId (UploadEntitiesRequest {repoInfo, entities}
       case repoInfoKind repoInfo of
         Left err -> throwError (Share.UploadEntitiesFailure $ Share.UploadEntitiesError'InvalidRepoInfo err repoInfo)
         Right (RepoInfoUser userHandle) -> do
-          User {user_id = repoOwnerUserId} <- lift (PG.runTransaction (PGQ.userByHandle userHandle)) `whenNothingM` throwError (Share.UploadEntitiesFailure $ Share.UploadEntitiesError'UserNotFound $ IDs.toText @UserHandle userHandle)
+          User {user_id = repoOwnerUserId} <- lift (PG.runTransaction (UserQ.userByHandle userHandle)) `whenNothingM` throwError (Share.UploadEntitiesFailure $ Share.UploadEntitiesError'UserNotFound $ IDs.toText @UserHandle userHandle)
           authZToken <- lift (AuthZ.checkUploadToUserCodebase callingUserId repoOwnerUserId) `whenLeftM` \_err -> throwError (Share.UploadEntitiesFailure $ Share.UploadEntitiesError'NoWritePermission repoInfo)
           let codebaseLoc = Codebase.codebaseLocationForUserCodebase repoOwnerUserId
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
@@ -202,7 +203,7 @@ uploadEntitiesEndpoint callingUserId (UploadEntitiesRequest {repoInfo, entities}
           let projectShortHand = ProjectShortHand {userHandle, projectSlug}
           (Project {projectId, ownerUserId = projectOwnerUserId}, mayContributorUserId) <- ExceptT . PG.tryRunTransaction $ do
             project <- PGQ.projectByShortHand projectShortHand `whenNothingM` throwError (Share.UploadEntitiesFailure $ Share.UploadEntitiesError'ProjectNotFound $ IDs.toText @ProjectShortHand projectShortHand)
-            mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (PGQ.userByHandle ch) `whenNothingM` throwError (Share.UploadEntitiesFailure $ Share.UploadEntitiesError'UserNotFound $ IDs.toText @UserHandle ch)
+            mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (UserQ.userByHandle ch) `whenNothingM` throwError (Share.UploadEntitiesFailure $ Share.UploadEntitiesError'UserNotFound $ IDs.toText @UserHandle ch)
             pure (project, mayContributorUserId)
           authZToken <- lift (AuthZ.checkUploadToProjectBranchCodebase callingUserId projectId mayContributorUserId) `whenLeftM` \_err -> throwError . Share.UploadEntitiesFailure $ Share.UploadEntitiesError'NoWritePermission repoInfo
           let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId mayContributorUserId

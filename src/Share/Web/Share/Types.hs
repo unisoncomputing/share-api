@@ -6,7 +6,6 @@ module Share.Web.Share.Types where
 
 import Data.Aeson (KeyValue ((.=)), ToJSON (..))
 import Data.Aeson qualified as Aeson
-import Network.URI (URI)
 import Share.BackgroundJobs.Search.DefinitionSync.Types (TermOrTypeTag)
 import Share.BackgroundJobs.Search.DefinitionSync.Types qualified as DefSync
 import Share.IDs
@@ -14,6 +13,8 @@ import Share.Prelude
 import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
+import Share.Web.Authorization.Types (RolePermission)
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
@@ -40,6 +41,14 @@ instance Aeson.FromJSON UpdateUserRequest where
     pronouns <- parseNullableUpdate o "pronouns"
     pure UpdateUserRequest {..}
 
+data UserKind = UserKind | OrgKind
+  deriving (Show, Eq, Ord)
+
+instance ToJSON UserKind where
+  toJSON = \case
+    UserKind -> "user"
+    OrgKind -> "org"
+
 data DescribeUserProfile = DescribeUserProfile
   { handle :: UserHandle,
     name :: Maybe Text,
@@ -48,12 +57,14 @@ data DescribeUserProfile = DescribeUserProfile
     website :: Maybe Text,
     location :: Maybe Text,
     twitterHandle :: Maybe Text,
-    pronouns :: Maybe Text
+    pronouns :: Maybe Text,
+    kind :: UserKind,
+    permissions :: Set RolePermission
   }
   deriving (Show)
 
 instance ToJSON DescribeUserProfile where
-  toJSON DescribeUserProfile {..} =
+  toJSON (DescribeUserProfile handle name avatarUrl bio website location twitterHandle pronouns kind permissions) =
     Aeson.object
       [ "handle" .= fromId @UserHandle @Text handle,
         "name" .= name,
@@ -62,7 +73,9 @@ instance ToJSON DescribeUserProfile where
         "website" .= website,
         "location" .= location,
         "twitterHandle" .= twitterHandle,
-        "pronouns" .= pronouns
+        "pronouns" .= pronouns,
+        "kind" .= kind,
+        "permissions" Aeson..= permissions
       ]
 
 data ReadmeResponse = ReadmeResponse
@@ -137,24 +150,6 @@ instance ToJSON UserAccountInfo where
       ]
 
 type PathSegment = Text
-
--- | Common type for displaying a user.
-data UserDisplayInfo = UserDisplayInfo
-  { handle :: UserHandle,
-    name :: Maybe Text,
-    avatarUrl :: Maybe URI,
-    userId :: UserId
-  }
-  deriving (Show, Eq, Ord, Generic)
-
-instance ToJSON UserDisplayInfo where
-  toJSON UserDisplayInfo {handle, name, avatarUrl, userId} =
-    Aeson.object
-      [ "handle" Aeson..= handle,
-        "name" Aeson..= name,
-        "avatarUrl" Aeson..= avatarUrl,
-        "userId" Aeson..= userId
-      ]
 
 data DefinitionNameSearchResult = DefinitionNameSearchResult
   { token :: Name,

@@ -20,13 +20,13 @@ import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
+import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Queries qualified as RQ
-import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.Release qualified as Release
@@ -38,6 +38,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Authorization.Types
 import Share.Web.Errors
 import Share.Web.Share.Branches.Impl (branchesServer, getProjectBranchReadmeEndpoint)
 import Share.Web.Share.Contributions.Impl (contributionsByProjectServer)
@@ -46,6 +47,8 @@ import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDi
 import Share.Web.Share.Projects.API qualified as API
 import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.Impl (getProjectReleaseReadmeEndpoint, releasesServer)
+import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
+import Share.Web.Share.Roles.Queries (displaySubjectsOf)
 import Share.Web.Share.Tickets.Impl (ticketsByProjectServer)
 import Share.Web.Share.Types
 import Unison.Name (Name)
@@ -54,43 +57,43 @@ import Unison.Server.Types
 import Unison.Syntax.Name qualified as Name
 
 data ProjectErrors
-  = MaintainersAlreadyExist [UserId]
-  | MaintainersMissing [UserId]
+  = RolesAlreadyExist [UserId]
+  | RolesMissing [UserId]
 
 instance ToServerError ProjectErrors where
   toServerError = \case
-    (MaintainersAlreadyExist userIds) ->
-      ( ErrorID "projects:maintainers-already-exist",
+    (RolesAlreadyExist userIds) ->
+      ( ErrorID "projects:roles-already-exist",
         Servant.err409
-          { errBody = BL.fromStrict . Text.encodeUtf8 $ "Maintainers already exist: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
+          { errBody = BL.fromStrict . Text.encodeUtf8 $ "Roles already exist: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
           }
       )
-    (MaintainersMissing userIds) ->
-      ( ErrorID "projects:maintainers-missing",
+    (RolesMissing userIds) ->
+      ( ErrorID "projects:roles-missing",
         Servant.err404
-          { errBody = BL.fromStrict . Text.encodeUtf8 $ "Maintainers missing: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
+          { errBody = BL.fromStrict . Text.encodeUtf8 $ "Roles missing: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
           }
       )
 
 instance Logging.Loggable ProjectErrors where
   toLog = \case
-    (MaintainersAlreadyExist userIds) ->
+    (RolesAlreadyExist userIds) ->
       Logging.textLog
-        ( "Maintainers already exist: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
+        ( "Roles already exist: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
         )
         & Logging.withSeverity Logging.UserFault
-    (MaintainersMissing userIds) ->
+    (RolesMissing userIds) ->
       Logging.textLog
-        ( "Maintainers missing: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
+        ( "Roles missing: " <> (Text.intercalate ", " (IDs.toText <$> userIds))
         )
         & Logging.withSeverity Logging.UserFault
 
 projectServer :: Maybe Session -> UserHandle -> ServerT API.ProjectsAPI WebApp
 projectServer session handle =
   let maintainersResourceServer slug =
-        listMaintainersEndpoint session handle slug
-          :<|> addMaintainersEndpoint session handle slug
-          :<|> updateMaintainersEndpoint session handle slug
+        listRolesEndpoint session handle slug
+          :<|> addRolesEndpoint session handle slug
+          :<|> removeRolesEndpoint session handle slug
    in listProjectsForUserEndpoint session handle
         :<|> ( \slug ->
                  hoistServer (Proxy @API.ProjectResourceAPI) (addTags slug) $
@@ -152,7 +155,7 @@ diffNamespacesEndpoint ::
 diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug oldShortHand newShortHand = do
   project@Project {projectId} <- PG.runTransactionOrRespondError do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId projectId
   (oldCodebase, oldCausalId, _oldBranchId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
   (newCodebase, newCausalId, _newBranchId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
 
@@ -189,7 +192,7 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
   do
     project@Project {projectId} <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId projectId
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
@@ -226,7 +229,7 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
   do
     project@Project {projectId} <- PG.runTransactionOrRespondError do
       Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchDiff callerUserId projectId
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
@@ -298,15 +301,16 @@ getProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp GetPr
 getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug = do
   projectId <- PG.runTransaction (Q.projectIDFromHandleAndSlug userHandle projectSlug) `or404` (EntityMissing (ErrorID "project:missing") "Project not found")
   addRequestTag "project-id" (IDs.toText projectId)
-  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats) <- PG.runTransactionOrRespondError do
+  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats, permissionsForProject) <- PG.runTransactionOrRespondError do
     projectWithMeta <- (Q.projectByIdWithMetadata callerUserId projectId) `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     releaseDownloads <- Q.releaseDownloadStatsForProject projectId
     contributionStats <- Q.contributionStatsForProject projectId
     ticketStats <- Q.ticketStatsForProject projectId
-    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats)
+    permissionsForProject <- PermissionsInfo <$> AuthZQ.permissionsForProject callerUserId projectId
+    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats, permissionsForProject)
   let releaseDownloadStats = ReleaseDownloadStats {releaseDownloads}
-  AuthZ.permissionGuard $ AuthZ.checkProjectGet callerUserId project
-  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats)
+  AuthZ.permissionGuard $ AuthZ.checkProjectGet callerUserId projectId
+  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats :++ permissionsForProject)
 
 favProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> FavProjectRequest -> WebApp NoContent
 favProjectEndpoint sess userHandle projectSlug (FavProjectRequest {isFaved}) = do
@@ -324,41 +328,37 @@ projectReadmeEndpoint session userHandle projectSlug = do
     Nothing -> getProjectBranchReadmeEndpoint session userHandle projectSlug defaultBranchShorthand Nothing
     Just releaseVersion -> getProjectReleaseReadmeEndpoint session userHandle projectSlug releaseVersion
 
-listMaintainersEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp ListMaintainersResponse
-listMaintainersEndpoint session projectUserHandle projectSlug = do
+listRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp ListRolesResponse
+listRolesEndpoint session projectUserHandle projectSlug = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
     Q.projectIDFromHandleAndSlug projectUserHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadProjectMaintainersList caller projectId
-  (isPremiumProject, maintainers) <- PG.runTransaction $ do
-    maintainers <- ProjectsQ.listProjectMaintainers projectId
-    withUserDisplayInfo <- maintainers & UsersQ.userDisplayInfoOf (traversed . traversed)
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadProjectRolesList caller projectId
+  (isPremiumProject, roleAssignments) <- PG.runTransaction $ do
+    projectRoles <- ProjectsQ.listProjectRoles projectId
+    roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) projectRoles
     isPremiumProject <- ProjectsQ.isPremiumProject projectId
-    pure (isPremiumProject, withUserDisplayInfo)
-  pure $ ListMaintainersResponse {active = isPremiumProject, maintainers}
+    pure (isPremiumProject, roleAssignments)
+  pure $ ListRolesResponse {active = isPremiumProject, roleAssignments}
 
-addMaintainersEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> AddMaintainersRequest -> WebApp AddMaintainersResponse
-addMaintainersEndpoint session projectUserHandle projectSlug (AddMaintainersRequest {maintainers}) = do
+addRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> AddRolesRequest -> WebApp AddRolesResponse
+addRolesEndpoint session projectUserHandle projectSlug (AddRolesRequest {roleAssignments}) = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
     Q.projectIDFromHandleAndSlug projectUserHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkUpdateProjectMaintainersList caller projectId
-  PG.runTransactionOrRespondError $ do
-    ProjectsQ.addMaintainers projectId maintainers >>= \case
-      Left alreadyExistingUserIds -> throwError (MaintainersAlreadyExist alreadyExistingUserIds)
-      Right updatedMaintainers -> do
-        updatedMaintainers' <- UsersQ.userDisplayInfoOf (traversed . traversed) updatedMaintainers
-        pure $ AddMaintainersResponse {maintainers = updatedMaintainers'}
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkAddProjectRoles caller projectId
+  PG.runTransaction $ do
+    updatedRoles <- ProjectsQ.addProjectRoles projectId roleAssignments
+    roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
+    pure $ AddRolesResponse {roleAssignments}
 
-updateMaintainersEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> UpdateMaintainersRequest -> WebApp UpdateMaintainersResponse
-updateMaintainersEndpoint session projectUserHandle projectSlug (UpdateMaintainersRequest {maintainers}) = do
+removeRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> RemoveRolesRequest -> WebApp RemoveRolesResponse
+removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {roleAssignments}) = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
     Q.projectIDFromHandleAndSlug projectUserHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkUpdateProjectMaintainersList caller projectId
-  PG.runTransactionOrRespondError $ do
-    ProjectsQ.updateMaintainers projectId maintainers >>= \case
-      Left missingUsers -> throwError (MaintainersAlreadyExist missingUsers)
-      Right updatedMaintainers -> do
-        updatedMaintainers' <- UsersQ.userDisplayInfoOf (traversed . traversed) updatedMaintainers
-        pure $ UpdateMaintainersResponse {maintainers = updatedMaintainers'}
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkRemoveProjectRoles caller projectId
+  PG.runTransaction $ do
+    updatedRoles <- ProjectsQ.removeProjectRoles projectId roleAssignments
+    roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
+    pure $ RemoveRolesResponse {roleAssignments}

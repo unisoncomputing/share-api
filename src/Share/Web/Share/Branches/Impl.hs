@@ -22,6 +22,7 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -41,7 +42,6 @@ import Share.Web.Share.CodeBrowsing.API qualified as API
 import Share.Web.Share.Projects.Types (projectToAPI)
 import Share.Web.Share.Types
 import U.Codebase.HashTags (CausalHash)
-import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
@@ -118,9 +118,9 @@ projectBranchBrowseEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON NamespaceListing)
 projectBranchBrowseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle = mayContributorHandle, branchName}) relativeTo namespace rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-browse" cacheParams causalId $ do
@@ -129,7 +129,7 @@ projectBranchBrowseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle pr
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle = mayContributorHandle, branchName}
 
-    cacheParams = [IDs.toText projectBranchShortHand, tShow $ fromMaybe (mempty @Path) relativeTo, tShow $ fromMaybe (mempty @Path) namespace]
+    cacheParams = [IDs.toText projectBranchShortHand, tShow $ fromMaybe mempty relativeTo, tShow $ fromMaybe mempty namespace]
 
 projectBranchDefinitionsByNameEndpoint ::
   Maybe Session ->
@@ -142,18 +142,18 @@ projectBranchDefinitionsByNameEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON DefinitionDisplayResults)
 projectBranchDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) name relativeTo renderWidth rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-name" cacheParams causalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe (mempty @Path) relativeTo) causalId renderWidth (Suffixify False) rt name
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
-    cacheParams = [IDs.toText projectBranchShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectBranchShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectBranchDefinitionsByHashEndpoint ::
   Maybe Session ->
@@ -166,8 +166,8 @@ projectBranchDefinitionsByHashEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON DefinitionDisplayResults)
 projectBranchDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) referent relativeTo renderWidth rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let shortHash = Referent.toShortHash referent
   let query = HQ.HashOnly shortHash
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
@@ -176,10 +176,10 @@ projectBranchDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-hash" cacheParams causalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe (mempty @Path) relativeTo) causalId renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
-    cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece referent, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectBranchTermSummaryEndpoint ::
   Maybe Session ->
@@ -193,8 +193,8 @@ projectBranchTermSummaryEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON TermSummary)
 projectBranchTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) ref mayName relativeTo renderWidth rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
@@ -203,7 +203,7 @@ projectBranchTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHand
       serveTermSummary ref mayName causalId relativeTo renderWidth
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
-    cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectBranchTypeSummaryEndpoint ::
   Maybe Session ->
@@ -217,8 +217,8 @@ projectBranchTypeSummaryEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON TypeSummary)
 projectBranchTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) ref mayName relativeTo renderWidth rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
@@ -227,7 +227,7 @@ projectBranchTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHand
       serveTypeSummary ref mayName renderWidth
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
-    cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectBranchFindEndpoint ::
   Maybe Session ->
@@ -242,9 +242,9 @@ projectBranchFindEndpoint ::
   Maybe CausalHash ->
   WebApp [(Fuzzy.Alignment, Fuzzy.FoundResult)]
 projectBranchFindEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) mayRelativeTo limit renderWidth query searchDependencies rootHash = do
-  let relativeTo = fromMaybe (mempty @Path) mayRelativeTo
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  let relativeTo = fromMaybe mempty mayRelativeTo
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
@@ -264,15 +264,15 @@ projectBranchNamespacesByNameEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON NamespaceDetails)
 projectBranchNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) path renderWidth rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-namespaces-by-name" cacheParams causalId $ do
     Codebase.runCodebaseTransactionOrRespondError codebase $ do
-      ND.namespaceDetails rt (fromMaybe (mempty @Path) path) causalId renderWidth
+      ND.namespaceDetails rt (fromMaybe mempty path) causalId renderWidth
         `whenNothingM` throwError (EntityMissing (ErrorID "namespace-not-found") "Namespace not found")
   where
     cacheParams = [IDs.toText projectBranchShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
@@ -287,9 +287,9 @@ getProjectBranchReadmeEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON ReadmeResponse)
 getProjectBranchReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
-  let rootPath = mempty @Path
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let rootPath = mempty
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
@@ -325,13 +325,13 @@ getProjectBranchDetailsEndpoint ::
   WebApp ShareBranch
 getProjectBranchDetailsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug branchShortHand = do
   let projectShortHand = ProjectShortHand {userHandle, projectSlug}
-  (project, projectOwner, projectBranch@(Branch {branchId = projectBranchId})) <- PG.runTransactionOrRespondError do
+  (project@Project {projectId}, projectOwner, projectBranch@(Branch {branchId = projectBranchId})) <- PG.runTransactionOrRespondError do
     project@Project {projectId, ownerUserId} <- Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @ProjectShortHand projectShortHand))
     projectOwner <- Q.projectOwnerByProjectId projectId `whenNothingM` throwError (EntityMissing (ErrorID "user-not-found") ("User not found: " <> IDs.toText @UserId ownerUserId))
     projectBranch <- Q.branchByProjectIdAndShortHand projectId branchShortHand `whenNothingM` throwError (EntityMissing (ErrorID "branch-not-found") ("Branch not found: " <> IDs.toText @BranchShortHand branchShortHand))
     projectBranchWithCausals <- CausalQ.expectCausalHashesByIdsOf branchCausals_ projectBranch
     pure (project, projectOwner, projectBranchWithCausals)
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   PG.runTransaction $ do
     branchContributions <-
       ContributionsQ.shareContributionsByBranchOf id projectBranchId
@@ -366,9 +366,9 @@ getProjectBranchDocEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON DocResponse)
 getProjectBranchDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug BranchShortHand {contributorHandle, branchName} rootHash = do
-  (project@Project {ownerUserId = projectOwnerUserId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId project
-  let rootPath = mempty @Path
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let rootPath = mempty
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
@@ -397,7 +397,7 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
     project@Project {ownerUserId, projectId} <- Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @ProjectShortHand projectShortHand))
     projectOwner <- Q.projectOwnerByProjectId projectId `whenNothingM` throwError (EntityMissing (ErrorID "user-not-found") ("User not found: " <> IDs.toText @UserId ownerUserId))
     pure (project, projectOwner)
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkListBranchesForProject callerUserId project
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkListBranchesForProject callerUserId projectId
   (mayNamePrefix, mayContributorFilter) <- computeSearchFilters
   branches <- PG.runTransaction do
     branches <- Q.listBranchesByProject limit mayCursor mayNamePrefix mayContributorFilter (fromMaybe defaultKindFilter mayKindFilter) projectId
@@ -426,7 +426,7 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
              in Just $ Cursor (updatedAt, branchId)
 
     userIdForHandle handle = do
-      fmap user_id <$> PG.runTransaction (Q.userByHandle handle)
+      fmap user_id <$> PG.runTransaction (UserQ.userByHandle handle)
     limit = fromMaybe defaultLimit mayLimit
     defaultLimit = Limit 20
     defaultKindFilter = AllBranchKinds
@@ -478,7 +478,7 @@ listBranchesByUserEndpoint ::
   WebApp (Paged ListBranchesCursor ShareBranch)
 listBranchesByUserEndpoint (AuthN.MaybeAuthedUserID callerUserId) contributorHandle mayCursor mayProjectShortHand mayLimit mayNamePrefix = do
   branches <- PG.runTransactionOrRespondError $ do
-    contributorUser <- Q.userByHandle contributorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user-not-found") ("User not found: " <> IDs.toText @UserHandle contributorHandle))
+    contributorUser <- UserQ.userByHandle contributorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user-not-found") ("User not found: " <> IDs.toText @UserHandle contributorHandle))
     mayProjectId <- for mayProjectShortHand \projSH -> do
       Project.projectId <$> (Q.projectByShortHand projSH) `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @ProjectShortHand projSH))
     Q.listContributorBranchesOfUserAccessibleToCaller (user_id contributorUser) callerUserId limit mayCursor mayNamePrefix mayProjectId

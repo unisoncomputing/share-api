@@ -32,6 +32,7 @@ module Share.Postgres
     runTransactionMode,
     tryRunTransaction,
     tryRunTransactionMode,
+    catchTransaction,
     unliftTransaction,
     runTransactionOrRespondError,
     runSession,
@@ -78,7 +79,6 @@ import Control.Monad.State
 import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
 import Data.Maybe
-import Data.Text qualified as Text
 import Data.Time.Clock (picosecondsToDiffTime)
 import Data.Time.Clock.System (getSystemTime, systemToTAITime)
 import Data.Time.Clock.TAI (diffAbsoluteTime)
@@ -99,6 +99,7 @@ import Share.Postgres.Orphans ()
 import Share.Prelude
 import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Postgres (likeEscape)
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
@@ -382,13 +383,13 @@ queryListRows sql = statement () (Interp.interp prepareStatements sql)
 queryVectorRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m (Vector r)
 queryVectorRows sql = statement () (Interp.interp prepareStatements sql)
 
-query1Row :: forall r m. (QueryM m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
+query1Row :: forall r m. (QueryA m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
 query1Row sql = listToMaybe <$> queryListRows sql
 
-query1Col :: forall a m. (QueryM m, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
+query1Col :: forall a m. (QueryA m, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
 query1Col sql = listToMaybe <$> queryListCol sql
 
-queryListCol :: forall a m. (QueryM m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
+queryListCol :: forall a m. (QueryA m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
 queryListCol sql = queryListRows @(Interp.OneColumn a) sql <&> coerce @[Interp.OneColumn a] @[a]
 
 execute_ :: (QueryA m) => Interp.Sql -> m ()
@@ -433,9 +434,6 @@ newtype Only a = Only {fromOnly :: a}
 
 instance (Interp.DecodeField a) => Interp.DecodeRow (Only a) where
   decodeRow = Only <$> decodeField
-
-likeEscape :: Text -> Text
-likeEscape = Text.replace "%" "\\%" . Text.replace "_" "\\_"
 
 -- | Helper for encoding a single-column table using PG.toTable.
 --
@@ -508,3 +506,10 @@ timeTransaction label ma =
       transactionUnsafeIO $ putStrLn $ "Finished " ++ label ++ " in " ++ show cpuDiff ++ " (cpu), " ++ show systemDiff ++ " (system)"
       pure a
     else ma
+
+catchTransaction :: Transaction e a -> Transaction e' (Either e a)
+catchTransaction (Transaction t) = Transaction do
+  t >>= \case
+    Left (Err e) -> pure (Right (Left e))
+    Left (Unrecoverable err) -> pure (Left (Unrecoverable err))
+    Right a -> pure (Right (Right a))

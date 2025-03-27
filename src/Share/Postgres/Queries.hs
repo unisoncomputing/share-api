@@ -7,7 +7,6 @@
 
 module Share.Postgres.Queries where
 
-import Control.Monad.Except
 import Data.Char qualified as Char
 import Data.List qualified as List
 import Data.Monoid (Sum (..))
@@ -15,18 +14,16 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Share.Branch
-import Share.Codebase qualified as Codebase
 import Share.Contribution
-import Share.Github
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.OAuth.Types
 import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
-import Share.Postgres.LooseCode.Queries qualified as LCQ
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project
 import Share.Release
@@ -34,58 +31,12 @@ import Share.Ticket (TicketStatus)
 import Share.Ticket qualified as Ticket
 import Share.User
 import Share.Utils.API
-import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
 import Share.Web.Share.Branches.Types (BranchKindFilter (..))
 import Share.Web.Share.Projects.Types (ContributionStats (..), DownloadStats (..), FavData, ProjectOwner, TicketStats (..))
 import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (..))
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
-
-expectUserByUserId :: (PG.QueryM m) => UserId -> m User
-expectUserByUserId uid = do
-  userByUserId uid >>= \case
-    Just user -> pure user
-    Nothing -> unrecoverableError $ EntityMissing (ErrorID "user:missing") ("User with id " <> IDs.toText uid <> " not found")
-
-userByUserId :: (PG.QueryM m) => UserId -> m (Maybe User)
-userByUserId uid = do
-  PG.query1Row
-    [PG.sql|
-        SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
-        FROM users u
-        WHERE u.id = #{uid}
-      |]
-
-userByEmail :: Text -> PG.Transaction e (Maybe User)
-userByEmail email = do
-  PG.query1Row
-    [PG.sql|
-        SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
-        FROM users u
-        WHERE lower(u.primary_email) = lower(#{email})
-        LIMIT 1
-      |]
-
-userByGithubUserId :: Int64 -> PG.Transaction e (Maybe User)
-userByGithubUserId githubUserId = do
-  PG.query1Row
-    [PG.sql|
-        SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
-        FROM github_users gh
-          JOIN users u
-            ON gh.unison_user_id = u.id
-        WHERE gh.github_user_id = #{githubUserId}
-      |]
-
-userByHandle :: UserHandle -> PG.Transaction e (Maybe User)
-userByHandle handle = do
-  PG.query1Row
-    [PG.sql|
-        SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
-        FROM users u
-        WHERE u.handle = lower(#{handle})
-      |]
 
 projectById :: ProjectId -> PG.Transaction e (Maybe Project)
 projectById projectId = do
@@ -181,95 +132,6 @@ setProjectFav userId projectId fav = do
         ON CONFLICT DO NOTHING
       |]
 
-data UserCreationError
-  = UserHandleTaken UserHandle
-  | -- A given user handle isn't valid according to Share.
-    -- This shouldn't happen for Github Handles, but in the case it does, we throw an error.
-    -- (Error Message, Invalid Handle)
-    InvalidUserHandle Text Text
-
-createFromGithubUser :: GithubUser -> GithubEmail -> PG.Transaction e (Either UserCreationError User)
-createFromGithubUser (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail = runExceptT do
-  let (GithubEmail {github_email_email = user_email, github_email_verified = emailVerified}) = primaryEmail
-  userHandle <- case IDs.fromText @UserHandle (Text.toLower githubHandle) of
-    Left err -> throwError (InvalidUserHandle err githubHandle)
-    Right handle -> pure handle
-  handleExists <-
-    lift $
-      PG.queryExpect1Col
-        [PG.sql|
-        SELECT EXISTS (SELECT from users WHERE handle = #{userHandle})
-      |]
-  if handleExists
-    then do
-      throwError $ UserHandleTaken userHandle
-    else do
-      -- All users are created public, private users are currently only possible via
-      -- manual Postgres manipulation.
-      let private = False
-      user_id <-
-        lift $
-          PG.queryExpect1Col
-            [PG.sql|
-                            INSERT INTO users
-                              (primary_email, email_verified, avatar_url, name, handle, private)
-                              VALUES (#{user_email}, #{emailVerified}, #{avatar_url}, #{user_name}, #{userHandle}, #{private})
-                            RETURNING id
-                          |]
-      lift $
-        PG.execute_
-          [PG.sql|
-          INSERT INTO github_users
-            (github_user_id, unison_user_id)
-            VALUES (#{githubUserId}, #{user_id})
-        |]
-      let codebase = Codebase.codebaseEnv AuthZ.userCreationOverride (Codebase.codebaseLocationForUserCodebase user_id)
-      lift $ Codebase.codebaseMToTransaction codebase LCQ.initialize
-      let visibility = UserPublic
-      pure $
-        User
-          { handle = userHandle,
-            avatar_url = Just avatar_url,
-            user_id,
-            user_name,
-            user_email,
-            visibility
-          }
-
-data NewOrPreExisting a
-  = New a
-  | PreExisting a
-  deriving stock (Show, Eq, Functor, Foldable, Traversable)
-
-getNewOrPreExisting :: NewOrPreExisting a -> a
-getNewOrPreExisting (New a) = a
-getNewOrPreExisting (PreExisting a) = a
-
-isNew :: NewOrPreExisting a -> Bool
-isNew New {} = True
-isNew _ = False
-
-findOrCreateGithubUser :: GithubUser -> GithubEmail -> PG.Transaction e (Either UserCreationError (NewOrPreExisting User))
-findOrCreateGithubUser ghu@(GithubUser _login githubUserId _avatarUrl _name) primaryEmail = do
-  user <- userByGithubUserId githubUserId
-  case user of
-    Just user' -> return $ Right (PreExisting user')
-    Nothing -> do
-      fmap New <$> createFromGithubUser ghu primaryEmail
-
-searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [User]
-searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
-  let q = likeEscape prefix <> "%"
-  PG.queryListRows
-    [PG.sql|
-    SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
-      FROM users u
-      WHERE (u.handle ILIKE #{q}
-             OR u.name ILIKE #{q}
-            ) AND NOT u.private
-      LIMIT #{limit}
-      |]
-
 -- | Perform a text search over projects and return Limit results in order of relevance.
 --
 -- The PG.queryListRows accepts strings as web search queries, see
@@ -333,13 +195,6 @@ completeToursForUser uid tours = do
     INSERT INTO tours(user_id, tour_id)
       SELECT * FROM ^{PG.toTable toursToInsert}
       ON CONFLICT DO NOTHING
-      |]
-
-allUsers :: PG.Transaction e [UserId]
-allUsers = do
-  PG.queryListCol
-    [PG.sql|
-        SELECT id FROM users
       |]
 
 -- | Return all projects
@@ -550,7 +405,7 @@ branchByProjectIdAndShortHand projectId BranchShortHand {contributorHandle, bran
   mayContributorUserId <- case contributorHandle of
     Nothing -> pure Nothing
     Just handle -> do
-      User {user_id} <- MaybeT (userByHandle handle)
+      User {user_id} <- MaybeT (UserQ.userByHandle handle)
       pure (Just user_id)
 
   MaybeT $

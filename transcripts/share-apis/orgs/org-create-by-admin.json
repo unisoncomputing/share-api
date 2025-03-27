@@ -1,0 +1,16 @@
+{
+  "body": {
+    "orgId": "ORG-<UUID>",
+    "user": {
+      "avatarUrl": "https://example.com/anvil.png",
+      "handle": "acme",
+      "name": "ACME",
+      "userId": "U-<UUID>"
+    }
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

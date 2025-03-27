@@ -107,7 +107,7 @@ relocateToNameRoot perspective query rootBh = do
             & Name.segments
             & NonEmpty.init
             & Path.fromList
-        Nothing -> mempty @Path
+        Nothing -> mempty
   let fullPath = perspective <> nameLocation
   Debug.debugM Debug.Server "relocateToNameRoot fullPath" fullPath
   namesPerspective@NamesPerspective {relativePerspective} <- namesPerspectiveForRootAndPath rootBh (PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ fullPath)

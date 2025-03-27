@@ -32,6 +32,7 @@ import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.Queries qualified as BranchQ
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project
@@ -52,7 +53,7 @@ import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 import Unison.Name (Name)
 import Unison.Server.Types
 import Unison.Syntax.Name qualified as Name
@@ -130,12 +131,12 @@ listContributionsByProjectEndpoint ::
   Maybe ContributionKindFilter ->
   WebApp (Paged ListContributionsCursor (ShareContribution UserDisplayInfo))
 listContributionsByProjectEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) handle projectSlug cursor mayLimit authorFilter statusFilter kindFilter = do
-  (project@Project {projectId}, authorUserId) <- PG.runTransactionOrRespondError $ do
+  (Project {projectId}, authorUserId) <- PG.runTransactionOrRespondError $ do
     project <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     authorFilterID <- for authorFilter \(IDs.PrefixedID authorHandle) -> do
-      User.user_id <$> Q.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
+      User.user_id <$> UserQ.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     pure (project, authorFilterID)
-  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionListByProject mayCallerUserId project
+  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionListByProject mayCallerUserId projectId
   (nextCursor, contributions) <- PG.runTransaction $ do
     ContributionsQ.listContributionsByProjectId projectId limit cursor authorUserId statusFilter kindFilter
       >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)
@@ -152,12 +153,12 @@ createContributionEndpoint ::
   WebApp (ShareContribution UserDisplayInfo)
 createContributionEndpoint session userHandle projectSlug (CreateContributionRequest {title, description, status, sourceBranchShortHand, targetBranchShortHand}) = do
   callerUserId <- AuthN.requireAuthenticatedUser session
-  (project@Project {projectId}, Branch {branchId = sourceBranchId}, Branch {branchId = targetBranchId}) <- PG.runTransactionOrRespondError $ do
+  (Project {projectId}, Branch {branchId = sourceBranchId}, Branch {branchId = targetBranchId}) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     sourceBranch <- Q.branchByProjectIdAndShortHand projectId sourceBranchShortHand `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
     targetBranch <- Q.branchByProjectIdAndShortHand projectId targetBranchShortHand `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     pure (project, sourceBranch, targetBranch)
-  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionCreate callerUserId project
+  _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionCreate callerUserId projectId
   PG.runTransactionOrRespondError $ do
     (contributionId, contributionNumber) <- ContributionsQ.createContribution callerUserId projectId title description status sourceBranchId targetBranchId
     DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
@@ -173,7 +174,7 @@ getContributionByNumberEndpoint ::
   IDs.ContributionNumber ->
   WebApp (ShareContribution UserDisplayInfo :++ AtKey "contributionStateToken" ContributionStateToken)
 getContributionByNumberEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber = do
-  (project, shareContribution) <- PG.runTransactionOrRespondError $ do
+  (Project {projectId}, shareContribution) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     shareContribution <-
       ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
@@ -182,7 +183,7 @@ getContributionByNumberEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHa
           contributionStateToken <- ContributionsQ.contributionStateTokenById contributionId
           pure $ shareContribution :++ AtKey contributionStateToken
     pure (project, shareContribution)
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId projectId
   pure shareContribution
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
@@ -220,14 +221,14 @@ getContributionTimelineEndpoint ::
   Maybe Limit ->
   WebApp (Paged ContributionTimelineCursor (ContributionTimelineEvent UserDisplayInfo))
 getContributionTimelineEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber mayCursor mayLimit = do
-  (project, shareContributionTimeline, nextCursor) <- PG.runTransactionOrRespondError $ do
+  (Project {projectId}, shareContributionTimeline, nextCursor) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "project:missing") "Project not found")
     (nextCursor, shareContributionTimeline) <- ContributionsQ.getPagedShareContributionTimelineByProjectIdAndNumber projectId contributionNumber (unCursor <$> mayCursor) limit
     shareContributionsTimelineWithUserInfo <-
       shareContributionTimeline
         & UsersQ.userDisplayInfoOf (traverse . traverse)
     pure (project, shareContributionsTimelineWithUserInfo, nextCursor)
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId project
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId projectId
   pure $ Paged {items = shareContributionTimeline, cursor = Cursor <$> nextCursor}
   where
     limit = fromMaybe 20 mayLimit
@@ -243,7 +244,7 @@ listContributionsByUserEndpoint ::
   WebApp (Paged ListContributionsCursor (ShareContribution UserDisplayInfo))
 listContributionsByUserEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle mayCursor mayLimit statusFilter kindFilter = do
   (contributions, nextCursor) <- PG.runTransactionOrRespondError $ do
-    user <- Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
+    user <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     (nextCursor, contributions) <-
       ContributionsQ.listContributionsByUserId mayCallerUserId (User.user_id user) limit mayCursor statusFilter kindFilter
         >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)
@@ -259,7 +260,7 @@ contributionDiffEndpoint ::
   IDs.ContributionNumber ->
   WebApp (Cached JSON ShareNamespaceDiffResponse)
 contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber = do
-  ( project,
+  ( project@Project {projectId},
     Contribution {contributionId, bestCommonAncestorCausalId},
     oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
     newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
@@ -269,7 +270,7 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
     newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
     oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     pure (project, contribution, oldBranch, newBranch)
-  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId project
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
   oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
@@ -306,7 +307,7 @@ contributionDiffTermsEndpoint ::
   WebApp (Cached JSON ShareTermDiffResponse)
 contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber oldTermName newTermName =
   do
-    ( project,
+    ( project@Project {projectId},
       Contribution {contributionId, bestCommonAncestorCausalId},
       oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
       newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
@@ -316,7 +317,7 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
       newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
       oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
       pure (project, contribution, oldBranch, newBranch)
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
     let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
     oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
@@ -354,7 +355,7 @@ contributionDiffTypesEndpoint ::
   WebApp (Cached JSON ShareTypeDiffResponse)
 contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber oldTypeName newTypeName =
   do
-    ( project,
+    ( project@(Project {projectId}),
       Contribution {contributionId, bestCommonAncestorCausalId},
       oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
       newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
@@ -364,7 +365,7 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
       newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
       oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
       pure (project, contribution, oldBranch, newBranch)
-    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId project
+    authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
     let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
     oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do

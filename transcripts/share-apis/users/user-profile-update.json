@@ -3,8 +3,10 @@
     "avatarUrl": "http://updated.com",
     "bio": "Updated bio",
     "handle": "transcripts",
+    "kind": "user",
     "location": "Updated location",
     "name": "Updated Transcripts",
+    "permissions": [],
     "pronouns": "updated/pronouns",
     "twitterHandle": "updated-twitter",
     "website": "http://updated-website.com"

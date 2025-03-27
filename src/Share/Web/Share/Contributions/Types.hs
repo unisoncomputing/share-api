@@ -20,7 +20,7 @@ import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors qualified as Err
 import Share.Web.Share.Comments (CommentEvent (..), commentEventTimestamp)
-import Share.Web.Share.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo (UserDisplayInfo)
 import U.Codebase.HashTags (CausalHash (..))
 import Unison.Hash qualified as Hash
 import Web.HttpApiData (ToHttpApiData (..))

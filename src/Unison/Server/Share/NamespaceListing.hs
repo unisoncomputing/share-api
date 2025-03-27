@@ -35,7 +35,6 @@ import Unison.Symbol (Symbol)
 import Unison.Syntax.NameSegment qualified as NameSegment
 import Unison.Util.Pretty (Width)
 import Unison.Var (Var)
-import Unison.Codebase.Path (Path)
 
 type NamespaceListingAPI =
   "list"
@@ -174,8 +173,8 @@ serve rootCausalId mayRelativeTo mayNamespaceName = runMaybeT $ do
   -- to look up the namespace listing and present shallow name, so that the
   -- definition "base.List.Nonempty.map", simple has the name "map"
   --
-  let relativeToPath = fromMaybe (mempty @Path) mayRelativeTo
-  let namespacePath = fromMaybe (mempty @Path) mayNamespaceName
+  let relativeToPath = fromMaybe mempty mayRelativeTo
+  let namespacePath = fromMaybe mempty mayNamespaceName
   let path = relativeToPath <> namespacePath
   listingCausal <- MaybeT $ Codebase.loadCausalNamespaceAtPath rootCausalId path
   listingBranch <- lift $ V2Causal.value listingCausal

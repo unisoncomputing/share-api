@@ -17,6 +17,7 @@ import Share.JWT qualified as JWT
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
+import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.IDs (CausalHash)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as PQ
@@ -24,6 +25,7 @@ import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DSQ
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -45,9 +47,11 @@ import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
+import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.Orgs.Queries qualified as OrgQ
+import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
-import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
@@ -86,13 +90,14 @@ userServer :: ServerT Share.UserAPI WebApp
 userServer session handle =
   hoistServerWithContext (Proxy @Share.UserResourceAPI) ctxType addTags $
     ( getUserReadmeEndpoint session handle
-        :<|> getUserProfileEndpoint handle
+        :<|> getUserProfileEndpoint mayCallerId handle
         :<|> updateUserEndpoint handle
         :<|> Projects.projectServer session handle
         :<|> Branches.listBranchesByUserEndpoint session handle
         :<|> Contributions.listContributionsByUserEndpoint session handle
     )
   where
+    mayCallerId = sessionUserId <$> session
     ctxType = Proxy @(AuthCheckCtx .++ '[Cookies.CookieSettings, JWT.JWTSettings])
     addTags :: forall x. WebApp x -> WebApp x
     addTags m = do
@@ -123,10 +128,10 @@ browseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle relativeTo name
     Codebase.runCodebaseTransactionOrRespondError codebase $ do
       NL.serve rootCausalId relativeTo namespace `whenNothingM` throwError (EntityMissing (ErrorID "no-namespace") $ "No namespace found at " <> Path.toText namespacePrefix)
   where
-    cacheParams = [tShow $ fromMaybe (mempty @Path) relativeTo, tShow $ fromMaybe (mempty @Path) namespace]
+    cacheParams = [tShow $ fromMaybe mempty relativeTo, tShow $ fromMaybe mempty namespace]
     namespacePrefix :: Path.Path
     namespacePrefix =
-      fromMaybe (mempty @Path) relativeTo <> fromMaybe (mempty @Path) namespace
+      fromMaybe mempty relativeTo <> fromMaybe mempty namespace
 
 definitionsByNameEndpoint ::
   Maybe Session ->
@@ -147,13 +152,13 @@ definitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle name
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-name" cacheParams rootCausalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe (mempty @Path) relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
-    cacheParams = [HQ.toTextWith Name.toText name, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
     authPath =
-      let prefix = fromMaybe (mempty @Path) relativeTo
-          suffix = maybe (mempty @Path) Path.fromName $ HQ.toName name
+      let prefix = fromMaybe mempty relativeTo
+          suffix = maybe mempty Path.fromName $ HQ.toName name
        in prefix <> suffix
 
 definitionsByHashEndpoint ::
@@ -168,7 +173,7 @@ definitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle refe
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported within loose-code")
   codebaseOwner@(User {user_id = codebaseOwnerUserId}) <- PGO.expectUserByHandle userHandle
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
-  let authPath = fromMaybe (mempty @Path) relativeTo
+  let authPath = fromMaybe mempty relativeTo
   let shortHash = Referent.toShortHash referent
   let query = HQ.HashOnly shortHash
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
@@ -177,9 +182,9 @@ definitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle refe
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-hash" cacheParams rootCausalId $ do
     Codebase.runCodebaseTransaction codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe (mempty @Path) relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
-    cacheParams = [toUrlPiece referent, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 termSummaryEndpoint ::
   Maybe Session ->
@@ -201,11 +206,11 @@ termSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
     Codebase.runCodebaseTransaction codebase $ do
       serveTermSummary ref mayName rootCausalId relativeTo renderWidth
   where
-    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
     authPath =
-      let prefix = fromMaybe (mempty @Path) relativeTo
-          suffix = maybe (mempty @Path) Path.fromName mayName
+      let prefix = fromMaybe mempty relativeTo
+          suffix = maybe mempty Path.fromName mayName
        in prefix <> suffix
 
 typeSummaryEndpoint ::
@@ -228,11 +233,11 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
     Codebase.runCodebaseTransaction codebase $ do
       serveTypeSummary ref mayName renderWidth
   where
-    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe (mempty @Path) relativeTo, foldMap toUrlPiece renderWidth]
+    cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
     authPath =
-      let prefix = fromMaybe (mempty @Path) relativeTo
-          suffix = maybe (mempty @Path) Path.fromName mayName
+      let prefix = fromMaybe mempty relativeTo
+          suffix = maybe mempty Path.fromName mayName
        in prefix <> suffix
 
 findEndpoint ::
@@ -247,7 +252,7 @@ findEndpoint ::
   WebApp [(Fuzzy.Alignment, Fuzzy.FoundResult)]
 findEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle mayRelativeTo limit renderWidth query searchDependencies rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported within loose-code")
-  let relativeTo = fromMaybe (mempty @Path) mayRelativeTo
+  let relativeTo = fromMaybe mempty mayRelativeTo
   let authPath = relativeTo
   codebaseOwner@(User {user_id = codebaseOwnerUserId}) <- PGO.expectUserByHandle userHandle
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
@@ -266,7 +271,7 @@ namespacesByNameEndpoint ::
   Maybe Pretty.Width ->
   Maybe CausalHash ->
   WebApp (Cached JSON NamespaceDetails)
-namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (fromMaybe (mempty @Path) -> path) renderWidth rootHash = do
+namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (fromMaybe mempty -> path) renderWidth rootHash = do
   whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported within loose-code")
   codebaseOwner@(User {user_id = codebaseOwnerUserId}) <- PGO.expectUserByHandle userHandle
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
@@ -280,11 +285,18 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
   where
     cacheParams = [tShow path]
 
-getUserProfileEndpoint :: UserHandle -> WebApp DescribeUserProfile
-getUserProfileEndpoint userHandle = do
-  UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <- PG.runTransactionOrRespondError do
-    User {user_id} <- Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-    UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+getUserProfileEndpoint :: Maybe UserId -> UserHandle -> WebApp DescribeUserProfile
+getUserProfileEndpoint callerUserId userHandle = do
+  (UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns}, kind, permissions) <- PG.runTransactionOrRespondError do
+    User {user_id} <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    profile <- UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    (kind, permissions) <-
+      OrgQ.orgByUserId user_id >>= \case
+        Just (Org {orgId}) -> do
+          permissionsWithinOrg <- AuthZQ.permissionsForOrg callerUserId orgId
+          pure (OrgKind, permissionsWithinOrg)
+        Nothing -> pure (UserKind, mempty)
+    pure (profile, kind, permissions)
   pure $
     DescribeUserProfile
       { handle = userHandle,
@@ -294,28 +306,19 @@ getUserProfileEndpoint userHandle = do
         website = website,
         location = location,
         twitterHandle = twitterHandle,
-        pronouns = pronouns
+        pronouns = pronouns,
+        kind,
+        permissions
       }
 
 updateUserEndpoint :: UserHandle -> UserId -> UpdateUserRequest -> WebApp DescribeUserProfile
 updateUserEndpoint userHandle callerUserId (UpdateUserRequest {name, avatarUrl, bio, website, location, twitterHandle, pronouns}) = do
   User {user_id = toUpdateUserId} <- PG.runTransactionOrRespondError $ do
-    Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkUserUpdate callerUserId toUpdateUserId
-  UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns} <- PG.runTransactionOrRespondError $ do
+  PG.runTransaction $ do
     UsersQ.updateUser toUpdateUserId name avatarUrl bio website location twitterHandle pronouns
-    UsersQ.userProfileById toUpdateUserId `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-  pure $
-    DescribeUserProfile
-      { handle = userHandle,
-        name = user_name,
-        avatarUrl = avatar_url,
-        bio = bio,
-        website = website,
-        location = location,
-        twitterHandle = twitterHandle,
-        pronouns = pronouns
-      }
+  getUserProfileEndpoint (Just callerUserId) userHandle
 
 -- | Gets the readme for a user.
 -- This was separated from the user profile endpoint because fetching the readme from the
@@ -351,7 +354,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
       & Text.splitOn "/"
       & \case
         (userQuery : projectQueryText : _rest) -> do
-          mayUserId <- PG.runTransaction $ fmap User.user_id <$> Q.userByHandle (UserHandle userQuery)
+          mayUserId <- PG.runTransaction $ fmap User.user_id <$> UserQ.userByHandle (UserHandle userQuery)
           pure (Query query, (mayUserId, Query projectQueryText))
         [projectOrUserQuery] -> pure (Query projectOrUserQuery, (Nothing, Query projectOrUserQuery))
         -- This is impossible
@@ -360,7 +363,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
   -- of 5 users (who match the query as a prefix), then return the rest of the results from
   -- projects.
   (users, projects) <- PG.runTransaction $ do
-    users <- Q.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+    users <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
     projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
     pure (users, projects)
   let userResults =
@@ -426,7 +429,7 @@ resolveProjectAndReleaseFilter projectFilter releaseFilter = do
 resolveUserFilter :: Maybe UserHandle -> MaybeT WebApp DDQ.DefnNameSearchFilter
 resolveUserFilter userFilter = do
   userHandle <- hoistMaybe userFilter
-  User {user_id} <- lift $ PG.runTransactionOrRespondError $ Q.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+  User {user_id} <- lift $ PG.runTransactionOrRespondError $ UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
   pure $ DDQ.UserFilter user_id
 
 searchDefinitionsEndpoint ::
