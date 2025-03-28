@@ -8,15 +8,18 @@ module Share.Notifications.Types
     ProjectBranchData (..),
     ProjectContributionData (..),
     NotificationHubEntry (..),
+    NotificationStatus (..),
     eventTopic,
   )
 where
 
-import Data.Aeson ((.=))
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Time (UTCTime)
 import Hasql.Decoders qualified as HasqlDecoders
 import Hasql.Encoders qualified as HasqlEncoders
+import Hasql.Interpolate qualified as Hasql
+import Servant (FromHttpApiData (..))
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -45,6 +48,14 @@ data NotificationStatus
   = Unread
   | Read
   | Archived
+  deriving (Eq, Show, Enum, Bounded, Ord)
+
+instance FromHttpApiData NotificationStatus where
+  parseQueryParam = \case
+    "unread" -> Right Unread
+    "read" -> Right Read
+    "archived" -> Right Archived
+    s -> Left $ "Invalid notification status: " <> s
 
 instance Aeson.ToJSON NotificationStatus where
   toJSON = \case
@@ -81,6 +92,13 @@ instance Aeson.ToJSON ProjectBranchData where
         "branchContributorUserId" .= branchContributorUserId
       ]
 
+instance Aeson.FromJSON ProjectBranchData where
+  parseJSON = Aeson.withObject "ProjectBranchData" \o -> do
+    projectId <- o .: "projectId"
+    branchId <- o .: "branchId"
+    branchContributorUserId <- o .: "branchContributorUserId"
+    pure ProjectBranchData {projectId, branchId, branchContributorUserId}
+
 data ProjectContributionData = ProjectContributionData
   { projectId :: ProjectId,
     contributionId :: ContributionId,
@@ -98,6 +116,15 @@ instance Aeson.ToJSON ProjectContributionData where
         "toBranchId" .= toBranchId,
         "contributorUserId" .= contributorUserId
       ]
+
+instance Aeson.FromJSON ProjectContributionData where
+  parseJSON = Aeson.withObject "ProjectContributionData" \o -> do
+    projectId <- o .: "projectId"
+    contributionId <- o .: "contributionId"
+    fromBranchId <- o .: "fromBranchId"
+    toBranchId <- o .: "toBranchId"
+    contributorUserId <- o .: "contributorUserId"
+    pure ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}
 
 data NotificationEventData
   = ProjectBranchUpdatedData ProjectBranchData
@@ -122,6 +149,18 @@ instance PG.EncodeValue NotificationEventData where
         ProjectBranchUpdatedData d -> Aeson.toJSON d
         ProjectContributionCreatedData d -> Aeson.toJSON d
 
+instance Hasql.DecodeRow NotificationEventData where
+  decodeRow = do
+    topic <- PG.decodeField
+    Hasql.Jsonb jsonData <- PG.decodeField
+    case topic of
+      ProjectBranchUpdated -> ProjectBranchUpdatedData <$> parseJsonData jsonData
+      ProjectContributionCreated -> ProjectContributionCreatedData <$> parseJsonData jsonData
+    where
+      parseJsonData v = case Aeson.fromJSON v of
+        Aeson.Error e -> fail e
+        Aeson.Success a -> pure a
+
 eventTopic :: NotificationEventData -> NotificationTopic
 eventTopic = \case
   ProjectBranchUpdatedData {} -> ProjectBranchUpdated
@@ -143,6 +182,14 @@ instance Aeson.ToJSON (NotificationEvent NotificationEventId UTCTime) where
         "data" Aeson..= eventData,
         "scope" Aeson..= eventScope
       ]
+
+instance Hasql.DecodeRow (NotificationEvent NotificationEventId UTCTime) where
+  decodeRow = do
+    eventId <- PG.decodeField
+    eventOccurredAt <- PG.decodeField
+    eventScope <- PG.decodeField
+    eventData <- PG.decodeRow
+    pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope}
 
 type NewNotificationEvent = NotificationEvent () ()
 
@@ -167,3 +214,10 @@ instance Aeson.ToJSON NotificationHubEntry where
         "event" Aeson..= hubEntryEvent,
         "status" Aeson..= hubEntryStatus
       ]
+
+instance Hasql.DecodeRow NotificationHubEntry where
+  decodeRow = do
+    hubEntryId <- PG.decodeField
+    hubEntryStatus <- PG.decodeField
+    hubEntryEvent <- PG.decodeRow
+    pure $ NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus}
