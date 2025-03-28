@@ -48,6 +48,7 @@ module Share.Web.Authorization
     checkCreateOrg,
     checkReadOrgRolesList,
     checkEditOrgRoles,
+    checkNotificationsGet,
     permissionGuard,
     readPath,
     writePath,
@@ -161,6 +162,7 @@ data ProjectPermission
 
 data UserPermission
   = UserUpdate UserId
+  | UserNotificationGet UserId
   deriving stock (Show, Eq, Ord)
 
 data OrgPermission
@@ -224,6 +226,7 @@ instance Errors.ToServerError AuthZFailure where
     UserPermission userPermission ->
       case userPermission of
         UserUpdate _uid -> (ErrorID "authz:user:update", err403 {errBody = "Permission Denied: " <> msg})
+        UserNotificationGet _uid -> (ErrorID "authz:user:notification-get", err403 {errBody = "Permission Denied: " <> msg})
     OrgPermission orgPermission ->
       case orgPermission of
         OrgRolesEdit _orgId -> (ErrorID "authz:org:roles-edit", err403 {errBody = "Permission Denied: " <> msg})
@@ -280,6 +283,7 @@ authZFailureMessage (AuthZFailure perm) = case perm of
   UserPermission userPermission ->
     case userPermission of
       UserUpdate _uid -> "Not permitted to update this user"
+      UserNotificationGet _uid -> "Not permitted to get notifications for this user"
   OrgPermission orgPermission ->
     case orgPermission of
       OrgRolesEdit _orgId -> "Not permitted to edit roles in this org"
@@ -669,6 +673,11 @@ checkEditOrgRoles reqUserId orgId =
   maybePermissionFailure (OrgPermission (OrgRolesEdit orgId)) $ do
     assertUserHasOrgPermission reqUserId orgId AuthZ.OrgAdmin
     pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkNotificationsGet :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkNotificationsGet caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationGet notificationUser) do
+  guard (caller == notificationUser) <|> (checkUserIsOrgMember caller notificationUser)
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check whether the given user has administrative privileges,
 -- and has a recently created session. This adds additional protection to
