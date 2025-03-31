@@ -10,6 +10,7 @@ termAliasMe = 1
 termDeleteMe = 2
 termRenameMe = 3
 termUpdateMe = "original"
+termDependsOnUpdateMe = termUpdateMe ++ termUpdateMe
 
 type DataLeaveMeAlone = A
 type DataAliasMe = B

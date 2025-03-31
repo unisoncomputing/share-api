@@ -8,7 +8,7 @@
               "contents": {
                 "aliasFullName": "ATypeAlias",
                 "aliasShortName": "ATypeAlias",
-                "hash": "#bbsbe7lolqunqrftm9jeg299caa91r2mlviqic54toilse443ljup5eojm1et3lqv6ni5gsu9l9hpldptga3cp5e0qffhg36gv5u2jo",
+                "hash": "#keu02n8is0irijd65cvuos41kukj3f4ni18mmnudrbll2epo6ftd03nt9l0vqc4fvg98198tefgoupco4o0d0gvnigqgr1bmo2neo88",
                 "otherNames": [
                   "DataAliasMe"
                 ],
@@ -42,7 +42,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#bbsbe7lolqunqrftm9jeg299caa91r2mlviqic54toilse443ljup5eojm1et3lqv6ni5gsu9l9hpldptga3cp5e0qffhg36gv5u2jo#d0",
+                          "contents": "#keu02n8is0irijd65cvuos41kukj3f4ni18mmnudrbll2epo6ftd03nt9l0vqc4fvg98198tefgoupco4o0d0gvnigqgr1bmo2neo88#d0",
                           "tag": "TermReference"
                         },
                         "segment": "B"
@@ -66,7 +66,7 @@
               "contents": {
                 "aliasFullName": "AbilityAlias",
                 "aliasShortName": "AbilityAlias",
-                "hash": "#qfgn5crplnhh308pepplqtleojiqhlpveimv0htug2mqbvhnia7qjfcravqlfb8ooos56jo5qq6brr99gg5kj0g5bgllvgn1nesv608",
+                "hash": "#u9m3jehjj8mtrhh4i4fuk545k3pdged9r0egph91irldf4lc0rsmtma9eoakvv9hoeesciebuqd7kfm0vdnk48gi7q3s7edn5omb65o",
                 "otherNames": [
                   "AbilityAliasMe"
                 ],
@@ -108,7 +108,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#qfgn5crplnhh308pepplqtleojiqhlpveimv0htug2mqbvhnia7qjfcravqlfb8ooos56jo5qq6brr99gg5kj0g5bgllvgn1nesv608#a0",
+                          "contents": "#u9m3jehjj8mtrhh4i4fuk545k3pdged9r0egph91irldf4lc0rsmtma9eoakvv9hoeesciebuqd7kfm0vdnk48gi7q3s7edn5omb65o#a0",
                           "tag": "TermReference"
                         },
                         "segment": "abilityAliasMe"
@@ -131,7 +131,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#qfgn5crplnhh308pepplqtleojiqhlpveimv0htug2mqbvhnia7qjfcravqlfb8ooos56jo5qq6brr99gg5kj0g5bgllvgn1nesv608",
+                          "contents": "#u9m3jehjj8mtrhh4i4fuk545k3pdged9r0egph91irldf4lc0rsmtma9eoakvv9hoeesciebuqd7kfm0vdnk48gi7q3s7edn5omb65o",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityAlias"
@@ -171,7 +171,7 @@
             "contents": {
               "contents": {
                 "fullName": "AbilityDeleteMe",
-                "hash": "#val3i3ikhjc998qh1lfefhh08ad77f1eshera5d0hnbrp6qpgmfelbfa96pvsc18d5qd5qm7lij5el0raipb3mbjgalkh7g3aujej1o",
+                "hash": "#i201btc2422jlmnric78btv3kl1palljsgc55mvm6rb9ofdos9u8mh2jd70uev381oiun4todb8vhkvvpteieshbfsot4slo9cgrjcg",
                 "rendered": {
                   "bestTypeName": "AbilityDeleteMe",
                   "defnTypeTag": "Ability",
@@ -210,7 +210,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#val3i3ikhjc998qh1lfefhh08ad77f1eshera5d0hnbrp6qpgmfelbfa96pvsc18d5qd5qm7lij5el0raipb3mbjgalkh7g3aujej1o#a0",
+                          "contents": "#i201btc2422jlmnric78btv3kl1palljsgc55mvm6rb9ofdos9u8mh2jd70uev381oiun4todb8vhkvvpteieshbfsot4slo9cgrjcg#a0",
                           "tag": "TermReference"
                         },
                         "segment": "abilityDeleteMe"
@@ -233,7 +233,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#val3i3ikhjc998qh1lfefhh08ad77f1eshera5d0hnbrp6qpgmfelbfa96pvsc18d5qd5qm7lij5el0raipb3mbjgalkh7g3aujej1o",
+                          "contents": "#i201btc2422jlmnric78btv3kl1palljsgc55mvm6rb9ofdos9u8mh2jd70uev381oiun4todb8vhkvvpteieshbfsot4slo9cgrjcg",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityDeleteMe"
@@ -273,7 +273,7 @@
             "contents": {
               "contents": {
                 "fullName": "AbilityNew",
-                "hash": "#t66tvdfo0l4pqj6hgav05tqifbuld8dc22g4rom3olfqj7b6cfpvf15j7307j8m2fpdsvcgv4ourrltpjutgpu3bh08efu2jl2nfqq0",
+                "hash": "#n7jj1pvi6a8689nggmnlhmn8hvkjiu4j5563kojf57dcf8dribv5suliht31nbpgc4501h26geepfg5o8jiid45h6ccmf8ogqu39am0",
                 "rendered": {
                   "bestTypeName": "AbilityNew",
                   "defnTypeTag": "Ability",
@@ -312,7 +312,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#t66tvdfo0l4pqj6hgav05tqifbuld8dc22g4rom3olfqj7b6cfpvf15j7307j8m2fpdsvcgv4ourrltpjutgpu3bh08efu2jl2nfqq0#a0",
+                          "contents": "#n7jj1pvi6a8689nggmnlhmn8hvkjiu4j5563kojf57dcf8dribv5suliht31nbpgc4501h26geepfg5o8jiid45h6ccmf8ogqu39am0#a0",
                           "tag": "TermReference"
                         },
                         "segment": "abilityNew"
@@ -335,7 +335,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#t66tvdfo0l4pqj6hgav05tqifbuld8dc22g4rom3olfqj7b6cfpvf15j7307j8m2fpdsvcgv4ourrltpjutgpu3bh08efu2jl2nfqq0",
+                          "contents": "#n7jj1pvi6a8689nggmnlhmn8hvkjiu4j5563kojf57dcf8dribv5suliht31nbpgc4501h26geepfg5o8jiid45h6ccmf8ogqu39am0",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityNew"
@@ -374,7 +374,7 @@
           {
             "contents": {
               "contents": {
-                "hash": "#iqmiiehu802p15ssntohl6l5kedd0j266rh7815s1t10rfe2bp207vh8ccngrlkii7i32h1n080dggr3r89osrq450kv6dj5uuc0o0o",
+                "hash": "#lh3ufh51cghv5sn14ckq9f2urei00i6adqj3d0vovc51c6f18bhauqfjhkm34227ediga6mc5dp58inn4j714rhenig2jsps9ima7do",
                 "newFullName": "AbilityRenamed",
                 "newShortName": "AbilityRenamed",
                 "oldNames": [
@@ -418,7 +418,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#iqmiiehu802p15ssntohl6l5kedd0j266rh7815s1t10rfe2bp207vh8ccngrlkii7i32h1n080dggr3r89osrq450kv6dj5uuc0o0o#a0",
+                          "contents": "#lh3ufh51cghv5sn14ckq9f2urei00i6adqj3d0vovc51c6f18bhauqfjhkm34227ediga6mc5dp58inn4j714rhenig2jsps9ima7do#a0",
                           "tag": "TermReference"
                         },
                         "segment": "abilityRenameMe"
@@ -441,7 +441,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#iqmiiehu802p15ssntohl6l5kedd0j266rh7815s1t10rfe2bp207vh8ccngrlkii7i32h1n080dggr3r89osrq450kv6dj5uuc0o0o",
+                          "contents": "#lh3ufh51cghv5sn14ckq9f2urei00i6adqj3d0vovc51c6f18bhauqfjhkm34227ediga6mc5dp58inn4j714rhenig2jsps9ima7do",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityRenamed"
@@ -522,12 +522,12 @@
                         {
                           "diffTag": "annotationChange",
                           "fromAnnotation": {
-                            "contents": "#0d5ej3mann48uffjea4epi8ss486689gsj46cscorhs3d4j7ohvj9t7ghg05tra792umcmgjr6lgqkskoo3odge7jm2ci91dlmpefcg#a0",
+                            "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0#a0",
                             "tag": "TermReference"
                           },
                           "segment": "abilityUpdateMe",
                           "toAnnotation": {
-                            "contents": "#qat72tp0lb43gp5pra5rgobup5r24qrc494crqd5pqjddbneiqdn3hq6puo2344nja1v6cp7aps1p0350ug0f1kvo9cp2gu9l31in18#a0",
+                            "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng#a0",
                             "tag": "TermReference"
                           }
                         },
@@ -555,12 +555,12 @@
                         {
                           "diffTag": "annotationChange",
                           "fromAnnotation": {
-                            "contents": "#0d5ej3mann48uffjea4epi8ss486689gsj46cscorhs3d4j7ohvj9t7ghg05tra792umcmgjr6lgqkskoo3odge7jm2ci91dlmpefcg",
+                            "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0",
                             "tag": "TypeReference"
                           },
                           "segment": "AbilityUpdateMe",
                           "toAnnotation": {
-                            "contents": "#qat72tp0lb43gp5pra5rgobup5r24qrc494crqd5pqjddbneiqdn3hq6puo2344nja1v6cp7aps1p0350ug0f1kvo9cp2gu9l31in18",
+                            "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng",
                             "tag": "TypeReference"
                           }
                         },
@@ -646,7 +646,7 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#0d5ej3mann48uffjea4epi8ss486689gsj46cscorhs3d4j7ohvj9t7ghg05tra792umcmgjr6lgqkskoo3odge7jm2ci91dlmpefcg#a0",
+                            "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0#a0",
                             "tag": "TermReference"
                           },
                           "segment": "abilityUpdateMe"
@@ -669,7 +669,7 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#0d5ej3mann48uffjea4epi8ss486689gsj46cscorhs3d4j7ohvj9t7ghg05tra792umcmgjr6lgqkskoo3odge7jm2ci91dlmpefcg",
+                            "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0",
                             "tag": "TypeReference"
                           },
                           "segment": "AbilityUpdateMe"
@@ -737,7 +737,7 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#qat72tp0lb43gp5pra5rgobup5r24qrc494crqd5pqjddbneiqdn3hq6puo2344nja1v6cp7aps1p0350ug0f1kvo9cp2gu9l31in18#a0",
+                            "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng#a0",
                             "tag": "TermReference"
                           },
                           "segment": "abilityUpdateMe"
@@ -760,7 +760,7 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#qat72tp0lb43gp5pra5rgobup5r24qrc494crqd5pqjddbneiqdn3hq6puo2344nja1v6cp7aps1p0350ug0f1kvo9cp2gu9l31in18",
+                            "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng",
                             "tag": "TypeReference"
                           },
                           "segment": "AbilityUpdateMe"
@@ -792,9 +792,9 @@
                   }
                 },
                 "fullName": "AbilityUpdateMe",
-                "newHash": "#qat72tp0lb43gp5pra5rgobup5r24qrc494crqd5pqjddbneiqdn3hq6puo2344nja1v6cp7aps1p0350ug0f1kvo9cp2gu9l31in18",
+                "newHash": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng",
                 "newTag": "Ability",
-                "oldHash": "#0d5ej3mann48uffjea4epi8ss486689gsj46cscorhs3d4j7ohvj9t7ghg05tra792umcmgjr6lgqkskoo3odge7jm2ci91dlmpefcg",
+                "oldHash": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0",
                 "oldTag": "Ability",
                 "shortName": "AbilityUpdateMe"
               },
@@ -806,7 +806,7 @@
             "contents": {
               "contents": {
                 "fullName": "DataDeleteMe",
-                "hash": "#keu02n8is0irijd65cvuos41kukj3f4ni18mmnudrbll2epo6ftd03nt9l0vqc4fvg98198tefgoupco4o0d0gvnigqgr1bmo2neo88",
+                "hash": "#fhc8jn2bhvfdnfr89dv2jf7tekuesna7gvje4ck6lfheh9rb184q4ddd29vm9mvfm6u1a98kpgditn8vb09durtel67rpof1c62535o",
                 "rendered": {
                   "bestTypeName": "DataDeleteMe",
                   "defnTypeTag": "Data",
@@ -837,7 +837,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#keu02n8is0irijd65cvuos41kukj3f4ni18mmnudrbll2epo6ftd03nt9l0vqc4fvg98198tefgoupco4o0d0gvnigqgr1bmo2neo88#d0",
+                          "contents": "#fhc8jn2bhvfdnfr89dv2jf7tekuesna7gvje4ck6lfheh9rb184q4ddd29vm9mvfm6u1a98kpgditn8vb09durtel67rpof1c62535o#d0",
                           "tag": "TermReference"
                         },
                         "segment": "C"
@@ -896,7 +896,7 @@
                           "elements": [
                             {
                               "annotation": {
-                                "contents": "#fhc8jn2bhvfdnfr89dv2jf7tekuesna7gvje4ck6lfheh9rb184q4ddd29vm9mvfm6u1a98kpgditn8vb09durtel67rpof1c62535o#d0",
+                                "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
                                 "tag": "TermReference"
                               },
                               "segment": "D"
@@ -908,7 +908,7 @@
                           "elements": [
                             {
                               "annotation": {
-                                "contents": "#qnblpurkqedrq0kae95ep7b8f6uh5b7igefp21r1nvl22agjoup5e7aunua4q8ku8mb532fh3lst4mj3m2bsb3kluchc3fuau5cllr0#d0",
+                                "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
                                 "tag": "TermReference"
                               },
                               "segment": "D2"
@@ -961,7 +961,7 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#fhc8jn2bhvfdnfr89dv2jf7tekuesna7gvje4ck6lfheh9rb184q4ddd29vm9mvfm6u1a98kpgditn8vb09durtel67rpof1c62535o#d0",
+                            "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
                             "tag": "TermReference"
                           },
                           "segment": "D"
@@ -1004,7 +1004,7 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#qnblpurkqedrq0kae95ep7b8f6uh5b7igefp21r1nvl22agjoup5e7aunua4q8ku8mb532fh3lst4mj3m2bsb3kluchc3fuau5cllr0#d0",
+                            "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
                             "tag": "TermReference"
                           },
                           "segment": "D2"
@@ -1030,9 +1030,9 @@
                   }
                 },
                 "fullName": "DataUpdateMe",
-                "newHash": "#qnblpurkqedrq0kae95ep7b8f6uh5b7igefp21r1nvl22agjoup5e7aunua4q8ku8mb532fh3lst4mj3m2bsb3kluchc3fuau5cllr0",
+                "newHash": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go",
                 "newTag": "Data",
-                "oldHash": "#fhc8jn2bhvfdnfr89dv2jf7tekuesna7gvje4ck6lfheh9rb184q4ddd29vm9mvfm6u1a98kpgditn8vb09durtel67rpof1c62535o",
+                "oldHash": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o",
                 "oldTag": "Data",
                 "shortName": "DataUpdateMe"
               },
@@ -1044,7 +1044,7 @@
             "contents": {
               "contents": {
                 "fullName": "NewType",
-                "hash": "#sa4ptibggqmbifhfj37gj2lq487q5ucfuojjcblfaas9bunlthhkvhstsrj20fvlpqakb8e9mqds4p32lnh8ohmf1s5omvdhc23jibg",
+                "hash": "#rmntisgmjlrtq6kja30at01q04aeq2p17q806li6v509bn117tq9tc3gd3m33lhdgimen1tjdn4tqiu2r11k7ie9oibng1n1i275cdg",
                 "rendered": {
                   "bestTypeName": "NewType",
                   "defnTypeTag": "Data",
@@ -1075,7 +1075,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#sa4ptibggqmbifhfj37gj2lq487q5ucfuojjcblfaas9bunlthhkvhstsrj20fvlpqakb8e9mqds4p32lnh8ohmf1s5omvdhc23jibg#d0",
+                          "contents": "#rmntisgmjlrtq6kja30at01q04aeq2p17q806li6v509bn117tq9tc3gd3m33lhdgimen1tjdn4tqiu2r11k7ie9oibng1n1i275cdg#d0",
                           "tag": "TermReference"
                         },
                         "segment": "X"
@@ -1097,7 +1097,7 @@
           {
             "contents": {
               "contents": {
-                "hash": "#8s3lsrv3p6ngq2bqotvli1f0gfcf9uvci4trmia6dosl3d8vu6i6kubdi3ic7m22r34m4mkru3hatdbgihj0fngmj7gktlq41ncs1e0",
+                "hash": "#hb2ubbk0c6347s5eqic78f26truhgro1ueh7r8invme3hnalmnv880tgpafpeo5kaaihonoph8o7pmhad8mr2e25m0hhor9lr34skhg",
                 "newFullName": "RenamedType",
                 "newShortName": "RenamedType",
                 "oldNames": [
@@ -1133,7 +1133,7 @@
                       },
                       {
                         "annotation": {
-                          "contents": "#8s3lsrv3p6ngq2bqotvli1f0gfcf9uvci4trmia6dosl3d8vu6i6kubdi3ic7m22r34m4mkru3hatdbgihj0fngmj7gktlq41ncs1e0#d0",
+                          "contents": "#hb2ubbk0c6347s5eqic78f26truhgro1ueh7r8invme3hnalmnv880tgpafpeo5kaaihonoph8o7pmhad8mr2e25m0hhor9lr34skhg#d0",
                           "tag": "TermReference"
                         },
                         "segment": "E"
@@ -1767,6 +1767,418 @@
                           "elements": [
                             {
                               "annotation": {
+                                "contents": "termDependsOnUpdateMe",
+                                "tag": "HashQualifier"
+                              },
+                              "segment": "termDependsOnUpdateMe"
+                            },
+                            {
+                              "annotation": {
+                                "tag": "TypeAscriptionColon"
+                              },
+                              "segment": " :"
+                            },
+                            {
+                              "annotation": null,
+                              "segment": " "
+                            },
+                            {
+                              "annotation": {
+                                "contents": "##Text",
+                                "tag": "TypeReference"
+                              },
+                              "segment": "Text"
+                            },
+                            {
+                              "annotation": null,
+                              "segment": "\n"
+                            },
+                            {
+                              "annotation": {
+                                "contents": "termDependsOnUpdateMe",
+                                "tag": "HashQualifier"
+                              },
+                              "segment": "termDependsOnUpdateMe"
+                            },
+                            {
+                              "annotation": {
+                                "tag": "BindingEquals"
+                              },
+                              "segment": " ="
+                            },
+                            {
+                              "annotation": null,
+                              "segment": "\n"
+                            },
+                            {
+                              "annotation": null,
+                              "segment": "  "
+                            },
+                            {
+                              "annotation": {
+                                "tag": "UseKeyword"
+                              },
+                              "segment": "use "
+                            },
+                            {
+                              "annotation": {
+                                "tag": "UsePrefix"
+                              },
+                              "segment": "Text"
+                            },
+                            {
+                              "annotation": null,
+                              "segment": " "
+                            },
+                            {
+                              "annotation": {
+                                "tag": "UseSuffix"
+                              },
+                              "segment": "++"
+                            },
+                            {
+                              "annotation": null,
+                              "segment": "\n"
+                            },
+                            {
+                              "annotation": null,
+                              "segment": "  "
+                            }
+                          ]
+                        },
+                        {
+                          "diffTag": "annotationChange",
+                          "fromAnnotation": {
+                            "contents": "#ofktbubbloi1omgpr09e0t90pg0cnf0lsuuopqese9biqvpdafsuhq0b4dfasbk6g3hp5r7crp4t486fc8bava7q7rrreg9j2volam8",
+                            "tag": "TermReference"
+                          },
+                          "segment": "termUpdateMe",
+                          "toAnnotation": {
+                            "contents": "#711u1t9cjso4t3rhlq2rp491n2n5n4t9o7701053kpj5ouu3kfs2e2l63i879pnsb6ob9fp0gpj18u6fpcl1qosd704h4doklfo734g",
+                            "tag": "TermReference"
+                          }
+                        },
+                        {
+                          "diffTag": "both",
+                          "elements": [
+                            {
+                              "annotation": null,
+                              "segment": " "
+                            },
+                            {
+                              "annotation": {
+                                "contents": "##Text.++",
+                                "tag": "TermReference"
+                              },
+                              "segment": "++"
+                            },
+                            {
+                              "annotation": null,
+                              "segment": " "
+                            }
+                          ]
+                        },
+                        {
+                          "diffTag": "annotationChange",
+                          "fromAnnotation": {
+                            "contents": "#ofktbubbloi1omgpr09e0t90pg0cnf0lsuuopqese9biqvpdafsuhq0b4dfasbk6g3hp5r7crp4t486fc8bava7q7rrreg9j2volam8",
+                            "tag": "TermReference"
+                          },
+                          "segment": "termUpdateMe",
+                          "toAnnotation": {
+                            "contents": "#711u1t9cjso4t3rhlq2rp491n2n5n4t9o7701053kpj5ouu3kfs2e2l63i879pnsb6ob9fp0gpj18u6fpcl1qosd704h4doklfo734g",
+                            "tag": "TermReference"
+                          }
+                        }
+                      ],
+                      "tag": "UserObject"
+                    },
+                    "diffKind": "diff"
+                  },
+                  "left": {
+                    "bestTermName": "termDependsOnUpdateMe",
+                    "defnTermTag": "Plain",
+                    "signature": [
+                      {
+                        "annotation": {
+                          "contents": "##Text",
+                          "tag": "TypeReference"
+                        },
+                        "segment": "Text"
+                      }
+                    ],
+                    "termDefinition": {
+                      "contents": [
+                        {
+                          "annotation": {
+                            "contents": "termDependsOnUpdateMe",
+                            "tag": "HashQualifier"
+                          },
+                          "segment": "termDependsOnUpdateMe"
+                        },
+                        {
+                          "annotation": {
+                            "tag": "TypeAscriptionColon"
+                          },
+                          "segment": " :"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "##Text",
+                            "tag": "TypeReference"
+                          },
+                          "segment": "Text"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "\n"
+                        },
+                        {
+                          "annotation": {
+                            "contents": "termDependsOnUpdateMe",
+                            "tag": "HashQualifier"
+                          },
+                          "segment": "termDependsOnUpdateMe"
+                        },
+                        {
+                          "annotation": {
+                            "tag": "BindingEquals"
+                          },
+                          "segment": " ="
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "\n"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "  "
+                        },
+                        {
+                          "annotation": {
+                            "tag": "UseKeyword"
+                          },
+                          "segment": "use "
+                        },
+                        {
+                          "annotation": {
+                            "tag": "UsePrefix"
+                          },
+                          "segment": "Text"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "tag": "UseSuffix"
+                          },
+                          "segment": "++"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "\n"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "  "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "#ofktbubbloi1omgpr09e0t90pg0cnf0lsuuopqese9biqvpdafsuhq0b4dfasbk6g3hp5r7crp4t486fc8bava7q7rrreg9j2volam8",
+                            "tag": "TermReference"
+                          },
+                          "segment": "termUpdateMe"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "##Text.++",
+                            "tag": "TermReference"
+                          },
+                          "segment": "++"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "#ofktbubbloi1omgpr09e0t90pg0cnf0lsuuopqese9biqvpdafsuhq0b4dfasbk6g3hp5r7crp4t486fc8bava7q7rrreg9j2volam8",
+                            "tag": "TermReference"
+                          },
+                          "segment": "termUpdateMe"
+                        }
+                      ],
+                      "tag": "UserObject"
+                    },
+                    "termDocs": [],
+                    "termNames": [
+                      "termDependsOnUpdateMe"
+                    ]
+                  },
+                  "right": {
+                    "bestTermName": "termDependsOnUpdateMe",
+                    "defnTermTag": "Plain",
+                    "signature": [
+                      {
+                        "annotation": {
+                          "contents": "##Text",
+                          "tag": "TypeReference"
+                        },
+                        "segment": "Text"
+                      }
+                    ],
+                    "termDefinition": {
+                      "contents": [
+                        {
+                          "annotation": {
+                            "contents": "termDependsOnUpdateMe",
+                            "tag": "HashQualifier"
+                          },
+                          "segment": "termDependsOnUpdateMe"
+                        },
+                        {
+                          "annotation": {
+                            "tag": "TypeAscriptionColon"
+                          },
+                          "segment": " :"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "##Text",
+                            "tag": "TypeReference"
+                          },
+                          "segment": "Text"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "\n"
+                        },
+                        {
+                          "annotation": {
+                            "contents": "termDependsOnUpdateMe",
+                            "tag": "HashQualifier"
+                          },
+                          "segment": "termDependsOnUpdateMe"
+                        },
+                        {
+                          "annotation": {
+                            "tag": "BindingEquals"
+                          },
+                          "segment": " ="
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "\n"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "  "
+                        },
+                        {
+                          "annotation": {
+                            "tag": "UseKeyword"
+                          },
+                          "segment": "use "
+                        },
+                        {
+                          "annotation": {
+                            "tag": "UsePrefix"
+                          },
+                          "segment": "Text"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "tag": "UseSuffix"
+                          },
+                          "segment": "++"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "\n"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": "  "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "#711u1t9cjso4t3rhlq2rp491n2n5n4t9o7701053kpj5ouu3kfs2e2l63i879pnsb6ob9fp0gpj18u6fpcl1qosd704h4doklfo734g",
+                            "tag": "TermReference"
+                          },
+                          "segment": "termUpdateMe"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "##Text.++",
+                            "tag": "TermReference"
+                          },
+                          "segment": "++"
+                        },
+                        {
+                          "annotation": null,
+                          "segment": " "
+                        },
+                        {
+                          "annotation": {
+                            "contents": "#711u1t9cjso4t3rhlq2rp491n2n5n4t9o7701053kpj5ouu3kfs2e2l63i879pnsb6ob9fp0gpj18u6fpcl1qosd704h4doklfo734g",
+                            "tag": "TermReference"
+                          },
+                          "segment": "termUpdateMe"
+                        }
+                      ],
+                      "tag": "UserObject"
+                    },
+                    "termDocs": [],
+                    "termNames": [
+                      "termDependsOnUpdateMe"
+                    ]
+                  }
+                },
+                "fullName": "termDependsOnUpdateMe",
+                "newHash": "#t3u2jnk3eej5hrcrfr80vqiaj7n26grg15n4eb67bd1601jb65ikhbfdk18eeirovmaithk3ipukum6qnhttld43ovitj01kdkd4jrg",
+                "newTag": "Plain",
+                "oldHash": "#8imj19nvqqdtl1jd9ns5fksnuh4slku9hoi3sl7dh353k7o209eek4aievkp1sbqq5lqpgqouvf00k5b6t1fkv8omnpsnvmpu0a5lr8",
+                "oldTag": "Plain",
+                "shortName": "termDependsOnUpdateMe"
+              },
+              "tag": "Propagated"
+            },
+            "tag": "Plain"
+          },
+          {
+            "contents": {
+              "contents": {
+                "diff": {
+                  "diff": {
+                    "diff": {
+                      "contents": [
+                        {
+                          "diffTag": "both",
+                          "elements": [
+                            {
+                              "annotation": {
                                 "contents": "termUpdateMe",
                                 "tag": "HashQualifier"
                               },
@@ -2280,9 +2692,9 @@
       "libdeps": []
     },
     "newRef": "diff-end",
-    "newRefHash": "#me8hi4d5j08ib0luqcvk05thm1s8hq9pa18b029ve2i1g0ecgs2r2up0svh5q770p0n7p4b28qn4ako0u62me4cjlnl8fl497vit4qo",
+    "newRefHash": "#kdc2oti6dee60arac994ldem976cjglvp1hm9qhbku6h6kvt1tm963gab5i7bfd6p2kd55ajhdbsvkc1sv9s1jjbh821c6tqkoj2ed0",
     "oldRef": "diff-start",
-    "oldRefHash": "#5fb8pc3gc675vi2k6drr0tdd2grp448m5u1g2ucurbnfr8vdevqklgj4sm8icf8jbmaara2confpq8bie39s6iqsr3cequadl9ts7gg",
+    "oldRefHash": "#3tltbfse9g99ua4or12llqfb48ivrdi1vm7j2ak4rtqam37qvgm26o9dg0u7ec3nre67qtuttmis2l6npflj0kp2kcggcn8m69po6r8",
     "project": "@transcripts/contribution-diff"
   },
   "status": [

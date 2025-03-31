@@ -271,7 +271,10 @@ type NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typ
   GNamespaceTreeDiff Path referent reference renderedTerm renderedType termDiff typeDiff
 
 type GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff =
-  Cofree (Map k) (Map NameSegment (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff))
+  GNamespaceTreeOf k (DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff)
+
+type GNamespaceTreeOf k a =
+  Cofree (Map k) (Map NameSegment a)
 
 -- | The differences at a specific path in the namespace tree.
 data DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff = DiffAtPath
@@ -440,9 +443,13 @@ namespaceTreeDiffRenderedTypes_ :: (Ord typeDiff, Ord reference, Ord renderedTyp
 namespaceTreeDiffRenderedTypes_ = traversed . traversed . diffAtPathRenderedTypes_
 
 -- | Convert a `DefinitionDiffs` into a tree of differences.
-definitionDiffsToTree :: forall ref. (Ord ref) => DefinitionDiffs Name ref -> Cofree (Map NameSegment) (Map NameSegment (Set (DefinitionDiff ref Name Name)))
+definitionDiffsToTree ::
+  forall ref.
+  (Ord ref) =>
+  DefinitionDiffs Name ref ->
+  GNamespaceTreeOf NameSegment (Set (DefinitionDiff ref Name Name))
 definitionDiffsToTree dd =
-  let DefinitionDiffs {added, removed, updated, renamed, newAliases} = dd
+  let DefinitionDiffs {added, removed, updated, propagated, renamed, newAliases} = dd
       expandedAliases :: Map Name (Set (DefinitionDiffKind ref Name Name))
       expandedAliases =
         newAliases
@@ -478,6 +485,7 @@ definitionDiffsToTree dd =
             expandedAliases,
             (removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
             (updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
+            (propagated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Propagated oldR newR name),
             expandedRenames
           ]
       includeFQNs :: Map Name (Set (DefinitionDiffKind ref Name Name)) -> Map Name (Set (DefinitionDiff ref Name Name))
