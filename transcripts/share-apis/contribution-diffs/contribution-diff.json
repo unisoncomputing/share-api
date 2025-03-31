@@ -1819,7 +1819,7 @@
                               "annotation": {
                                 "tag": "TextLiteral"
                               },
-                              "segment": "\"conflicted update\""
+                              "segment": "\"original\""
                             }
                           ]
                         },
@@ -1902,7 +1902,7 @@
                           "annotation": {
                             "tag": "TextLiteral"
                           },
-                          "segment": "\"conflicted update\""
+                          "segment": "\"original\""
                         }
                       ],
                       "tag": "UserObject"

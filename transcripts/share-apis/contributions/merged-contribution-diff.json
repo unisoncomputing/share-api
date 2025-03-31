@@ -57,7 +57,23 @@
                             {
                               "annotation": null,
                               "segment": " "
-                            },
+                            }
+                          ]
+                        },
+                        {
+                          "diffTag": "old",
+                          "elements": [
+                            {
+                              "annotation": {
+                                "tag": "TextLiteral"
+                              },
+                              "segment": "\"start\""
+                            }
+                          ]
+                        },
+                        {
+                          "diffTag": "new",
+                          "elements": [
                             {
                               "annotation": {
                                 "tag": "TextLiteral"
@@ -134,7 +150,7 @@
                           "annotation": {
                             "tag": "TextLiteral"
                           },
-                          "segment": "\"feature-one\""
+                          "segment": "\"start\""
                         }
                       ],
                       "tag": "UserObject"

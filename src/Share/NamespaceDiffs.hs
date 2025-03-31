@@ -28,6 +28,8 @@ module Share.NamespaceDiffs
     definitionDiffKindRefs_,
     definitionDiffKindDiffs_,
     definitionDiffKindRendered_,
+    namespaceAndLibdepsDiffDefns_,
+    namespaceAndLibdepsDiffLibdeps_,
   )
 where
 
@@ -224,6 +226,25 @@ data GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType ter
   { defns :: GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff,
     libdeps :: Map NameSegment (DiffOp libdep)
   }
+  deriving stock (Show)
+
+namespaceAndLibdepsDiffDefns_ ::
+  Traversal
+    (GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType termDiff typeDiff libdep)
+    (GNamespaceAndLibdepsDiff k' referent' reference' renderedTerm' renderedType' termDiff' typeDiff' libdep)
+    (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff)
+    (GNamespaceTreeDiff k' referent' reference' renderedTerm' renderedType' termDiff' typeDiff')
+namespaceAndLibdepsDiffDefns_ f (NamespaceAndLibdepsDiff defns libdeps) =
+  NamespaceAndLibdepsDiff <$> f defns <*> pure libdeps
+
+namespaceAndLibdepsDiffLibdeps_ ::
+  Traversal
+    (GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType termDiff typeDiff libdep)
+    (GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType termDiff typeDiff libdep')
+    (Map NameSegment (DiffOp libdep))
+    (Map NameSegment (DiffOp libdep'))
+namespaceAndLibdepsDiffLibdeps_ f (NamespaceAndLibdepsDiff defns libdeps) =
+  NamespaceAndLibdepsDiff defns <$> f libdeps
 
 -- | A compressed tree of differences between two namespaces.
 -- All intermediate namespaces with no differences are compressed into the keys of the

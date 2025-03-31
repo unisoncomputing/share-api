@@ -94,7 +94,7 @@ contribution-diff/diff-end> rename.namespace AbilityRenameMe AbilityRenamed
 contribution-diff/diff-end> push @transcripts/contribution-diff/diff-end
 ```
 
-Now we go back to the `diff-start` branch and make some more commits to test that 
+Now we go back to the `diff-start` branch and make some more commits to test that
 diffing uses the best common ancestor.
 
 ```unison
