@@ -40,6 +40,7 @@ import Control.Monad.Except
 import Data.Align (Semialign (..))
 import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
+import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
@@ -306,12 +307,12 @@ diffAtPathTermDiffs_ f (DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) =
 
 witherDiffAtPathTermDiffs ::
   forall f reference referent renderedTerm renderedType termDiff termDiff' typeDiff.
-  (Monad f, Ord termDiff', Ord referent, Ord renderedTerm) =>
+  (Applicative f, Ord termDiff', Ord referent, Ord renderedTerm) =>
   (termDiff -> f (Maybe termDiff')) ->
   DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff ->
   f (Maybe (DiffAtPath referent reference renderedTerm renderedType termDiff' typeDiff))
 witherDiffAtPathTermDiffs f DiffAtPath {termDiffsAtPath, typeDiffsAtPath} =
-  g <$> Set.forMaybe termDiffsAtPath (runMaybeT . (definitionDiffDiffs_ (MaybeT . f)))
+  g <$> Set.forMaybe termDiffsAtPath (getCompose . (definitionDiffDiffs_ (Compose . f)))
   where
     g ::
       Set (DefinitionDiff referent renderedTerm termDiff') ->
@@ -340,7 +341,7 @@ witherDiffAtPathTermDiffKinds ::
   DiffAtPath referent reference renderedTerm renderedType termDiff typeDiff ->
   f (Maybe (DiffAtPath referent' reference renderedTerm' renderedType termDiff' typeDiff))
 witherDiffAtPathTermDiffKinds f DiffAtPath {termDiffsAtPath, typeDiffsAtPath} =
-  g <$> Set.forMaybe termDiffsAtPath (runMaybeT . definitionDiffKind_ (MaybeT . f))
+  g <$> Set.forMaybe termDiffsAtPath (getCompose . definitionDiffKind_ (Compose . f))
   where
     g ::
       Set (DefinitionDiff referent' renderedTerm' termDiff') ->
