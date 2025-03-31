@@ -4,21 +4,24 @@ module Share.Notifications.Types
     NotificationEventData,
     NotificationEvent (..),
     NewNotificationEvent,
-    Subscription (..),
+    NotificationSubscription (..),
     ProjectBranchData (..),
     ProjectContributionData (..),
     NotificationHubEntry (..),
     NotificationStatus (..),
+    NotificationDeliveryMechanism (..),
     eventTopic,
   )
 where
 
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Hasql.Decoders qualified as HasqlDecoders
 import Hasql.Encoders qualified as HasqlEncoders
 import Hasql.Interpolate qualified as Hasql
+import Network.URI (URI)
 import Servant (FromHttpApiData (..))
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -63,6 +66,13 @@ instance Aeson.ToJSON NotificationStatus where
     Read -> "read"
     Archived -> "archived"
 
+instance Aeson.FromJSON NotificationStatus where
+  parseJSON = Aeson.withText "NotificationStatus" \case
+    "unread" -> pure Unread
+    "read" -> pure Read
+    "archived" -> pure Archived
+    s -> fail $ "Invalid notification status: " <> Text.unpack s
+
 instance PG.EncodeValue NotificationStatus where
   encodeValue = HasqlEncoders.enum \case
     Unread -> "unread"
@@ -77,6 +87,8 @@ instance PG.DecodeValue NotificationStatus where
     _ -> Nothing
 
 newtype NotificationFilter = NotificationFilter (Map Text Text)
+  deriving (Eq, Show)
+  deriving newtype (Aeson.ToJSON, Aeson.FromJSON)
 
 data ProjectBranchData = ProjectBranchData
   { projectId :: ProjectId,
@@ -193,13 +205,61 @@ instance Hasql.DecodeRow (NotificationEvent NotificationEventId UTCTime) where
 
 type NewNotificationEvent = NotificationEvent () ()
 
-data Subscription id = Subscription
+data NotificationEmailDeliveryConfig = NotificationEmailConfig
+  { emailDeliveryId :: NotificationEmailId,
+    emailDeliveryEmail :: Text
+  }
+  deriving (Eq, Ord, Show)
+
+instance Aeson.ToJSON NotificationEmailDeliveryConfig where
+  toJSON NotificationEmailConfig {emailDeliveryId, emailDeliveryEmail} =
+    Aeson.object
+      [ "id" Aeson..= emailDeliveryId,
+        "email" Aeson..= emailDeliveryEmail
+      ]
+
+data NotificationWebhookDeliveryConfig = NotificationWebhookConfig
+  { webhookDeliveryId :: NotificationWebhookId,
+    webhookDeliveryUrl :: URI
+  }
+  deriving (Eq, Ord, Show)
+
+instance Aeson.ToJSON NotificationWebhookDeliveryConfig where
+  toJSON NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl} =
+    Aeson.object
+      [ "id" Aeson..= webhookDeliveryId,
+        "url" Aeson..= show webhookDeliveryUrl
+      ]
+
+data NotificationDeliveryMechanism
+  = EmailDeliveryMechanism NotificationEmailDeliveryConfig
+  | WebhookDeliveryMechanism NotificationWebhookDeliveryConfig
+  deriving (Eq, Ord, Show)
+
+instance Aeson.ToJSON NotificationDeliveryMechanism where
+  toJSON = \case
+    EmailDeliveryMechanism config -> Aeson.object ["kind" .= ("email" :: Text), "config" .= config]
+    WebhookDeliveryMechanism config -> Aeson.object ["kind" .= ("webhook" :: Text), "config" .= config]
+
+data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
     subscriber :: UserId,
     subscriptionScope :: UserId,
     subscriptionTopic :: NotificationTopic,
-    subscriptionFilter :: NotificationFilter
+    subscriptionFilter :: NotificationFilter,
+    subscriptionDeliveryMechanisms :: Set NotificationDeliveryMechanism
   }
+
+instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
+  toJSON NotificationSubscription {subscriptionId, subscriber, subscriptionScope, subscriptionTopic, subscriptionFilter, subscriptionDeliveryMechanisms} =
+    Aeson.object
+      [ "id" Aeson..= subscriptionId,
+        "subscriber" Aeson..= subscriber,
+        "scope" Aeson..= subscriptionScope,
+        "topic" Aeson..= subscriptionTopic,
+        "filter" Aeson..= subscriptionFilter,
+        "deliveryMechanisms" Aeson..= subscriptionDeliveryMechanisms
+      ]
 
 data NotificationHubEntry = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,

@@ -41,6 +41,9 @@ module Share.IDs
     TeamId (..),
     NotificationHubEntryId (..),
     NotificationEventId (..),
+    NotificationEmailId (..),
+    NotificationWebhookId (..),
+    NotificationSubscriptionId (..),
     projectBranchShortHandToBranchShortHand,
     JTI (..),
     CategoryName (..),
@@ -724,3 +727,18 @@ newtype NotificationEventId = NotificationEventId UUID
   deriving stock (Eq, Ord)
   deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
   deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "EVENT-" UUID)
+
+newtype NotificationEmailId = NotificationEmailId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NE-" UUID)
+
+newtype NotificationWebhookId = NotificationWebhookId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NW-" UUID)
+
+newtype NotificationSubscriptionId = NotificationSubscriptionId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NS-" UUID)

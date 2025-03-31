@@ -42,8 +42,8 @@ CREATE TABLE notification_subscriptions (
 
     -- The scope of this subscription.
     scope_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    -- The topic this subscription is for.
-    topic notification_topic NOT NULL,
+    -- The topics this subscription is for.
+    topics notification_topic[] NOT NULL CHECK (array_length(topics, 1) > 0),
     -- Any additional filtering for this subscription, e.g. which projects we care about, etc.
     -- Specified as an object with key-value pairs which must ALL be present on the event in order to trigger
     -- the notification.
@@ -55,7 +55,8 @@ CREATE TRIGGER notification_subscriptions_updated_at
   FOR EACH ROW
   EXECUTE PROCEDURE moddatetime (updated_at);
 
-CREATE INDEX notification_subscriptions_topic ON notification_subscriptions(topic, scope_user_id);
+-- GIN index for finding subscriptions by topic
+CREATE INDEX notification_subscriptions_by_topic ON notification_subscriptions USING GIN (topics, scope_user_id);
 
 -- Which notifications were triggered by which subscription for each event.
 CREATE TABLE notification_providence_log (
@@ -152,7 +153,7 @@ CREATE TABLE notification_hub_entries (
   status notification_status NOT NULL DEFAULT 'unread',
 
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 )
 
 CREATE UNIQUE INDEX notification_hub_entries_event_user ON notification_hub_entries(user_id, event_id);
@@ -176,7 +177,7 @@ BEGIN
   FOR the_subscription_id, the_subscriber IN
     (SELECT ns.id FROM notification_subscriptions ns
       WHERE ns.scope_user_id = NEW.scope_user_id
-        AND ns.topic = NEW.topic
+        AND NEW.topic = ANY(ns.topics)
         AND NEW.data @> ns.filter
     )
   LOOP
