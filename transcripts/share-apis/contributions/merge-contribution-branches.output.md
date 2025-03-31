@@ -1,13 +1,9 @@
 ``` ucm
 scratch/main> clone @transcripts/bca-updates/main
 
-  Downloaded 3 entities.
-
   Cloned @transcripts/bca-updates/main.
 
 scratch/main> clone @transcripts/bca-updates/feature-one
-
-  Downloaded 3 entities.
 
   Cloned @transcripts/bca-updates/feature-one.
 

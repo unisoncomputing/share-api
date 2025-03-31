@@ -48,7 +48,7 @@ Push and pull it back.
 ``` ucm
 proj/main> push @transcripts/proj/main
 
-  Uploaded 358 entities.
+  Uploaded 361 entities.
 
   I just created @transcripts/proj on http://localhost:5424
 
@@ -74,7 +74,7 @@ proj/pulled> ls
   4. B/       (2 terms)
   5. a        ('Nat)
   6. b        ('Nat)
-  7. builtin/ (469 terms, 74 types)
+  7. builtin/ (471 terms, 75 types)
   8. xs       (['{g} Nat])
   9. ys       ([Nat])
 ```

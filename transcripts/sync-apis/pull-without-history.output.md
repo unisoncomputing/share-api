@@ -84,8 +84,6 @@ myproject/main> branch.create-empty dest
 
 myproject/dest> pull.without-history @transcripts/myproject/main
 
-  Downloaded 1 entities.
-
   ✅
 
   Successfully updated myproject/dest from
