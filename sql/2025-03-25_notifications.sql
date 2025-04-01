@@ -16,7 +16,7 @@
 -- which is then sent via the *email* *delivery method* and marked completed.
 
 CREATE TYPE notification_topic AS ENUM (
-    "project:branch:updated"
+    'project:branch:updated',
     'project:contribution:created'
 );
 
@@ -217,3 +217,9 @@ CREATE TRIGGER notification_event_subscriptions
   FOR EACH ROW
   EXECUTE FUNCTION trigger_notification_event_subscriptions();
 
+
+
+-- Add new permissions to existing roles
+UPDATE roles r
+SET permissions = r.permissions || '{"notifications_hub_entries:view", "notifications_hub_entries:update", "notification_delivery_methods:create", "notification_delivery_methods:update", "notification_subscriptions:create", "notification_subscriptions:update"}'
+  WHERE r.ref IN ('org_admin'::role_ref, 'org_owner'::role_ref, 'org_default'::role_ref, 'org_maintainer'::role_ref);

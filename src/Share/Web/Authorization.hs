@@ -51,6 +51,11 @@ module Share.Web.Authorization
     checkReadOrgMembers,
     checkEditOrgMembers,
     checkNotificationsGet,
+    checkNotificationsUpdate,
+    checkDeliveryMethodsView,
+    checkDeliveryMethodsManage,
+    checkSubscriptionsView,
+    checkSubscriptionsManage,
     permissionGuard,
     readPath,
     writePath,
@@ -164,7 +169,12 @@ data ProjectPermission
 
 data UserPermission
   = UserUpdate UserId
-  | UserNotificationGet UserId
+  | UserNotificationHubEntryView UserId
+  | UserNotificationHubEntryUpdate UserId
+  | UserNotificationSubscriptionView UserId
+  | UserNotificationSubscriptionManage UserId
+  | UserNotificationDeliveryMethodView UserId
+  | UserNotificationDeliveryMethodManage UserId
   deriving stock (Show, Eq, Ord)
 
 data OrgPermission
@@ -229,7 +239,12 @@ instance Errors.ToServerError AuthZFailure where
     UserPermission userPermission ->
       case userPermission of
         UserUpdate _uid -> (ErrorID "authz:user:update", err403 {errBody = "Permission Denied: " <> msg})
-        UserNotificationGet _uid -> (ErrorID "authz:user:notification-get", err403 {errBody = "Permission Denied: " <> msg})
+        UserNotificationHubEntryView _uid -> (ErrorID "authz:user:notification-get", err403 {errBody = "Permission Denied: " <> msg})
+        UserNotificationHubEntryUpdate _uid -> (ErrorID "authz:user:notification-update", err403 {errBody = "Permission Denied: " <> msg})
+        UserNotificationSubscriptionView _uid -> (ErrorID "authz:user:notification-subscription-get", err403 {errBody = "Permission Denied: " <> msg})
+        UserNotificationSubscriptionManage _uid -> (ErrorID "authz:user:notification-subscription-manage", err403 {errBody = "Permission Denied: " <> msg})
+        UserNotificationDeliveryMethodView _uid -> (ErrorID "authz:user:notification-delivery-method-get", err403 {errBody = "Permission Denied: " <> msg})
+        UserNotificationDeliveryMethodManage _uid -> (ErrorID "authz:user:notification-delivery-method-manage", err403 {errBody = "Permission Denied: " <> msg})
     OrgPermission orgPermission ->
       case orgPermission of
         OrgRolesEdit _orgId -> (ErrorID "authz:org:roles-edit", err403 {errBody = "Permission Denied: " <> msg})
@@ -287,7 +302,12 @@ authZFailureMessage (AuthZFailure perm) = case perm of
   UserPermission userPermission ->
     case userPermission of
       UserUpdate _uid -> "Not permitted to update this user"
-      UserNotificationGet _uid -> "Not permitted to get notifications for this user"
+      UserNotificationHubEntryView _uid -> "Not permitted to get notifications for this user"
+      UserNotificationHubEntryUpdate _uid -> "Not permitted to update notifications for this user"
+      UserNotificationSubscriptionView _uid -> "Not permitted to get notifications for this user"
+      UserNotificationSubscriptionManage _uid -> "Not permitted to manage notifications for this user"
+      UserNotificationDeliveryMethodView _uid -> "Not permitted to get notifications for this user"
+      UserNotificationDeliveryMethodManage _uid -> "Not permitted to manage notifications for this user"
   OrgPermission orgPermission ->
     case orgPermission of
       OrgRolesEdit _orgId -> "Not permitted to edit roles in this org"
@@ -316,7 +336,7 @@ assertCausalHashAccessibleFromRoot rootCausalId targetCausalId = permissionGuard
 checkReadUserCodebase :: Maybe UserId -> User -> Path -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkReadUserCodebase mayRequestingUser (User {user_id = targetUserId}) (Path.toList -> path) = maybePermissionFailure (CodebasePermission $ UserCodebaseReadPath path) do
   reqUserId <- guardMaybe mayRequestingUser
-  deprecatedUserEqualityCheck reqUserId targetUserId
+  assertUsersEqual reqUserId targetUserId
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check that the caller is allowed to upload to the specified codebase.
@@ -358,7 +378,7 @@ checkUploadToUserCodebase ::
   UserId ->
   WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkUploadToUserCodebase reqUserId codebaseOwnerUserId = maybePermissionFailure (CodebasePermission CodebaseUpload) do
-  deprecatedUserEqualityCheck reqUserId codebaseOwnerUserId
+  assertUsersEqual reqUserId codebaseOwnerUserId
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | The download endpoint currently does all of its own auth using HashJWTs,
@@ -637,6 +657,11 @@ assertUserHasOrgPermission :: UserId -> OrgId -> AuthZ.RolePermission -> MaybeT 
 assertUserHasOrgPermission reqUserId orgId rolePermission =
   guardM . lift . PG.runTransaction $ Q.userHasOrgPermission reqUserId orgId rolePermission
 
+assertUserHasOrgPermissionByOrgUser :: UserId -> UserId -> AuthZ.RolePermission -> MaybeT WebApp ()
+assertUserHasOrgPermissionByOrgUser reqUserId orgUserId rolePermission = do
+  Org {orgId} <- guardMaybeM $ PG.runTransaction $ OrgQ.orgByUserId orgUserId
+  assertUserHasOrgPermission reqUserId orgId rolePermission
+
 assertUserHasProjectPermission :: AuthZ.RolePermission -> Maybe UserId -> ProjectId -> MaybeT WebApp ()
 assertUserHasProjectPermission rolePermission mayReqUserId projId = do
   guardM $ PG.runTransaction $ do
@@ -691,8 +716,33 @@ checkEditOrgMembers reqUserId orgId = do
     pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 checkNotificationsGet :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
-checkNotificationsGet caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationGet notificationUser) do
-  guard (caller == notificationUser) <|> (checkUserIsOrgMember caller notificationUser)
+checkNotificationsGet caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationHubEntryView notificationUser) do
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationHubEntryView
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkNotificationsUpdate :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkNotificationsUpdate caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationHubEntryUpdate notificationUser) do
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.OrgProjectCreate
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkDeliveryMethodsView :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkDeliveryMethodsView caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationDeliveryMethodView notificationUser) do
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationHubEntryView
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkDeliveryMethodsManage :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkDeliveryMethodsManage caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationDeliveryMethodManage notificationUser) do
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationHubEntryUpdate
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkSubscriptionsView :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkSubscriptionsView caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationSubscriptionView notificationUser) do
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationSubscriptionView
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkSubscriptionsManage :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkSubscriptionsManage caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationSubscriptionManage notificationUser) do
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationSubscriptionManage
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check whether the given user has administrative privileges,
@@ -741,6 +791,6 @@ makeCacheable (AuthZ.UnsafeAuthZReceipt _) = AuthZ.UnsafeAuthZReceipt (Just Auth
 -- | Helper for checking deprecated User Codebase permissions.
 -- It mostly serves as a marker of places in code that can be cleaned up once user codebase
 -- stuff is sunset.
-deprecatedUserEqualityCheck :: UserId -> UserId -> MaybeT WebApp ()
-deprecatedUserEqualityCheck reqUserId targetUserId = do
+assertUsersEqual :: UserId -> UserId -> MaybeT WebApp ()
+assertUsersEqual reqUserId targetUserId = do
   guard $ reqUserId == targetUserId

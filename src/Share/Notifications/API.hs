@@ -4,6 +4,11 @@
 module Share.Notifications.API
   ( API,
     Routes (..),
+    HubEntriesRoutes (..),
+    DeliveryMethodRoutes (..),
+    SubscriptionRoutes (..),
+    EmailRoutes (..),
+    WebhookRoutes (..),
     GetHubEntriesResponse (..),
     StatusFilter (..),
     UpdateHubEntryRequest (..),
@@ -39,9 +44,9 @@ type API = NamedRoutes Routes
 
 data Routes mode
   = Routes
-  { hubRoutes :: "hub" :> HubEntriesRoutes mode,
-    deliveryMethodRoutes :: "delivery-methods" :> DeliveryMethodRoutes mode,
-    subscriptionsRoutes :: "subscriptions" :> SubscriptionRoutes mode
+  { hubRoutes :: mode :- "hub" :> NamedRoutes HubEntriesRoutes,
+    deliveryMethodRoutes :: mode :- "delivery-methods" :> NamedRoutes DeliveryMethodRoutes,
+    subscriptionsRoutes :: mode :- "subscriptions" :> NamedRoutes SubscriptionRoutes
   }
   deriving stock (Generic)
 
@@ -55,8 +60,8 @@ data HubEntriesRoutes mode
 data DeliveryMethodRoutes mode
   = DeliveryMethodRoutes
   { getDeliveryMethodsEndpoint :: mode :- GetDeliveryMethodsEndpoint,
-    emailDeliveryRoutes :: "emails" :> EmailRoutes mode,
-    webhookDeliveryRoutes :: "webhooks" :> WebhookRoutes mode
+    emailDeliveryRoutes :: mode :- "emails" :> NamedRoutes EmailRoutes,
+    webhookDeliveryRoutes :: mode :- "webhooks" :> NamedRoutes WebhookRoutes
   }
   deriving stock (Generic)
 
