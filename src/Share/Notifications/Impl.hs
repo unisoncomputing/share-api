@@ -13,7 +13,14 @@ import Share.Web.Authorization qualified as AuthZ
 
 server :: UserHandle -> ServerT API.API WebApp
 server userHandle =
-  API.Routes {API.getNotificationsEndpoint = getNotificationsEndpoint userHandle}
+  API.Routes
+    { API.getNotificationsEndpoint = getNotificationsEndpoint userHandle,
+      getDeliveryMechanismsEndpoint = getDeliveryMechanismsEndpoint userHandle,
+      subscriptionsRoutes = subscriptionsRoutes userHandle,
+      emailDeliveryRoutes = emailDeliveryRoutes userHandle,
+      webhookDeliveryRoutes = webhookDeliveryRoutes userHandle,
+      hubManagementRoutes = hubManagementRoutes userHandle
+    }
 
 getNotificationsEndpoint :: UserHandle -> UserId -> Maybe Int -> Maybe UTCTime -> Maybe API.StatusFilter -> WebApp API.GetNotificationsResponse
 getNotificationsEndpoint userHandle callerUserId limit afterTime mayStatusFilter = do

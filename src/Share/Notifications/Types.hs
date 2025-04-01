@@ -9,7 +9,7 @@ module Share.Notifications.Types
     ProjectContributionData (..),
     NotificationHubEntry (..),
     NotificationStatus (..),
-    NotificationDeliveryMechanism (..),
+    NotificationDeliveryMethod (..),
     eventTopic,
   )
 where
@@ -206,7 +206,7 @@ instance Hasql.DecodeRow (NotificationEvent NotificationEventId UTCTime) where
 type NewNotificationEvent = NotificationEvent () ()
 
 data NotificationEmailDeliveryConfig = NotificationEmailConfig
-  { emailDeliveryId :: NotificationEmailId,
+  { emailDeliveryId :: NotificationEmailDeliveryMethodId,
     emailDeliveryEmail :: Text
   }
   deriving (Eq, Ord, Show)
@@ -231,15 +231,15 @@ instance Aeson.ToJSON NotificationWebhookDeliveryConfig where
         "url" Aeson..= show webhookDeliveryUrl
       ]
 
-data NotificationDeliveryMechanism
-  = EmailDeliveryMechanism NotificationEmailDeliveryConfig
-  | WebhookDeliveryMechanism NotificationWebhookDeliveryConfig
+data NotificationDeliveryMethod
+  = EmailDeliveryMethod NotificationEmailDeliveryConfig
+  | WebhookDeliveryMethod NotificationWebhookDeliveryConfig
   deriving (Eq, Ord, Show)
 
-instance Aeson.ToJSON NotificationDeliveryMechanism where
+instance Aeson.ToJSON NotificationDeliveryMethod where
   toJSON = \case
-    EmailDeliveryMechanism config -> Aeson.object ["kind" .= ("email" :: Text), "config" .= config]
-    WebhookDeliveryMechanism config -> Aeson.object ["kind" .= ("webhook" :: Text), "config" .= config]
+    EmailDeliveryMethod config -> Aeson.object ["kind" .= ("email" :: Text), "config" .= config]
+    WebhookDeliveryMethod config -> Aeson.object ["kind" .= ("webhook" :: Text), "config" .= config]
 
 data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
@@ -247,18 +247,18 @@ data NotificationSubscription id = NotificationSubscription
     subscriptionScope :: UserId,
     subscriptionTopic :: NotificationTopic,
     subscriptionFilter :: NotificationFilter,
-    subscriptionDeliveryMechanisms :: Set NotificationDeliveryMechanism
+    subscriptionDeliveryMethods :: Set NotificationDeliveryMethod
   }
 
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
-  toJSON NotificationSubscription {subscriptionId, subscriber, subscriptionScope, subscriptionTopic, subscriptionFilter, subscriptionDeliveryMechanisms} =
+  toJSON NotificationSubscription {subscriptionId, subscriber, subscriptionScope, subscriptionTopic, subscriptionFilter, subscriptionDeliveryMethods} =
     Aeson.object
       [ "id" Aeson..= subscriptionId,
         "subscriber" Aeson..= subscriber,
         "scope" Aeson..= subscriptionScope,
         "topic" Aeson..= subscriptionTopic,
         "filter" Aeson..= subscriptionFilter,
-        "deliveryMechanisms" Aeson..= subscriptionDeliveryMechanisms
+        "deliveryMethods" Aeson..= subscriptionDeliveryMethods
       ]
 
 data NotificationHubEntry = NotificationHubEntry
