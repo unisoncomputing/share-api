@@ -1,4 +1,4 @@
-module Unison.PrettyPrintEnvDecl.Postgres (ppedForReferences) where
+module Share.PrettyPrintEnvDecl.Postgres (ppedForReferences) where
 
 import Control.Lens
 import Data.Map qualified as Map
@@ -37,7 +37,7 @@ ppedForReferences namesPerspective refs = do
         let typeNames' = typeNames <&> \(fqn, suffixed) -> (fqn, suffixed, ref)
         pure $ ([], typeNames')
 
--- | Given a list of names and a list of names with suffixes, return a PrettyPrintEnvDecl
+-- | Given a list of (fqn, suffixified, ref), return a PrettyPrintEnvDecl
 -- Note: this type of PPE does not (yet) support hash qualifying conflicted names, because this
 -- would require running additional queries when fetching the names.
 ppedFromNamesWithSuffixes :: [(Name, Name, V1.Referent)] -> [(Name, Name, V1.Reference)] -> PPED.PrettyPrintEnvDecl

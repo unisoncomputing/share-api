@@ -514,32 +514,32 @@ contributionStateTokenById contributionId = do
       |]
 
 getPrecomputedNamespaceDiff ::
-  (CodebaseEnv, BranchHashId) ->
-  (CodebaseEnv, BranchHashId) ->
+  (CodebaseEnv, CausalId) ->
+  (CodebaseEnv, CausalId) ->
   PG.Transaction e (Maybe Text)
 getPrecomputedNamespaceDiff
-  (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftBHId)
-  (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightBHId) = do
+  (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId)
+  (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) = do
     PG.query1Col @Text
       [PG.sql|
           SELECT (diff :: text)
           FROM namespace_diffs nd
-          WHERE nd.left_namespace_id = #{leftBHId}
-            AND nd.right_namespace_id = #{rightBHId}
+          WHERE nd.left_causal_id = #{leftCausalId}
+            AND nd.right_causal_id = #{rightCausalId}
             AND nd.left_codebase_owner_user_id = #{leftCodebaseUser}
             AND nd.right_codebase_owner_user_id = #{rightCodebaseUser}
         |]
 
 savePrecomputedNamespaceDiff ::
-  (CodebaseEnv, BranchHashId) ->
-  (CodebaseEnv, BranchHashId) ->
+  (CodebaseEnv, CausalId) ->
+  (CodebaseEnv, CausalId) ->
   Text ->
   PG.Transaction e ()
-savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftBHId) (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightBHId) diff = do
+savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId) (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) diff = do
   PG.execute_
     [PG.sql|
-        INSERT INTO namespace_diffs (left_namespace_id, right_namespace_id, left_codebase_owner_user_id, right_codebase_owner_user_id, diff)
-        VALUES (#{leftBHId}, #{rightBHId}, #{leftCodebaseUser}, #{rightCodebaseUser}, #{diff}::jsonb)
+        INSERT INTO namespace_diffs (left_causal_id, right_causal_id, left_codebase_owner_user_id, right_codebase_owner_user_id, diff)
+        VALUES (#{leftCausalId}, #{rightCausalId}, #{leftCodebaseUser}, #{rightCodebaseUser}, #{diff}::jsonb)
         ON CONFLICT DO NOTHING
       |]
 

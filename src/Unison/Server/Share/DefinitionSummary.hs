@@ -24,6 +24,7 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
 import Unison.Codebase.Path qualified as Path
@@ -33,15 +34,12 @@ import Unison.Name (Name)
 import Unison.NameSegment.Internal qualified as NameSegment
 import Unison.Parser.Ann (Ann)
 import Unison.Prelude
-import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Unison.Reference (Reference)
 import Unison.Reference qualified as Reference
 import Unison.Referent (Referent)
 import Unison.Server.Backend (BackendError (..))
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
-import Unison.Server.Types
-  ( mayDefaultWidth,
-  )
+import Unison.Server.Types (mayDefaultWidth)
 import Unison.Symbol (Symbol)
 import Unison.Type qualified as Type
 import Unison.Util.Pretty (Width)

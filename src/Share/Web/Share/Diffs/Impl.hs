@@ -1,6 +1,5 @@
 module Share.Web.Share.Diffs.Impl
-  ( diffNamespaces,
-    diffCausals,
+  ( diffCausals,
     diffTerms,
     diffTypes,
   )
@@ -19,25 +18,32 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Share.App (AppM)
 import Share.Codebase qualified as Codebase
-import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), NamespaceDiffError (..), NamespaceTreeDiff)
+import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), GNamespaceAndLibdepsDiff, GNamespaceTreeDiff, NamespaceAndLibdepsDiff, NamespaceDiffError (..), NamespaceTreeDiff)
 import Share.NamespaceDiffs qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
-import Share.Postgres.IDs (BranchHashId, CausalId)
+import Share.Postgres.Hashes.Queries qualified as HashQ
+import Share.Postgres.IDs (BranchHash, BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Prelude
+import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Aeson (PreEncoded (PreEncoded))
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
-import U.Codebase.Referent qualified as V2Referent
+import Unison.Codebase.SqliteCodebase.Conversions (referent1to2)
+import Unison.ConstructorReference (ConstructorReference)
+import Unison.Merge (DiffOp (..), TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge qualified as Merge
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.PrettyPrintEnvDecl qualified as PPED
-import Unison.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
+import Unison.Reference (TypeReference)
+import Unison.Referent (Referent)
+import Unison.Referent qualified as Referent
 import Unison.Server.Backend.DefinitionDiff qualified as DefinitionDiff
 import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
 import Unison.Server.Share.Definitions qualified as Definitions
@@ -47,117 +53,207 @@ import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty (Width)
 import UnliftIO qualified
 
-diffNamespaces ::
-  AuthZReceipt ->
-  (BranchHashId, NameLookupReceipt) ->
-  (BranchHashId, NameLookupReceipt) ->
-  AppM r (Either NamespaceDiffs.NamespaceDiffError (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) Name Name Name Name))
-diffNamespaces !_authZReceipt oldNamespacePair newNamespacePair = do
-  PG.tryRunTransaction $ do
-    diff <- NamespaceDiffs.diffTreeNamespaces oldNamespacePair newNamespacePair `whenLeftM` throwError
-    withTermTags <-
-      ( diff
-          & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferents_
-            %%~ ( \refs -> do
-                    termTags <- Codebase.termTagsByReferentsOf traversed refs
-                    pure $ zip termTags (refs <&> V2Referent.toShortHash)
-                )
-        )
-    withTermTags
-      & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
-        %%~ ( \refs -> do
-                typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-                pure $ zip typeTags (refs <&> V2Reference.toShortHash)
-            )
-
--- | Find the common ancestor between two causals, then diff
 diffCausals ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, CausalId) ->
   (Codebase.CodebaseEnv, CausalId) ->
-  ExceptT NamespaceDiffs.NamespaceDiffError (AppM r) (PreEncoded (NamespaceDiffs.NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff))
-diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) = do
-  -- Ensure name lookups for each thing we're diffing.
-  -- We do this in two separate transactions to ensure we can still make progress even if we need to build name lookups.
-  let getOldBranch = PG.runTransaction $ do
-        oldBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id oldCausalId
-        oldBranchNLReceipt <- NLOps.ensureNameLookupForBranchId oldBranchHashId
-        pure (oldBranchHashId, oldBranchNLReceipt)
-
-  let getNewBranch = PG.runTransaction $ do
-        newBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id newCausalId
-        newNLReceipt <- NLOps.ensureNameLookupForBranchId newBranchHashId
-        pure (newBranchHashId, newNLReceipt)
-  ((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newNLReceipt)) <- getOldBranch `concurrentExceptT` getNewBranch
-  (PG.runTransaction $ ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId))
-    >>= \case
-      Just diff -> pure $ PreEncoded $ TL.encodeUtf8 $ TL.fromStrict diff
-      Nothing -> do
-        diffWithTags <- ExceptT $ PG.tryRunTransaction $ do
-          diff <- NamespaceDiffs.diffTreeNamespaces (oldBranchHashId, oldBranchNLReceipt) (newBranchHashId, newNLReceipt) `whenLeftM` throwError
-          withTermTags <-
-            ( diff
-                & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferents_
-                  %%~ ( \refs -> do
-                          termTags <- Codebase.termTagsByReferentsOf traversed refs
-                          pure $ zip termTags (refs <&> V2Referent.toShortHash)
-                      )
-              )
-          withTermTags
-            & unsafePartsOf NamespaceDiffs.namespaceTreeDiffReferences_
-              %%~ ( \refs -> do
-                      typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-                      pure $ zip typeTags (refs <&> V2Reference.toShortHash)
-                  )
-        diff <- computeUpdatedDefinitionDiffs authZReceipt (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) diffWithTags
-        let encoded = Aeson.encode . RenderedNamespaceDiff $ diff
-        PG.runTransaction $ ContributionQ.savePrecomputedNamespaceDiff (oldCodebase, oldBranchHashId) (newCodebase, newBranchHashId) (TL.toStrict $ TL.decodeUtf8 encoded)
-        pure $ PreEncoded encoded
+  Maybe CausalId ->
+  ExceptT
+    NamespaceDiffs.NamespaceDiffError
+    (AppM r)
+    ( PreEncoded
+        ( NamespaceDiffs.NamespaceAndLibdepsDiff
+            (TermTag, ShortHash)
+            (TypeTag, ShortHash)
+            TermDefinition
+            TypeDefinition
+            TermDefinitionDiff
+            TypeDefinitionDiff
+            BranchHash
+        )
+    )
+diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) maybeLcaCausalId = do
+  -- Ensure name lookups for the things we're diffing.
+  -- We do this in separate transactions to ensure we can still make progress even if we need to build name lookups.
+  let getBranch :: CausalId -> ExceptT NamespaceDiffs.NamespaceDiffError (AppM r) (BranchHashId, NameLookupReceipt)
+      getBranch causalId =
+        PG.runTransaction do
+          branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+          nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
+          pure (branchHashId, nameLookupReceipt)
+  (((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newBranchNLReceipt))) <-
+    getBranch oldCausalId `concurrentExceptT` getBranch newCausalId
+  PG.runTransaction (ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId)) >>= \case
+    Just diff -> pure $ PreEncoded $ TL.encodeUtf8 $ TL.fromStrict diff
+    Nothing -> do
+      (maybeLcaBranchHashId, maybeLcaBranchNLReceipt) <-
+        case maybeLcaCausalId of
+          Just lcaCausalId -> do
+            (lcaBranchHashId, lcaBranchNLReceipt) <- getBranch lcaCausalId
+            pure (Just lcaBranchHashId, Just lcaBranchNLReceipt)
+          Nothing -> pure (Nothing, Nothing)
+      diff0 <-
+        ExceptT do
+          PG.tryRunTransaction do
+            -- Do the initial 3-way namespace diff
+            diff ::
+              GNamespaceAndLibdepsDiff
+                NameSegment
+                Referent
+                TypeReference
+                Name
+                Name
+                Name
+                Name
+                BranchHashId <-
+              NamespaceDiffs.computeThreeWayNamespaceDiff
+                TwoWay {alice = oldCodebase, bob = newCodebase}
+                TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
+                TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
+            -- Resolve the term referents to tag + hash
+            diff1 ::
+              GNamespaceAndLibdepsDiff
+                NameSegment
+                (TermTag, ShortHash)
+                TypeReference
+                Name
+                Name
+                Name
+                Name
+                BranchHashId <-
+              diff
+                & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
+                  %%~ \refs -> do
+                    termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
+                    pure $ zip termTags (refs <&> Referent.toShortHash)
+            -- Resolve the type references to tag + hash
+            diff2 ::
+              GNamespaceAndLibdepsDiff
+                NameSegment
+                (TermTag, ShortHash)
+                (TypeTag, ShortHash)
+                Name
+                Name
+                Name
+                Name
+                BranchHashId <-
+              diff1
+                & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
+                  %%~ \refs -> do
+                    typeTags <- Codebase.typeTagsByReferencesOf traversed refs
+                    pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+            -- Resolve libdeps branch hash ids to branch hashes
+            diff3 ::
+              GNamespaceAndLibdepsDiff
+                NameSegment
+                (TermTag, ShortHash)
+                (TypeTag, ShortHash)
+                Name
+                Name
+                Name
+                Name
+                BranchHash <-
+              HashQ.expectNamespaceHashesByNamespaceHashIdsOf
+                (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . traversed)
+                diff2
+            pure diff3
+      -- Resolve the actual term/type definitions. Use the LCA as the "old" (because that's what we're rendering the
+      -- diff relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we
+      -- won't have anything classified as an "update" in this case so it doesn't really matter).
+      diff1 <-
+        diff0
+          & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
+            %%~ computeUpdatedDefinitionDiffs
+              authZReceipt
+              (oldCodebase, fromMaybe oldBranchHashId maybeLcaBranchHashId)
+              (newCodebase, newBranchHashId)
+      let encoded = Aeson.encode (RenderedNamespaceAndLibdepsDiff diff1)
+      PG.runTransaction $
+        ContributionQ.savePrecomputedNamespaceDiff
+          (oldCodebase, oldCausalId)
+          (newCodebase, newCausalId)
+          (TL.toStrict $ TL.decodeUtf8 encoded)
+      pure $ PreEncoded encoded
 
 computeUpdatedDefinitionDiffs ::
+  forall a b r.
   (Ord a, Ord b) =>
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId) ->
   (Codebase.CodebaseEnv, BranchHashId) ->
-  (NamespaceDiffs.NamespaceTreeDiff a b Name Name Name Name) ->
-  ExceptT NamespaceDiffError (AppM r) (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
-computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff = do
-  withTermDiffs <-
-    diff
-      & NamespaceDiffs.namespaceTreeDiffTermDiffs_
-        %%~ ( \name ->
-                diffTerms authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
-            )
-      >>= NamespaceDiffs.namespaceTreeTermDiffKinds_ %%~ renderDiffKind getTermDefinition
-  withTermDiffs
-    & NamespaceDiffs.namespaceTreeDiffTypeDiffs_
-      %%~ ( \name ->
-              diffTypes authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name)
-          )
-    >>= NamespaceDiffs.namespaceTreeTypeDiffKinds_ %%~ renderDiffKind getTypeDefinition
+  GNamespaceTreeDiff NameSegment a b Name Name Name Name ->
+  ExceptT
+    NamespaceDiffError
+    (AppM r)
+    (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
+computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff0 = do
+  diff1 <-
+    NamespaceDiffs.witherNamespaceTreeDiffTermDiffs
+      (\name -> diffTerms authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name))
+      diff0
+  diff2 <-
+    NamespaceDiffs.witherNamespaceTreeTermDiffKinds
+      (throwAwayConstructorDiffs . renderDiffKind (ExceptT . fmap sequence . getTermDefinition))
+      diff1
+  diff3 <-
+    NamespaceDiffs.namespaceTreeDiffTypeDiffs_
+      (\name -> diffTypes authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name))
+      diff2
+  diff4 <-
+    NamespaceDiffs.namespaceTreeTypeDiffKinds_
+      (renderDiffKind getTypeDefinition)
+      diff3
+  pure (NamespaceDiffs.compressNameTree diff4)
   where
     notFound name t = MissingEntityError $ EntityMissing (ErrorID "definition-not-found") (t <> ": Definition not found: " <> Name.toText name)
+
+    renderDiffKind ::
+      forall diff m r x.
+      (Monad m) =>
+      ((Codebase.CodebaseEnv, BranchHashId, Name) -> m (Maybe x)) ->
+      DefinitionDiffKind r Name diff ->
+      ExceptT NamespaceDiffError m (DefinitionDiffKind r x diff)
     renderDiffKind getter = \case
       Added r name -> Added r <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "Added"))
       NewAlias r existingNames name -> NewAlias r existingNames <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "NewAlias"))
       Removed r name -> Removed r <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "Removed"))
       Updated oldRef newRef diff -> pure $ Updated oldRef newRef diff
+      Propagated oldRef newRef diff -> pure $ Propagated oldRef newRef diff
       RenamedTo r names name -> RenamedTo r names <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "RenamedTo"))
       RenamedFrom r names name -> RenamedFrom r names <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "RenamedFrom"))
+
+    throwAwayConstructorDiffs ::
+      ExceptT
+        NamespaceDiffError
+        (ExceptT ConstructorReference (AppM r))
+        (DefinitionDiffKind a TermDefinition TermDefinitionDiff) ->
+      ExceptT
+        NamespaceDiffError
+        (AppM r)
+        (Maybe (DefinitionDiffKind a TermDefinition TermDefinitionDiff))
+    throwAwayConstructorDiffs m =
+      lift (runExceptT (runExceptT m)) >>= \case
+        Left _ref -> pure Nothing
+        Right (Left err) -> throwError err
+        Right (Right diff) -> pure (Just diff)
 
 diffTerms ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
   (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  ExceptT NamespaceDiffError (AppM r) TermDefinitionDiff
+  ExceptT NamespaceDiffError (AppM r) (Maybe TermDefinitionDiff)
 diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
   let getOldTerm = lift (getTermDefinition old) `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
   let getNewTerm = lift (getTermDefinition new) `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
-  (oldTerm, newTerm) <- getOldTerm `concurrentExceptT` getNewTerm
-  let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
-  pure $ TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject}
+  (getOldTerm `concurrentExceptT` getNewTerm) >>= \case
+    (Right oldTerm, Right newTerm) -> do
+      let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
+      pure (Just TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject})
+    -- For later: decide how to render a constructor-to-term or constructor-to-constructor diff
+    -- Just dropping them from the diff for now
+    _ -> pure Nothing
 
-getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TermDefinition)
+getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe (Either ConstructorReference TermDefinition))
 getTermDefinition (codebase, bhId, name) = do
   let perspective = mempty
   (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
@@ -199,10 +295,16 @@ getTypeDefinition (codebase, bhId, name) = do
     renderWidth :: Width
     renderWidth = 80
 
-newtype RenderedNamespaceDiff = RenderedNamespaceDiff (NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
+newtype RenderedNamespaceAndLibdepsDiff
+  = RenderedNamespaceAndLibdepsDiff
+      (NamespaceAndLibdepsDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff BranchHash)
 
-instance ToJSON RenderedNamespaceDiff where
-  toJSON (RenderedNamespaceDiff diffs) = namespaceTreeDiffJSON diffs
+instance ToJSON RenderedNamespaceAndLibdepsDiff where
+  toJSON (RenderedNamespaceAndLibdepsDiff diff) =
+    object
+      [ "defns" .= namespaceTreeDiffJSON diff.defns,
+        "libdeps" .= libdepsDiffJSON diff.libdeps
+      ]
     where
       text :: Text -> Text
       text t = t
@@ -219,6 +321,9 @@ instance ToJSON RenderedNamespaceDiff where
         Updated (oldTag, oldRef) (newTag, newRef) diffVal ->
           let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
            in (newTag, object ["tag" .= text "Updated", "contents" .= contents])
+        Propagated (oldTag, oldRef) (newTag, newRef) diffVal ->
+          let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
+           in (newTag, object ["tag" .= text "Propagated", "contents" .= contents])
         RenamedTo (defnTag, r) newNames rendered ->
           let contents = object ["oldShortName" .= shortName, "oldFullName" .= fqn, "newNames" .= newNames, "hash" .= r, "rendered" .= rendered]
            in (defnTag, object ["tag" .= text "RenamedTo", "contents" .= contents])
@@ -237,7 +342,16 @@ instance ToJSON RenderedNamespaceDiff where
 
       typeDefinitionDiffToJSON :: TypeDefinitionDiff -> Value
       typeDefinitionDiffToJSON (TypeDefinitionDiff {left, right, diff}) = object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
-      namespaceTreeDiffJSON :: NamespaceTreeDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff -> Value
+
+      namespaceTreeDiffJSON ::
+        NamespaceTreeDiff
+          (TermTag, ShortHash)
+          (TypeTag, ShortHash)
+          TermDefinition
+          TypeDefinition
+          TermDefinitionDiff
+          TypeDefinitionDiff ->
+        Value
       namespaceTreeDiffJSON (diffs Cofree.:< children) =
         let changesJSON =
               diffs
@@ -257,7 +371,7 @@ instance ToJSON RenderedNamespaceDiff where
                                & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
                            )
                   )
-                & toJSON @([Value])
+                & toJSON @[Value]
             childrenJSON =
               children
                 & Map.toList
@@ -269,6 +383,34 @@ instance ToJSON RenderedNamespaceDiff where
               [ "changes" .= changesJSON,
                 "children" .= childrenJSON
               ]
+
+      libdepsDiffJSON :: Map NameSegment (DiffOp BranchHash) -> Value
+      libdepsDiffJSON =
+        Map.toList
+          >>> map
+            ( \(name, op) ->
+                case op of
+                  DiffOp'Add hash ->
+                    object
+                      [ "hash" .= hash,
+                        "name" .= name,
+                        "tag" .= ("Added" :: Text)
+                      ]
+                  DiffOp'Delete hash ->
+                    object
+                      [ "hash" .= hash,
+                        "name" .= name,
+                        "tag" .= ("Removed" :: Text)
+                      ]
+                  DiffOp'Update Merge.Updated {old, new} ->
+                    object
+                      [ "name" .= name,
+                        "newHash" .= new,
+                        "oldHash" .= old,
+                        "tag" .= ("Updated" :: Text)
+                      ]
+            )
+          >>> toJSON @[Value]
 
 concurrentExceptT :: (MonadUnliftIO m) => ExceptT e m a -> ExceptT e m b -> ExceptT e m (a, b)
 concurrentExceptT a b = do
