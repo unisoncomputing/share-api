@@ -8,6 +8,7 @@
               "contents": {
                 "aliasFullName": "ATypeAlias",
                 "aliasShortName": "ATypeAlias",
+                "conflicted": false,
                 "hash": "#keu02n8is0irijd65cvuos41kukj3f4ni18mmnudrbll2epo6ftd03nt9l0vqc4fvg98198tefgoupco4o0d0gvnigqgr1bmo2neo88",
                 "otherNames": [
                   "DataAliasMe"
@@ -66,6 +67,7 @@
               "contents": {
                 "aliasFullName": "AbilityAlias",
                 "aliasShortName": "AbilityAlias",
+                "conflicted": false,
                 "hash": "#u9m3jehjj8mtrhh4i4fuk545k3pdged9r0egph91irldf4lc0rsmtma9eoakvv9hoeesciebuqd7kfm0vdnk48gi7q3s7edn5omb65o",
                 "otherNames": [
                   "AbilityAliasMe"
@@ -272,6 +274,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "fullName": "AbilityNew",
                 "hash": "#n7jj1pvi6a8689nggmnlhmn8hvkjiu4j5563kojf57dcf8dribv5suliht31nbpgc4501h26geepfg5o8jiid45h6ccmf8ogqu39am0",
                 "rendered": {
@@ -374,6 +377,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "hash": "#lh3ufh51cghv5sn14ckq9f2urei00i6adqj3d0vovc51c6f18bhauqfjhkm34227ediga6mc5dp58inn4j714rhenig2jsps9ima7do",
                 "newFullName": "AbilityRenamed",
                 "newShortName": "AbilityRenamed",
@@ -479,6 +483,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "diff": {
                   "diff": {
                     "diff": {
@@ -859,6 +864,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "diff": {
                   "diff": {
                     "diff": {
@@ -1043,6 +1049,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "fullName": "NewType",
                 "hash": "#rmntisgmjlrtq6kja30at01q04aeq2p17q806li6v509bn117tq9tc3gd3m33lhdgimen1tjdn4tqiu2r11k7ie9oibng1n1i275cdg",
                 "rendered": {
@@ -1097,6 +1104,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "hash": "#hb2ubbk0c6347s5eqic78f26truhgro1ueh7r8invme3hnalmnv880tgpafpeo5kaaihonoph8o7pmhad8mr2e25m0hhor9lr34skhg",
                 "newFullName": "RenamedType",
                 "newShortName": "RenamedType",
@@ -1284,6 +1292,7 @@
               "contents": {
                 "aliasFullName": "aTermAlias",
                 "aliasShortName": "aTermAlias",
+                "conflicted": false,
                 "hash": "#gjmq673r1vrurfotlnirv7vutdhm6sa3s02em5g22kk606mv6duvv8be402dv79312i4a0onepq5bo7citsodvq2g720nttj0ee9p0g",
                 "otherNames": [
                   "termAliasMe"
@@ -1503,6 +1512,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "fullName": "newTerm",
                 "hash": "#u1qsl3nk5t2svl58ifqepem851775qca9p4hc10j3iordu1v7u8e16oodui9kvt2c0j1cbc50avado53bl2vt3pphrfj9mhbut1ipm8",
                 "rendered": {
@@ -1587,6 +1597,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": false,
                 "hash": "#f3lgjvjqoocpt8v6kdgd2bgthh11a7md3qdp9rf5datccmo580btjd5bt5dro3irqs0is7vm7s1dphddjbtufch620te7ef7canmjj8",
                 "newFullName": "renamedTerm",
                 "newShortName": "renamedTerm",
@@ -2170,6 +2181,7 @@
           {
             "contents": {
               "contents": {
+                "conflicted": true,
                 "diff": {
                   "diff": {
                     "diff": {

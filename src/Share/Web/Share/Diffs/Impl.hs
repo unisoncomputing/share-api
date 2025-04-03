@@ -12,6 +12,7 @@ import Control.Monad.Trans.Except (except)
 import Data.Aeson (ToJSON (..), Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (object)
+import Data.Aeson.Types qualified as Aeson (Pair)
 import Data.Foldable qualified as Foldable
 import Data.Map qualified as Map
 import Data.Text.Lazy qualified as TL
@@ -214,13 +215,20 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase
       DefinitionDiffKind r Name diff ->
       ExceptT NamespaceDiffError m (DefinitionDiffKind r x diff)
     renderDiffKind getter = \case
-      Added r name -> Added r <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "Added"))
-      NewAlias r existingNames name -> NewAlias r existingNames <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "NewAlias"))
+      Added r conflicted name ->
+        Added r conflicted
+          <$> lift (getter (toCodebase, toBHId, name))
+            `whenNothingM` throwError (notFound name "Added")
+      NewAlias r existingNames conflicted name ->
+        NewAlias r existingNames conflicted
+          <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "NewAlias"))
       Removed r name -> Removed r <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "Removed"))
-      Updated oldRef newRef diff -> pure $ Updated oldRef newRef diff
+      Updated oldRef newRef diff conflicted -> pure $ Updated oldRef newRef diff conflicted
       Propagated oldRef newRef diff -> pure $ Propagated oldRef newRef diff
       RenamedTo r names name -> RenamedTo r names <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "RenamedTo"))
-      RenamedFrom r names name -> RenamedFrom r names <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "RenamedFrom"))
+      RenamedFrom r names conflicted name ->
+        RenamedFrom r names conflicted
+          <$> lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "RenamedFrom")
 
     throwAwayConstructorDiffs ::
       ExceptT
@@ -308,18 +316,45 @@ instance ToJSON RenderedNamespaceAndLibdepsDiff where
     where
       text :: Text -> Text
       text t = t
-      hqNameJSON :: Name -> NameSegment -> ShortHash -> Value -> Value
-      hqNameJSON fqn name sh rendered = object ["hash" .= sh, "shortName" .= name, "fullName" .= fqn, "rendered" .= rendered]
+      hqNameJSON :: Name -> NameSegment -> ShortHash -> Value -> [Aeson.Pair]
+      hqNameJSON fqn name sh rendered =
+        [ "hash" .= sh,
+          "shortName" .= name,
+          "fullName" .= fqn,
+          "rendered" .= rendered
+        ]
       -- The preferred frontend format is a bit clunky to calculate here:
       diffDataJSON :: (ToJSON tag) => NameSegment -> DefinitionDiff (tag, ShortHash) Value Value -> (tag, Value)
       diffDataJSON shortName (DefinitionDiff {fqn, kind}) = case kind of
-        Added (defnTag, r) rendered -> (defnTag, object ["tag" .= text "Added", "contents" .= hqNameJSON fqn shortName r rendered])
-        NewAlias (defnTag, r) existingNames rendered ->
-          let contents = object ["hash" .= r, "aliasShortName" .= shortName, "aliasFullName" .= fqn, "otherNames" .= toList existingNames, "rendered" .= rendered]
+        Added (defnTag, r) conflicted rendered ->
+          let contents = object (("conflicted" .= conflicted) : hqNameJSON fqn shortName r rendered)
+           in (defnTag, object ["tag" .= text "Added", "contents" .= contents])
+        NewAlias (defnTag, r) existingNames conflicted rendered ->
+          let contents =
+                object
+                  [ "hash" .= r,
+                    "aliasShortName" .= shortName,
+                    "aliasFullName" .= fqn,
+                    "otherNames" .= toList existingNames,
+                    "conflicted" .= conflicted,
+                    "rendered" .= rendered
+                  ]
            in (defnTag, object ["tag" .= text "Aliased", "contents" .= contents])
-        Removed (defnTag, r) rendered -> (defnTag, object ["tag" .= text "Removed", "contents" .= hqNameJSON fqn shortName r rendered])
-        Updated (oldTag, oldRef) (newTag, newRef) diffVal ->
-          let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
+        Removed (defnTag, r) rendered ->
+          let contents = object (hqNameJSON fqn shortName r rendered)
+           in (defnTag, object ["tag" .= text "Removed", "contents" .= contents])
+        Updated (oldTag, oldRef) (newTag, newRef) diffVal conflicted ->
+          let contents =
+                object
+                  [ "oldHash" .= oldRef,
+                    "newHash" .= newRef,
+                    "shortName" .= shortName,
+                    "fullName" .= fqn,
+                    "oldTag" .= oldTag,
+                    "newTag" .= newTag,
+                    "diff" .= diffVal,
+                    "conflicted" .= conflicted
+                  ]
            in (newTag, object ["tag" .= text "Updated", "contents" .= contents])
         Propagated (oldTag, oldRef) (newTag, newRef) diffVal ->
           let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
@@ -327,8 +362,16 @@ instance ToJSON RenderedNamespaceAndLibdepsDiff where
         RenamedTo (defnTag, r) newNames rendered ->
           let contents = object ["oldShortName" .= shortName, "oldFullName" .= fqn, "newNames" .= newNames, "hash" .= r, "rendered" .= rendered]
            in (defnTag, object ["tag" .= text "RenamedTo", "contents" .= contents])
-        RenamedFrom (defnTag, r) oldNames rendered ->
-          let contents = object ["oldNames" .= oldNames, "newShortName" .= shortName, "newFullName" .= fqn, "hash" .= r, "rendered" .= rendered]
+        RenamedFrom (defnTag, r) oldNames conflicted rendered ->
+          let contents =
+                object
+                  [ "oldNames" .= oldNames,
+                    "newShortName" .= shortName,
+                    "newFullName" .= fqn,
+                    "hash" .= r,
+                    "conflicted" .= conflicted,
+                    "rendered" .= rendered
+                  ]
            in (defnTag, object ["tag" .= text "RenamedFrom", "contents" .= contents])
       displayObjectDiffToJSON :: DisplayObjectDiff -> Value
       displayObjectDiffToJSON = \case

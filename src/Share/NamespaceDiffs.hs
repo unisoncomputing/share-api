@@ -39,9 +39,11 @@ import Control.Lens hiding ((:<))
 import Control.Monad.Except
 import Data.Align (Semialign (..))
 import Data.Either (partitionEithers)
-import Data.Foldable qualified as Foldable
 import Data.Functor.Compose (Compose (..))
+import Data.List.NonEmpty qualified as List.NonEmpty
 import Data.Map qualified as Map
+import Data.Map.NonEmpty (NEMap)
+import Data.Map.NonEmpty qualified as NEMap
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
@@ -83,7 +85,7 @@ import Unison.Term (Term)
 import Unison.Type (Type)
 import Unison.Util.BiMultimap (BiMultimap)
 import Unison.Util.BiMultimap qualified as BiMultimap
-import Unison.Util.Defns (Defns (..), DefnsF, DefnsF3, alignDefnsWith)
+import Unison.Util.Defns (Defns (..), DefnsF, DefnsF3, alignDefnsWith, zipDefns)
 import Unison.Util.Nametree (Nametree (..))
 import Unison.Util.Set qualified as Set
 
@@ -113,20 +115,20 @@ instance Logging.Loggable NamespaceDiffError where
 -- | The differences between two namespaces.
 data DefinitionDiffs name r = DefinitionDiffs
   { -- Brand new added terms, neither the name nor definition exist in the old namespace.
-    added :: Map name r,
+    added :: Map name (r, Bool {- conflicted -}),
     -- Removed terms. These names for these definitions were removed, and there are no newly
     -- added names for these definitions.
     removed :: Map name r,
     -- Updated terms, split into non-propagated (`updated`) and propagated (`propagated`) updates. These names exist in
     -- both the old and new namespace, but the definitions assigned to them have changed.
-    updated :: Map name (r {- old -}, r {- new -}),
+    updated :: Map name (r {- old -}, r {- new -}, Bool {- conflicted -}),
     propagated :: Map name (r {- old -}, r {- new -}),
     -- Renamed terms. These definitions exist in both the old and new namespace, but the names have
     -- changed.
-    renamed :: Map r (NESet name {- old names for this ref -}, NESet name {- new names for this ref -}),
+    renamed :: Map r (NESet name {- old names for this ref -}, NEMap name Bool {- new names for this ref -> conflicted? -}),
     -- New aliases. These definitions exist in both the old namespace, but have received new names
     -- in the new namespace without removing the old ones.
-    newAliases :: Map r (NESet name {- Existing names for this ref -}, NESet name)
+    newAliases :: Map r (NESet name {- Existing names for this ref -}, NEMap name Bool {- new name -> conflicted? -})
   }
   deriving stock (Eq, Show)
 
@@ -154,17 +156,17 @@ definitionDiffRendered_ f (DefinitionDiff k n) = DefinitionDiff <$> definitionDi
 
 -- | Information about a single definition which is different.
 data DefinitionDiffKind r rendered diff
-  = Added r rendered
-  | NewAlias r (NESet Name {- existing names -}) rendered
+  = Added r Bool {- conflicted -} rendered
+  | NewAlias r (NESet Name {- existing names -}) Bool {- conflicted -} rendered
   | Removed r rendered
   | -- | A non-propagated update, where old and new have different syntactic hashes.
-    Updated r {- old -} r {- new -} diff
+    Updated r {- old -} r {- new -} diff Bool {- conflicted -}
   | -- | A propagated update (old and new are different but have the same syntactic hash)
     Propagated r {- old -} r {- new -} diff
   | -- This definition was removed away from this location and added at the provided names.
-    RenamedTo r (NESet Name) rendered
+    RenamedTo r (NEMap Name Bool {- conflicted -}) rendered
   | -- This definition was added at this location and removed from the provided names.
-    RenamedFrom r (NESet Name) rendered
+    RenamedFrom r (NESet Name) Bool {- conflicted -} rendered
   deriving stock (Eq, Show, Ord)
 
 instance (Ord r) => Semigroup (DefinitionDiffs Name r) where
@@ -191,33 +193,33 @@ instance (Ord r) => Monoid (DefinitionDiffs Name r) where
 
 definitionDiffKindRefs_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r' rendered diff) r r'
 definitionDiffKindRefs_ f = \case
-  Added r rendered -> Added <$> f r <*> pure rendered
-  NewAlias r ns rendered -> NewAlias <$> f r <*> pure ns <*> pure rendered
+  Added r conflicted rendered -> Added <$> f r <*> pure conflicted <*> pure rendered
+  NewAlias r ns conflicted rendered -> NewAlias <$> f r <*> pure ns <*> pure conflicted <*> pure rendered
   Removed r rendered -> Removed <$> f r <*> pure rendered
   Propagated old new diff -> Propagated <$> f old <*> f new <*> pure diff
-  Updated old new diff -> Updated <$> f old <*> f new <*> pure diff
+  Updated old new diff conflicted -> Updated <$> f old <*> f new <*> pure diff <*> pure conflicted
   RenamedTo r old rendered -> RenamedTo <$> f r <*> pure old <*> pure rendered
-  RenamedFrom r old rendered -> RenamedFrom <$> f r <*> pure old <*> pure rendered
+  RenamedFrom r old conflicted rendered -> RenamedFrom <$> f r <*> pure old <*> pure conflicted <*> pure rendered
 
 definitionDiffKindDiffs_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r rendered diff') diff diff'
 definitionDiffKindDiffs_ f = \case
-  Added r rendered -> Added r <$> pure rendered
-  NewAlias r ns rendered -> NewAlias r ns <$> pure rendered
-  Removed r rendered -> Removed r <$> pure rendered
+  Added r conflicted rendered -> pure (Added r conflicted rendered)
+  NewAlias r ns conflicted rendered -> pure (NewAlias r ns conflicted rendered)
+  Removed r rendered -> pure (Removed r rendered)
   Propagated old new diff -> Propagated old new <$> f diff
-  Updated old new diff -> Updated old new <$> f diff
-  RenamedTo r old rendered -> RenamedTo r old <$> pure rendered
-  RenamedFrom r old rendered -> RenamedFrom r old <$> pure rendered
+  Updated old new diff conflicted -> Updated old new <$> f diff <*> pure conflicted
+  RenamedTo r old rendered -> pure (RenamedTo r old rendered)
+  RenamedFrom r old conflicted rendered -> pure (RenamedFrom r old conflicted rendered)
 
 definitionDiffKindRendered_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r rendered' diff) rendered rendered'
 definitionDiffKindRendered_ f = \case
-  Added r rendered -> Added r <$> f rendered
-  NewAlias r ns rendered -> NewAlias r ns <$> f rendered
+  Added r conflicted rendered -> Added r conflicted <$> f rendered
+  NewAlias r ns conflicted rendered -> NewAlias r ns conflicted <$> f rendered
   Removed r rendered -> Removed r <$> f rendered
-  Propagated old new diff -> Propagated old new <$> pure diff
-  Updated old new diff -> Updated old new <$> pure diff
+  Propagated old new diff -> pure (Propagated old new diff)
+  Updated old new diff conflicted -> pure (Updated old new diff conflicted)
   RenamedTo r old rendered -> RenamedTo r old <$> f rendered
-  RenamedFrom r old rendered -> RenamedFrom r old <$> f rendered
+  RenamedFrom r old conflicted rendered -> RenamedFrom r old conflicted <$> f rendered
 
 type NamespaceAndLibdepsDiff referent reference renderedTerm renderedType termDiff typeDiff libdep =
   GNamespaceAndLibdepsDiff Path referent reference renderedTerm renderedType termDiff typeDiff libdep
@@ -457,9 +459,11 @@ definitionDiffsToTree dd =
           & Map.toList
           & foldMap
             ( \(r, (existingNames, newNames)) ->
-                ( Foldable.toList newNames
-                    <&> \newName -> Map.singleton newName (Set.singleton (NewAlias r existingNames newName))
-                )
+                newNames
+                  & NEMap.toList
+                  & List.NonEmpty.toList
+                  & map \(newName, conflicted) ->
+                    Map.singleton newName (Set.singleton (NewAlias r existingNames conflicted newName))
             )
           & Map.unionsWith (<>)
       expandedRenames :: Map Name (Set (DefinitionDiffKind ref Name Name))
@@ -469,23 +473,21 @@ definitionDiffsToTree dd =
           & foldMap \(r, (oldNames, newNames)) ->
             ( -- We don't currently want to track the old names in a rename, and including them messes up
               -- the path-compression for the diff tree, so we just omit them.
-              -- ( Foldable.toList oldNames
-              --       <&> \oldName -> Map.singleton oldName (Set.singleton (RenamedTo r newNames))
-              --   )
-              -- <>
-              ( Foldable.toList newNames
-                  <&> \newName -> Map.singleton newName (Set.singleton (RenamedFrom r oldNames newName))
-              )
+              newNames
+                & NEMap.toList
+                & List.NonEmpty.toList
+                & map \(newName, conflicted) ->
+                  Map.singleton newName (Set.singleton (RenamedFrom r oldNames conflicted newName))
             )
               & Map.unionsWith (<>)
       diffTree :: Map Name (Set (DefinitionDiffKind ref Name Name))
       diffTree =
         Map.unionsWith
           (<>)
-          [ (added & Map.mapWithKey \n r -> Set.singleton $ Added r n),
+          [ (added & Map.mapWithKey \n (r, conflicted) -> Set.singleton $ Added r conflicted n),
             expandedAliases,
             (removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
-            (updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
+            (updated & Map.mapWithKey \name (old, new, conflicted) -> Set.singleton $ Updated old new name conflicted),
             (propagated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Propagated oldR newR name),
             expandedRenames
           ]
@@ -695,21 +697,26 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
 
   let definitionDiffs :: DefnsF (DefinitionDiffs Name) Referent TypeReference
       definitionDiffs =
-        let f :: forall ref. (Ord ref) => Map Name (HumanDiffOp ref) -> DefinitionDiffs Name ref
-            f =
-              Map.toList >>> foldMap \(name, op) ->
-                case op of
-                  HumanDiffOp'Add ref -> mempty {added = Map.singleton name ref}
-                  HumanDiffOp'Delete ref -> mempty {removed = Map.singleton name ref}
-                  HumanDiffOp'Update refs -> mempty {updated = Map.singleton name (refs.old, refs.new)}
-                  HumanDiffOp'PropagatedUpdate refs -> mempty {propagated = Map.singleton name (refs.old, refs.new)}
-                  HumanDiffOp'AliasOf ref names ->
-                    mempty {newAliases = Map.singleton ref (names, NESet.singleton name)}
-                  HumanDiffOp'RenamedFrom ref names ->
-                    mempty {renamed = Map.singleton ref (names, NESet.singleton name)}
-                  HumanDiffOp'RenamedTo ref names ->
-                    mempty {renamed = Map.singleton ref (NESet.singleton name, names)}
-         in bimap f f blob1.humanDiffsFromLCA.bob
+        let f :: forall ref ref'. (Ord ref) => (Map Name (HumanDiffOp ref), Map Name ref') -> DefinitionDiffs Name ref
+            f (diff, conflicts) =
+              let conflicted = (`Map.member` conflicts)
+               in diff
+                    & Map.toList
+                    & foldMap \(name, op) ->
+                      case op of
+                        HumanDiffOp'Add ref -> mempty {added = Map.singleton name (ref, conflicted name)}
+                        HumanDiffOp'Delete ref -> mempty {removed = Map.singleton name ref}
+                        HumanDiffOp'Update refs ->
+                          mempty {updated = Map.singleton name (refs.old, refs.new, conflicted name)}
+                        HumanDiffOp'PropagatedUpdate refs ->
+                          mempty {propagated = Map.singleton name (refs.old, refs.new)}
+                        HumanDiffOp'AliasOf ref names ->
+                          mempty {newAliases = Map.singleton ref (names, NEMap.singleton name (conflicted name))}
+                        HumanDiffOp'RenamedFrom ref names ->
+                          mempty {renamed = Map.singleton ref (names, NEMap.singleton name (conflicted name))}
+                        HumanDiffOp'RenamedTo ref names ->
+                          mempty {renamed = Map.singleton ref (NESet.singleton name, NEMap.fromSet conflicted names)}
+         in bimap f f (zipDefns blob1.humanDiffsFromLCA.bob blob1.conflicts.bob)
 
   -- Convert definition diffs to two uncompressed trees of diffs (one for terms, one for types)
   let twoUncompressedTrees ::
