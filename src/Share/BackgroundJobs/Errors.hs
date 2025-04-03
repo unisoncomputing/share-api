@@ -18,7 +18,10 @@ import Share.Prelude
 import Share.Utils.Logging (Loggable)
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors (InternalServerError (..), withCallstack)
+import Data.Map qualified as Map
 import UnliftIO qualified
+import Data.Text qualified as Text
+import Data.Aeson qualified as Aeson
 
 data SomeBackgroundError where
   SomeBackgroundError :: (Typeable e, Loggable e) => e -> SomeBackgroundError
@@ -47,9 +50,13 @@ reportException bg = flip (UnliftIO.withException @_ @SomeException) (reportErro
 reportError :: (HasCallStack, Loggable e) => e -> Background ()
 reportError e = do
   env <- ask
-  let BackgroundCtx {workerName} = Env.ctx env
+  let BackgroundCtx {workerName, loggingTags} = Env.ctx env
   let coreTags = HM.fromList [("workerName", into @String workerName)]
-  let extraTags = HM.fromList []
+  let extraTags =
+        loggingTags
+        & Map.toList
+        & (fmap \(k, v) -> (Text.unpack k, Aeson.toJSON v))
+        & HM.fromList
   let errID = "background-job:" <> workerName
   let errLog = Logging.toLog e
   Monitoring.reportError env coreTags extraTags errID e
