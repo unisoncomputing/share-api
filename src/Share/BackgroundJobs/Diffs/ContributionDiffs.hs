@@ -1,16 +1,17 @@
 module Share.BackgroundJobs.Diffs.ContributionDiffs (worker) where
 
 import Control.Lens
-import Control.Monad.Except (ExceptT (..), runExceptT)
+import Control.Monad.Except
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Diffs.Queries qualified as DQ
 import Share.BackgroundJobs.Errors (reportError)
-import Share.BackgroundJobs.Monad (Background)
+import Share.BackgroundJobs.Monad (Background, withTag)
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Branch (Branch (..))
 import Share.Codebase qualified as Codebase
 import Share.Contribution (Contribution (..))
 import Share.IDs
+import Share.IDs qualified as IDs
 import Share.Metrics qualified as Metrics
 import Share.NamespaceDiffs (NamespaceDiffError (MissingEntityError))
 import Share.Postgres qualified as PG
@@ -34,10 +35,12 @@ worker scope = do
   newWorker scope "diffs:contributions" $ forever do
     Notif.waitOnChannel Notif.ContributionDiffChannel (maxPollingIntervalSeconds * 1000000)
     processDiffs authZReceipt >>= \case
-      Left e -> reportError e
+      Left (contributionId, e) ->
+        withTag "contribution-id" (IDs.toText contributionId) $ do
+          reportError e
       Right _ -> pure ()
 
-processDiffs :: AuthZ.AuthZReceipt -> Background (Either NamespaceDiffError ())
+processDiffs :: AuthZ.AuthZReceipt -> Background (Either (ContributionId, NamespaceDiffError) ())
 processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT $ do
   mayContributionId <- PG.runTransaction DQ.claimContributionToDiff
   for_ mayContributionId (diffContribution authZReceipt)
@@ -51,8 +54,8 @@ processDiffs authZReceipt = Metrics.recordContributionDiffDuration . runExceptT 
       either throwError pure =<< lift (processDiffs authZReceipt)
     Nothing -> pure ()
 
-diffContribution :: AuthZ.AuthZReceipt -> ContributionId -> ExceptT NamespaceDiffError Background ()
-diffContribution authZReceipt contributionId = do
+diffContribution :: AuthZ.AuthZReceipt -> ContributionId -> ExceptT (ContributionId, NamespaceDiffError) Background ()
+diffContribution authZReceipt contributionId = withExceptT (contributionId,) . mapExceptT (withTag "contribution-id" (IDs.toText contributionId)) $ do
   ( bestCommonAncestorCausalId,
     project,
     newBranch@Branch {causal = newBranchCausalId},
@@ -66,5 +69,6 @@ diffContribution authZReceipt contributionId = do
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
   -- This method saves the diff so it'll be there when we need it, so we don't need to do anything with it.
-  _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId) bestCommonAncestorCausalId
+  _ <-
+    Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId) bestCommonAncestorCausalId
   pure ()
