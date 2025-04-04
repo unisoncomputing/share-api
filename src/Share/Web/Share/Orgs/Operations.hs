@@ -3,6 +3,7 @@ module Share.Web.Share.Orgs.Operations
   )
 where
 
+import Data.Set qualified as Set
 import Share.IDs (OrgHandle (..), OrgId, UserHandle (..), UserId)
 import Share.Postgres
 import Share.Postgres.Users.Queries (UserCreationError)
@@ -10,6 +11,7 @@ import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Utils.URI
 import Share.Web.Authorization.Types qualified as AuthZ
+import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Roles.Queries qualified as RoleQ
 
 createOrg :: AuthZ.AuthZReceipt -> Text -> OrgHandle -> Text -> Maybe URIParam -> UserId -> Transaction UserCreationError OrgId
@@ -23,4 +25,5 @@ createOrg !authZReceipt name (OrgHandle handle) email avatarUrl owner = do
       RETURNING id, resource_id
     |]
   RoleQ.assignUserRoleMembership authZReceipt owner orgResourceId AuthZ.RoleOrgOwner
+  OrgQ.addOrgMembers orgId (Set.singleton owner)
   pure orgId
