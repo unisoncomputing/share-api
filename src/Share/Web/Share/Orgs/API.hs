@@ -1,7 +1,13 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Web.Share.Orgs.API (API, ResourceRoutes (..), OrgRolesRoutes (..)) where
+module Share.Web.Share.Orgs.API
+  ( API,
+    ResourceRoutes (..),
+    OrgRolesRoutes (..),
+    OrgMembersRoutes (..),
+  )
+where
 
 import GHC.Generics (Generic)
 import Servant
@@ -18,7 +24,8 @@ type API =
 
 data ResourceRoutes mode
   = ResourceRoutes
-  { roles :: mode :- "roles" :> NamedRoutes OrgRolesRoutes
+  { roles :: mode :- "roles" :> NamedRoutes OrgRolesRoutes,
+    members :: mode :- "members" :> NamedRoutes OrgMembersRoutes
   }
   deriving stock (Generic)
 
@@ -27,6 +34,14 @@ data OrgRolesRoutes mode
   { list :: mode :- OrgRolesListEndpoint,
     add :: mode :- OrgRolesAddEndpoint,
     remove :: mode :- OrgRolesRemoveEndpoint
+  }
+  deriving stock (Generic)
+
+data OrgMembersRoutes mode
+  = OrgMembersRoutes
+  { list :: mode :- OrgMembersListEndpoint,
+    add :: mode :- OrgMembersAddEndpoint,
+    remove :: mode :- OrgMembersRemoveEndpoint
   }
   deriving stock (Generic)
 
@@ -48,3 +63,17 @@ type CreateOrgEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] CreateOrgRequest
     :> Post '[JSON] OrgDisplayInfo
+
+type OrgMembersAddEndpoint =
+  AuthenticatedUserId
+    :> ReqBody '[JSON] OrgMembersAddRequest
+    :> Post '[JSON] OrgMembersListResponse
+
+type OrgMembersRemoveEndpoint =
+  AuthenticatedUserId
+    :> ReqBody '[JSON] OrgMembersRemoveRequest
+    :> Delete '[JSON] OrgMembersListResponse
+
+type OrgMembersListEndpoint =
+  AuthenticatedUserId
+    :> Get '[JSON] OrgMembersListResponse

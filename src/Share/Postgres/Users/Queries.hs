@@ -4,6 +4,7 @@
 -- | Common queries for users.
 module Share.Postgres.Users.Queries
   ( userDisplayInfoOf,
+    userIdsByHandlesOf,
     userProfileById,
     updateUser,
     expectUserByUserId,
@@ -75,6 +76,26 @@ userDisplayInfoOf trav s = do
         <&> \result ->
           if length result /= length userIds
             then error "userDisplayInfoOf: Missing user display info."
+            else result
+
+userIdsByHandlesOf :: (PG.QueryA m) => Traversal s t UserHandle UserId -> s -> m t
+userIdsByHandlesOf trav s = do
+  s
+    & unsafePartsOf trav %%~ \userHandles -> do
+      let usersTable = zip [0 :: Int32 ..] userHandles
+      PG.queryListCol @(UserId)
+        [PG.sql|
+      WITH values(ord, handle) AS (
+        SELECT * FROM ^{PG.toTable usersTable}
+      )
+      SELECT users.id
+        FROM values
+          JOIN users u ON u.handle = values.handle
+      ORDER BY ord
+      |]
+        <&> \result ->
+          if length result /= length userHandles
+            then error "userIdsByHandlesOf: Missing user ids."
             else result
 
 userProfileById :: UserId -> PG.Transaction e (Maybe UserProfile)
