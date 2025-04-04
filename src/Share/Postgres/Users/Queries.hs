@@ -88,7 +88,7 @@ userIdsByHandlesOf trav s = do
       WITH values(ord, handle) AS (
         SELECT * FROM ^{PG.toTable usersTable}
       )
-      SELECT users.id
+      SELECT u.id
         FROM values
           JOIN users u ON u.handle = values.handle
       ORDER BY ord

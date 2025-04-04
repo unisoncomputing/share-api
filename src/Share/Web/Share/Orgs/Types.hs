@@ -41,13 +41,13 @@ instance FromJSON CreateOrgRequest where
     pure CreateOrgRequest {..}
 
 data OrgMembersAddRequest = OrgMembersAddRequest
-  { userHandles :: [UserHandle]
+  { members :: [UserHandle]
   }
   deriving (Show, Eq)
 
 instance FromJSON OrgMembersAddRequest where
   parseJSON = withObject "OrgMembersAddRequest" $ \o -> do
-    userHandles <- o .: "userHandles"
+    members <- o .: "members"
     pure OrgMembersAddRequest {..}
 
 data OrgMembersListResponse = OrgMembersListResponse
@@ -62,6 +62,11 @@ instance ToJSON OrgMembersListResponse where
       ]
 
 data OrgMembersRemoveRequest = OrgMembersRemoveRequest
-  { userHandles :: [UserHandle]
+  { members :: [UserHandle]
   }
   deriving (Show, Eq)
+
+instance FromJSON OrgMembersRemoveRequest where
+  parseJSON = withObject "OrgMembersRemoveRequest" $ \o -> do
+    members <- o .: "members"
+    pure OrgMembersRemoveRequest {..}

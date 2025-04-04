@@ -1,0 +1,17 @@
+{
+  "body": {
+    "members": [
+      {
+        "avatarUrl": null,
+        "handle": "test",
+        "name": null,
+        "userId": "U-<UUID>"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

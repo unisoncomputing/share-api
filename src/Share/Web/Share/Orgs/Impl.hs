@@ -95,19 +95,19 @@ listMembersEndpoint orgHandle caller = do
     OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
 
 addMembersEndpoint :: UserHandle -> UserId -> OrgMembersAddRequest -> WebApp OrgMembersListResponse
-addMembersEndpoint orgHandle caller (OrgMembersAddRequest {userHandles}) = do
+addMembersEndpoint orgHandle caller (OrgMembersAddRequest {members}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
   PG.runTransaction do
-    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList userHandles)
+    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
     OrgQ.addOrgMembers orgId userIds
     OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
 
 removeMembersEndpoint :: UserHandle -> UserId -> OrgMembersRemoveRequest -> WebApp OrgMembersListResponse
-removeMembersEndpoint orgHandle caller (OrgMembersRemoveRequest {userHandles}) = do
+removeMembersEndpoint orgHandle caller (OrgMembersRemoveRequest {members}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
   PG.runTransaction do
-    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList userHandles)
+    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
     OrgQ.removeOrgMembers orgId userIds
     OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
