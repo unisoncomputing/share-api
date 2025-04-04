@@ -118,6 +118,10 @@ fetch_data() {
         echo "fetch requires at least 4 arguments: user_id, method, testname, api_path, [data]" >&2
         exit 1
     fi
+    if [ -z "$1" ]; then
+        echo "fetch requires a user id" >&2
+        exit 1
+    fi
     cookie_jar="$(cookie_jar_for_user_id "$1")"
     method="$2"
     testname="$3"

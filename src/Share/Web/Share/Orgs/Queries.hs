@@ -6,6 +6,9 @@ module Share.Web.Share.Orgs.Queries
     listOrgRoles,
     addOrgRoles,
     removeOrgRoles,
+    listOrgMembers,
+    addOrgMembers,
+    removeOrgMembers,
     orgDisplayInfoOf,
     userDisplayInfoByOrgIdOf,
   )
@@ -131,3 +134,47 @@ removeOrgRoles orgId toRemove = do
             AND role_memberships.role_id = v.role_id
         |]
   listOrgRoles orgId
+
+listOrgMembers :: OrgId -> Transaction e [UserDisplayInfo]
+listOrgMembers orgId = do
+  queryListRows
+    [sql|
+      SELECT u.handle, u.name, u.avatar_url, u.id
+        FROM org_members om
+        JOIN users u ON om.member_user_id = u.id
+      WHERE om.org_id = #{orgId}
+        ORDER BY u.handle
+    |]
+    <&> fmap \(handle, name, avatarUrl, userId) ->
+      UserDisplayInfo
+        { handle,
+          name,
+          avatarUrl = unpackURI <$> avatarUrl,
+          userId
+        }
+
+addOrgMembers :: OrgId -> Set UserId -> Transaction e ()
+addOrgMembers orgId newMembers = do
+  execute_
+    [sql|
+        WITH values(member_user_id) AS (
+          SELECT t.member_user_id
+            FROM ^{singleColumnTable (toList newMembers)} AS t(member_user_id)
+        ) INSERT INTO org_members (org_id, organization_user_id,  member_user_id)
+          SELECT #{orgId}, (SELECT o.user_id FROM orgs o WHERE o.id = #{orgId}),  v.member_user_id
+            FROM values v
+          ON CONFLICT DO NOTHING
+        |]
+
+removeOrgMembers :: OrgId -> Set UserId -> Transaction e ()
+removeOrgMembers orgId toRemove = do
+  execute_
+    [sql|
+        WITH values(member_user_id) AS (
+          SELECT t.member_user_id
+            FROM ^{singleColumnTable (toList toRemove)} AS t(member_user_id)
+        ) DELETE FROM org_members
+          USING values v
+          WHERE org_members.member_user_id = v.member_user_id
+            AND org_members.org_id = #{orgId}
+        |]

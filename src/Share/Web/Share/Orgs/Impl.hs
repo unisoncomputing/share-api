@@ -2,6 +2,7 @@ module Share.Web.Share.Orgs.Impl (server) where
 
 import Control.Lens
 import Data.Either (isRight)
+import Data.Set qualified as Set
 import Servant
 import Servant.Server.Generic
 import Share.IDs
@@ -17,13 +18,18 @@ import Share.Web.Share.DisplayInfo (OrgDisplayInfo)
 import Share.Web.Share.Orgs.API as API
 import Share.Web.Share.Orgs.Operations qualified as OrgOps
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
-import Share.Web.Share.Orgs.Types (CreateOrgRequest (..), Org (..))
+import Share.Web.Share.Orgs.Types (CreateOrgRequest (..), Org (..), OrgMembersAddRequest (..), OrgMembersListResponse (..), OrgMembersRemoveRequest (..))
 import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
 import Share.Web.Share.Roles.Queries (displaySubjectsOf)
+import Unison.Util.Set qualified as Set
 
 server :: ServerT API.API WebApp
 server =
-  let orgResourceServer orgHandle = API.ResourceRoutes {API.roles = rolesServer orgHandle}
+  let orgResourceServer orgHandle =
+        API.ResourceRoutes
+          { API.roles = rolesServer orgHandle,
+            API.members = membersServer orgHandle
+          }
    in orgCreateEndpoint :<|> orgResourceServer
 
 orgCreateEndpoint :: UserId -> CreateOrgRequest -> WebApp OrgDisplayInfo
@@ -39,6 +45,14 @@ rolesServer orgHandle =
     { API.list = listRolesEndpoint orgHandle,
       API.add = addRolesEndpoint orgHandle,
       API.remove = removeRolesEndpoint orgHandle
+    }
+
+membersServer :: UserHandle -> API.OrgMembersRoutes (AsServerT WebApp)
+membersServer orgHandle =
+  API.OrgMembersRoutes
+    { API.list = listMembersEndpoint orgHandle,
+      API.add = addMembersEndpoint orgHandle,
+      API.remove = removeMembersEndpoint orgHandle
     }
 
 orgIdByHandle :: UserHandle -> WebApp OrgId
@@ -72,3 +86,28 @@ removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
   PG.runTransaction do
     orgRoles <- OrgQ.removeOrgRoles orgId roleAssignments
     ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
+
+listMembersEndpoint :: UserHandle -> UserId -> WebApp OrgMembersListResponse
+listMembersEndpoint orgHandle caller = do
+  orgId <- orgIdByHandle orgHandle
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadOrgMembers caller orgId
+  PG.runTransaction do
+    OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
+
+addMembersEndpoint :: UserHandle -> UserId -> OrgMembersAddRequest -> WebApp OrgMembersListResponse
+addMembersEndpoint orgHandle caller (OrgMembersAddRequest {members}) = do
+  orgId <- orgIdByHandle orgHandle
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
+  PG.runTransaction do
+    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
+    OrgQ.addOrgMembers orgId userIds
+    OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
+
+removeMembersEndpoint :: UserHandle -> UserId -> OrgMembersRemoveRequest -> WebApp OrgMembersListResponse
+removeMembersEndpoint orgHandle caller (OrgMembersRemoveRequest {members}) = do
+  orgId <- orgIdByHandle orgHandle
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
+  PG.runTransaction do
+    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
+    OrgQ.removeOrgMembers orgId userIds
+    OrgMembersListResponse <$> OrgQ.listOrgMembers orgId

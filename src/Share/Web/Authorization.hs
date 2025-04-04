@@ -48,6 +48,8 @@ module Share.Web.Authorization
     checkCreateOrg,
     checkReadOrgRolesList,
     checkEditOrgRoles,
+    checkReadOrgMembers,
+    checkEditOrgMembers,
     permissionGuard,
     readPath,
     writePath,
@@ -167,6 +169,7 @@ data OrgPermission
   = OrgRolesList OrgId
   | OrgRolesEdit OrgId
   | OrgCreate UserId
+  | OrgMembersEdit OrgId
   deriving stock (Show, Eq, Ord)
 
 data AuthZFailure = AuthZFailure WrapperPermissions
@@ -229,6 +232,7 @@ instance Errors.ToServerError AuthZFailure where
         OrgRolesEdit _orgId -> (ErrorID "authz:org:roles-edit", err403 {errBody = "Permission Denied: " <> msg})
         OrgRolesList _orgId -> (ErrorID "authz:org:roles-list", err403 {errBody = "Permission Denied: " <> msg})
         OrgCreate _uid -> (ErrorID "authz:org:create", err403 {errBody = "Permission Denied: " <> msg})
+        OrgMembersEdit _orgId -> (ErrorID "authz:org:members-edit", err403 {errBody = "Permission Denied: " <> msg})
     AdminPermission ->
       (ErrorID "authz:admin", err403 {errBody = "Permission Denied: " <> msg})
     SudoPermission ->
@@ -285,6 +289,7 @@ authZFailureMessage (AuthZFailure perm) = case perm of
       OrgRolesEdit _orgId -> "Not permitted to edit roles in this org"
       OrgRolesList _orgId -> "Not permitted to list roles in this org"
       OrgCreate _uid -> "Not permitted to create an org for this user"
+      OrgMembersEdit _orgId -> "Not permitted to edit members in this org"
   AdminPermission -> "Not permitted to access this resource"
   SudoPermission -> "Sudo mode required to perform this action. Please re-authenticate to enable sudo mode."
 
@@ -668,6 +673,17 @@ checkEditOrgRoles :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZ.AuthZR
 checkEditOrgRoles reqUserId orgId =
   maybePermissionFailure (OrgPermission (OrgRolesEdit orgId)) $ do
     assertUserHasOrgPermission reqUserId orgId AuthZ.OrgAdmin
+    pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkReadOrgMembers :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkReadOrgMembers _reqUserId _orgId = do
+  -- Currently all org members lists are public
+  pure . Right $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkEditOrgMembers :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkEditOrgMembers reqUserId orgId = do
+  maybePermissionFailure (OrgPermission (OrgMembersEdit orgId)) $ do
+    assertUserHasOrgPermission reqUserId orgId AuthZ.OrgManage
     pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check whether the given user has administrative privileges,
