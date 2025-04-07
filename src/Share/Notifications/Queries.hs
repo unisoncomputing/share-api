@@ -1,6 +1,8 @@
 module Share.Notifications.Queries
   ( recordEvent,
     listNotificationHubEntries,
+    updateNotificationHubEntry,
+    listNotificationDeliveryMethods,
   )
 where
 
@@ -37,3 +39,40 @@ listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = 
       ORDER BY hub.created_at DESC
       LIMIT #{limit}
     |]
+
+updateNotificationHubEntry :: (QueryA m) => NotificationHubEntryId -> NotificationStatus -> m ()
+updateNotificationHubEntry hubEntryId status = do
+  execute_
+    [sql|
+      UPDATE notification_hub_entries
+      SET status = #{status}
+      WHERE id = #{hubEntryId}
+    |]
+
+listNotificationDeliveryMethods :: UserId -> Transaction e [NotificationDeliveryMethod]
+listNotificationDeliveryMethods userId = pipelined do
+  emailDeliveryMethods <- listEmailDeliveryMethods userId
+  webhookDeliveryMethods <- listWebhookDeliveryMethods userId
+  pure $ (EmailDeliveryMethod <$> emailDeliveryMethods) <> (WebhookDeliveryMethod <$> webhookDeliveryMethods)
+
+listEmailDeliveryMethods :: (QueryA m) => UserId -> m [NotificationEmailDeliveryConfig]
+listEmailDeliveryMethods userId = do
+  queryListRows
+    [sql|
+      SELECT ne.id, ne.email
+        FROM notification_emails ne
+      WHERE ne.subscriber_user_id = #{userId}
+      ORDER BY ne.email
+    |]
+
+listWebhookDeliveryMethods :: (QueryA m) => UserId -> m [NotificationWebhookDeliveryConfig]
+listWebhookDeliveryMethods userId = do
+  queryListRows
+    [sql|
+      SELECT nw.id, nw.url
+        FROM notification_webhooks nw
+      WHERE nw.subscriber_user_id = #{userId}
+      ORDER BY nw.url
+    |]
+
+createEmailDeliveryMethod :: UserId -> Text -> Transaction e NotificationEmailDeliveryMethodId

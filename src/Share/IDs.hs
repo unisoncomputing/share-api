@@ -44,6 +44,7 @@ module Share.IDs
     NotificationEmailDeliveryMethodId (..),
     NotificationWebhookId (..),
     NotificationSubscriptionId (..),
+    Email (..),
     projectBranchShortHandToBranchShortHand,
     JTI (..),
     CategoryName (..),
@@ -742,3 +743,7 @@ newtype NotificationSubscriptionId = NotificationSubscriptionId UUID
   deriving stock (Eq, Ord)
   deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
   deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NS-" UUID)
+
+newtype Email = Email Text
+  deriving stock (Eq, Ord, Show)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via Text

@@ -10,6 +10,8 @@ module Share.Notifications.Types
     NotificationHubEntry (..),
     NotificationStatus (..),
     NotificationDeliveryMethod (..),
+    NotificationEmailDeliveryConfig (..),
+    NotificationWebhookDeliveryConfig (..),
     eventTopic,
   )
 where
@@ -26,6 +28,7 @@ import Servant (FromHttpApiData (..))
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
+import Share.Utils.URI (URIParam (..))
 
 data NotificationTopic
   = ProjectBranchUpdated
@@ -207,9 +210,15 @@ type NewNotificationEvent = NotificationEvent () ()
 
 data NotificationEmailDeliveryConfig = NotificationEmailConfig
   { emailDeliveryId :: NotificationEmailDeliveryMethodId,
-    emailDeliveryEmail :: Text
+    emailDeliveryEmail :: Email
   }
   deriving (Eq, Ord, Show)
+
+instance PG.DecodeRow NotificationEmailDeliveryConfig where
+  decodeRow = do
+    emailDeliveryId <- PG.decodeField
+    emailDeliveryEmail <- PG.decodeField
+    pure $ NotificationEmailConfig {emailDeliveryId, emailDeliveryEmail}
 
 instance Aeson.ToJSON NotificationEmailDeliveryConfig where
   toJSON NotificationEmailConfig {emailDeliveryId, emailDeliveryEmail} =
@@ -223,6 +232,12 @@ data NotificationWebhookDeliveryConfig = NotificationWebhookConfig
     webhookDeliveryUrl :: URI
   }
   deriving (Eq, Ord, Show)
+
+instance PG.DecodeRow NotificationWebhookDeliveryConfig where
+  decodeRow = do
+    webhookDeliveryId <- PG.decodeField
+    URIParam webhookDeliveryUrl <- PG.decodeField
+    pure $ NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl}
 
 instance Aeson.ToJSON NotificationWebhookDeliveryConfig where
   toJSON NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl} =

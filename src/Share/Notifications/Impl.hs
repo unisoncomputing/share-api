@@ -1,5 +1,6 @@
 module Share.Notifications.Impl (server) where
 
+import Data.Set qualified as Set
 import Data.Time
 import Servant
 import Servant.Server.Generic (AsServerT)
@@ -78,48 +79,48 @@ getDeliveryMethodsEndpoint :: UserHandle -> UserId -> WebApp API.GetDeliveryMeth
 getDeliveryMethodsEndpoint userHandle callerUserId = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsView callerUserId notificationUserId
-  deliveryMethods <- PG.runTransaction $ NotificationQ.listNotificationDeliveryMethods notificationUserId
+  deliveryMethods <- fmap Set.fromList . PG.runTransaction $ NotificationQ.listNotificationDeliveryMethods notificationUserId
   pure $ API.GetDeliveryMethodsResponse {deliveryMethods}
 
 createEmailDeliveryMethodEndpoint :: UserHandle -> UserId -> API.CreateEmailDeliveryMethodRequest -> WebApp API.CreateEmailDeliveryMethodResponse
 createEmailDeliveryMethodEndpoint userHandle callerUserId API.CreateEmailDeliveryMethodRequest {email} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEmailDeliveryMethodsManage callerUserId notificationUserId
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
   emailDeliveryMethodId <- PG.runTransaction $ NotificationQ.createEmailDeliveryMethod notificationUserId email
   pure $ API.CreateEmailDeliveryMethodResponse {emailDeliveryMethodId}
 
 deleteEmailDeliveryMethodEndpoint :: UserHandle -> UserId -> NotificationEmailDeliveryMethodId -> WebApp NoContent
 deleteEmailDeliveryMethodEndpoint userHandle callerUserId emailDeliveryMethodId = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEmailDeliveryMethodsManage callerUserId notificationUserId
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
   PG.runTransaction $ NotificationQ.deleteEmailDeliveryMethod emailDeliveryMethodId
   pure NoContent
 
 updateEmailDeliveryMethodEndpoint :: UserHandle -> UserId -> NotificationEmailDeliveryMethodId -> API.UpdateEmailDeliveryMethodRequest -> WebApp NoContent
 updateEmailDeliveryMethodEndpoint userHandle callerUserId emailDeliveryMethodId API.UpdateEmailDeliveryMethodRequest {email} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEmailDeliveryMethodsManage callerUserId notificationUserId
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
   PG.runTransaction $ NotificationQ.updateEmailDeliveryMethod emailDeliveryMethodId email
   pure NoContent
 
 createWebhookEndpoint :: UserHandle -> UserId -> API.CreateWebhookRequest -> WebApp API.CreateWebhookResponse
 createWebhookEndpoint userHandle callerUserId API.CreateWebhookRequest {url} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkWebhooksManage callerUserId notificationUserId
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
   webhookDeliveryMethodId <- PG.runTransaction $ NotificationQ.createWebhookDeliveryMethod notificationUserId url
   pure $ API.CreateWebhookResponse {webhookDeliveryMethodId}
 
 deleteWebhookEndpoint :: UserHandle -> UserId -> NotificationWebhookId -> WebApp NoContent
 deleteWebhookEndpoint userHandle callerUserId webhookDeliveryMethodId = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkWebhooksManage callerUserId notificationUserId
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
   PG.runTransaction $ NotificationQ.deleteWebhookDeliveryMethod webhookDeliveryMethodId
   pure NoContent
 
 updateWebhookEndpoint :: UserHandle -> UserId -> NotificationWebhookId -> API.UpdateWebhookRequest -> WebApp NoContent
 updateWebhookEndpoint userHandle callerUserId webhookDeliveryMethodId API.UpdateWebhookRequest {url} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkWebhooksManage callerUserId notificationUserId
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
   PG.runTransaction $ NotificationQ.updateWebhookDeliveryMethod webhookDeliveryMethodId url
   pure NoContent
 
