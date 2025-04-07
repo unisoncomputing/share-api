@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Share.Web.Share.Orgs.Impl (server) where
 
 import Control.Lens
@@ -10,6 +12,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.User (User (..))
+import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Authorization.Types
@@ -22,6 +25,29 @@ import Share.Web.Share.Orgs.Types (CreateOrgRequest (..), Org (..), OrgMembersAd
 import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
 import Share.Web.Share.Roles.Queries (displaySubjectsOf)
 import Unison.Util.Set qualified as Set
+
+data OrgError
+  = OrgMemberOfOrgError
+  | OrgMustHaveOwnerError
+  deriving stock (Show, Eq)
+  deriving (Logging.Loggable) via (Logging.ShowLoggable Logging.UserFault OrgError)
+
+instance ToServerError OrgError where
+  toServerError = \case
+    OrgMemberOfOrgError ->
+      ( ErrorID "org:org-member-of-org",
+        err400
+          { errBody = "Cannot add an org as a member of another org.",
+            errReasonPhrase = "Invalid Org Member"
+          }
+      )
+    OrgMustHaveOwnerError ->
+      ( ErrorID "org:must-have-owner",
+        err400
+          { errBody = "Cannot remove the only owner of an org.",
+            errReasonPhrase = "Invalid Org Member"
+          }
+      )
 
 server :: ServerT API.API WebApp
 server =
@@ -75,6 +101,7 @@ addRolesEndpoint :: UserHandle -> UserId -> AddRolesRequest -> WebApp ListRolesR
 addRolesEndpoint orgHandle caller (AddRolesRequest {roleAssignments}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
+  assertNoOrgSubjects roleAssignments
   PG.runTransaction do
     orgRoles <- OrgQ.addOrgRoles orgId roleAssignments
     ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
@@ -83,8 +110,12 @@ removeRolesEndpoint :: UserHandle -> UserId -> RemoveRolesRequest -> WebApp List
 removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
-  PG.runTransaction do
+  PG.runTransactionOrRespondError do
     orgRoles <- OrgQ.removeOrgRoles orgId roleAssignments
+    OrgQ.doesOrgHaveOwner orgId >>= \case
+      False -> throwError OrgMustHaveOwnerError
+      True -> pure ()
+
     ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
 
 listMembersEndpoint :: UserHandle -> UserId -> WebApp OrgMembersListResponse
@@ -98,8 +129,12 @@ addMembersEndpoint :: UserHandle -> UserId -> OrgMembersAddRequest -> WebApp Org
 addMembersEndpoint orgHandle caller (OrgMembersAddRequest {members}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
-  PG.runTransaction do
+  PG.runTransactionOrRespondError do
     userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
+    hasOrgMember <- runMaybeT $ for_ userIds \userId -> do
+      MaybeT $ OrgQ.orgByUserId userId
+    when (isJust hasOrgMember) do
+      throwError OrgMemberOfOrgError
     OrgQ.addOrgMembers orgId userIds
     OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
 
@@ -111,3 +146,15 @@ removeMembersEndpoint orgHandle caller (OrgMembersRemoveRequest {members}) = do
     userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
     OrgQ.removeOrgMembers orgId userIds
     OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
+
+assertNoOrgSubjects :: [RoleAssignment ResolvedAuthSubject] -> WebApp ()
+assertNoOrgSubjects roleAssignments = do
+  let hasOrgSubject =
+        roleAssignments
+          & any
+            ( \RoleAssignment {subject} -> case subject of
+                OrgSubject {} -> True
+                _ -> False
+            )
+  when hasOrgSubject do
+    respondError OrgMemberOfOrgError
