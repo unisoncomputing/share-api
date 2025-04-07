@@ -31,6 +31,7 @@ CREATE TABLE notification_events (
 );
 
 CREATE INDEX notification_events_topic ON notification_events(topic, created_at DESC);
+CREATE INDEX notification_events_scope_user ON notification_events(scope_user_id, created_at DESC);
 
 CREATE TABLE notification_subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -58,6 +59,8 @@ CREATE TRIGGER notification_subscriptions_updated_at
 -- GIN index for finding subscriptions by topic
 CREATE INDEX notification_subscriptions_by_topic ON notification_subscriptions USING GIN (topics, scope_user_id);
 
+CREATE INDEX notification_subscriptions_by_user ON notification_subscriptions(subscriber_user_id, created_at DESC);
+
 -- Which notifications were triggered by which subscription for each event.
 CREATE TABLE notification_providence_log (
   event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
@@ -77,6 +80,8 @@ CREATE TABLE notification_webhooks (
     url TEXT NOT NULL CHECK (url <> '')
 );
 
+CREATE INDEX notification_webhooks_by_user ON notification_webhooks(subscriber_user_id, url);
+
 CREATE TRIGGER notification_webhooks_updated_at
   BEFORE UPDATE ON notification_webhooks
   FOR EACH ROW
@@ -87,6 +92,8 @@ CREATE TABLE notification_by_webhook (
   webhook_id UUID REFERENCES notification_webhooks(id) ON DELETE CASCADE,
   PRIMARY KEY (subscription_id, webhook_id)
 );
+
+CREATE INDEX notification_by_webhook_by_webhook_id ON notification_by_webhook(webhook_id);
 
 CREATE TABLE notification_emails (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -100,6 +107,8 @@ CREATE TABLE notification_emails (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX notification_emails_by_user ON notification_emails(subscriber_user_id, email);
+
 CREATE TRIGGER notification_emails_updated_at
   BEFORE UPDATE ON notification_emails
   FOR EACH ROW
@@ -110,6 +119,8 @@ CREATE TABLE notification_by_email (
   email_id UUID REFERENCES notification_emails(id) ON DELETE CASCADE,
   PRIMARY KEY (subscription_id, email_id)
 );
+
+CREATE INDEX notification_by_email_by_email_id ON notification_by_email(email_id);
 
 CREATE TABLE notification_webhook_queue (
   event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
@@ -124,7 +135,6 @@ CREATE TABLE notification_webhook_queue (
 -- Allow efficiently grabbing the oldest undelivered webhooks we're still trying to deliver.
 CREATE INDEX notification_webhook_queue_undelivered ON notification_webhook_queue(created_at ASC)
   WHERE NOT delivered AND delivery_attempts_remaining > 0;
-
 
 CREATE TABLE notification_email_queue (
   event_id UUID REFERENCES notification_events(id) ON DELETE CASCADE,
