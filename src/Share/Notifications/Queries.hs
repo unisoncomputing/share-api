@@ -3,6 +3,15 @@ module Share.Notifications.Queries
     listNotificationHubEntries,
     updateNotificationHubEntry,
     listNotificationDeliveryMethods,
+    listEmailDeliveryMethods,
+    listWebhookDeliveryMethods,
+    createEmailDeliveryMethod,
+    createWebhookDeliveryMethod,
+    deleteEmailDeliveryMethod,
+    deleteWebhookDeliveryMethod,
+    updateEmailDeliveryMethod,
+    updateWebhookDeliveryMethod,
+    listNotificationSubscriptions,
   )
 where
 
@@ -15,6 +24,7 @@ import Data.Time (UTCTime)
 import Share.IDs
 import Share.Notifications.Types
 import Share.Postgres
+import Share.Utils.URI (URIParam)
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
 recordEvent (NotificationEvent {eventScope, eventData}) = do
@@ -75,4 +85,90 @@ listWebhookDeliveryMethods userId = do
       ORDER BY nw.url
     |]
 
-createEmailDeliveryMethod :: UserId -> Text -> Transaction e NotificationEmailDeliveryMethodId
+createEmailDeliveryMethod :: UserId -> Email -> Transaction e NotificationEmailDeliveryMethodId
+createEmailDeliveryMethod userId email = do
+  existingEmailDeliveryMethodId <-
+    query1Col
+      [sql|
+      SELECT id
+        FROM notification_emails
+      WHERE subscriber_user_id = #{userId}
+            AND email = #{email}
+    |]
+  case existingEmailDeliveryMethodId of
+    Just emailDeliveryMethodId -> pure emailDeliveryMethodId
+    Nothing -> do
+      queryExpect1Col
+        [sql|
+          INSERT INTO notification_emails (subscriber_user_id, email)
+          VALUES (#{userId}, #{email})
+          RETURNING id
+        |]
+
+updateEmailDeliveryMethod :: UserId -> NotificationEmailDeliveryMethodId -> Email -> Transaction e ()
+updateEmailDeliveryMethod notificationUserId emailDeliveryMethodId email = do
+  execute_
+    [sql|
+      UPDATE notification_emails
+      SET email = #{email}
+      WHERE id = #{emailDeliveryMethodId}
+        AND subscriber_user_id = #{notificationUserId}
+    |]
+
+deleteEmailDeliveryMethod :: UserId -> NotificationEmailDeliveryMethodId -> Transaction e ()
+deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
+  execute_
+    [sql|
+      DELETE FROM notification_emails
+      WHERE id = #{emailDeliveryMethodId}
+        AND subscriber_user_id = #{notificationUserId}
+    |]
+
+createWebhookDeliveryMethod :: UserId -> URIParam -> Transaction e NotificationWebhookId
+createWebhookDeliveryMethod userId url = do
+  existingWebhookDeliveryMethodId <-
+    query1Col
+      [sql|
+      SELECT id
+        FROM notification_webhooks
+      WHERE subscriber_user_id = #{userId}
+            AND url = #{url}
+    |]
+  case existingWebhookDeliveryMethodId of
+    Just webhookDeliveryMethodId -> pure webhookDeliveryMethodId
+    Nothing -> do
+      queryExpect1Col
+        [sql|
+          INSERT INTO notification_webhooks (subscriber_user_id, url)
+          VALUES (#{userId}, #{url})
+          RETURNING id
+        |]
+
+updateWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> URIParam -> Transaction e ()
+updateWebhookDeliveryMethod notificationUser webhookDeliveryMethodId url = do
+  execute_
+    [sql|
+      UPDATE notification_webhooks
+      SET url = #{url}
+      WHERE id = #{webhookDeliveryMethodId}
+        AND subscriber_user_id = #{notificationUser}
+    |]
+
+deleteWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> Transaction e ()
+deleteWebhookDeliveryMethod notificationUserId webhookDeliveryMethodId = do
+  execute_
+    [sql|
+      DELETE FROM notification_webhooks
+      WHERE id = #{webhookDeliveryMethodId}
+        AND subscriber_user_id = #{notificationUserId}
+    |]
+
+listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscription NotificationSubscriptionId]
+listNotificationSubscriptions notificationUserId = do
+  queryListRows
+    [sql|
+      SELECT ns.id, ns.scope_user_id, ns.topics, ns.filter
+        FROM notification_subscriptions ns
+      WHERE ns.subscriber_user_id = #{userId}
+      ORDER BY ns.created_at DESC
+    |]

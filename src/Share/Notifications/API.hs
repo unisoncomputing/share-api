@@ -218,7 +218,7 @@ type CreateEmailDeliveryMethodEndpoint =
 
 data CreateEmailDeliveryMethodRequest
   = CreateEmailDeliveryMethodRequest
-  { email :: Text
+  { email :: Email
   }
 
 instance FromJSON CreateEmailDeliveryMethodRequest where
@@ -248,7 +248,7 @@ type UpdateEmailDeliveryMethodEndpoint =
 
 data UpdateEmailDeliveryMethodRequest
   = UpdateEmailDeliveryMethodRequest
-  { email :: Text
+  { email :: Email
   }
 
 instance FromJSON UpdateEmailDeliveryMethodRequest where

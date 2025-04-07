@@ -18,6 +18,7 @@ where
 
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Hasql.Decoders qualified as HasqlDecoders
@@ -33,6 +34,7 @@ import Share.Utils.URI (URIParam (..))
 data NotificationTopic
   = ProjectBranchUpdated
   | ProjectContributionCreated
+  deriving (Eq, Show, Ord)
 
 instance PG.EncodeValue NotificationTopic where
   encodeValue = HasqlEncoders.enum \case
@@ -92,6 +94,14 @@ instance PG.DecodeValue NotificationStatus where
 newtype NotificationFilter = NotificationFilter (Map Text Text)
   deriving (Eq, Show)
   deriving newtype (Aeson.ToJSON, Aeson.FromJSON)
+
+instance PG.DecodeValue NotificationFilter where
+  decodeValue = do
+    HasqlDecoders.jsonb
+      & HasqlDecoders.refine \obj ->
+        case Aeson.fromJSON obj of
+          Aeson.Error e -> Left (Text.pack e)
+          Aeson.Success a -> Right a
 
 data ProjectBranchData = ProjectBranchData
   { projectId :: ProjectId,
@@ -258,22 +268,26 @@ instance Aeson.ToJSON NotificationDeliveryMethod where
 
 data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
-    subscriber :: UserId,
     subscriptionScope :: UserId,
-    subscriptionTopic :: NotificationTopic,
-    subscriptionFilter :: NotificationFilter,
-    subscriptionDeliveryMethods :: Set NotificationDeliveryMethod
+    subscriptionTopic :: Set NotificationTopic,
+    subscriptionFilter :: NotificationFilter
   }
 
+instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) where
+  decodeRow = do
+    subscriptionId <- PG.decodeField
+    subscriptionScope <- PG.decodeField
+    subscriptionTopic <- Set.fromList <$> PG.decodeField
+    subscriptionFilter <- PG.decodeField
+    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopic, subscriptionFilter}
+
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
-  toJSON NotificationSubscription {subscriptionId, subscriber, subscriptionScope, subscriptionTopic, subscriptionFilter, subscriptionDeliveryMethods} =
+  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopic, subscriptionFilter} =
     Aeson.object
       [ "id" Aeson..= subscriptionId,
-        "subscriber" Aeson..= subscriber,
         "scope" Aeson..= subscriptionScope,
         "topic" Aeson..= subscriptionTopic,
-        "filter" Aeson..= subscriptionFilter,
-        "deliveryMethods" Aeson..= subscriptionDeliveryMethods
+        "filter" Aeson..= subscriptionFilter
       ]
 
 data NotificationHubEntry = NotificationHubEntry
