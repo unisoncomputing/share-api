@@ -188,6 +188,9 @@ VALUES (
 -- @test/privatetestproject/privatebranch
 (
   '4b0201f8-82a7-4710-a892-a2829f2f044b', '91fdca65-0eed-4f44-bdfa-06050fd69dba', 'privatebranch', 'd32f4ddf-2423-4f10-a4de-465939951354', NULL, 0, NULL, '2023-03-02T00:00:00.0Z'),
+-- @test/privatetestproject/main
+(
+  'f0d9aee9-0e4c-4f13-88d9-9b44c8c0601f', '91fdca65-0eed-4f44-bdfa-06050fd69dba', 'main', 'd32f4ddf-2423-4f10-a4de-465939951354', NULL, 0, NULL, '2023-03-02T00:00:00.0Z'),
 -- @unison/privateorgproject/main
 (
   '8d599975-8738-4f38-9410-3a73efb4a14a', '13e2392d-c094-4383-bbd0-dc203705c9a6', 'main', 'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9', NULL, 0, NULL, '2023-03-02T00:00:00.0Z'),

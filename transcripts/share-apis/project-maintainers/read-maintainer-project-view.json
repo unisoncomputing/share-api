@@ -1,7 +1,7 @@
 {
   "body": {
     "createdAt": "<TIMESTAMP>",
-    "defaultBranch": null,
+    "defaultBranch": "main",
     "isFaved": false,
     "latestRelease": null,
     "numActiveContributions": 0,
