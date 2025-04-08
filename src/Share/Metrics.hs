@@ -14,6 +14,7 @@ module Share.Metrics
   )
 where
 
+import Data.Either.Combinators (whenRight)
 import Data.Ratio ((%))
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -413,14 +414,25 @@ contributionDiffDurationSeconds =
 
 timeActionIntoHistogram :: (Prom.Label l, MonadUnliftIO m) => (Prom.Vector l Prom.Histogram) -> l -> m c -> m c
 timeActionIntoHistogram histogram l m = do
-  UnliftIO.bracket start end \_ -> m
-  where
-    start = UnliftIO.liftIO $ Clock.getTime Monotonic
-    end startTime = UnliftIO.liftIO $ do
-      end <- Clock.getTime Monotonic
+  startTime <- liftIO $ Clock.getTime Monotonic
+  m `UnliftIO.finally` do
+    liftIO do
+      endTime <- Clock.getTime Monotonic
       let latency :: Double
-          latency = fromRational (toNanoSecs (end `diffTimeSpec` startTime) % 1000000000)
+          latency = fromRational (toNanoSecs (endTime `diffTimeSpec` startTime) % 1000000000)
       Prom.withLabel histogram l (flip Prom.observe latency)
+
+-- | Like 'timeActionIntoHistogram', but only bothers to time actions that return 'Right' (indicating success).
+timeRightActionIntoHistogram :: (Prom.Label l, MonadIO m) => (Prom.Vector l Prom.Histogram) -> l -> m (Either err c) -> m (Either err c)
+timeRightActionIntoHistogram histogram l m = do
+  startTime <- liftIO $ Clock.getTime Monotonic
+  result <- m
+  whenRight result \_ -> liftIO do
+    endTime <- Clock.getTime Monotonic
+    let latency :: Double
+        latency = fromRational (toNanoSecs (endTime `diffTimeSpec` startTime) % 1000000000)
+    Prom.withLabel histogram l (flip Prom.observe latency)
+  pure result
 
 -- | Record the duration of a background import.
 recordBackgroundImportDuration :: (MonadUnliftIO m) => m r -> m r
@@ -430,5 +442,5 @@ recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDuratio
 recordDefinitionSearchIndexDuration :: (MonadUnliftIO m) => m r -> m r
 recordDefinitionSearchIndexDuration = timeActionIntoHistogram definitionSearchIndexDurationSeconds (deployment, service)
 
-recordContributionDiffDuration :: (MonadUnliftIO m) => m r -> m r
-recordContributionDiffDuration = timeActionIntoHistogram contributionDiffDurationSeconds (deployment, service)
+recordContributionDiffDuration :: (MonadIO m) => m (Either err r) -> m (Either err r)
+recordContributionDiffDuration = timeRightActionIntoHistogram contributionDiffDurationSeconds (deployment, service)

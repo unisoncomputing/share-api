@@ -39,7 +39,7 @@ notifs = unsafePerformIO $ STM.newTVarIO mempty
 initialize ::
   Ki.Scope -> -- The scope of the server
   Background ()
-initialize scope = void $ Ki.fork scope $ forever do
+initialize scope = Ki.fork_ scope $ forever do
   result <- UnliftIO.try $ do
     PG.runSession $ do
       for_ [minBound .. maxBound] \kind -> do
