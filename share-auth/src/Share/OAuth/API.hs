@@ -17,12 +17,12 @@ module Share.OAuth.API
 where
 
 import Data.Text (Text)
+import Servant
 import Share.OAuth.Scopes
 import Share.OAuth.Session
 import Share.OAuth.Types
 import Share.Utils.Servant.Cookies (Cookie)
 import Share.Utils.URI (URIParam)
-import Servant
 import Web.Cookie (SetCookie)
 
 type RequiredQueryParam = QueryParam' '[Required, Strict]
@@ -47,6 +47,7 @@ type IdentityProviderAPI =
 type LoginEndpoint =
   -- Where to redirect to after login
   QueryParam "return_to" URIParam
+    :> QueryParam "handle" Text
     :> Verb 'GET 302 '[PlainText] (Headers '[Header "Set-Cookie" SetCookie, Header "Location" String] NoContent)
 
 -- | GET /logout
