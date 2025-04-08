@@ -134,11 +134,12 @@ getSubscriptionsEndpoint userHandle callerUserId = do
 createSubscriptionEndpoint :: UserHandle -> UserId -> API.CreateSubscriptionRequest -> WebApp API.CreateSubscriptionResponse
 createSubscriptionEndpoint userHandle callerUserId API.CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionFilter} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
+  User {user_id = scopeUserId} <- UserQ.expectUserByHandle subscriptionScope
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage callerUserId notificationUserId
-  error "TODO: Somehow need to check that the subscriber should be able to see events for a given resourse"
+  error "TODO: Somehow need to check that the subscriber should be able to see events for a given resource"
   subscription <- PG.runTransaction $ do
-    subscriptionId <- NotificationQ.createNotificationSubscription notificationUserId subscriptionScope subscriptionTopics subscriptionFilter
-    NotificationQ.getNotificationSubscription subscriptionId
+    subscriptionId <- NotificationQ.createNotificationSubscription notificationUserId scopeUserId subscriptionTopics subscriptionFilter
+    NotificationQ.getNotificationSubscription notificationUserId subscriptionId
   pure $ API.CreateSubscriptionResponse {subscription}
 
 deleteSubscriptionEndpoint :: UserHandle -> UserId -> NotificationSubscriptionId -> WebApp NoContent

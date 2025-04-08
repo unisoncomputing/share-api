@@ -12,6 +12,10 @@ module Share.Notifications.Queries
     updateEmailDeliveryMethod,
     updateWebhookDeliveryMethod,
     listNotificationSubscriptions,
+    createNotificationSubscription,
+    deleteNotificationSubscription,
+    updateNotificationSubscription,
+    getNotificationSubscription,
   )
 where
 
@@ -169,6 +173,45 @@ listNotificationSubscriptions notificationUserId = do
     [sql|
       SELECT ns.id, ns.scope_user_id, ns.topics, ns.filter
         FROM notification_subscriptions ns
-      WHERE ns.subscriber_user_id = #{userId}
+      WHERE ns.subscriber_user_id = #{notificationUserId}
       ORDER BY ns.created_at DESC
+    |]
+
+createNotificationSubscription :: UserId -> UserId -> NESet NotificationTopic -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
+createNotificationSubscription notificationUserId subscriptionScope subscriptionTopics subscriptionFilter = do
+  queryExpect1Col
+    [sql|
+      INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, topics, filter)
+      VALUES (#{notificationUserId}, #{subscriptionScope}, #{Foldable.toList subscriptionTopics}, #{subscriptionFilter})
+      RETURNING id
+    |]
+
+deleteNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transaction e ()
+deleteNotificationSubscription notificationUserId subscriptionId = do
+  execute_
+    [sql|
+      DELETE FROM notification_subscriptions
+      WHERE id = #{subscriptionId}
+        AND subscriber_user_id = #{notificationUserId}
+    |]
+
+updateNotificationSubscription :: UserId -> NotificationSubscriptionId -> Maybe (NESet NotificationTopic) -> Maybe SubscriptionFilter -> Transaction e ()
+updateNotificationSubscription notificationUserId subscriptionId subscriptionTopics subscriptionFilter = do
+  execute_
+    [sql|
+      UPDATE notification_subscriptions
+      SET topics = COALESCE(#{Foldable.toList <$> subscriptionTopics}, topics),
+          filter = COALESCE(#{subscriptionFilter}, filter)
+      WHERE id = #{subscriptionId}
+        AND subscriber_user_id = #{notificationUserId}
+    |]
+
+getNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transaction e (NotificationSubscription NotificationSubscriptionId)
+getNotificationSubscription notificationUserId subscriptionId = do
+  queryExpect1Row
+    [sql|
+      SELECT ns.id, ns.scope_user_id, ns.topics, ns.filter
+        FROM notification_subscriptions ns
+      WHERE ns.id = #{subscriptionId}
+        AND ns.subscriber_user_id = #{notificationUserId}
     |]

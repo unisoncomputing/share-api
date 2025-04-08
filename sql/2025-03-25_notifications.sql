@@ -48,7 +48,7 @@ CREATE TABLE notification_subscriptions (
     -- Any additional filtering for this subscription, e.g. which projects we care about, etc.
     -- Specified as an object with key-value pairs which must ALL be present on the event in order to trigger
     -- the notification.
-    filter JSONB NOT NULL
+    filter JSONB NULL
 );
 
 CREATE TRIGGER notification_subscriptions_updated_at
@@ -188,7 +188,7 @@ BEGIN
     (SELECT ns.id FROM notification_subscriptions ns
       WHERE ns.scope_user_id = NEW.scope_user_id
         AND NEW.topic = ANY(ns.topics)
-        AND NEW.data @> ns.filter
+        AND (ns.filter IS NULL OR NEW.data @> ns.filter)
     )
   LOOP
     -- Log that this event triggered this subscription.

@@ -35,7 +35,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription)
+import Share.Notifications.Types (NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.URI (URIParam)
@@ -111,8 +111,8 @@ type CreateSubscriptionEndpoint =
 data CreateSubscriptionRequest
   = CreateSubscriptionRequest
   { subscriptionScope :: UserHandle,
-    subscriptionTopics :: NESet Text,
-    subscriptionFilter :: StatusFilter
+    subscriptionTopics :: NESet NotificationTopic,
+    subscriptionFilter :: Maybe SubscriptionFilter
   }
 
 instance FromJSON CreateSubscriptionRequest where
@@ -144,8 +144,8 @@ type UpdateSubscriptionEndpoint =
 
 data UpdateSubscriptionRequest
   = UpdateSubscriptionRequest
-  { subscriptionTopics :: Maybe (NESet Text),
-    subscriptionFilter :: Maybe StatusFilter
+  { subscriptionTopics :: Maybe (NESet NotificationTopic),
+    subscriptionFilter :: Maybe SubscriptionFilter
   }
 
 instance FromJSON UpdateSubscriptionRequest where
@@ -210,6 +210,11 @@ data UpdateHubEntryRequest
   = UpdateHubEntryRequest
   { notificationStatus :: NotificationStatus
   }
+
+instance FromJSON UpdateHubEntryRequest where
+  parseJSON = withObject "UpdateHubEntryRequest" $ \o -> do
+    notificationStatus <- o .: "status"
+    pure UpdateHubEntryRequest {notificationStatus}
 
 type CreateEmailDeliveryMethodEndpoint =
   AuthenticatedUserId
@@ -276,6 +281,10 @@ data CreateWebhookResponse
   { webhookDeliveryMethodId :: NotificationWebhookId
   }
 
+instance ToJSON CreateWebhookResponse where
+  toJSON CreateWebhookResponse {webhookDeliveryMethodId} =
+    object ["webhookDeliveryMethodId" .= webhookDeliveryMethodId]
+
 type DeleteWebhookEndpoint =
   AuthenticatedUserId
     :> Capture "webhookDeliveryMethodId" NotificationWebhookId
@@ -291,3 +300,8 @@ data UpdateWebhookRequest
   = UpdateWebhookRequest
   { url :: URIParam
   }
+
+instance FromJSON UpdateWebhookRequest where
+  parseJSON = withObject "UpdateWebhookRequest" $ \o -> do
+    url <- o .: "url"
+    pure UpdateWebhookRequest {url}

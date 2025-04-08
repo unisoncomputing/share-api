@@ -5,6 +5,7 @@ module Share.Notifications.Types
     NotificationEvent (..),
     NewNotificationEvent,
     NotificationSubscription (..),
+    SubscriptionFilter (..),
     ProjectBranchData (..),
     ProjectContributionData (..),
     NotificationHubEntry (..),
@@ -51,6 +52,12 @@ instance Aeson.ToJSON NotificationTopic where
   toJSON = \case
     ProjectBranchUpdated -> "project:branch:updated"
     ProjectContributionCreated -> "project:contribution:created"
+
+instance Aeson.FromJSON NotificationTopic where
+  parseJSON = Aeson.withText "NotificationTopic" \case
+    "project:branch:updated" -> pure ProjectBranchUpdated
+    "project:contribution:created" -> pure ProjectContributionCreated
+    s -> fail $ "Invalid notification topic: " <> Text.unpack s
 
 data NotificationStatus
   = Unread
@@ -102,6 +109,11 @@ instance PG.DecodeValue NotificationFilter where
         case Aeson.fromJSON obj of
           Aeson.Error e -> Left (Text.pack e)
           Aeson.Success a -> Right a
+
+instance PG.EncodeValue NotificationFilter where
+  encodeValue =
+    HasqlEncoders.jsonb
+      & contramap \(NotificationFilter obj) -> Aeson.toJSON obj
 
 data ProjectBranchData = ProjectBranchData
   { projectId :: ProjectId,
@@ -310,3 +322,7 @@ instance Hasql.DecodeRow NotificationHubEntry where
     hubEntryStatus <- PG.decodeField
     hubEntryEvent <- PG.decodeRow
     pure $ NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus}
+
+newtype SubscriptionFilter = SubscriptionFilter (Aeson.Value)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via Hasql.Jsonb
+  deriving newtype (Eq, Show, Aeson.ToJSON, Aeson.FromJSON)
