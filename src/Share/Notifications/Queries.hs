@@ -182,7 +182,7 @@ createNotificationSubscription notificationUserId subscriptionScope subscription
   queryExpect1Col
     [sql|
       INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, topics, filter)
-      VALUES (#{notificationUserId}, #{subscriptionScope}, #{Foldable.toList subscriptionTopics}, #{subscriptionFilter})
+      VALUES (#{notificationUserId}, #{subscriptionScope}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{subscriptionFilter})
       RETURNING id
     |]
 
@@ -200,7 +200,7 @@ updateNotificationSubscription notificationUserId subscriptionId subscriptionTop
   execute_
     [sql|
       UPDATE notification_subscriptions
-      SET topics = COALESCE(#{Foldable.toList <$> subscriptionTopics}, topics),
+      SET topics = COALESCE(#{Foldable.toList <$> subscriptionTopics}::notification_topic[], topics),
           filter = COALESCE(#{subscriptionFilter}, filter)
       WHERE id = #{subscriptionId}
         AND subscriber_user_id = #{notificationUserId}

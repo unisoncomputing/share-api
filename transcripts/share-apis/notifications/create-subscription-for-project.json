@@ -1,8 +1,19 @@
 {
-  "body": "Something went wrong, please try again later",
+  "body": {
+    "subscription": {
+      "filter": {
+        "project_id": "P-<UUID>"
+      },
+      "id": "NS-<UUID>",
+      "scope": "U-<UUID>",
+      "topic": [
+        "project:contribution:created"
+      ]
+    }
+  },
   "status": [
     {
-      "status_code": 500
+      "status_code": 200
     }
   ]
 }
