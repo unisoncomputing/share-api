@@ -168,7 +168,14 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
         pure (oldCausalHash, newCausalHash, maybeLcaCausalId)
     oldRuntime <- Codebase.codebaseRuntime oldCodebase
     newRuntime <- Codebase.codebaseRuntime newCodebase
-    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId)
+    namespaceDiff <-
+      (either respondError pure =<<) do
+        PG.tryRunTransaction do
+          Diffs.diffCausals
+            authZReceipt
+            (oldCodebase, oldRuntime, oldCausalId)
+            (newCodebase, newRuntime, newCausalId)
+            maybeLcaCausalId
     pure
       ShareNamespaceDiffResponse
         { project = projectShortHand,

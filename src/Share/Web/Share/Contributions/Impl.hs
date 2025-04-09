@@ -282,12 +282,14 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
     oldRuntime <- Codebase.codebaseRuntime oldCodebase
     newRuntime <- Codebase.codebaseRuntime newCodebase
-    namespaceDiff <- respondExceptT do
-      Diffs.diffCausals
-        authZReceipt
-        (oldCodebase, oldRuntime, oldBranchCausalId)
-        (newCodebase, newRuntime, newBranchCausalId)
-        bestCommonAncestorCausalId
+    namespaceDiff <-
+      (either respondError pure =<<) do
+        PG.tryRunTransaction do
+          Diffs.diffCausals
+            authZReceipt
+            (oldCodebase, oldRuntime, oldBranchCausalId)
+            (newCodebase, newRuntime, newBranchCausalId)
+            bestCommonAncestorCausalId
     (newBranchCausalHash, oldBranchCausalHash) <- PG.runTransaction do
       newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
       oldBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId

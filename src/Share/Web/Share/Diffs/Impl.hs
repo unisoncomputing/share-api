@@ -8,7 +8,6 @@ where
 import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens hiding ((.=))
 import Control.Monad.Except
-import Control.Monad.Trans.Except (except)
 import Data.Aeson (ToJSON (..), Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (object)
@@ -16,7 +15,6 @@ import Data.Foldable qualified as Foldable
 import Data.Map qualified as Map
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
-import Share.App (AppM)
 import Share.Codebase qualified as Codebase
 import Share.NamespaceDiffs (DefinitionDiff (..), DefinitionDiffKind (..), DiffAtPath (..), GNamespaceAndLibdepsDiff, GNamespaceTreeDiff, NamespaceAndLibdepsDiff, NamespaceDiffError (..), NamespaceTreeDiff)
 import Share.NamespaceDiffs qualified as NamespaceDiffs
@@ -51,16 +49,14 @@ import Unison.Server.Types
 import Unison.ShortHash (ShortHash)
 import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty (Width)
-import UnliftIO qualified
 
 diffCausals ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
   Maybe CausalId ->
-  ExceptT
+  PG.Transaction
     NamespaceDiffs.NamespaceDiffError
-    (AppM r)
     ( PreEncoded
         ( NamespaceDiffs.NamespaceAndLibdepsDiff
             (TermTag, ShortHash)
@@ -74,16 +70,14 @@ diffCausals ::
     )
 diffCausals !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = do
   -- Ensure name lookups for the things we're diffing.
-  -- We do this in separate transactions to ensure we can still make progress even if we need to build name lookups.
-  let getBranch :: CausalId -> ExceptT NamespaceDiffs.NamespaceDiffError (AppM r) (BranchHashId, NameLookupReceipt)
-      getBranch causalId =
-        PG.runTransaction do
-          branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
-          nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
-          pure (branchHashId, nameLookupReceipt)
-  (((oldBranchHashId, oldBranchNLReceipt), (newBranchHashId, newBranchNLReceipt))) <-
-    getBranch oldCausalId `concurrentExceptT` getBranch newCausalId
-  PG.runTransaction (ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId)) >>= \case
+  let getBranch :: CausalId -> PG.Transaction NamespaceDiffs.NamespaceDiffError (BranchHashId, NameLookupReceipt)
+      getBranch causalId = do
+        branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+        nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
+        pure (branchHashId, nameLookupReceipt)
+  (oldBranchHashId, oldBranchNLReceipt) <- getBranch oldCausalId
+  (newBranchHashId, newBranchNLReceipt) <- getBranch newCausalId
+  ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
     Just diff -> pure $ PreEncoded $ TL.encodeUtf8 $ TL.fromStrict diff
     Nothing -> do
       (maybeLcaBranchHashId, maybeLcaBranchNLReceipt) <-
@@ -92,89 +86,82 @@ diffCausals !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, n
             (lcaBranchHashId, lcaBranchNLReceipt) <- getBranch lcaCausalId
             pure (Just lcaBranchHashId, Just lcaBranchNLReceipt)
           Nothing -> pure (Nothing, Nothing)
-      diff0 <-
-        ExceptT do
-          PG.tryRunTransaction do
-            -- Do the initial 3-way namespace diff
-            diff ::
-              GNamespaceAndLibdepsDiff
-                NameSegment
-                Referent
-                TypeReference
-                Name
-                Name
-                Name
-                Name
-                BranchHashId <-
-              NamespaceDiffs.computeThreeWayNamespaceDiff
-                TwoWay {alice = oldCodebase, bob = newCodebase}
-                TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
-                TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
-            -- Resolve the term referents to tag + hash
-            diff1 ::
-              GNamespaceAndLibdepsDiff
-                NameSegment
-                (TermTag, ShortHash)
-                TypeReference
-                Name
-                Name
-                Name
-                Name
-                BranchHashId <-
-              diff
-                & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
-                  %%~ \refs -> do
-                    termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
-                    pure $ zip termTags (refs <&> Referent.toShortHash)
-            -- Resolve the type references to tag + hash
-            diff2 ::
-              GNamespaceAndLibdepsDiff
-                NameSegment
-                (TermTag, ShortHash)
-                (TypeTag, ShortHash)
-                Name
-                Name
-                Name
-                Name
-                BranchHashId <-
-              diff1
-                & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
-                  %%~ \refs -> do
-                    typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-                    pure $ zip typeTags (refs <&> V2Reference.toShortHash)
-            -- Resolve libdeps branch hash ids to branch hashes
-            diff3 ::
-              GNamespaceAndLibdepsDiff
-                NameSegment
-                (TermTag, ShortHash)
-                (TypeTag, ShortHash)
-                Name
-                Name
-                Name
-                Name
-                BranchHash <-
-              HashQ.expectNamespaceHashesByNamespaceHashIdsOf
-                (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . traversed)
-                diff2
-            pure diff3
+      -- Do the initial 3-way namespace diff
+      diff0 ::
+        GNamespaceAndLibdepsDiff
+          NameSegment
+          Referent
+          TypeReference
+          Name
+          Name
+          Name
+          Name
+          BranchHashId <-
+        NamespaceDiffs.computeThreeWayNamespaceDiff
+          TwoWay {alice = oldCodebase, bob = newCodebase}
+          TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
+          TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
+      -- Resolve the term referents to tag + hash
+      diff1 ::
+        GNamespaceAndLibdepsDiff
+          NameSegment
+          (TermTag, ShortHash)
+          TypeReference
+          Name
+          Name
+          Name
+          Name
+          BranchHashId <-
+        diff0
+          & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
+            %%~ \refs -> do
+              termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
+              pure $ zip termTags (refs <&> Referent.toShortHash)
+      -- Resolve the type references to tag + hash
+      diff2 ::
+        GNamespaceAndLibdepsDiff
+          NameSegment
+          (TermTag, ShortHash)
+          (TypeTag, ShortHash)
+          Name
+          Name
+          Name
+          Name
+          BranchHashId <-
+        diff1
+          & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
+            %%~ \refs -> do
+              typeTags <- Codebase.typeTagsByReferencesOf traversed refs
+              pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+      -- Resolve libdeps branch hash ids to branch hashes
+      diff3 ::
+        GNamespaceAndLibdepsDiff
+          NameSegment
+          (TermTag, ShortHash)
+          (TypeTag, ShortHash)
+          Name
+          Name
+          Name
+          Name
+          BranchHash <-
+        HashQ.expectNamespaceHashesByNamespaceHashIdsOf
+          (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . traversed)
+          diff2
       -- Resolve the actual term/type definitions. Use the LCA as the "old" (because that's what we're rendering the
       -- diff relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we
       -- won't have anything classified as an "update" in this case so it doesn't really matter).
-      diff1 <-
-        ExceptT do
-          PG.tryRunTransaction do
-            diff0
-              & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
-                %%~ computeUpdatedDefinitionDiffs
-                  authZReceipt
-                  (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
-                  (newCodebase, newRuntime, newBranchHashId)
-      let encoded = Aeson.encode (RenderedNamespaceAndLibdepsDiff diff1)
-      PG.runTransaction $
-        ContributionQ.savePrecomputedNamespaceDiff
-          (oldCodebase, oldCausalId)
-          (newCodebase, newCausalId)
-          (TL.toStrict $ TL.decodeUtf8 encoded)
+      diff4 <-
+        diff3
+          & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
+            %%~ computeUpdatedDefinitionDiffs
+              authZReceipt
+              (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
+              (newCodebase, newRuntime, newBranchHashId)
+      let encoded = Aeson.encode (RenderedNamespaceAndLibdepsDiff diff4)
+      ContributionQ.savePrecomputedNamespaceDiff
+        (oldCodebase, oldCausalId)
+        (newCodebase, newCausalId)
+        (TL.toStrict $ TL.decodeUtf8 encoded)
       pure $ PreEncoded encoded
 
 computeUpdatedDefinitionDiffs ::
@@ -410,10 +397,3 @@ instance ToJSON RenderedNamespaceAndLibdepsDiff where
                       ]
             )
           >>> toJSON @[Value]
-
-concurrentExceptT :: (MonadUnliftIO m) => ExceptT e m a -> ExceptT e m b -> ExceptT e m (a, b)
-concurrentExceptT a b = do
-  (ea, eb) <- lift $ UnliftIO.concurrently (runExceptT a) (runExceptT b)
-  ra <- except ea
-  rb <- except eb
-  pure (ra, rb)
