@@ -28,7 +28,7 @@ fetch "$transcripts_user" POST create-subscription-for-other-user-project '/user
 
 
 # Create a contribution in a public project, which should trigger a notification for both users
-fetch "$test_user" POST contribution-create '/users/test/projects/publictestproject/contributions' '{
+fetch "$test_user" POST public-contribution-create '/users/test/projects/publictestproject/contributions' '{
     "title": "My contribution",
     "description": "My description",
     "status": "draft",
@@ -38,7 +38,7 @@ fetch "$test_user" POST contribution-create '/users/test/projects/publictestproj
 
 # Create a contribution in a private project, which shouldn't create a notification for either, because 'test' has
 # a subscription filter and 'transcripts' doesn't have access.
-fetch "$test_user" POST contribution-create '/users/test/projects/privatetestproject/contributions' '{
+fetch "$test_user" POST private-contribution-create '/users/test/projects/privatetestproject/contributions' '{
     "title": "My private contribution",
     "description": "My private description",
     "status": "draft",
