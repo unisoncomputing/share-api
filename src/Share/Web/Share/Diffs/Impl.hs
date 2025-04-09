@@ -55,8 +55,8 @@ import UnliftIO qualified
 
 diffCausals ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, CausalId) ->
-  (Codebase.CodebaseEnv, CausalId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
   Maybe CausalId ->
   ExceptT
     NamespaceDiffs.NamespaceDiffError
@@ -72,7 +72,7 @@ diffCausals ::
             BranchHash
         )
     )
-diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) maybeLcaCausalId = do
+diffCausals !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = do
   -- Ensure name lookups for the things we're diffing.
   -- We do this in separate transactions to ensure we can still make progress even if we need to build name lookups.
   let getBranch :: CausalId -> ExceptT NamespaceDiffs.NamespaceDiffError (AppM r) (BranchHashId, NameLookupReceipt)
@@ -161,12 +161,14 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
       -- diff relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we
       -- won't have anything classified as an "update" in this case so it doesn't really matter).
       diff1 <-
-        diff0
-          & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
-            %%~ computeUpdatedDefinitionDiffs
-              authZReceipt
-              (oldCodebase, fromMaybe oldBranchHashId maybeLcaBranchHashId)
-              (newCodebase, newBranchHashId)
+        ExceptT do
+          PG.tryRunTransaction do
+            diff0
+              & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
+                %%~ computeUpdatedDefinitionDiffs
+                  authZReceipt
+                  (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
+                  (newCodebase, newRuntime, newBranchHashId)
       let encoded = Aeson.encode (RenderedNamespaceAndLibdepsDiff diff1)
       PG.runTransaction $
         ContributionQ.savePrecomputedNamespaceDiff
@@ -176,28 +178,27 @@ diffCausals !authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) 
       pure $ PreEncoded encoded
 
 computeUpdatedDefinitionDiffs ::
-  forall a b r.
+  forall a b.
   (Ord a, Ord b) =>
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, BranchHashId) ->
-  (Codebase.CodebaseEnv, BranchHashId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId) ->
   GNamespaceTreeDiff NameSegment a b Name Name Name Name ->
-  ExceptT
+  PG.Transaction
     NamespaceDiffError
-    (AppM r)
     (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
-computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase, toBHId) diff0 = do
+computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId) (toCodebase, toRuntime, toBHId) diff0 = do
   diff1 <-
     NamespaceDiffs.witherNamespaceTreeDiffTermDiffs
-      (\name -> diffTerms authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name))
+      (\name -> diffTerms authZReceipt (fromCodebase, fromRuntime, fromBHId, name) (toCodebase, toRuntime, toBHId, name))
       diff0
   diff2 <-
     NamespaceDiffs.witherNamespaceTreeTermDiffKinds
-      (throwAwayConstructorDiffs . renderDiffKind (ExceptT . fmap sequence . getTermDefinition))
+      (fmap throwAwayConstructorDiffs . renderDiffKind getTermDefinition)
       diff1
   diff3 <-
     NamespaceDiffs.namespaceTreeDiffTypeDiffs_
-      (\name -> diffTypes authZReceipt (fromCodebase, fromBHId, name) (toCodebase, toBHId, name))
+      (\name -> diffTypes authZReceipt (fromCodebase, fromRuntime, fromBHId, name) (toCodebase, toRuntime, toBHId, name))
       diff2
   diff4 <-
     NamespaceDiffs.namespaceTreeTypeDiffKinds_
@@ -208,44 +209,45 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromBHId) (toCodebase
     notFound name t = MissingEntityError $ EntityMissing (ErrorID "definition-not-found") (t <> ": Definition not found: " <> Name.toText name)
 
     renderDiffKind ::
-      forall diff m r x.
-      (Monad m) =>
-      ((Codebase.CodebaseEnv, BranchHashId, Name) -> m (Maybe x)) ->
+      forall diff r x.
+      ((Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) -> PG.Transaction NamespaceDiffError (Maybe x)) ->
       DefinitionDiffKind r Name diff ->
-      ExceptT NamespaceDiffError m (DefinitionDiffKind r x diff)
+      PG.Transaction NamespaceDiffError (DefinitionDiffKind r x diff)
     renderDiffKind getter = \case
-      Added r name -> Added r <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "Added"))
-      NewAlias r existingNames name -> NewAlias r existingNames <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "NewAlias"))
-      Removed r name -> Removed r <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "Removed"))
+      Added r name -> Added r <$> (getter (toCodebase, toRuntime, toBHId, name) `whenNothingM` throwError (notFound name "Added"))
+      NewAlias r existingNames name -> NewAlias r existingNames <$> (getter (toCodebase, toRuntime, toBHId, name) `whenNothingM` throwError (notFound name "NewAlias"))
+      Removed r name -> Removed r <$> (getter (fromCodebase, fromRuntime, fromBHId, name) `whenNothingM` throwError (notFound name "Removed"))
       Updated oldRef newRef diff -> pure $ Updated oldRef newRef diff
       Propagated oldRef newRef diff -> pure $ Propagated oldRef newRef diff
-      RenamedTo r names name -> RenamedTo r names <$> (lift (getter (fromCodebase, fromBHId, name)) `whenNothingM` throwError (notFound name "RenamedTo"))
-      RenamedFrom r names name -> RenamedFrom r names <$> (lift (getter (toCodebase, toBHId, name)) `whenNothingM` throwError (notFound name "RenamedFrom"))
+      RenamedTo r names name -> RenamedTo r names <$> (getter (fromCodebase, fromRuntime, fromBHId, name) `whenNothingM` throwError (notFound name "RenamedTo"))
+      RenamedFrom r names name -> RenamedFrom r names <$> (getter (toCodebase, toRuntime, toBHId, name) `whenNothingM` throwError (notFound name "RenamedFrom"))
 
     throwAwayConstructorDiffs ::
-      ExceptT
-        NamespaceDiffError
-        (ExceptT ConstructorReference (AppM r))
-        (DefinitionDiffKind a TermDefinition TermDefinitionDiff) ->
-      ExceptT
-        NamespaceDiffError
-        (AppM r)
-        (Maybe (DefinitionDiffKind a TermDefinition TermDefinitionDiff))
-    throwAwayConstructorDiffs m =
-      lift (runExceptT (runExceptT m)) >>= \case
-        Left _ref -> pure Nothing
-        Right (Left err) -> throwError err
-        Right (Right diff) -> pure (Just diff)
+      DefinitionDiffKind a (Either ConstructorReference TermDefinition) diff -> Maybe (DefinitionDiffKind a TermDefinition diff)
+    throwAwayConstructorDiffs = \case
+      Added ref (Right term) -> Just (Added ref term)
+      NewAlias ref names (Right term) -> Just (NewAlias ref names term)
+      Removed ref (Right term) -> Just (Removed ref term)
+      Updated old new diff -> Just (Updated old new diff)
+      Propagated old new diff -> Just (Propagated old new diff)
+      RenamedTo ref names (Right term) -> Just (RenamedTo ref names term)
+      RenamedFrom ref names (Right term) -> Just (RenamedFrom ref names term)
+      --
+      Added _ (Left _) -> Nothing
+      NewAlias _ _ (Left _) -> Nothing
+      Removed _ (Left _) -> Nothing
+      RenamedFrom _ _ (Left _) -> Nothing
+      RenamedTo _ _ (Left _) -> Nothing
 
 diffTerms ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  ExceptT NamespaceDiffError (AppM r) (Maybe TermDefinitionDiff)
-diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
-  let getOldTerm = lift (getTermDefinition old) `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
-  let getNewTerm = lift (getTermDefinition new) `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
-  (getOldTerm `concurrentExceptT` getNewTerm) >>= \case
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
+  PG.Transaction NamespaceDiffError (Maybe TermDefinitionDiff)
+diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
+  oldTerm <- getTermDefinition old `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
+  newTerm <- getTermDefinition new `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
+  case (oldTerm, newTerm) of
     (Right oldTerm, Right newTerm) -> do
       let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
       pure (Just TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject})
@@ -253,14 +255,13 @@ diffTerms !_authZReceipt old@(_, _, oldName) new@(_, _, newName) = do
     -- Just dropping them from the diff for now
     _ -> pure Nothing
 
-getTermDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe (Either ConstructorReference TermDefinition))
-getTermDefinition (codebase, bhId, name) = do
+getTermDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) -> PG.Transaction e (Maybe (Either ConstructorReference TermDefinition))
+getTermDefinition (codebase, rt, bhId, name) = do
   let perspective = mempty
-  (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
-  let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+  (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+  let ppedBuilder deps = PPED.biasTo [name] <$> PPEPostgres.ppedForReferences namesPerspective deps
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  rt <- Codebase.codebaseRuntime codebase
-  Codebase.runCodebaseTransaction codebase do
+  Codebase.codebaseMToTransaction codebase do
     Definitions.termDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width
@@ -268,28 +269,26 @@ getTermDefinition (codebase, bhId, name) = do
 
 diffTypes ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  (Codebase.CodebaseEnv, BranchHashId, Name) ->
-  ExceptT NamespaceDiffError (AppM r) TypeDefinitionDiff
-diffTypes !_authZReceipt old@(_, _, oldTypeName) new@(_, _, newTypeName) = do
-  let getOldType =
-        lift (getTypeDefinition old)
-          `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
-  let getNewType =
-        lift (getTypeDefinition new)
-          `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
-  (sourceType, newType) <- getOldType `concurrentExceptT` getNewType
-  let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition sourceType) (typeDefinition newType)
-  pure $ TypeDefinitionDiff {left = sourceType, right = newType, diff = typeDiffDisplayObject}
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
+  PG.Transaction NamespaceDiffError TypeDefinitionDiff
+diffTypes !_authZReceipt old@(_, _, _, oldTypeName) new@(_, _, _, newTypeName) = do
+  oldType <-
+    getTypeDefinition old
+      `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
+  newType <-
+    getTypeDefinition new
+      `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
+  let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition oldType) (typeDefinition newType)
+  pure $ TypeDefinitionDiff {left = oldType, right = newType, diff = typeDiffDisplayObject}
 
-getTypeDefinition :: (Codebase.CodebaseEnv, BranchHashId, Name) -> AppM r (Maybe TypeDefinition)
-getTypeDefinition (codebase, bhId, name) = do
+getTypeDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) -> PG.Transaction e (Maybe TypeDefinition)
+getTypeDefinition (codebase, rt, bhId, name) = do
   let perspective = mempty
-  (namesPerspective, Identity relocatedName) <- PG.runTransaction $ NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+  (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
   let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  rt <- Codebase.codebaseRuntime codebase
-  Codebase.runCodebaseTransaction codebase do
+  Codebase.codebaseMToTransaction codebase do
     Definitions.typeDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width

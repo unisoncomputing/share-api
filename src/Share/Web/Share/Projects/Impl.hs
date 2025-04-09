@@ -166,7 +166,9 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
         (oldCausalHash, newCausalHash) <- CausalQ.expectCausalHashesByIdsOf each (oldCausalId, newCausalId)
         maybeLcaCausalId <- CausalQ.bestCommonAncestor oldCausalId newCausalId
         pure (oldCausalHash, newCausalHash, maybeLcaCausalId)
-    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldCausalId) (newCodebase, newCausalId) maybeLcaCausalId)
+    oldRuntime <- Codebase.codebaseRuntime oldCodebase
+    newRuntime <- Codebase.codebaseRuntime newCodebase
+    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId)
     pure
       ShareNamespaceDiffResponse
         { project = projectShortHand,
@@ -199,10 +201,14 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "project-diff-terms" cacheKeys do
+      oldRuntime <- Codebase.codebaseRuntime oldCodebase
+      newRuntime <- Codebase.codebaseRuntime newCodebase
       termDiff <-
-        respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBhId, oldTermName) (newCodebase, newBhId, newTermName))
+        PG.tryRunTransaction (Diffs.diffTerms authZReceipt (oldCodebase, oldRuntime, oldBhId, oldTermName) (newCodebase, newRuntime, newBhId, newTermName)) >>= \case
+          Left err -> respondError err
           -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
-          `whenNothingM` respondError (EntityMissing (ErrorID "term:missing") "Term not found")
+          Right Nothing -> respondError (EntityMissing (ErrorID "term:missing") "Term not found")
+          Right (Just diff) -> pure diff
       pure $
         ShareTermDiffResponse
           { project = projectShortHand,
@@ -236,7 +242,15 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "project-diff-types" cacheKeys do
-      typeDiff <- respondExceptT (Diffs.diffTypes authZReceipt (oldCodebase, oldBhId, oldTypeName) (newCodebase, newBhId, newTypeName))
+      oldRuntime <- Codebase.codebaseRuntime oldCodebase
+      newRuntime <- Codebase.codebaseRuntime newCodebase
+      typeDiff <-
+        (either respondError pure =<<) do
+          PG.tryRunTransaction do
+            Diffs.diffTypes
+              authZReceipt
+              (oldCodebase, oldRuntime, oldBhId, oldTypeName)
+              (newCodebase, newRuntime, newBhId, newTypeName)
       pure $
         ShareTypeDiffResponse
           { project = projectShortHand,

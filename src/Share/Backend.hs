@@ -231,7 +231,7 @@ displayType = \case
     pure (UserObject decl)
 
 evalDocRef ::
-  Codebase.CodebaseRuntime ->
+  Codebase.CodebaseRuntime IO ->
   V2.TermReference ->
   Codebase.CodebaseM e (Doc.EvaluatedDoc Symbol)
 evalDocRef (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
@@ -245,6 +245,7 @@ evalDocRef (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termR
 
     typeOf :: Referent.Referent -> Codebase.CodebaseM e (Maybe (V1.Type Symbol ()))
     typeOf termRef = fmap void <$> Codebase.loadTypeOfReferent (Cv.referent1to2 termRef)
+
     eval :: V1.Term Symbol a -> Codebase.CodebaseM e (Maybe (V1.Term Symbol ()))
     eval (Term.amap (const mempty) -> tm) = do
       -- We use an empty ppe for evalutation, it's only used for adding additional context to errors.

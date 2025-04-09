@@ -65,7 +65,9 @@ diffContribution authZReceipt contributionId = do
     let Branch {causal = newBranchCausalId} = newBranch
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
     let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-    _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId) bestCommonAncestorCausalId
+    oldRuntime <- lift (Codebase.codebaseRuntime oldCodebase)
+    newRuntime <- lift (Codebase.codebaseRuntime newCodebase)
+    _ <- Diffs.diffCausals authZReceipt (oldCodebase, oldRuntime, oldBranchCausalId) (newCodebase, newRuntime, newBranchCausalId) bestCommonAncestorCausalId
     pure ()
   where
     getContributionInfo :: PG.Transaction NamespaceDiffError (Maybe CausalId, Project, Branch CausalId, Branch CausalId)

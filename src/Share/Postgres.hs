@@ -35,6 +35,7 @@ module Share.Postgres
     catchTransaction,
     unliftTransaction,
     runTransactionOrRespondError,
+    transaction,
     runSession,
     tryRunSession,
     runSessionOrRespondError,
