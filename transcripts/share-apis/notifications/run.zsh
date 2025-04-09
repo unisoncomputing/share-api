@@ -18,7 +18,7 @@ fetch "$test_user" POST create-subscription-for-project '/users/test/notificatio
 }"
 
 # Subscribe to notifications for contribution creation for all projects belonging to another user.
-fetch "$transcript_user" POST create-subscription-for-other-user-project '/users/test/notifications/subscriptions' "{
+fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/test/notifications/subscriptions' "{
   \"scope\": \"$test_user\",
   \"topics\": [
     \"project:contribution:created\"
@@ -45,4 +45,4 @@ fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notif
 
 fetch "$test_user" GET list-notifications-test '/users/test/notifications' 
 
-fetch "$transcript_user" GET list-notifications-transcripts '/users/transcripts/notifications' 
+fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications' 

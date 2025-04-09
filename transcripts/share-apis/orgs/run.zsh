@@ -29,14 +29,14 @@ fetch "$admin_user" POST org-create-by-admin '/orgs' '{
 
 
 # Owner can add members
-fetch "$transcript_user" POST org-add-members '/orgs/acme/members' '{
+fetch "$transcripts_user" POST org-add-members '/orgs/acme/members' '{
   "members": [
     "test"
   ]
 }'
 
 # Permissions within an org should show in the get-user endpoint
-fetch "$transcript_user" GET org-get-profile '/users/acme' 
+fetch "$transcripts_user" GET org-get-profile '/users/acme' 
 
 # Managing org members lists
 
@@ -50,7 +50,7 @@ fetch "$unauthorized_user" POST org-add-members-unauthorized '/orgs/acme/members
   ]
 }'
 
-fetch "$transcript_user" POST org-add-members '/orgs/acme/members' '{
+fetch "$transcripts_user" POST org-add-members '/orgs/acme/members' '{
   "members": [
     "newuser"
   ]
@@ -63,15 +63,13 @@ fetch "$transcript_user" POST org-cant-have-org-members '/orgs/acme/members' '{
   ]
 }'
 
-fetch "$transcript_user" GET org-get-members-after-adding '/orgs/acme/members'
+fetch "$transcripts_user" GET org-get-members-after-adding '/orgs/acme/members'
 
 # Owner can remove members
-fetch "$transcript_user" DELETE org-remove-members '/orgs/acme/members' '{
+fetch "$transcripts_user" DELETE org-remove-members '/orgs/acme/members' '{
   "members": [
     "newuser"
   ]
 }'
 
-
-fetch "$transcript_user" GET org-get-members-after-removing '/orgs/acme/members'
-
+fetch "$transcripts_user" GET org-get-members-after-removing '/orgs/acme/members'

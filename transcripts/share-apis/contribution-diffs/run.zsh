@@ -6,9 +6,9 @@ source "../../transcript_helpers.sh"
 
 transcript_ucm transcript prelude.md
 
-fetch "$transcript_user" GET namespace-diff '/users/transcripts/projects/contribution-diff/diff/namespaces?old=diff-start&new=diff-end'
+fetch "$transcripts_user" GET namespace-diff '/users/transcripts/projects/contribution-diff/diff/namespaces?old=diff-start&new=diff-end'
 
-fetch "$transcript_user" POST create-contribution-for-diff '/users/transcripts/projects/contribution-diff/contributions' '{
+fetch "$transcripts_user" POST create-contribution-for-diff '/users/transcripts/projects/contribution-diff/contributions' '{
     "title": "My contribution",
     "description": "My description",
     "status": "in_review",
@@ -16,10 +16,10 @@ fetch "$transcript_user" POST create-contribution-for-diff '/users/transcripts/p
     "targetBranchRef": "diff-start"
 }'
 
-fetch "$transcript_user" GET contribution-diff '/users/transcripts/projects/contribution-diff/contributions/1/diff'
+fetch "$transcripts_user" GET contribution-diff '/users/transcripts/projects/contribution-diff/contributions/1/diff'
 
 # Diffing a user-defined term against a user-defined term.
-fetch "$transcript_user" GET standard-term-diff '/users/transcripts/projects/contribution-diff/contributions/1/diff/terms?oldTerm=termUpdateMe&newTerm=termUpdateMe'
+fetch "$transcripts_user" GET standard-term-diff '/users/transcripts/projects/contribution-diff/contributions/1/diff/terms?oldTerm=termUpdateMe&newTerm=termUpdateMe'
 
 # Diffing a user-defined type against a user-defined type.
-fetch "$transcript_user" GET standard-type-diff '/users/transcripts/projects/contribution-diff/contributions/1/diff/types?oldType=DataUpdateMe&newType=DataUpdateMe'
+fetch "$transcripts_user" GET standard-type-diff '/users/transcripts/projects/contribution-diff/contributions/1/diff/types?oldType=DataUpdateMe&newType=DataUpdateMe'

@@ -77,9 +77,9 @@ pg_reset_fixtures
 
 echo "Getting access token for transcript setup"
 
-transcript_user="$(user_id_from_handle 'transcripts')"
-export transcript_user
-curl -s --cookie-jar "$(cookie_jar_for_user_id "$transcript_user")" http://localhost:5424/local/user/transcripts/login > /dev/null
+transcripts_user="$(user_id_from_handle 'transcripts')"
+export transcripts_user
+curl -s --cookie-jar "$(cookie_jar_for_user_id "$transcripts_user")" http://localhost:5424/local/user/transcripts/login > /dev/null
 
 test_user="$(user_id_from_handle 'test')"
 export test_user
