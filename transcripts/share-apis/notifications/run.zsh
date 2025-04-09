@@ -17,15 +17,13 @@ fetch "$test_user" POST create-subscription-for-project '/users/test/notificatio
   }
 }"
 
-# Subscribe to notifications for contribution creation for all projects belonging to another user.
-fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/test/notifications/subscriptions' "{
+# Add a subscription within the transcripts user to notifications for contributions created in any project belonging to the test user.
+# No filter is applied.
+fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/transcripts/notifications/subscriptions' "{
   \"scope\": \"test\",
   \"topics\": [
     \"project:contribution:created\"
-  ],
-  \"filter\": {
-    \"project_id\": \"$publictestproject_id\"
-  }
+  ]
 }"
 
 
@@ -51,8 +49,8 @@ fetch "$test_user" POST contribution-create '/users/test/projects/privatetestpro
 
 # Notification APIs
 
-fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notifications' 
+fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notifications/hub' 
 
-fetch "$test_user" GET list-notifications-test '/users/test/notifications' 
+fetch "$test_user" GET list-notifications-test '/users/test/notifications/hub' 
 
-fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications' 
+fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' 

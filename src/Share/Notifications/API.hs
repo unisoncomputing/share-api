@@ -119,7 +119,7 @@ instance FromJSON CreateSubscriptionRequest where
   parseJSON = withObject "CreateSubscriptionRequest" $ \o -> do
     subscriptionScope <- o .: "scope"
     subscriptionTopics <- o .: "topics"
-    subscriptionFilter <- o .: "filter"
+    subscriptionFilter <- o .:? "filter"
     pure CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionFilter}
 
 data CreateSubscriptionResponse

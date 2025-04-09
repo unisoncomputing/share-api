@@ -284,7 +284,7 @@ data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
     subscriptionScope :: UserId,
     subscriptionTopic :: Set NotificationTopic,
-    subscriptionFilter :: NotificationFilter
+    subscriptionFilter :: Maybe NotificationFilter
   }
 
 instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) where

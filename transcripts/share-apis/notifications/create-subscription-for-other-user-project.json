@@ -1,8 +1,17 @@
 {
-  "body": "Permission Denied: Not permitted to manage notifications for this user",
+  "body": {
+    "subscription": {
+      "filter": null,
+      "id": "NS-<UUID>",
+      "scope": "U-<UUID>",
+      "topic": [
+        "project:contribution:created"
+      ]
+    }
+  },
   "status": [
     {
-      "status_code": 403
+      "status_code": 200
     }
   ]
 }

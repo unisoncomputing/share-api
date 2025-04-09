@@ -132,17 +132,17 @@ getSubscriptionsEndpoint userHandle callerUserId = do
   pure $ API.GetSubscriptionsResponse {subscriptions}
 
 createSubscriptionEndpoint :: UserHandle -> UserId -> API.CreateSubscriptionRequest -> WebApp API.CreateSubscriptionResponse
-createSubscriptionEndpoint userHandle callerUserId API.CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionFilter} = do
-  User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
+createSubscriptionEndpoint subscriberHandle callerUserId API.CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionFilter} = do
+  User {user_id = subscriberUserId} <- UserQ.expectUserByHandle subscriberHandle
   User {user_id = scopeUserId} <- UserQ.expectUserByHandle subscriptionScope
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage callerUserId notificationUserId
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage callerUserId subscriberUserId
   -- NOTE: We allow creating any sort of notification subscription, even for things a user
   -- doesn't have access to, but the notification system will only actually create notifications if the caller has access to
   -- the resource of a given event for the permission associated to that topic via the
   -- 'topic_permission' SQL function.
   subscription <- PG.runTransaction $ do
-    subscriptionId <- NotificationQ.createNotificationSubscription notificationUserId scopeUserId subscriptionTopics subscriptionFilter
-    NotificationQ.getNotificationSubscription notificationUserId subscriptionId
+    subscriptionId <- NotificationQ.createNotificationSubscription subscriberUserId scopeUserId subscriptionTopics subscriptionFilter
+    NotificationQ.getNotificationSubscription subscriberUserId subscriptionId
   pure $ API.CreateSubscriptionResponse {subscription}
 
 deleteSubscriptionEndpoint :: UserHandle -> UserId -> NotificationSubscriptionId -> WebApp NoContent

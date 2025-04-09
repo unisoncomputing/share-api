@@ -1,8 +1,10 @@
 {
-  "body": null,
+  "body": {
+    "notifications": []
+  },
   "status": [
     {
-      "status_code": 404
+      "status_code": 200
     }
   ]
 }

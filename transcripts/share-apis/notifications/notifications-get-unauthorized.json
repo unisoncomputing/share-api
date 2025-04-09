@@ -1,8 +1,8 @@
 {
-  "body": null,
+  "body": "Permission Denied: Not permitted to get notifications for this user",
   "status": [
     {
-      "status_code": 404
+      "status_code": 403
     }
   ]
 }
