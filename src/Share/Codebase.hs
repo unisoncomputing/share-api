@@ -72,7 +72,7 @@ module Share.Codebase
   )
 where
 
-import Control.Concurrent.STM (TVar, atomically, modifyTVar', readTVarIO)
+import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Lens
 import Control.Monad.Morph (hoist)
 import Data.ByteString.Lazy.Char8 qualified as BL
@@ -182,21 +182,23 @@ codebaseEnv !_authZReceipt codebaseLoc = do
 codebaseRuntime :: (MonadReader (Env.Env x) m, MonadUnliftIO m) => CodebaseEnv -> m (CodebaseRuntime IO)
 codebaseRuntime codebase = do
   unisonRuntime <- asks Env.sandboxedRuntime
-  cacheVar <- UnliftIO.newTVarIO (CodeLookupCache mempty mempty)
+  rt <- liftIO (codebaseRuntime' unisonRuntime codebase)
   unlift <- badAskUnliftCodebaseRuntime
-  pure (unlift (codebaseRuntime' unisonRuntime cacheVar codebase))
+  pure (unlift rt)
 
 -- | Ideally, we'd use this – a runtime with lookup actions in transaction, not IO. But that will require refactoring to
 -- the runtime interface in ucm, so we can't use it for now. That's bad: we end up unsafely running separate
 -- transactions for inner calls to 'codeLookup' / 'cachedEvalResult', which can lead to deadlock due to a starved
 -- connection pool.
-codebaseRuntime' :: Runtime Symbol -> TVar CodeLookupCache -> CodebaseEnv -> CodebaseRuntime (PG.Transaction e)
-codebaseRuntime' unisonRuntime cacheVar CodebaseEnv {codebaseOwner} =
-  CodebaseRuntime
-    { codeLookup = codeLookupForUser cacheVar codebaseOwner,
-      cachedEvalResult = (fmap . fmap) Term.unannotate . loadCachedEvalResult codebaseOwner,
-      unisonRuntime
-    }
+codebaseRuntime' :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime (PG.Transaction e))
+codebaseRuntime' unisonRuntime CodebaseEnv {codebaseOwner} = do
+  cacheVar <- newTVarIO (CodeLookupCache mempty mempty)
+  pure
+    CodebaseRuntime
+      { codeLookup = codeLookupForUser cacheVar codebaseOwner,
+        cachedEvalResult = (fmap . fmap) Term.unannotate . loadCachedEvalResult codebaseOwner,
+        unisonRuntime
+      }
 
 badAskUnliftCodebaseRuntime ::
   (MonadReader (Env.Env x) m, MonadUnliftIO m) =>
