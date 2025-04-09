@@ -35,7 +35,7 @@ recordEvent (NotificationEvent {eventScope, eventData, eventResourceId}) = do
   execute_
     [sql|
       INSERT INTO notification_events (topic, scope_user_id, resource_id, data)
-      VALUES (#{eventTopic eventData}, #{eventScope}, #{eventResourceId}, #{eventData})
+      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventResourceId}, #{eventData})
     |]
 
 listNotificationHubEntries :: (QueryA m) => UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> m [NotificationHubEntry]

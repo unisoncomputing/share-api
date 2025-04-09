@@ -1,7 +1,7 @@
 module Share.Notifications.Types
   ( NotificationTopic (..),
     NotificationFilter (..),
-    NotificationEventData,
+    NotificationEventData (..),
     NotificationEvent (..),
     NewNotificationEvent,
     NotificationSubscription (..),
@@ -141,7 +141,7 @@ data ProjectContributionData = ProjectContributionData
     contributionId :: ContributionId,
     fromBranchId :: BranchId,
     toBranchId :: BranchId,
-    contributorUserId :: Maybe UserId
+    contributorUserId :: UserId
   }
 
 instance Aeson.ToJSON ProjectContributionData where
