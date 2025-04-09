@@ -51,6 +51,28 @@ fetch "$test_user" POST private-contribution-create '/users/test/projects/privat
 
 fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notifications/hub' 
 
-fetch "$test_user" GET list-notifications-test '/users/test/notifications/hub' 
+test_notification_id=$(fetch_data_jq "$test_user" GET list-notifications-test '/users/test/notifications/hub' '.notifications[0].id')
+transcripts_notification_id=$(fetch_data_jq "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' '.notifications[0].id')
 
 fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' 
+
+# Mark notifications as read
+fetch "$test_user" PATCH mark-notifications-read-test '/users/test/notifications/hub' "{
+  \"status\": \"read\",
+  \"notificationIds\": [
+    \"$test_notification_id\"
+  ]
+}"
+
+fetch "$transcripts_user" PATCH mark-notifications-read-transcripts '/users/transcripts/notifications/hub' "{
+  \"status\": \"read\",
+  \"notificationIds\": [
+    \"$transcripts_notification_id\"
+  ]
+}"
+
+# Show only unread notifications (none should be unread):
+fetch "$test_user" GET list-notifications-unread-test '/users/test/notifications/hub?status=unread' 
+
+# Show only read notifications (the one we just marked as read):
+fetch "$transcripts_user" GET list-notifications-read-transcripts '/users/transcripts/notifications/hub?status=read'

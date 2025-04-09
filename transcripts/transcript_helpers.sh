@@ -155,6 +155,25 @@ fetch_data() {
     esac
 }
 
+fetch_data_jq() {
+    if [ "$#" -lt 5 ]; then
+        echo "fetch requires at least 5 arguments: user_id, method, testname, api_path, jq_pattern, [data]" >&2
+        exit 1
+    fi
+    if [ -z "$1" ]; then
+        echo "fetch requires a user id" >&2
+        exit 1
+    fi
+    cookie_jar="$1"
+    method="$2"
+    testname="$3"
+    api_path="$4"
+    jq_pattern="$5"
+    data="$6"
+    fetch_data "$cookie_jar" "$method" "$testname" "$api_path" "$data" 2> /dev/null | \
+      jq --sort-keys -r "$jq_pattern" 
+}
+
 # Credentials setup 
 
 login_user_for_ucm() {

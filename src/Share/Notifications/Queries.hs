@@ -1,7 +1,7 @@
 module Share.Notifications.Queries
   ( recordEvent,
     listNotificationHubEntries,
-    updateNotificationHubEntry,
+    updateNotificationHubEntries,
     listNotificationDeliveryMethods,
     listEmailDeliveryMethods,
     listWebhookDeliveryMethods,
@@ -54,13 +54,16 @@ listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = 
       LIMIT #{limit}
     |]
 
-updateNotificationHubEntry :: (QueryA m) => NotificationHubEntryId -> NotificationStatus -> m ()
-updateNotificationHubEntry hubEntryId status = do
+updateNotificationHubEntries :: (QueryA m) => NESet NotificationHubEntryId -> NotificationStatus -> m ()
+updateNotificationHubEntries hubEntryIds status = do
   execute_
     [sql|
+      WITH to_update(notification_id) AS (
+        SELECT * FROM ^{singleColumnTable $ Foldable.toList hubEntryIds}
+      )
       UPDATE notification_hub_entries
-      SET status = #{status}
-      WHERE id = #{hubEntryId}
+      SET status = #{status}::notification_status
+      WHERE id IN (SELECT notification_id FROM to_update)
     |]
 
 listNotificationDeliveryMethods :: UserId -> Transaction e [NotificationDeliveryMethod]

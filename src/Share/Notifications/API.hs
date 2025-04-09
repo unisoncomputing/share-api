@@ -11,7 +11,7 @@ module Share.Notifications.API
     WebhookRoutes (..),
     GetHubEntriesResponse (..),
     StatusFilter (..),
-    UpdateHubEntryRequest (..),
+    UpdateHubEntriesRequest (..),
     GetSubscriptionsResponse (..),
     CreateSubscriptionRequest (..),
     CreateSubscriptionResponse (..),
@@ -53,7 +53,7 @@ data Routes mode
 data HubEntriesRoutes mode
   = HubEntriesRoutes
   { getHubEntriesEndpoint :: mode :- GetHubEntriesEndpoint,
-    updateHubEntryEndpoint :: mode :- UpdateHubEntryEndpoint
+    updateHubEntriesEndpoint :: mode :- UpdateHubEntriesEndpoint
   }
   deriving stock (Generic)
 
@@ -200,21 +200,22 @@ instance ToJSON GetHubEntriesResponse where
   toJSON GetHubEntriesResponse {notifications} =
     object ["notifications" .= notifications]
 
-type UpdateHubEntryEndpoint =
+type UpdateHubEntriesEndpoint =
   AuthenticatedUserId
-    :> Capture "hubEntryId" NotificationHubEntryId
-    :> ReqBody '[JSON] UpdateHubEntryRequest
+    :> ReqBody '[JSON] UpdateHubEntriesRequest
     :> Patch '[JSON] NoContent
 
-data UpdateHubEntryRequest
-  = UpdateHubEntryRequest
-  { notificationStatus :: NotificationStatus
+data UpdateHubEntriesRequest
+  = UpdateHubEntriesRequest
+  { notificationStatus :: NotificationStatus,
+    notificationIds :: NESet NotificationHubEntryId
   }
 
-instance FromJSON UpdateHubEntryRequest where
-  parseJSON = withObject "UpdateHubEntryRequest" $ \o -> do
+instance FromJSON UpdateHubEntriesRequest where
+  parseJSON = withObject "UpdateHubEntriesRequest" $ \o -> do
     notificationStatus <- o .: "status"
-    pure UpdateHubEntryRequest {notificationStatus}
+    notificationIds <- o .: "notificationIds"
+    pure UpdateHubEntriesRequest {notificationStatus, notificationIds}
 
 type CreateEmailDeliveryMethodEndpoint =
   AuthenticatedUserId

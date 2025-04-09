@@ -17,7 +17,7 @@ hubRoutes :: UserHandle -> API.HubEntriesRoutes (AsServerT WebApp)
 hubRoutes userHandle =
   API.HubEntriesRoutes
     { getHubEntriesEndpoint = getHubEntriesEndpoint userHandle,
-      updateHubEntryEndpoint = updateHubEntryEndpoint userHandle
+      updateHubEntriesEndpoint = updateHubEntriesEndpoint userHandle
     }
 
 deliveryMethodRoutes :: UserHandle -> API.DeliveryMethodRoutes (AsServerT WebApp)
@@ -68,11 +68,11 @@ getHubEntriesEndpoint userHandle callerUserId limit afterTime mayStatusFilter = 
   notifications <- PG.runTransaction $ NotificationQ.listNotificationHubEntries notificationUserId limit afterTime (API.getStatusFilter <$> mayStatusFilter)
   pure $ API.GetHubEntriesResponse {notifications}
 
-updateHubEntryEndpoint :: UserHandle -> UserId -> NotificationHubEntryId -> API.UpdateHubEntryRequest -> WebApp NoContent
-updateHubEntryEndpoint userHandle callerUserId hubEntryId API.UpdateHubEntryRequest {notificationStatus} = do
+updateHubEntriesEndpoint :: UserHandle -> UserId -> API.UpdateHubEntriesRequest -> WebApp NoContent
+updateHubEntriesEndpoint userHandle callerUserId API.UpdateHubEntriesRequest {notificationStatus, notificationIds} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkNotificationsUpdate callerUserId notificationUserId
-  PG.runTransaction $ NotificationQ.updateNotificationHubEntry hubEntryId notificationStatus
+  PG.runTransaction $ NotificationQ.updateNotificationHubEntries notificationIds notificationStatus
   pure NoContent
 
 getDeliveryMethodsEndpoint :: UserHandle -> UserId -> WebApp API.GetDeliveryMethodsResponse
