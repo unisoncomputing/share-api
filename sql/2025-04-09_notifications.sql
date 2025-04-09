@@ -217,7 +217,7 @@ DECLARE
 BEGIN
   SELECT NEW.id INTO the_event_id;
   FOR the_subscription_id, the_subscriber IN
-    (SELECT ns.id FROM notification_subscriptions ns
+    (SELECT ns.id, ns.subscriber_user_id FROM notification_subscriptions ns
       WHERE ns.scope_user_id = NEW.scope_user_id
         AND NEW.topic = ANY(ns.topics)
         AND (ns.filter IS NULL OR NEW.data @> ns.filter)
@@ -225,7 +225,7 @@ BEGIN
         -- A subscriber can be notified if the event is in their scope or if they have permission to the resource.
         -- The latter is usually a superset of the former, but the former is trivial to compute so it can help
         -- performance to include it.
-          (the_subscriber = ns.subscriber_user_id
+          (NEW.scope_user_id = ns.subscriber_user_id
             OR user_has_permission(ns.subscriber_user_id, NEW.resource_id, topic_permission(NEW.topic))
           )
     )

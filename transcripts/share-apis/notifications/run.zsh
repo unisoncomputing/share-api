@@ -13,7 +13,7 @@ fetch "$test_user" POST create-subscription-for-project '/users/test/notificatio
     \"project:contribution:created\"
   ],
   \"filter\": {
-    \"project_id\": \"$publictestproject_id\"
+    \"projectId\": \"$publictestproject_id\"
   }
 }"
 

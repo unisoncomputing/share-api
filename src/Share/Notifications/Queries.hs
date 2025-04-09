@@ -44,7 +44,7 @@ listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = 
   let statusFilterList = Foldable.toList <$> statusFilter
   queryListRows @NotificationHubEntry
     [sql|
-      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.topic, event.resource_id, event.data
+      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.resource_id, event.topic, event.data
         FROM notification_hub_entries hub
         JOIN notification_events event ON hub.event_id = event.id
       WHERE hub.user_id = #{notificationUserId}

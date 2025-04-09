@@ -2,7 +2,7 @@
   "body": {
     "subscription": {
       "filter": {
-        "project_id": "P-<UUID>"
+        "projectId": "P-<UUID>"
       },
       "id": "NS-<UUID>",
       "scope": "U-<UUID>",
