@@ -49,6 +49,20 @@ user_id_from_handle () {
   pg_sql "SELECT 'U-' || id FROM users WHERE handle = '${handle}';"
 }
 
+project_id_from_handle_and_slug () {
+  if [ -z "$1" ]; then
+    echo "project_id_from_handle_and_slug requires a handle" >&2
+    exit 1
+  fi
+  if [ -z "$2" ]; then
+    echo "project_id_from_handle_and_slug requires a slug" >&2
+    exit 1
+  fi
+  handle="$1"
+  slug="$2"
+  pg_sql "SELECT 'P-' || id FROM debug_projects WHERE handle = '${handle}' AND slug = '${slug}';"
+}
+
 # Creates a user and returns the user id
 create_user () {
   handle="$1"

@@ -30,8 +30,8 @@ CREATE TABLE notification_events (
     data JSONB NOT NULL
 );
 
-CREATE INDEX notification_events_topic ON notification_events(topic, created_at DESC);
-CREATE INDEX notification_events_scope_user ON notification_events(scope_user_id, created_at DESC);
+CREATE INDEX notification_events_topic ON notification_events(topic, occurred_at DESC);
+CREATE INDEX notification_events_scope_user ON notification_events(scope_user_id, occurred_at DESC);
 
 CREATE TABLE notification_subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -164,7 +164,7 @@ CREATE TABLE notification_hub_entries (
 
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-)
+);
 
 CREATE UNIQUE INDEX notification_hub_entries_event_user ON notification_hub_entries(user_id, event_id);
 CREATE INDEX notification_hub_entries_by_user_chronological ON notification_hub_entries(user_id, created_at DESC)
