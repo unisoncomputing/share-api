@@ -8,7 +8,7 @@ publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject
 
 # Subscribe to project:contribution:created notifications for the test user's publictetestproject.
 fetch "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' "{
-  \"scope\": \"$test_user\",
+  \"scope\": \"test\",
   \"topics\": [
     \"project:contribution:created\"
   ],
@@ -19,7 +19,7 @@ fetch "$test_user" POST create-subscription-for-project '/users/test/notificatio
 
 # Subscribe to notifications for contribution creation for all projects belonging to another user.
 fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/test/notifications/subscriptions' "{
-  \"scope\": \"$test_user\",
+  \"scope\": \"test\",
   \"topics\": [
     \"project:contribution:created\"
   ],
@@ -29,12 +29,22 @@ fetch "$transcripts_user" POST create-subscription-for-other-user-project '/user
 }"
 
 
-# Create a contribution, which should trigger a notification
+# Create a contribution in a public project, which should trigger a notification for both users
 fetch "$test_user" POST contribution-create '/users/test/projects/publictestproject/contributions' '{
     "title": "My contribution",
     "description": "My description",
     "status": "draft",
     "sourceBranchRef": "feature",
+    "targetBranchRef": "main"
+}'
+
+# Create a contribution in a private project, which shouldn't create a notification for either, because 'test' has
+# a subscription filter and 'transcripts' doesn't have access.
+fetch "$test_user" POST contribution-create '/users/test/projects/privatetestproject/contributions' '{
+    "title": "My private contribution",
+    "description": "My private description",
+    "status": "draft",
+    "sourceBranchRef": "privatebranch",
     "targetBranchRef": "main"
 }'
 

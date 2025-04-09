@@ -136,7 +136,10 @@ createSubscriptionEndpoint userHandle callerUserId API.CreateSubscriptionRequest
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   User {user_id = scopeUserId} <- UserQ.expectUserByHandle subscriptionScope
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage callerUserId notificationUserId
-  error "TODO: Somehow need to check that the subscriber should be able to see events for a given resource"
+  -- NOTE: We allow creating any sort of notification subscription, even for things a user
+  -- doesn't have access to, but the notification system will only actually create notifications if the caller has access to
+  -- the resource of a given event for the permission associated to that topic via the
+  -- 'topic_permission' SQL function.
   subscription <- PG.runTransaction $ do
     subscriptionId <- NotificationQ.createNotificationSubscription notificationUserId scopeUserId subscriptionTopics subscriptionFilter
     NotificationQ.getNotificationSubscription notificationUserId subscriptionId

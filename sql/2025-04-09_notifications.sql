@@ -14,15 +14,47 @@
 -- That *event* is handled by all relevant *subscriptions*,
 -- Which generates a *notification* for the user,
 -- which is then sent via the *email* *delivery method* and marked completed.
+--
+-- A note on permissions:
+-- We allow creating all kinds of notification subscriptions, even for things the calling user
+-- doesn't have access to, but the notification system will only actually create notifications if the caller has access to
+-- the resource of a given event for the permission associated to that topic via the
+-- 'topic_permission' SQL function.
+--
+-- This means that if the permissions associated to a given resource change, the notification system will correctly
+-- adapt which notifications its sending over time. And we avoid the nebulous task of determining which possible
+-- resources any given subscription _might_ be associated with. This allows subscriptions to be more general as well,
+-- since they can be wide-sweeping wildcard subscriptions which are not constrained to a specific resource.
 
 CREATE TYPE notification_topic AS ENUM (
     'project:branch:updated',
     'project:contribution:created'
 );
 
+-- Returns the list of permissions a user must have for an event's resource in order to be notified.
+CREATE FUNCTION topic_permission(topic notification_topic)
+RETURNS permission 
+PARALLEL SAFE
+IMMUTABLE
+AS $$
+BEGIN
+  CASE topic
+    WHEN 'project:branch:updated' THEN 
+      RETURN 'project:view'::permission;
+    WHEN 'project:contribution:created' THEN 
+      RETURN 'project:view'::permission;
+    ELSE
+      RAISE EXCEPTION 'topic_permissions: topic % must declare its necessary permissions', topic;
+  END CASE;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE notification_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     occurred_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- The resource associated with the event, to check if subscribers have permission to be notified.
+    resource_id UUID NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
 
     topic notification_topic NOT NULL,
     -- The effective scope of this event. The user_id of the relevant user or org.
@@ -189,6 +221,13 @@ BEGIN
       WHERE ns.scope_user_id = NEW.scope_user_id
         AND NEW.topic = ANY(ns.topics)
         AND (ns.filter IS NULL OR NEW.data @> ns.filter)
+        AND 
+        -- A subscriber can be notified if the event is in their scope or if they have permission to the resource.
+        -- The latter is usually a superset of the former, but the former is trivial to compute so it can help
+        -- performance to include it.
+          (the_subscriber = ns.subscriber_user_id
+            OR user_has_permission(ns.subscriber_user_id, NEW.resource_id, topic_permission(NEW.topic))
+          )
     )
   LOOP
     -- Log that this event triggered this subscription.

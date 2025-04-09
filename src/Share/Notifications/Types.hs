@@ -207,6 +207,7 @@ eventTopic = \case
 data NotificationEvent id occurredAt = NotificationEvent
   { eventId :: id,
     eventOccurredAt :: occurredAt,
+    eventResourceId :: ResourceId,
     eventData :: NotificationEventData,
     eventScope :: UserId
   }
@@ -225,8 +226,9 @@ instance Hasql.DecodeRow (NotificationEvent NotificationEventId UTCTime) where
     eventId <- PG.decodeField
     eventOccurredAt <- PG.decodeField
     eventScope <- PG.decodeField
+    eventResourceId <- PG.decodeField
     eventData <- PG.decodeRow
-    pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope}
+    pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventResourceId}
 
 type NewNotificationEvent = NotificationEvent () ()
 

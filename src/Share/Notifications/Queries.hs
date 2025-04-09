@@ -31,20 +31,20 @@ import Share.Postgres
 import Share.Utils.URI (URIParam)
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
-recordEvent (NotificationEvent {eventScope, eventData}) = do
+recordEvent (NotificationEvent {eventScope, eventData, eventResourceId}) = do
   execute_
     [sql|
-      INSERT INTO notification_events (topic, scope_user_id, data)
-      VALUES (#{eventTopic eventData}, #{eventScope}, #{eventData})
+      INSERT INTO notification_events (topic, scope_user_id, resource_id, data)
+      VALUES (#{eventTopic eventData}, #{eventScope}, #{eventResourceId}, #{eventData})
     |]
 
 listNotificationHubEntries :: (QueryA m) => UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> m [NotificationHubEntry]
 listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = do
   let limit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
   let statusFilterList = Foldable.toList <$> statusFilter
-  queryListRows
+  queryListRows @NotificationHubEntry
     [sql|
-      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.topic, event.data
+      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.topic, event.resource_id, event.data
         FROM notification_hub_entries hub
         JOIN notification_events event ON hub.event_id = event.id
       WHERE hub.user_id = #{notificationUserId}
