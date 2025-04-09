@@ -118,7 +118,7 @@ instance PG.EncodeValue NotificationFilter where
 data ProjectBranchData = ProjectBranchData
   { projectId :: ProjectId,
     branchId :: BranchId,
-    branchContributorUserId :: UserId
+    branchContributorUserId :: Maybe UserId
   }
 
 instance Aeson.ToJSON ProjectBranchData where
