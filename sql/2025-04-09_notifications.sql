@@ -270,5 +270,5 @@ CREATE TRIGGER notification_event_subscriptions
 
 -- Add new permissions to existing roles
 UPDATE roles r
-SET permissions = r.permissions || '{"notifications_hub_entries:view", "notifications_hub_entries:update", "notification_delivery_methods:create", "notification_delivery_methods:update", "notification_subscriptions:create", "notification_subscriptions:update"}'
+SET permissions = r.permissions || '{"notification:hub_entry:view", "notification:hub_entry:update", "notification:delivery_method:view", "notification:delivery_method:manage", "notification:subscription:view", "notification:subscription:manage"}'
   WHERE r.ref IN ('org_admin'::role_ref, 'org_owner'::role_ref, 'org_default'::role_ref, 'org_maintainer'::role_ref);
