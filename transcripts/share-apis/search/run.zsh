@@ -87,3 +87,9 @@ fetch "$transcript_user" GET 'defn-search-project-filter-sad' '/search-definitio
 # Release filter
 fetch "$transcript_user" GET 'defn-search-release-filter-happy' '/search-definitions?query=map&project-filter=@transcripts%2Fsearch&release-filter=1.2.3'
 fetch "$transcript_user" GET 'defn-search-release-filter-sad' '/search-definitions?query=map&project-filter=@test%2Fpublictestproject&release-filter=1.0.0'
+
+# Omni search should find org users
+fetch "$transcript_user" GET 'omni-search-orgs' '/search?query=%40uni'
+
+# Omni search should find regular users
+fetch "$transcript_user" GET 'omni-search-users' '/search?query=%40tes'

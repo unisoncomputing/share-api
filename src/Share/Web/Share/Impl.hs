@@ -47,7 +47,7 @@ import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
-import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
@@ -368,8 +368,10 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
     pure (users, projects)
   let userResults =
         users
-          <&> \User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId} ->
-            SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
+          <&> \(User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId}, mayOrgId) ->
+            case mayOrgId of
+              Just orgId -> SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId}, orgId})
+              Nothing -> SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
   let projectResults =
         projects
           <&> \(Project {slug, summary, visibility}, ownerHandle) ->

@@ -1,5 +1,6 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TypeOperators #-}
 
 -- | Common queries for users.
 module Share.Postgres.Users.Queries
@@ -266,18 +267,20 @@ findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarU
     Nothing -> do
       New <$> createFromGithubUser authZReceipt ghu primaryEmail
 
-searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [User]
+searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(User, Maybe OrgId)]
 searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
   let q = likeEscape prefix <> "%"
-  PG.queryListRows
+  PG.queryListRows @(User PG.:. (PG.Only (Maybe OrgId)))
     [PG.sql|
-    SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
+    SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private, org.id
       FROM users u
+      LEFT JOIN orgs org ON org.user_id = u.id
       WHERE (u.handle ILIKE #{q}
              OR u.name ILIKE #{q}
             ) AND NOT u.private
       LIMIT #{limit}
       |]
+    <&> fmap \(user PG.:. PG.Only mayOrgId) -> (user, mayOrgId)
 
 data UserCreationError
   = UserHandleTaken UserHandle
