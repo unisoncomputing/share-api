@@ -57,7 +57,7 @@ fetch "$transcripts_user" POST org-add-members '/orgs/acme/members' '{
 }'
 
 # Can't add an org to another org
-fetch "$transcript_user" POST org-cant-have-org-members '/orgs/acme/members' '{
+fetch "$transcripts_user" POST org-cant-have-org-members '/orgs/acme/members' '{
   "members": [
     "unison"
   ]
