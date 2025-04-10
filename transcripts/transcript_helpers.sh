@@ -60,7 +60,7 @@ project_id_from_handle_and_slug () {
   fi
   handle="$1"
   slug="$2"
-  pg_sql "SELECT 'P-' || project_id FROM debug_projects WHERE handle = '${handle}' AND slug = '${slug}';"
+  pg_sql "SELECT 'P-' || p.id FROM projects p JOIN users u ON p.owner_user_id = u.id WHERE u.handle = '${handle}' AND p.slug = '${slug}';"
 }
 
 # Creates a user and returns the user id
