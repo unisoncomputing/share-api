@@ -56,6 +56,13 @@ fetch "$transcript_user" POST org-add-members '/orgs/acme/members' '{
   ]
 }'
 
+# Can't add an org to another org
+fetch "$transcript_user" POST org-cant-have-org-members '/orgs/acme/members' '{
+  "members": [
+    "unison"
+  ]
+}'
+
 fetch "$transcript_user" GET org-get-members-after-adding '/orgs/acme/members'
 
 # Owner can remove members
@@ -65,4 +72,6 @@ fetch "$transcript_user" DELETE org-remove-members '/orgs/acme/members' '{
   ]
 }'
 
+
 fetch "$transcript_user" GET org-get-members-after-removing '/orgs/acme/members'
+
