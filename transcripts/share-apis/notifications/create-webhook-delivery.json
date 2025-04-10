@@ -1,0 +1,10 @@
+{
+  "body": {
+    "webhookDeliveryMethodId": "NW-<UUID>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

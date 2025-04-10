@@ -159,6 +159,13 @@ data RolePermission
   | -- Team
     TeamView
   | TeamManage
+  | -- Notifications
+    NotificationHubEntryView
+  | NotificationHubEntryUpdate
+  | NotificationSubscriptionView
+  | NotificationSubscriptionManage
+  | NotificationDeliveryMethodView
+  | NotificationDeliveryMethodManage
   deriving (Show, Eq, Ord)
 
 rolePermissionToText :: RolePermission -> Text
@@ -178,6 +185,12 @@ rolePermissionToText = \case
   OrgProjectCreate -> "org:create_project"
   TeamView -> "team:view"
   TeamManage -> "team:manage"
+  NotificationHubEntryView -> "notification:hub_entry:view"
+  NotificationHubEntryUpdate -> "notification:hub_entry:update"
+  NotificationSubscriptionView -> "notification:subscription:view"
+  NotificationSubscriptionManage -> "notification:subscription:manage"
+  NotificationDeliveryMethodView -> "notification:delivery_method:view"
+  NotificationDeliveryMethodManage -> "notification:delivery_method:manage"
 
 rolePermissionFromText :: Text -> Maybe RolePermission
 rolePermissionFromText = \case

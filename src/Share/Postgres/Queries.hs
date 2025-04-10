@@ -17,6 +17,8 @@ import Share.Branch
 import Share.Contribution
 import Share.IDs
 import Share.IDs qualified as IDs
+import Share.Notifications.Queries qualified as NotifQ
+import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectBranchData (..))
 import Share.OAuth.Types
 import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
@@ -633,6 +635,7 @@ setBranchCausalHash ::
 setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causalId = do
   PG.execute_ updateReflogSQL
   PG.execute_ setBranchSQL
+  recordNotificationEvent
   where
     setBranchSQL =
       [PG.sql|
@@ -659,6 +662,30 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
         FROM project_branches
         WHERE id = #{branchId}
       |]
+    recordNotificationEvent = do
+      (projectId, projectResourceId, projectOwnerUserId, branchContributorUserId) <-
+        PG.queryExpect1Row
+          [PG.sql|
+        SELECT p.id, p.resource_id, p.owner_user_id, pb.contributor_id
+          FROM project_branches pb
+          JOIN projects p ON p.id = pb.project_id
+        WHERE pb.id = #{branchId}
+        |]
+      let branchUpdateEventData =
+            ProjectBranchData
+              { projectId,
+                branchId,
+                branchContributorUserId
+              }
+      let notifEvent =
+            NotificationEvent
+              { eventId = (),
+                eventOccurredAt = (),
+                eventResourceId = projectResourceId,
+                eventData = ProjectBranchUpdatedData branchUpdateEventData,
+                eventScope = projectOwnerUserId
+              }
+      NotifQ.recordEvent notifEvent
 
 getCausalIdForBranch :: BranchId -> PG.Transaction e CausalId
 getCausalIdForBranch branchId = do

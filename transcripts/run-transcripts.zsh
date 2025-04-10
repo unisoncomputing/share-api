@@ -29,6 +29,7 @@ transcripts=(
     roles transcripts/share-apis/roles/
     sync-apis transcripts/sync-apis/
     orgs transcripts/share-apis/orgs/
+    notifications transcripts/share-apis/notifications/
 )
 
 for transcript dir in "${(@kv)transcripts}"; do

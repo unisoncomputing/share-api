@@ -1,0 +1,26 @@
+{
+  "body": {
+    "author": {
+      "avatarUrl": null,
+      "handle": "test",
+      "name": null,
+      "userId": "U-<UUID>"
+    },
+    "createdAt": "<TIMESTAMP>",
+    "description": "My private description",
+    "id": "C-<UUID>",
+    "numComments": 0,
+    "number": 1,
+    "projectRef": "@test/privatetestproject",
+    "sourceBranchRef": "privatebranch",
+    "status": "draft",
+    "targetBranchRef": "main",
+    "title": "My private contribution",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

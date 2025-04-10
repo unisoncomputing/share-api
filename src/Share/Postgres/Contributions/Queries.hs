@@ -32,6 +32,8 @@ import Safe (lastMay)
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
+import Share.Notifications.Queries qualified as NotifQ
+import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectContributionData (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Comments.Queries (commentsByTicketOrContribution)
 import Share.Postgres.IDs
@@ -82,6 +84,30 @@ createContribution authorId projectId title description status sourceBranchId ta
         RETURNING contributions.id, contributions.contribution_number
       |]
   insertContributionStatusChangeEvent contributionId authorId Nothing status
+  let contributionEventData =
+        ProjectContributionData
+          { projectId,
+            contributionId,
+            fromBranchId = sourceBranchId,
+            toBranchId = targetBranchId,
+            contributorUserId = authorId
+          }
+  (projectResourceId, projectOwnerUserId) <-
+    PG.queryExpect1Row
+      [PG.sql|
+    SELECT p.resource_id, p.owner_user_id FROM projects p
+    WHERE p.id = #{projectId}
+    |]
+
+  let notifEvent =
+        NotificationEvent
+          { eventId = (),
+            eventOccurredAt = (),
+            eventResourceId = projectResourceId,
+            eventData = ProjectContributionCreatedData contributionEventData,
+            eventScope = projectOwnerUserId
+          }
+  NotifQ.recordEvent notifEvent
   pure (contributionId, number)
 
 contributionByProjectIdAndNumber ::

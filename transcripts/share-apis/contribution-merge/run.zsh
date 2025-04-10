@@ -9,7 +9,7 @@ source "../../transcript_helpers.sh"
 login_user_for_ucm 'transcripts'
 transcript_ucm transcript 'project-setup.md'
 
-fetch "$transcript_user" PATCH make-project-public '/users/transcripts/projects/merge' '{
+fetch "$transcripts_user" PATCH make-project-public '/users/transcripts/projects/merge' '{
     "summary": null,
     "visibility": "public"
 }'
@@ -27,27 +27,27 @@ fetch "$test_user" POST contribution-create-contribution '/users/transcripts/pro
 }'
 
 # And the main branch should be set to the branch's head
-fetch "$transcript_user" GET 'main-before-merge' '/users/transcripts/projects/merge/branches/main'
-fetch_data "$transcript_user" GET 'feature-branch' '/users/transcripts/projects/merge/branches/%40test%2Ffast-forward-feature'
+fetch "$transcripts_user" GET 'main-before-merge' '/users/transcripts/projects/merge/branches/main'
+fetch_data "$transcripts_user" GET 'feature-branch' '/users/transcripts/projects/merge/branches/%40test%2Ffast-forward-feature'
 
 # Get the contribution and its contribution state token
-contribution_state_token=$(fetch_data "$transcript_user" GET 'contribution' '/users/transcripts/projects/merge/contributions/1' 2>/dev/null | jq -r '.contributionStateToken')
+contribution_state_token=$(fetch_data "$transcripts_user" GET 'contribution' '/users/transcripts/projects/merge/contributions/1' 2>/dev/null | jq -r '.contributionStateToken')
 echo "$contribution_state_token"
 
 # Check whether we can merge the contribution
-fetch "$transcript_user" GET 'contribution-check-merge' '/users/transcripts/projects/merge/contributions/1/merge/check'
+fetch "$transcripts_user" GET 'contribution-check-merge' '/users/transcripts/projects/merge/contributions/1/merge/check'
 
 # Actually merge the contribution
-fetch "$transcript_user" POST 'contribution-merge' '/users/transcripts/projects/merge/contributions/1/merge' "{
+fetch "$transcripts_user" POST 'contribution-merge' '/users/transcripts/projects/merge/contributions/1/merge' "{
     \"contributionStateToken\": \"${contribution_state_token}\"
 }
 "
 
 # Contribution should now be merged
-fetch "$transcript_user" GET 'contribution-after-merge' '/users/transcripts/projects/merge/contributions/1'
+fetch "$transcripts_user" GET 'contribution-after-merge' '/users/transcripts/projects/merge/contributions/1'
 
 # And the main branch should be set to the branch's head
-fetch "$transcript_user" GET 'main-after-merge' '/users/transcripts/projects/merge/branches/main'
+fetch "$transcripts_user" GET 'main-after-merge' '/users/transcripts/projects/merge/branches/main'
 
 login_user_for_ucm 'transcripts'
 transcript_ucm transcript 'pull-after-merge.md'

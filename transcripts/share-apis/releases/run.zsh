@@ -4,9 +4,9 @@ set -e
 
 source "../../transcript_helpers.sh"
 
-fetch "$transcript_user" GET releases-list '/users/test/projects/publictestproject/releases'
-fetch "$transcript_user" GET releases-list-published-only '/users/test/projects/publictestproject/releases?status=published'
-fetch "$transcript_user" GET releases-list-version-search '/users/test/projects/publictestproject/releases?version-prefix=1.2'
+fetch "$transcripts_user" GET releases-list '/users/test/projects/publictestproject/releases'
+fetch "$transcripts_user" GET releases-list-published-only '/users/test/projects/publictestproject/releases?status=published'
+fetch "$transcripts_user" GET releases-list-version-search '/users/test/projects/publictestproject/releases?version-prefix=1.2'
 
 # Create a release in the test project
 fetch "$test_user" POST project-release-ucm-create '/ucm/v1/projects/create-project-branch' '{
