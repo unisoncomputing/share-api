@@ -26,6 +26,15 @@ fetch "$transcripts_user" POST create-subscription-for-other-user-project '/user
   ]
 }"
 
+fetch "$test_user" POST create-email-delivery '/users/test/notifications/delivery-methods/emails' '{
+  "email": "me@example.com"
+}'
+
+fetch "$test_user" POST create-webhook-delivery '/users/test/notifications/delivery-methods/webhooks' '{
+  "url": "https://example.com/webhook"
+}'
+
+fetch "$test_user" GET check-delivery-methods '/users/test/notifications/delivery-methods'
 
 # Create a contribution in a public project, which should trigger a notification for both users
 fetch "$test_user" POST public-contribution-create '/users/test/projects/publictestproject/contributions' '{
