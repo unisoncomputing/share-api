@@ -1,0 +1,16 @@
+{
+  "body": {
+    "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
+    "completedTours": [],
+    "handle": "localgithubuser",
+    "name": "Local Github User",
+    "organizationMemberships": [],
+    "primaryEmail": "local@example.com",
+    "userId": "U-<UUID>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

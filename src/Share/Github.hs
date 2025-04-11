@@ -45,10 +45,10 @@ instance ToServerError GithubError where
     GithubDecodeError _ce -> (ErrorID "github:decode-error", err500 {errBody = "Github returned an unexpected response. Please try again."})
 
 data GithubUser = GithubUser
-  { github_user_login :: Text,
-    github_user_id :: Int64,
-    github_user_avatar_url :: URIParam,
-    github_user_name :: Maybe Text
+  { githubHandle :: Text,
+    githubUserId :: Int64,
+    githubUserAvatarUrl :: URIParam,
+    githubUserName :: Maybe Text
   }
   deriving (Show)
 
@@ -56,21 +56,21 @@ instance FromJSON GithubUser where
   parseJSON = withObject "GithubUser" $ \u ->
     GithubUser
       <$> u
-      .: "login"
+        .: "login"
       <*> u
-      .: "id"
+        .: "id"
       <*> u
-      .: "avatar_url"
+        .: "avatar_url"
       -- We don't use this email because it's the "publicly visible" email, instead we fetch
       -- the primary email using the emails API.
       -- <*> u .: "email"
       <*> u
-      .:? "name"
+        .:? "name"
 
 data GithubEmail = GithubEmail
-  { github_email_email :: Text,
-    github_email_primary :: Bool,
-    github_email_verified :: Bool
+  { githubEmailEmail :: Text,
+    githubEmailIsPrimary :: Bool,
+    githubEmailIsVerified :: Bool
   }
   deriving (Show)
 
@@ -78,11 +78,11 @@ instance FromJSON GithubEmail where
   parseJSON = withObject "GithubEmail" $ \u ->
     GithubEmail
       <$> u
-      .: "email"
+        .: "email"
       <*> u
-      .: "primary"
+        .: "primary"
       <*> u
-      .: "verified"
+        .: "verified"
 
 type GithubTokenApi =
   "login"
@@ -190,7 +190,7 @@ primaryGithubEmail auth = do
   emails <- runGithubClient githubAPIBaseURL (githubEmailsClient auth)
   -- Github's api docs suggest there will always be a primary email.
   -- https://docs.github.com/en/rest/users/emails#list-email-addresses-for-the-authenticated-user
-  case find github_email_primary emails of
+  case find githubEmailIsPrimary emails of
     Nothing -> respondError GithubUserWithoutPrimaryEmail
     Just email -> pure email
 

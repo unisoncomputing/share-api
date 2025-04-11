@@ -197,7 +197,7 @@ userByHandle handle = do
 
 createFromGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> PG.Transaction UserCreationError User
 createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail = do
-  let (GithubEmail {github_email_email = user_email, github_email_verified = emailVerified}) = primaryEmail
+  let (GithubEmail {githubEmailEmail = user_email, githubEmailIsVerified = emailVerified}) = primaryEmail
   userHandle <- case IDs.fromText @UserHandle (Text.toLower githubHandle) of
     Left err -> throwError (InvalidUserHandle err githubHandle)
     Right handle -> pure handle
