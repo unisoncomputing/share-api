@@ -16,13 +16,16 @@ where
 
 import Control.Monad
 import Control.Monad.Reader
+import Data.Aeson (ToJSON (..))
+import Data.Aeson qualified as Aeson
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Servant
 import Share.App (shareAud, shareIssuer)
 import Share.Env qualified as Env
 import Share.Github qualified as Github
-import Share.IDs (PendingSessionId, fromId)
+import Share.IDs (PendingSessionId, UserHandle, fromId)
+import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
 import Share.Metrics qualified as Metrics
 import Share.OAuth.API qualified as OAuth
@@ -140,7 +143,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
   cookiePSID <- case cookieVal mayCookiePSID of
     Nothing -> respondError $ MissingOrExpiredPendingSession
     Just psid -> pure psid
-  PendingSession {loginRequest, returnToURI = unvalidatedReturnToURI} <- ensurePendingSession cookiePSID
+  PendingSession {loginRequest, returnToURI = unvalidatedReturnToURI, additionalData} <- ensurePendingSession cookiePSID
   newOrPreExistingUser <- case (mayGithubCode, mayStatePSID, existingAuthSession) of
     -- The user has an already valid session, we can use that.
     (_, _, Just session) -> do
@@ -148,7 +151,16 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       pure (UserQ.PreExisting user)
     -- The user has completed the Github flow, we can log them in or create a new user.
     (Just githubCode, Just statePSID, _noSession) -> do
-      completeGithubFlow githubCode statePSID cookiePSID
+      mayPreferredHandle <- runMaybeT do
+        obj <- hoistMaybe additionalData
+        case Aeson.fromJSON obj of
+          Aeson.Error _err -> do
+            Logging.logErrorText ("Failed to parse additional data: " <> tShow obj)
+            empty
+          Aeson.Success m -> do
+            handle <- hoistMaybe $ Map.lookup ("handle" :: Text) m
+            hoistMaybe . eitherToMaybe $ IDs.fromText handle
+      completeGithubFlow githubCode statePSID cookiePSID mayPreferredHandle
     (Nothing, _, _) -> do
       respondError $ MissingCode
     (_, Nothing, _) -> do
@@ -190,16 +202,17 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       ( OAuth.Code ->
         PendingSessionId ->
         PendingSessionId ->
+        Maybe UserHandle ->
         WebApp (UserQ.NewOrPreExisting User)
       )
-    completeGithubFlow githubCode statePSID cookiePSID = do
+    completeGithubFlow githubCode statePSID cookiePSID mayPreferredHandle = do
       when (statePSID /= cookiePSID) do
         Redis.liftRedis $ Redis.failPendingSession cookiePSID
         respondError (MismatchedState cookiePSID statePSID)
       token <- Github.githubTokenForCode githubCode
       ghUser <- Github.githubUser token
       ghEmail <- Github.primaryGithubEmail token
-      PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail) >>= \case
+      PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail mayPreferredHandle) >>= \case
         Left (UserQ.UserHandleTaken _) -> do
           errorRedirect AccountCreationHandleAlreadyTaken
         Left (UserQ.InvalidUserHandle err handle) -> do
@@ -239,11 +252,11 @@ identityProviderServer =
 
 -- | This endpoint kicks off a login for users of the Share web app.
 loginEndpoint :: ServerT OAuth.LoginEndpoint WebApp
-loginEndpoint returnToURI = do
+loginEndpoint returnToURI mayPreferredHandle = do
   -- We don't currently use pkce with github, but the session interface is simpler if we
   -- always generate a verifier anyways.
   (pkceVerifier, _pkceChallenge, _pkceChallengeMethod) <- PKCE.generatePkce
-  pSesh <- Redis.liftRedis $ Redis.newPendingSession Session.LoginPage pkceVerifier (unpackURI <$> returnToURI) Nothing
+  pSesh <- Redis.liftRedis $ Redis.newPendingSession Session.LoginPage pkceVerifier (unpackURI <$> returnToURI) (mayPreferredHandle <&> \handle -> toJSON $ Map.singleton ("handle" :: Text) handle)
   let psid = pendingId pSesh
   Env.Env {cookieSettings} <- ask
   setPendingSessionCookie cookieSettings psid <$> loginWithGithub psid
