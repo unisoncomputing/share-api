@@ -185,12 +185,12 @@ rolePermissionToText = \case
   OrgProjectCreate -> "org:create_project"
   TeamView -> "team:view"
   TeamManage -> "team:manage"
-  NotificationHubEntryView -> "notification:hub_entry:view"
-  NotificationHubEntryUpdate -> "notification:hub_entry:update"
-  NotificationSubscriptionView -> "notification:subscription:view"
-  NotificationSubscriptionManage -> "notification:subscription:manage"
-  NotificationDeliveryMethodView -> "notification:delivery_method:view"
-  NotificationDeliveryMethodManage -> "notification:delivery_method:manage"
+  NotificationHubEntryView -> "notification_hub_entry:view"
+  NotificationHubEntryUpdate -> "notification_hub_entry:update"
+  NotificationSubscriptionView -> "notification_subscription:view"
+  NotificationSubscriptionManage -> "notification_subscription:manage"
+  NotificationDeliveryMethodView -> "notification_delivery_method:view"
+  NotificationDeliveryMethodManage -> "notification_delivery_method:manage"
 
 rolePermissionFromText :: Text -> Maybe RolePermission
 rolePermissionFromText = \case
@@ -209,6 +209,12 @@ rolePermissionFromText = \case
   "org:create_project" -> Just OrgProjectCreate
   "team:view" -> Just TeamView
   "team:manage" -> Just TeamManage
+  "notification_hub_entry:view" -> Just NotificationHubEntryView
+  "notification_hub_entry:update" -> Just NotificationHubEntryUpdate
+  "notification_subscription:view" -> Just NotificationSubscriptionView
+  "notification_subscription:manage" -> Just NotificationSubscriptionManage
+  "notification_delivery_method:view" -> Just NotificationDeliveryMethodView
+  "notification_delivery_method:manage" -> Just NotificationDeliveryMethodManage
   _ -> Nothing
 
 instance Hasql.EncodeValue RolePermission where
