@@ -14,6 +14,7 @@ import Share.Codebase.Types qualified as Codebase
 import Share.IDs (TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
+import Share.Notifications.Impl qualified as Notifications
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
@@ -95,6 +96,7 @@ userServer session handle =
         :<|> Projects.projectServer session handle
         :<|> Branches.listBranchesByUserEndpoint session handle
         :<|> Contributions.listContributionsByUserEndpoint session handle
+        :<|> Notifications.server handle
     )
   where
     mayCallerId = sessionUserId <$> session

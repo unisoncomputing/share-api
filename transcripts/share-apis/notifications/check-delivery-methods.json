@@ -1,0 +1,25 @@
+{
+  "body": {
+    "deliveryMethods": [
+      {
+        "config": {
+          "email": "me@example.com",
+          "id": "NE-<UUID>"
+        },
+        "kind": "email"
+      },
+      {
+        "config": {
+          "id": "NW-<UUID>",
+          "url": "https://example.com/webhook"
+        },
+        "kind": "webhook"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

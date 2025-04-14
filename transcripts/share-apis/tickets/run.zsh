@@ -7,7 +7,7 @@ source "../../transcript_helpers.sh"
 # Creating Tickets
 
 ## Create a ticket
-fetch "$transcript_user" POST ticket-create '/users/test/projects/publictestproject/tickets' '{
+fetch "$transcripts_user" POST ticket-create '/users/test/projects/publictestproject/tickets' '{
     "title": "My Ticket",
     "description": "My description"
 }'
@@ -21,13 +21,13 @@ fetch "$unauthorized_user" POST ticket-create-unauthorized '/users/test/projects
 # Fetching Tickets
 
 ## List tickets by project
-fetch "$transcript_user" GET ticket-list '/users/test/projects/publictestproject/tickets'
+fetch "$transcripts_user" GET ticket-list '/users/test/projects/publictestproject/tickets'
 
 ## List tickets by project, author filter
-fetch "$transcript_user" GET ticket-list-author-filter '/users/test/projects/publictestproject/tickets?author=@test'
+fetch "$transcripts_user" GET ticket-list-author-filter '/users/test/projects/publictestproject/tickets?author=@test'
 
 ## List tickets by project, status filter
-fetch "$transcript_user" GET ticket-list-status-filter '/users/test/projects/publictestproject/tickets?status=open'
+fetch "$transcripts_user" GET ticket-list-status-filter '/users/test/projects/publictestproject/tickets?status=open'
 
 fetch "$test_user" PATCH ticket-update '/users/test/projects/publictestproject/tickets/1' '{
     "title": "Updated Title",
@@ -35,10 +35,10 @@ fetch "$test_user" PATCH ticket-update '/users/test/projects/publictestproject/t
     "status": "closed"
 }'
 
-fetch "$transcript_user" GET ticket-get '/users/test/projects/publictestproject/tickets/1'
+fetch "$transcripts_user" GET ticket-get '/users/test/projects/publictestproject/tickets/1'
 
 
-fetch "$transcript_user" POST ticket-comment-create '/users/test/projects/publictestproject/tickets/1/timeline/comments' '{
+fetch "$transcripts_user" POST ticket-comment-create '/users/test/projects/publictestproject/tickets/1/timeline/comments' '{
     "content": "This is a new comment"
 }'
 
@@ -54,4 +54,4 @@ fetch "$test_user" PATCH ticket-comment-update-success '/users/test/projects/pub
 
 fetch "$test_user" DELETE ticket-comment-delete '/users/test/projects/publictestproject/tickets/1/timeline/comments/CMT-d9164a6f-706b-402d-a2b0-b55a7c19a4f5'
 
-fetch "$transcript_user" GET ticket-timeline-get '/users/test/projects/publictestproject/tickets/1/timeline'
+fetch "$transcripts_user" GET ticket-timeline-get '/users/test/projects/publictestproject/tickets/1/timeline'

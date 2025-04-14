@@ -49,6 +49,20 @@ user_id_from_handle () {
   pg_sql "SELECT 'U-' || id FROM users WHERE handle = '${handle}';"
 }
 
+project_id_from_handle_and_slug () {
+  if [ -z "$1" ]; then
+    echo "project_id_from_handle_and_slug requires a handle" >&2
+    exit 1
+  fi
+  if [ -z "$2" ]; then
+    echo "project_id_from_handle_and_slug requires a slug" >&2
+    exit 1
+  fi
+  handle="$1"
+  slug="$2"
+  pg_sql "SELECT 'P-' || p.id FROM projects p JOIN users u ON p.owner_user_id = u.id WHERE u.handle = '${handle}' AND p.slug = '${slug}';"
+}
+
 # Creates a user and returns the user id
 create_user () {
   handle="$1"
@@ -63,9 +77,9 @@ pg_reset_fixtures
 
 echo "Getting access token for transcript setup"
 
-transcript_user="$(user_id_from_handle 'transcripts')"
-export transcript_user
-curl -s --cookie-jar "$(cookie_jar_for_user_id "$transcript_user")" http://localhost:5424/local/user/transcripts/login > /dev/null
+transcripts_user="$(user_id_from_handle 'transcripts')"
+export transcripts_user
+curl -s --cookie-jar "$(cookie_jar_for_user_id "$transcripts_user")" http://localhost:5424/local/user/transcripts/login > /dev/null
 
 test_user="$(user_id_from_handle 'test')"
 export test_user
@@ -139,6 +153,25 @@ fetch_data() {
             curl --request "$method" -L -s --cookie "$cookie_jar" -H "Accept: application/json" -H "Content-Type: application/json" --data-raw "$data" -w '%{stderr} {"status_code":%{http_code}}' "$url"
             ;;
     esac
+}
+
+fetch_data_jq() {
+    if [ "$#" -lt 5 ]; then
+        echo "fetch requires at least 5 arguments: user_id, method, testname, api_path, jq_pattern, [data]" >&2
+        exit 1
+    fi
+    if [ -z "$1" ]; then
+        echo "fetch requires a user id" >&2
+        exit 1
+    fi
+    cookie_jar="$1"
+    method="$2"
+    testname="$3"
+    api_path="$4"
+    jq_pattern="$5"
+    data="$6"
+    fetch_data "$cookie_jar" "$method" "$testname" "$api_path" "$data" 2> /dev/null | \
+      jq --sort-keys -r "$jq_pattern" 
 }
 
 # Credentials setup 
