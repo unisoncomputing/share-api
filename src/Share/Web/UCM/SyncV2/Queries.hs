@@ -33,12 +33,12 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
         JOIN causals c ON tch.hash = c.hash
     ), dependency_hashes(hash) AS (
       SELECT DISTINCT deps.hash
-      FROM dependencies_of_causals((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
+      FROM dependencies_of_causals_without_ancestors((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
     ), do_causals AS (
       INSERT INTO except_causals(causal_id)
       SELECT DISTINCT causal.id
-      FROM the_causal_hashes tch
-        JOIN causals causal ON tch.hash = causal.hash
+      FROM dependency_hashes dh
+        JOIN causals causal ON dh.hash = causal.hash
       ON CONFLICT DO NOTHING
     ), do_namespaces AS (
       INSERT INTO except_namespaces(branch_hash_ids)
