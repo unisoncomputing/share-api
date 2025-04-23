@@ -7,7 +7,7 @@ import Share.BackgroundJobs.Diffs.Queries qualified as DQ
 import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background, withTag)
 import Share.BackgroundJobs.Workers (newWorker)
-import Share.Branch (Branch (..))
+import Share.Branch (branchCausals_)
 import Share.Codebase qualified as Codebase
 import Share.Contribution (Contribution (..))
 import Share.Env qualified as Env
@@ -17,11 +17,9 @@ import Share.Metrics qualified as Metrics
 import Share.NamespaceDiffs (NamespaceDiffError (MissingEntityError))
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
-import Share.Postgres.IDs (CausalId)
 import Share.Postgres.Notifications qualified as Notif
 import Share.Postgres.Queries qualified as Q
 import Share.Prelude
-import Share.Project (Project)
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..), ErrorID (..))
@@ -60,48 +58,45 @@ processDiffs authZReceipt makeRuntime = do
               Nothing -> pure Nothing
               Just contributionId -> do
                 startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
-                result <- PG.catchTransaction (diffContribution authZReceipt makeRuntime contributionId)
+                result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId)
                 pure (Just (contributionId, startTime, result))
-        case result of
-          Nothing -> pure ()
-          Just (contributionId, startTime, result) -> do
-            withTag "contribution-id" (IDs.toText contributionId) do
-              case result of
-                Left err -> reportError err
-                Right () -> do
+        whenJust result \(contributionId, startTime, result) -> do
+          withTag "contribution-id" (IDs.toText contributionId) do
+            case result of
+              Left err -> reportError err
+              Right didWork -> do
+                when didWork do
                   liftIO (Metrics.recordContributionDiffDuration startTime)
                   Logging.textLog "Computed contribution diff"
                     & Logging.withSeverity Logging.Info
                     & Logging.logMsg
-            loop
+          loop
   loop
 
-diffContribution ::
+-- Check whether a causal diff has already been computed, and if it hasn't, compute and store it. Otherwise, do nothing.
+maybeComputeAndStoreCausalDiff ::
   AuthZ.AuthZReceipt ->
   (Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)) ->
   ContributionId ->
-  PG.Transaction NamespaceDiffError ()
-diffContribution authZReceipt makeRuntime contributionId = do
-  (bestCommonAncestorCausalId, project, newBranch, oldBranch) <- getContributionInfo
-  let Branch {causal = oldBranchCausalId} = oldBranch
-  let Branch {causal = newBranchCausalId} = newBranch
+  PG.Transaction NamespaceDiffError Bool
+maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId = do
+  Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <-
+    ContributionsQ.contributionById contributionId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+  project <- Q.projectById projectId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "project:missing") "Project not found")
+  newBranch <- Q.branchById newBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Source branch not found")
+  oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Target branch not found")
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-  oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
-  newRuntime <- PG.transactionUnsafeIO (makeRuntime newCodebase)
-  _ <-
-    Diffs.diffCausals
-      authZReceipt
-      (oldCodebase, oldRuntime, oldBranchCausalId)
-      (newCodebase, newRuntime, newBranchCausalId)
-      bestCommonAncestorCausalId
-  pure ()
-  where
-    getContributionInfo :: PG.Transaction NamespaceDiffError (Maybe CausalId, Project, Branch CausalId, Branch CausalId)
-    getContributionInfo = do
-      Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <-
-        ContributionsQ.contributionById contributionId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-      project <- Q.projectById projectId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "project:missing") "Project not found")
-      newBranch <- Q.branchById newBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Source branch not found")
-      oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Target branch not found")
-      pure (bestCommonAncestorCausalId, project, newBranch, oldBranch)
+  let oldCausal = oldBranch ^. branchCausals_
+  let newCausal = newBranch ^. branchCausals_
+  ContributionsQ.existsPrecomputedNamespaceDiff (oldCodebase, oldCausal) (newCodebase, newCausal) >>= \case
+    True -> pure False
+    False -> do
+      oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
+      newRuntime <- PG.transactionUnsafeIO (makeRuntime newCodebase)
+      Diffs.computeAndStoreCausalDiff
+        authZReceipt
+        (oldCodebase, oldRuntime, oldCausal)
+        (newCodebase, newRuntime, newCausal)
+        bestCommonAncestorCausalId
+      pure True

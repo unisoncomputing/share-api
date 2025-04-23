@@ -55,7 +55,7 @@ instance (Hasql.DecodeValue causal) => Hasql.DecodeRow (Branch causal) where
     creatorId <- PG.decodeField
     pure $ Branch {..}
 
-branchCausals_ :: Traversal (Branch causal) (Branch causal') causal causal'
+branchCausals_ :: Lens (Branch causal) (Branch causal') causal causal'
 branchCausals_ f Branch {..} = (\causal -> Branch {causal, ..}) <$> f causal
 
 branchCodebaseUser :: Branch causal -> UserId
