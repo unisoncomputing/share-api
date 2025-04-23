@@ -22,10 +22,12 @@ where
 import Control.Monad.Except
 import Control.Monad.Trans (MonadTrans (..))
 import Crypto.JWT (JWTError)
-import Data.Aeson (ToJSON (toJSON))
+import Data.Aeson (ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Data.Function ((&))
+import Data.Functor ((<&>))
 import Data.Maybe (fromMaybe)
+import Data.Map qualified as Map
 import Data.Text (Text)
 import Database.Redis qualified as Redis
 import Servant
@@ -133,13 +135,14 @@ loginEndpoint ::
   IdentityProviderConfig ->
   ServiceProviderConfig ->
   Maybe URIParam ->
+  Maybe Text ->
   m
     ( Headers
         '[Header "Set-Cookie" SetCookie, Header "Location" String]
         NoContent
     )
-loginEndpoint idpConfig spConfig returnToURI = do
-  loginEndpointWithData idpConfig spConfig (Nothing :: Maybe Aeson.Value) returnToURI
+loginEndpoint idpConfig spConfig returnToURI preferredHandle = do
+  loginEndpointWithData idpConfig spConfig (preferredHandle <&> \handle -> toJSON $ Map.singleton ("handle" :: Text) handle) returnToURI
 
 -- | Log in the user and set a session cookie, propagating a value to the session callback.
 loginEndpointWithData ::
