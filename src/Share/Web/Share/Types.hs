@@ -143,7 +143,8 @@ data UserAccountInfo = UserAccountInfo
     primaryEmail :: Text,
     -- List of tours which the user has completed.
     completedTours :: [TourId],
-    organizationMemberships :: [UserHandle]
+    organizationMemberships :: [UserHandle],
+    isSuperadmin :: Bool
   }
   deriving (Show)
 
@@ -156,7 +157,8 @@ instance ToJSON UserAccountInfo where
         "primaryEmail" .= primaryEmail,
         "userId" .= userId,
         "completedTours" .= completedTours,
-        "organizationMemberships" .= organizationMemberships
+        "organizationMemberships" .= organizationMemberships,
+        "isSuperadmin" .= isSuperadmin
       ]
 
 type PathSegment = Text

@@ -486,10 +486,11 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do
   User {user_name, avatar_url, user_email, handle, user_id} <- PGO.expectUserById sessionUserId
-  (completedTours, organizationMemberships) <- PG.runTransaction $ do
+  (completedTours, organizationMemberships, isSuperadmin) <- PG.runTransaction $ do
     tours <- Q.getCompletedToursForUser user_id
     memberships <- Q.organizationMemberships user_id
-    pure (tours, memberships)
+    isSuperadmin <- AuthZQ.isSuperadmin user_id
+    pure (tours, memberships, isSuperadmin)
   pure $
     UserAccountInfo
       { handle = handle,
@@ -498,7 +499,8 @@ accountInfoEndpoint Session {sessionUserId} = do
         userId = user_id,
         primaryEmail = user_email,
         completedTours,
-        organizationMemberships
+        organizationMemberships,
+        isSuperadmin
       }
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent
