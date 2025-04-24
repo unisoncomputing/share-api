@@ -8,6 +8,7 @@ module Share.Web.Share.Projects.Impl where
 import Control.Lens
 import Control.Monad.Except
 import Data.ByteString.Lazy qualified as BL
+import Data.ByteString.Lazy qualified as ByteString.Lazy
 import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -16,12 +17,14 @@ import Share.Branch (defaultBranchShorthand)
 import Share.Branch qualified as Branch
 import Share.Codebase (CodebaseEnv)
 import Share.Codebase qualified as Codebase
+import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
@@ -32,6 +35,7 @@ import Share.Project (Project (..))
 import Share.Release qualified as Release
 import Share.User (User (..))
 import Share.Utils.API ((:++) (..))
+import Share.Utils.Aeson (PreEncoded (..))
 import Share.Utils.Caching (Cached)
 import Share.Utils.Caching qualified as Caching
 import Share.Utils.Logging qualified as Logging
@@ -43,7 +47,7 @@ import Share.Web.Errors
 import Share.Web.Share.Branches.Impl (branchesServer, getProjectBranchReadmeEndpoint)
 import Share.Web.Share.Contributions.Impl (contributionsByProjectServer)
 import Share.Web.Share.Diffs.Impl qualified as Diffs
-import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
+import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareNamespaceDiffStatus (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
 import Share.Web.Share.Projects.API qualified as API
 import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.Impl (getProjectReleaseReadmeEndpoint, releasesServer)
@@ -161,21 +165,30 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
 
   let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.causalIdCacheKey oldCausalId, Caching.causalIdCacheKey newCausalId]
   Caching.cachedResponse authZReceipt "project-diff-namespaces" cacheKeys do
-    (oldCausalHash, newCausalHash, maybeLcaCausalId) <-
+    ((oldCausalHash, newCausalHash), maybeLcaCausalId) <-
       PG.runTransaction do
-        (oldCausalHash, newCausalHash) <- CausalQ.expectCausalHashesByIdsOf each (oldCausalId, newCausalId)
-        maybeLcaCausalId <- CausalQ.bestCommonAncestor oldCausalId newCausalId
-        pure (oldCausalHash, newCausalHash, maybeLcaCausalId)
-    oldRuntime <- Codebase.codebaseRuntime oldCodebase
-    newRuntime <- Codebase.codebaseRuntime newCodebase
-    namespaceDiff <-
-      (either respondError pure =<<) do
-        PG.tryRunTransaction do
-          Diffs.diffCausals
-            authZReceipt
-            (oldCodebase, oldRuntime, oldCausalId)
-            (newCodebase, newRuntime, newCausalId)
-            maybeLcaCausalId
+        PG.pipelined do
+          (,)
+            <$> CausalQ.expectCausalHashesByIdsOf each (oldCausalId, newCausalId)
+            <*> CausalQ.bestCommonAncestor oldCausalId newCausalId
+    badUnliftCodebaseRuntime <- Codebase.badAskUnliftCodebaseRuntime
+    unisonRuntime <- asks Env.sandboxedRuntime
+    let makeRuntime :: Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)
+        makeRuntime codebase = do
+          runtime <- Codebase.codebaseRuntime' unisonRuntime codebase
+          pure (badUnliftCodebaseRuntime runtime)
+    diffOrError <-
+      PG.tryRunTransaction do
+        ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
+          Just diff -> pure (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
+          Nothing -> do
+            oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
+            newRuntime <- PG.transactionUnsafeIO (makeRuntime newCodebase)
+            Diffs.computeAndStoreCausalDiff
+              authZReceipt
+              (oldCodebase, oldRuntime, oldCausalId)
+              (newCodebase, newRuntime, newCausalId)
+              maybeLcaCausalId
     pure
       ShareNamespaceDiffResponse
         { project = projectShortHand,
@@ -183,7 +196,10 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
           oldRefHash = Just $ PrefixedHash oldCausalHash,
           newRef = newShortHand,
           newRefHash = Just $ PrefixedHash newCausalHash,
-          diff = namespaceDiff
+          diff =
+            case diffOrError of
+              Right diff -> ShareNamespaceDiffStatus'Ok diff
+              Left err -> ShareNamespaceDiffStatus'Error err
         }
   where
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}

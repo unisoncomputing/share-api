@@ -74,6 +74,7 @@ processDiffs authZReceipt makeRuntime = do
   loop
 
 -- Check whether a causal diff has already been computed, and if it hasn't, compute and store it. Otherwise, do nothing.
+-- Returns whether or not we did any work.
 maybeComputeAndStoreCausalDiff ::
   AuthZ.AuthZReceipt ->
   (Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)) ->
@@ -94,9 +95,10 @@ maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId = do
     False -> do
       oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
       newRuntime <- PG.transactionUnsafeIO (makeRuntime newCodebase)
-      Diffs.computeAndStoreCausalDiff
-        authZReceipt
-        (oldCodebase, oldRuntime, oldCausal)
-        (newCodebase, newRuntime, newCausal)
-        bestCommonAncestorCausalId
+      _ <-
+        Diffs.computeAndStoreCausalDiff
+          authZReceipt
+          (oldCodebase, oldRuntime, oldCausal)
+          (newCodebase, newRuntime, newCausal)
+          bestCommonAncestorCausalId
       pure True

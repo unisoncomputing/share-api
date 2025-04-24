@@ -1,6 +1,5 @@
 module Share.Web.Share.Diffs.Impl
-  ( diffCausals,
-    computeAndStoreCausalDiff,
+  ( computeAndStoreCausalDiff,
     diffTerms,
     diffTypes,
   )
@@ -21,7 +20,6 @@ import Share.NamespaceDiffs
   ( DefinitionDiff (..),
     DefinitionDiffKind (..),
     DiffAtPath (..),
-    GNamespaceAndLibdepsDiff,
     GNamespaceTreeDiff,
     NamespaceAndLibdepsDiff,
     NamespaceDiffError (..),
@@ -49,8 +47,6 @@ import Unison.Merge qualified as Merge
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.PrettyPrintEnvDecl qualified as PPED
-import Unison.Reference (TypeReference)
-import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
 import Unison.Server.Backend.DefinitionDiff qualified as DefinitionDiff
 import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
@@ -60,8 +56,8 @@ import Unison.ShortHash (ShortHash)
 import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty (Width)
 
--- | Diff two causals
-diffCausals ::
+-- | Diff two causals and store the diff in the database.
+computeAndStoreCausalDiff ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
@@ -79,109 +75,6 @@ diffCausals ::
             BranchHash
         )
     )
-diffCausals !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = do
-  -- Ensure name lookups for the things we're diffing.
-  let getBranch :: CausalId -> PG.Transaction NamespaceDiffError (BranchHashId, NameLookupReceipt)
-      getBranch causalId = do
-        branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
-        nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
-        pure (branchHashId, nameLookupReceipt)
-  (oldBranchHashId, oldBranchNLReceipt) <- getBranch oldCausalId
-  (newBranchHashId, newBranchNLReceipt) <- getBranch newCausalId
-  ContributionQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
-    Just diff -> pure $ PreEncoded $ TL.encodeUtf8 $ TL.fromStrict diff
-    Nothing -> do
-      (maybeLcaBranchHashId, maybeLcaBranchNLReceipt) <-
-        case maybeLcaCausalId of
-          Just lcaCausalId -> do
-            (lcaBranchHashId, lcaBranchNLReceipt) <- getBranch lcaCausalId
-            pure (Just lcaBranchHashId, Just lcaBranchNLReceipt)
-          Nothing -> pure (Nothing, Nothing)
-      -- Do the initial 3-way namespace diff
-      diff0 ::
-        GNamespaceAndLibdepsDiff
-          NameSegment
-          Referent
-          TypeReference
-          Name
-          Name
-          Name
-          Name
-          BranchHashId <-
-        NamespaceDiffs.computeThreeWayNamespaceDiff
-          TwoWay {alice = oldCodebase, bob = newCodebase}
-          TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
-          TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
-      -- Resolve the term referents to tag + hash
-      diff1 ::
-        GNamespaceAndLibdepsDiff
-          NameSegment
-          (TermTag, ShortHash)
-          TypeReference
-          Name
-          Name
-          Name
-          Name
-          BranchHashId <-
-        diff0
-          & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
-            %%~ \refs -> do
-              termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
-              pure $ zip termTags (refs <&> Referent.toShortHash)
-      -- Resolve the type references to tag + hash
-      diff2 ::
-        GNamespaceAndLibdepsDiff
-          NameSegment
-          (TermTag, ShortHash)
-          (TypeTag, ShortHash)
-          Name
-          Name
-          Name
-          Name
-          BranchHashId <-
-        diff1
-          & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
-            %%~ \refs -> do
-              typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-              pure $ zip typeTags (refs <&> V2Reference.toShortHash)
-      -- Resolve libdeps branch hash ids to branch hashes
-      diff3 ::
-        GNamespaceAndLibdepsDiff
-          NameSegment
-          (TermTag, ShortHash)
-          (TypeTag, ShortHash)
-          Name
-          Name
-          Name
-          Name
-          BranchHash <-
-        HashQ.expectNamespaceHashesByNamespaceHashIdsOf
-          (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . traversed)
-          diff2
-      -- Resolve the actual term/type definitions. Use the LCA as the "old" (because that's what we're rendering the
-      -- diff relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we
-      -- won't have anything classified as an "update" in this case so it doesn't really matter).
-      diff4 <-
-        diff3
-          & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
-            %%~ computeUpdatedDefinitionDiffs
-              authZReceipt
-              (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
-              (newCodebase, newRuntime, newBranchHashId)
-      let encoded = Aeson.encode (RenderedNamespaceAndLibdepsDiff diff4)
-      ContributionQ.savePrecomputedNamespaceDiff
-        (oldCodebase, oldCausalId)
-        (newCodebase, newCausalId)
-        (TL.toStrict $ TL.decodeUtf8 encoded)
-      pure $ PreEncoded encoded
-
--- | Diff two causals and store the diff in the database.
-computeAndStoreCausalDiff ::
-  AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
-  Maybe CausalId ->
-  PG.Transaction NamespaceDiffError ()
 computeAndStoreCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = do
   -- Ensure name lookups for the things we're diffing.
   let getBranch :: CausalId -> PG.Transaction NamespaceDiffError (BranchHashId, NameLookupReceipt)
@@ -237,6 +130,7 @@ computeAndStoreCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (
     (oldCodebase, oldCausalId)
     (newCodebase, newCausalId)
     (TL.toStrict $ TL.decodeUtf8 encoded)
+  pure (PreEncoded encoded)
 
 computeUpdatedDefinitionDiffs ::
   forall a b.

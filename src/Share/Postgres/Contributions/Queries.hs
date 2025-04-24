@@ -532,9 +532,10 @@ existsPrecomputedNamespaceDiff
       |]
 
 getPrecomputedNamespaceDiff ::
+  (PG.QueryA m) =>
   (CodebaseEnv, CausalId) ->
   (CodebaseEnv, CausalId) ->
-  PG.Transaction e (Maybe Text)
+  m (Maybe Text)
 getPrecomputedNamespaceDiff
   (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId)
   (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) = do

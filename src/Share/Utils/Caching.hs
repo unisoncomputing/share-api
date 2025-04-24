@@ -6,6 +6,7 @@
 
 module Share.Utils.Caching
   ( cachedResponse,
+    conditionallyCachedResponse,
     causalIdCacheKey,
     branchIdCacheKey,
     Cached,
@@ -54,7 +55,22 @@ cachedResponse ::
   -- | How to generate the response if it's not in the cache.
   WebApp a ->
   WebApp (Cached ct a)
-cachedResponse authzReceipt endpointName cacheParams action = do
+cachedResponse authzReceipt endpointName cacheParams action =
+  conditionallyCachedResponse authzReceipt endpointName cacheParams ((,True) <$> action)
+
+-- | Like 'cachedResponse', but only cache (True, x) values.
+conditionallyCachedResponse ::
+  forall ct a.
+  (Servant.MimeRender ct a) =>
+  AuthZ.AuthZReceipt ->
+  -- | The name of the endpoint we're caching. Must be unique.
+  Text ->
+  -- | Cache Keys: All parameters which affect the response
+  [Text] ->
+  -- | How to generate the response if it's not in the cache. True means cache, false means don't cache.
+  WebApp (a, Bool) ->
+  WebApp (Cached ct a)
+conditionallyCachedResponse authzReceipt endpointName cacheParams action = do
   requestIsCacheable <- shouldUseCaching
   let mayCachingToken = AuthZ.getCacheability authzReceipt
   let shouldUseCaching = requestIsCacheable && isJust mayCachingToken
@@ -65,14 +81,13 @@ cachedResponse authzReceipt endpointName cacheParams action = do
   case mayCachedResponse of
     Just cachedResponse -> pure cachedResponse
     Nothing -> do
-      a <- action
+      (a, cache) <- action
       let cachedResponse :: Cached ct a
           cachedResponse = Cached . BL.toStrict $ Servant.mimeRender (Proxy @ct) a
-      -- Only actually cache the response if it's valid to do so.
-      case mayCachingToken of
-        Just ct | shouldUseCaching -> do
-          cacheResponse ct endpointName cacheParams $ cachedResponse
-        _ -> pure ()
+      when (shouldUseCaching && cache) do
+        -- Only actually cache the response if it's valid to do so.
+        whenJust mayCachingToken \ct ->
+          cacheResponse ct endpointName cacheParams cachedResponse
       pure cachedResponse
 
 -- | Cached responses expire if not accessed in 7 days.

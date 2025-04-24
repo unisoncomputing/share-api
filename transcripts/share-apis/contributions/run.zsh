@@ -118,6 +118,17 @@ transcript_ucm transcript merge-contribution-branches.md
 # Fetch the contribution to see that it's been marked as merged.
 fetch "$transcript_user" GET merged-contribution '/users/transcripts/projects/bca-updates/contributions/1'
 
+# Hacky, but since namespace diffs are computed asynchronously, we just block here until there are 5 (the number this
+# test creates). Don't wait more than 10 seconds, just in case.
+expectedNumberOfNamespaceDiffs=5
+for i in {1..5}; do
+  if [[ $(pg_sql "select count(*) from namespace_diffs;") -lt $expectedNumberOfNamespaceDiffs ]]; then
+    sleep 1
+  else
+    break
+  fi
+done
+
 # BCA of contribution diff should still be frozen at it's pre-merge hash. The bca and source hash should be different (or else we'd see no diff!)
 fetch "$transcript_user" GET merged-contribution-diff '/users/transcripts/projects/bca-updates/contributions/1/diff'
 

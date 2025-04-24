@@ -14,7 +14,9 @@ module Share.Web.Share.Contributions.Impl
 where
 
 import Control.Lens hiding ((.=))
+import Data.ByteString.Lazy qualified as ByteString.Lazy
 import Data.Set qualified as Set
+import Data.Text.Encoding qualified as Text
 import Servant
 import Servant.Server.Generic (AsServerT)
 import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
@@ -38,6 +40,7 @@ import Share.Prelude
 import Share.Project
 import Share.User qualified as User
 import Share.Utils.API
+import Share.Utils.Aeson (PreEncoded (..))
 import Share.Utils.Caching (Cached)
 import Share.Utils.Caching qualified as Caching
 import Share.Web.App
@@ -52,7 +55,7 @@ import Share.Web.Share.Contributions.API qualified as API
 import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Impl qualified as Diffs
-import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
+import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareNamespaceDiffStatus (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
 import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 import Unison.Name (Name)
 import Unison.Server.Types
@@ -261,7 +264,7 @@ contributionDiffEndpoint ::
   WebApp (Cached JSON ShareNamespaceDiffResponse)
 contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber = do
   ( project@Project {projectId},
-    Contribution {contributionId, bestCommonAncestorCausalId},
+    Contribution {contributionId},
     oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
     newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
     ) <- PG.runTransactionOrRespondError $ do
@@ -279,30 +282,28 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
     lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
 
   let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldBranchCausalId]
-  Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
-    oldRuntime <- Codebase.codebaseRuntime oldCodebase
-    newRuntime <- Codebase.codebaseRuntime newCodebase
-    namespaceDiff <-
-      (either respondError pure =<<) do
-        PG.tryRunTransaction do
-          Diffs.diffCausals
-            authZReceipt
-            (oldCodebase, oldRuntime, oldBranchCausalId)
-            (newCodebase, newRuntime, newBranchCausalId)
-            bestCommonAncestorCausalId
-    (newBranchCausalHash, oldBranchCausalHash) <- PG.runTransaction do
-      newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
-      oldBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId
-      pure (newBranchCausalHash, oldBranchCausalHash)
-    pure $
-      ShareNamespaceDiffResponse
-        { project = projectShorthand,
-          newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-          newRefHash = Just $ PrefixedHash newBranchCausalHash,
-          oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
-          oldRefHash = Just $ PrefixedHash oldBranchCausalHash,
-          diff = namespaceDiff
-        }
+  Caching.conditionallyCachedResponse authZReceipt "contribution-diff" cacheKeys do
+    (oldBranchCausalHash, newBranchCausalHash, maybeNamespaceDiff) <-
+      PG.runTransaction do
+        PG.pipelined do
+          (,,)
+            <$> CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId
+            <*> CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
+            <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
+    let response =
+          ShareNamespaceDiffResponse
+            { project = projectShorthand,
+              newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
+              newRefHash = Just $ PrefixedHash newBranchCausalHash,
+              oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
+              oldRefHash = Just $ PrefixedHash oldBranchCausalHash,
+              diff =
+                case maybeNamespaceDiff of
+                  Just diff -> ShareNamespaceDiffStatus'Ok (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
+                  Nothing -> ShareNamespaceDiffStatus'StillComputing
+            }
+    let shouldCache = isJust maybeNamespaceDiff
+    pure (response, shouldCache)
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
 
