@@ -5,9 +5,9 @@ set -e
 source "../../transcript_helpers.sh"
 
 # Should find all branches in the public project
-fetch "$transcript_user" GET user-profile '/users/transcripts'
+fetch "$transcripts_user" GET user-profile '/users/transcripts'
 
-fetch "$transcript_user" PATCH user-profile-update '/users/transcripts' '
+fetch "$transcripts_user" PATCH user-profile-update '/users/transcripts' '
 {
   "name": "Updated Transcripts",
   "avatarUrl": "http://updated.com",

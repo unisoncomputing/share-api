@@ -1,0 +1,17 @@
+{
+  "body": {
+    "subscription": {
+      "filter": null,
+      "id": "NS-<UUID>",
+      "scope": "U-<UUID>",
+      "topic": [
+        "project:contribution:created"
+      ]
+    }
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

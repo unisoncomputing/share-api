@@ -39,6 +39,12 @@ module Share.IDs
     ResourceId (..),
     OrgId (..),
     TeamId (..),
+    NotificationHubEntryId (..),
+    NotificationEventId (..),
+    NotificationEmailDeliveryMethodId (..),
+    NotificationWebhookId (..),
+    NotificationSubscriptionId (..),
+    Email (..),
     projectBranchShortHandToBranchShortHand,
     JTI (..),
     CategoryName (..),
@@ -712,3 +718,32 @@ newtype TeamId = TeamId UUID
   deriving stock (Eq, Ord)
   deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
   deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "TEAM-" UUID)
+
+newtype NotificationHubEntryId = NotificationHubEntryId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NOT-" UUID)
+
+newtype NotificationEventId = NotificationEventId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "EVENT-" UUID)
+
+newtype NotificationEmailDeliveryMethodId = NotificationEmailDeliveryMethodId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NE-" UUID)
+
+newtype NotificationWebhookId = NotificationWebhookId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NW-" UUID)
+
+newtype NotificationSubscriptionId = NotificationSubscriptionId UUID
+  deriving stock (Eq, Ord)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue) via UUID
+  deriving (Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, IsID) via (PrefixedID "NS-" UUID)
+
+newtype Email = Email Text
+  deriving stock (Eq, Ord, Show)
+  deriving (Hasql.EncodeValue, Hasql.DecodeValue, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via Text

@@ -79,16 +79,7 @@ userHasProjectPermission :: Maybe UserId -> ProjectId -> RolePermission -> PG.Tr
 userHasProjectPermission mayUserId projectId permission = do
   PG.queryExpect1Col
     [PG.sql|
-      SELECT
-        user_has_permission(#{mayUserId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
-        OR
-        EXISTS (
-          SELECT FROM roles r
-          WHERE r.ref = 'project_public_access'
-            AND #{permission} = ANY(r.permissions)
-            AND (SELECT NOT p.private FROM projects p WHERE p.id = #{projectId})
-        )
-
+      SELECT user_has_permission(#{mayUserId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
     |]
 
 userHasOrgPermission :: UserId -> OrgId -> RolePermission -> PG.Transaction e Bool
@@ -159,14 +150,8 @@ permissionsForProject mayUserId projectId = do
       (SELECT permission FROM
         user_resource_permissions urp
         JOIN projects p ON p.resource_id = urp.resource_id
-        WHERE urp.user_id = #{mayUserId}
+        WHERE (urp.user_id IS NULL OR urp.user_id = #{mayUserId})
               AND p.id = #{projectId}
-        )
-      UNION
-        (SELECT permission
-          FROM roles r, UNNEST(r.permissions) AS permission
-          WHERE r.ref = 'project_public_access'
-                AND (SELECT NOT p.private FROM projects p WHERE p.id = #{projectId})
         )
       |]
     <&> Set.fromList
@@ -178,7 +163,7 @@ permissionsForOrg mayUserId orgId = do
       SELECT permission
       FROM user_resource_permissions urp
       JOIN orgs org ON org.resource_id = urp.resource_id
-      WHERE urp.user_id = #{mayUserId}
+      WHERE (urp IS NULL OR urp.user_id = #{mayUserId})
             AND org.id = #{orgId}
       |]
     <&> Set.fromList

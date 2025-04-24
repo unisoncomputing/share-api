@@ -5,11 +5,11 @@
 module Share.User where
 
 import Data.Aeson
+import Hasql.Interpolate qualified as Hasql
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.URI
-import Hasql.Interpolate qualified as Hasql
 
 data UserVisibility = UserPrivate | UserPublic
   deriving (Show, Eq, Ord)

@@ -21,7 +21,13 @@
       "org:change_owner",
       "org:create_project",
       "team:view",
-      "team:manage"
+      "team:manage",
+      "notification_hub_entry:view",
+      "notification_hub_entry:update",
+      "notification_subscription:view",
+      "notification_subscription:manage",
+      "notification_delivery_method:view",
+      "notification_delivery_method:manage"
     ],
     "pronouns": null,
     "twitterHandle": null,

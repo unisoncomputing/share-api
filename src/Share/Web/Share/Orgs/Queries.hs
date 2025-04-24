@@ -11,6 +11,7 @@ module Share.Web.Share.Orgs.Queries
     removeOrgMembers,
     orgDisplayInfoOf,
     userDisplayInfoByOrgIdOf,
+    doesOrgHaveOwner,
   )
 where
 
@@ -178,3 +179,17 @@ removeOrgMembers orgId toRemove = do
           WHERE org_members.member_user_id = v.member_user_id
             AND org_members.org_id = #{orgId}
         |]
+
+doesOrgHaveOwner :: OrgId -> Transaction e Bool
+doesOrgHaveOwner orgId = do
+  queryExpect1Col
+    [sql|
+      SELECT EXISTS (
+        SELECT
+          FROM role_memberships rm
+          JOIN roles role ON rm.role_id = role.id
+          JOIN orgs org ON rm.resource_id = org.resource_id
+        WHERE org.id = #{orgId}
+          AND role.ref = 'org_owner'::role_ref
+      )
+    |]

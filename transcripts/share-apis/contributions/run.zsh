@@ -7,7 +7,7 @@ source "../../transcript_helpers.sh"
 # Creating Contributions
 
 ## Create a contribution
-fetch "$transcript_user" POST contribution-create-contribution '/users/test/projects/publictestproject/contributions' '{
+fetch "$transcripts_user" POST contribution-create-contribution '/users/test/projects/publictestproject/contributions' '{
     "title": "My contribution",
     "description": "My description",
     "status": "in_review",
@@ -46,16 +46,16 @@ fetch "$unauthorized_user" POST contribution-create-draft-unauthorized '/users/t
 # Fetching Contributions
 
 ## List contributions by project
-fetch "$transcript_user" GET contribution-list '/users/test/projects/publictestproject/contributions'
+fetch "$transcripts_user" GET contribution-list '/users/test/projects/publictestproject/contributions'
 
 ## List contributions by project, author filter
-fetch "$transcript_user" GET contribution-list-author-filter '/users/test/projects/publictestproject/contributions?author=@test'
+fetch "$transcripts_user" GET contribution-list-author-filter '/users/test/projects/publictestproject/contributions?author=@test'
 
 ## List contributions by project, status filter
-fetch "$transcript_user" GET contribution-list-status-filter '/users/test/projects/publictestproject/contributions?status=in_review'
+fetch "$transcripts_user" GET contribution-list-status-filter '/users/test/projects/publictestproject/contributions?status=in_review'
 
 ## List contributions by project, kind filter
-fetch "$transcript_user" GET contribution-list-kind-filter '/users/test/projects/publictestproject/contributions?kind=core'
+fetch "$transcripts_user" GET contribution-list-kind-filter '/users/test/projects/publictestproject/contributions?kind=core'
 
 fetch "$test_user" PATCH contribution-update '/users/test/projects/publictestproject/contributions/3' '{
     "title": "Updated Title",
@@ -65,10 +65,10 @@ fetch "$test_user" PATCH contribution-update '/users/test/projects/publictestpro
     "targetBranchRef": "main"
 }'
 
-fetch "$transcript_user" GET contribution-get '/users/test/projects/publictestproject/contributions/3'
+fetch "$transcripts_user" GET contribution-get '/users/test/projects/publictestproject/contributions/3'
 
 
-fetch "$transcript_user" POST contribution-comment-create '/users/test/projects/publictestproject/contributions/1/timeline/comments' '{
+fetch "$transcripts_user" POST contribution-comment-create '/users/test/projects/publictestproject/contributions/1/timeline/comments' '{
     "content": "This is a new comment"
 }'
 
@@ -84,7 +84,7 @@ fetch "$test_user" PATCH contribution-comment-update-success '/users/test/projec
 
 fetch "$test_user" DELETE contribution-comment-delete '/users/test/projects/publictestproject/contributions/1/timeline/comments/CMT-82c21bb5-6331-497f-b2e6-15414ebc63c4'
 
-fetch "$transcript_user" GET contribution-timeline-get '/users/test/projects/publictestproject/contributions/1/timeline'
+fetch "$transcripts_user" GET contribution-timeline-get '/users/test/projects/publictestproject/contributions/1/timeline'
 
 ################################################################################
 
@@ -94,7 +94,7 @@ fetch "$transcript_user" GET contribution-timeline-get '/users/test/projects/pub
 transcript_ucm transcript contribution-setup.md
 
 # Create a contribution for merging feature-one into main
-fetch "$transcript_user" POST create-feature-one-contribution '/users/transcripts/projects/bca-updates/contributions' '{
+fetch "$transcripts_user" POST create-feature-one-contribution '/users/transcripts/projects/bca-updates/contributions' '{
     "title": "Feature One",
     "description": "description",
     "status": "in_review",
@@ -103,7 +103,7 @@ fetch "$transcript_user" POST create-feature-one-contribution '/users/transcript
 }'
 
 # Create a contribution for merging feature-two into feature-one
-fetch "$transcript_user" POST create-feature-two-contribution '/users/transcripts/projects/bca-updates/contributions' '{
+fetch "$transcripts_user" POST create-feature-two-contribution '/users/transcripts/projects/bca-updates/contributions' '{
     "title": "Feature Two",
     "description": "description",
     "status": "in_review",
@@ -116,7 +116,7 @@ fetch "$transcript_user" POST create-feature-two-contribution '/users/transcript
 transcript_ucm transcript merge-contribution-branches.md
 
 # Fetch the contribution to see that it's been marked as merged.
-fetch "$transcript_user" GET merged-contribution '/users/transcripts/projects/bca-updates/contributions/1'
+fetch "$transcripts_user" GET merged-contribution '/users/transcripts/projects/bca-updates/contributions/1'
 
 # Hacky, but since namespace diffs are computed asynchronously, we just block here until there are 5 (the number this
 # test creates). Don't wait more than 10 seconds, just in case.
@@ -130,12 +130,12 @@ for i in {1..5}; do
 done
 
 # BCA of contribution diff should still be frozen at it's pre-merge hash. The bca and source hash should be different (or else we'd see no diff!)
-fetch "$transcript_user" GET merged-contribution-diff '/users/transcripts/projects/bca-updates/contributions/1/diff'
+fetch "$transcripts_user" GET merged-contribution-diff '/users/transcripts/projects/bca-updates/contributions/1/diff'
 
 # Fetch the contribution for feature-two which was based on feature-one, which was just merged.
 # It should now be marked as merging into main.
-fetch "$transcript_user" GET transitive-contribution '/users/transcripts/projects/bca-updates/contributions/2'
+fetch "$transcripts_user" GET transitive-contribution '/users/transcripts/projects/bca-updates/contributions/2'
 
 # BCA of transitive contribution should still be feature-one's hash, since that was merged into main, where we are now
 # merging into.
-fetch "$transcript_user" GET transitive-contribution-diff '/users/transcripts/projects/bca-updates/contributions/2/diff'
+fetch "$transcripts_user" GET transitive-contribution-diff '/users/transcripts/projects/bca-updates/contributions/2/diff'

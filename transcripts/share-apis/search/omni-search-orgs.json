@@ -1,0 +1,23 @@
+{
+  "body": [
+    {
+      "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+      "handle": "unison",
+      "name": "Unison Org",
+      "orgId": "ORG-<UUID>",
+      "tag": "Org",
+      "userId": "U-<UUID>"
+    },
+    {
+      "projectRef": "@unison/privateorgproject",
+      "summary": "Private Unison Project",
+      "tag": "Project",
+      "visibility": "private"
+    }
+  ],
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

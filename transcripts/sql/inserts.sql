@@ -83,7 +83,7 @@ VALUES (
 INSERT INTO role_memberships(subject_id, resource_id, role_id)
   SELECT (SELECT u.subject_id FROM users u WHERE u.handle = 'test'),
          (SELECT org.resource_id FROM orgs org JOIN users orgu ON org.user_id = orgu.id WHERE orgu.handle = 'unison'), 
-         (SELECT r.id FROM roles r WHERE r.ref = 'org_admin');
+         (SELECT r.id FROM roles r WHERE r.ref = 'org_owner');
 
 INSERT INTO tours (
   user_id,

@@ -14,7 +14,7 @@ import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
 import Share.Web.Authorization.Types (RolePermission)
-import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
 import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
@@ -105,6 +105,7 @@ data SearchResult
   = SearchResultUser UserDisplayInfo
   | -- | shorthand summary visibility
     SearchResultProject ProjectShortHand (Maybe Text) ProjectVisibility
+  | SearchResultOrg OrgDisplayInfo
   deriving (Show)
 
 instance ToJSON SearchResult where
@@ -116,6 +117,15 @@ instance ToJSON SearchResult where
           "avatarUrl" .= avatarUrl,
           "userId" .= userId,
           "tag" .= ("User" :: Text)
+        ]
+    SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl, userId}, orgId}) ->
+      Aeson.object
+        [ "handle" .= fromId @UserHandle @Text handle,
+          "name" .= name,
+          "avatarUrl" .= avatarUrl,
+          "userId" .= userId,
+          "orgId" .= orgId,
+          "tag" .= ("Org" :: Text)
         ]
     SearchResultProject shorthand summary visibility ->
       Aeson.object
@@ -133,7 +143,8 @@ data UserAccountInfo = UserAccountInfo
     primaryEmail :: Text,
     -- List of tours which the user has completed.
     completedTours :: [TourId],
-    organizationMemberships :: [UserHandle]
+    organizationMemberships :: [UserHandle],
+    isSuperadmin :: Bool
   }
   deriving (Show)
 
@@ -146,7 +157,8 @@ instance ToJSON UserAccountInfo where
         "primaryEmail" .= primaryEmail,
         "userId" .= userId,
         "completedTours" .= completedTours,
-        "organizationMemberships" .= organizationMemberships
+        "organizationMemberships" .= organizationMemberships,
+        "isSuperadmin" .= isSuperadmin
       ]
 
 type PathSegment = Text

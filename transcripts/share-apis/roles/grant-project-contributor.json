@@ -18,7 +18,7 @@
       },
       {
         "roles": [
-          "org_admin"
+          "org_owner"
         ],
         "subject": {
           "data": {

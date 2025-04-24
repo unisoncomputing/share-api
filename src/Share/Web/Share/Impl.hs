@@ -14,6 +14,7 @@ import Share.Codebase.Types qualified as Codebase
 import Share.IDs (TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
+import Share.Notifications.Impl qualified as Notifications
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
@@ -47,7 +48,7 @@ import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
-import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
@@ -95,6 +96,7 @@ userServer session handle =
         :<|> Projects.projectServer session handle
         :<|> Branches.listBranchesByUserEndpoint session handle
         :<|> Contributions.listContributionsByUserEndpoint session handle
+        :<|> Notifications.server handle
     )
   where
     mayCallerId = sessionUserId <$> session
@@ -368,8 +370,10 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
     pure (users, projects)
   let userResults =
         users
-          <&> \User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId} ->
-            SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
+          <&> \(User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId}, mayOrgId) ->
+            case mayOrgId of
+              Just orgId -> SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId}, orgId})
+              Nothing -> SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
   let projectResults =
         projects
           <&> \(Project {slug, summary, visibility}, ownerHandle) ->
@@ -482,10 +486,11 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do
   User {user_name, avatar_url, user_email, handle, user_id} <- PGO.expectUserById sessionUserId
-  (completedTours, organizationMemberships) <- PG.runTransaction $ do
+  (completedTours, organizationMemberships, isSuperadmin) <- PG.runTransaction $ do
     tours <- Q.getCompletedToursForUser user_id
     memberships <- Q.organizationMemberships user_id
-    pure (tours, memberships)
+    isSuperadmin <- AuthZQ.isSuperadmin user_id
+    pure (tours, memberships, isSuperadmin)
   pure $
     UserAccountInfo
       { handle = handle,
@@ -494,7 +499,8 @@ accountInfoEndpoint Session {sessionUserId} = do
         userId = user_id,
         primaryEmail = user_email,
         completedTours,
-        organizationMemberships
+        organizationMemberships,
+        isSuperadmin
       }
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent

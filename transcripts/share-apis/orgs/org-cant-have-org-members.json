@@ -1,0 +1,8 @@
+{
+  "body": "Cannot add an org as a member of another org.",
+  "status": [
+    {
+      "status_code": 400
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "body": {
+    "notifications": [
+      {
+        "event": {
+          "data": {
+            "data": {
+              "contributionId": "C-<UUID>",
+              "contributorUserId": "U-<UUID>",
+              "fromBranchId": "B-<UUID>",
+              "projectId": "P-<UUID>",
+              "toBranchId": "B-<UUID>"
+            },
+            "topic": "project:contribution:created"
+          },
+          "id": "EVENT-<UUID>",
+          "occurredAt": "<TIMESTAMP>",
+          "scope": "U-<UUID>"
+        },
+        "id": "NOT-<UUID>",
+        "status": "read"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

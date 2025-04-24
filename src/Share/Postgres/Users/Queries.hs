@@ -1,5 +1,6 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TypeOperators #-}
 
 -- | Common queries for users.
 module Share.Postgres.Users.Queries
@@ -194,12 +195,14 @@ userByHandle handle = do
         WHERE u.handle = lower(#{handle})
       |]
 
-createFromGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> PG.Transaction UserCreationError User
-createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail = do
+createFromGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> Maybe UserHandle -> PG.Transaction UserCreationError User
+createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail mayPreferredHandle = do
   let (GithubEmail {github_email_email = user_email, github_email_verified = emailVerified}) = primaryEmail
-  userHandle <- case IDs.fromText @UserHandle (Text.toLower githubHandle) of
-    Left err -> throwError (InvalidUserHandle err githubHandle)
-    Right handle -> pure handle
+  userHandle <- case mayPreferredHandle of
+    Just handle -> pure handle
+    Nothing -> case IDs.fromText @UserHandle (Text.toLower githubHandle) of
+      Left err -> throwError (InvalidUserHandle err githubHandle)
+      Right handle -> pure handle
   userId <- createUser authzReceipt user_email user_name (Just avatar_url) userHandle emailVerified
   PG.execute_
     [PG.sql|
@@ -258,26 +261,28 @@ isNew :: NewOrPreExisting a -> Bool
 isNew New {} = True
 isNew _ = False
 
-findOrCreateGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> PG.Transaction UserCreationError (NewOrPreExisting User)
-findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarUrl _name) primaryEmail = do
+findOrCreateGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> Maybe UserHandle -> PG.Transaction UserCreationError (NewOrPreExisting User)
+findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarUrl _name) primaryEmail mayPreferredHandle = do
   user <- userByGithubUserId githubUserId
   case user of
     Just user' -> pure (PreExisting user')
     Nothing -> do
-      New <$> createFromGithubUser authZReceipt ghu primaryEmail
+      New <$> createFromGithubUser authZReceipt ghu primaryEmail mayPreferredHandle
 
-searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [User]
+searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(User, Maybe OrgId)]
 searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
   let q = likeEscape prefix <> "%"
-  PG.queryListRows
+  PG.queryListRows @(User PG.:. (PG.Only (Maybe OrgId)))
     [PG.sql|
-    SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
+    SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private, org.id
       FROM users u
+      LEFT JOIN orgs org ON org.user_id = u.id
       WHERE (u.handle ILIKE #{q}
              OR u.name ILIKE #{q}
             ) AND NOT u.private
       LIMIT #{limit}
       |]
+    <&> fmap \(user PG.:. PG.Only mayOrgId) -> (user, mayOrgId)
 
 data UserCreationError
   = UserHandleTaken UserHandle
