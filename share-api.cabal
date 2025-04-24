@@ -103,7 +103,6 @@ library
       Share.Utils.Logging
       Share.Utils.Logging.Types
       Share.Utils.Postgres
-      Share.Utils.Servant
       Share.Utils.Servant.CBOR
       Share.Utils.Servant.Client
       Share.Utils.Servant.PathInfo

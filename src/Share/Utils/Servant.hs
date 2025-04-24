@@ -10,6 +10,7 @@ module Share.Utils.Servant
     StatusFound302,
     GetRedirect,
     RequiredQueryParam,
+    RequiredHeader,
     InvalidParam (..),
     redirectTo,
     withTimeoutSeconds,
@@ -22,7 +23,6 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Share.Prelude
 import Share.Utils.Logging
-import Share.Web.App
 import Share.Web.Errors (ErrorID (..), InvalidParam (..), ToServerError (..), respondError)
 import GHC.TypeLits (KnownSymbol, Nat, Symbol)
 import Servant
@@ -35,6 +35,7 @@ type GetRedirect (code :: Nat) = Verb 'GET code '[JSON] LocationHeader
 type StatusFound302 = 302
 
 type RequiredQueryParam = QueryParam' '[Required, Strict]
+type RequiredHeader = Header' '[Required, Strict]
 
 redirectTo :: URI -> LocationHeader
 redirectTo uri = addHeader (show uri) NoContent

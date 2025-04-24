@@ -30,9 +30,11 @@ library
       Share.Utils.Deployment
       Share.Utils.IDs
       Share.Utils.SecureTokens
+      Share.Utils.Servant
       Share.Utils.Servant.Cookies
       Share.Utils.Show
       Share.Utils.URI
+      Vault
   other-modules:
       Paths_share_utils
   hs-source-dirs:
@@ -81,6 +83,7 @@ library
     , hasql
     , hasql-interpolate
     , http-api-data
+    , http-media
     , http-types
     , jose
     , lens
@@ -89,6 +92,7 @@ library
     , pretty-simple
     , random
     , servant-auth
+    , servant-client
     , servant-server
     , text
     , time
