@@ -564,7 +564,7 @@ getPrecomputedNamespaceDiff ::
   m (Maybe Text)
 getPrecomputedNamespaceDiff
   (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId)
-  (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) = do
+  (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) =
     PG.query1Col @Text
       [PG.sql|
           SELECT (diff :: text)

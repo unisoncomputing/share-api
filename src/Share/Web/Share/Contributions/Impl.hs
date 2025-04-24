@@ -290,6 +290,10 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
             <$> CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId
             <*> CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
             <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
+    -- If the diff hasn't been computed by a background worker yet, signal interest in it (perhaps redundantly), in case
+    -- it had been picked up by a worker that then went on to crash before completing and storing the diff.
+    when (isNothing maybeNamespaceDiff) do
+      PG.runTransaction (DiffsQ.submitContributionToBeDiffed contributionId)
     let response =
           ShareNamespaceDiffResponse
             { project = projectShorthand,

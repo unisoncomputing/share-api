@@ -1,14 +1,27 @@
 module Share.BackgroundJobs.Diffs.Queries
-  ( submitContributionsToBeDiffed,
+  ( submitContributionToBeDiffed,
+    submitContributionsToBeDiffed,
     claimContributionToDiff,
   )
 where
 
-import Data.Foldable (toList)
-import Data.Set (Set)
 import Share.IDs
 import Share.Postgres
 import Share.Postgres.Notifications qualified as Notif
+import Unison.Prelude
+
+submitContributionToBeDiffed :: (QueryM m) => ContributionId -> m ()
+submitContributionToBeDiffed contributionId = do
+  result <-
+    query1Col @Int64
+      [sql|
+        INSERT INTO contribution_diff_queue (contribution_id)
+        VALUES (#{contributionId})
+        ON CONFLICT DO NOTHING
+        RETURNING 1
+      |]
+  whenJust result \_ ->
+    Notif.notifyChannel Notif.ContributionDiffChannel
 
 submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
 submitContributionsToBeDiffed contributions = do
