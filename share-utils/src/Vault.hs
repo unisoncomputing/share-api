@@ -1,13 +1,19 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Vault
   ( deleteSecret,
     patchSecret,
-    storeSecret,
+    putSecret,
     fetchSecret,
     SecretMount (..),
     VaultToken (..),
+    SecretPath (..),
+    SecretRequest (..),
+    SecretResponse (..),
+    SecretPatch (..),
+    Options (..),
   )
 where
 
@@ -26,7 +32,7 @@ type RequiredHeader = Header' '[Required, Strict]
 type VaultAPI =
   (RequiredHeader "X-Vault-Token" VaultToken :> Capture "mount" SecretMount :> "data" :> Capture "path" SecretPath :> DeleteNoContent)
     :<|> (RequiredHeader "X-Vault-Token" VaultToken :> Capture "mount" SecretMount :> "data" :> Capture "path" SecretPath :> ReqBody '[JsonMergePatch] SecretPatch :> PatchNoContent)
-    :<|> (RequiredHeader "X-Vault-Token" VaultToken :> Capture "mount" SecretMount :> "data" :> Capture "path" SecretPath :> ReqBody '[JSON] SecretRequest :> PostNoContent)
+    :<|> (RequiredHeader "X-Vault-Token" VaultToken :> Capture "mount" SecretMount :> "data" :> Capture "path" SecretPath :> ReqBody '[JSON] SecretRequest :> PutNoContent)
     :<|> (RequiredHeader "X-Vault-Token" VaultToken :> Capture "mount" SecretMount :> "data" :> Capture "path" SecretPath :> Get '[JSON] SecretResponse)
 
 vaultApi :: Proxy VaultAPI
@@ -49,15 +55,15 @@ newtype VaultToken = VaultToken Text
 
 deleteSecret :: VaultToken -> SecretMount -> SecretPath -> SC.ClientM NoContent
 patchSecret :: VaultToken -> SecretMount -> SecretPath -> SecretPatch -> SC.ClientM NoContent
-storeSecret :: VaultToken -> SecretMount -> SecretPath -> SecretRequest -> SC.ClientM NoContent
+putSecret :: VaultToken -> SecretMount -> SecretPath -> SecretRequest -> SC.ClientM NoContent
 fetchSecret :: VaultToken -> SecretMount -> SecretPath -> SC.ClientM SecretResponse
-deleteSecret :<|> patchSecret :<|> storeSecret :<|> fetchSecret = SC.client vaultApi
+deleteSecret :<|> patchSecret :<|> putSecret :<|> fetchSecret = SC.client vaultApi
 
 -- Data types
 
 data SecretRequest = SecretRequest
   { options :: Maybe Options,
-    data_ :: Map String String
+    data_ :: Aeson.Value
   }
   deriving (Generic)
 
@@ -71,22 +77,14 @@ newtype Options = Options
 
 instance Aeson.ToJSON Options
 
-newtype SecretResponse = SecretResponse SecretData
+newtype SecretResponse = SecretResponse {data_ :: Aeson.Value}
 
-newtype SecretData = SecretData (Map String String)
-
-data SecretPatch = SecretPatch !(Maybe Options) !(Map String (Maybe String))
+data SecretPatch = SecretPatch !(Maybe Options) !(Map Text (Maybe Text))
 
 instance MimeRender JsonMergePatch SecretPatch where
   mimeRender _ (SecretPatch options data_) = Aeson.encode $ Aeson.object ["options" Aeson..= options, "data" Aeson..= data_]
 
 instance Aeson.FromJSON SecretResponse where
-  parseJSON (Aeson.Object v) = SecretResponse <$> v Aeson..: "data"
-  parseJSON _ = undefined
-
-instance Aeson.FromJSON SecretData where
-  parseJSON (Aeson.Object v) = SecretData <$> v Aeson..: "data"
-  parseJSON _ = undefined
-
-instance Aeson.ToJSON SecretData where
-  toJSON (SecretData data_) = Aeson.object ["data" Aeson..= data_]
+  parseJSON = Aeson.withObject "SecretResponse" $ \o -> do
+    data_ <- o Aeson..: "data"
+    return $ SecretResponse {data_}

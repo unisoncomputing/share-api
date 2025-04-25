@@ -52,6 +52,7 @@ library
       Share.Notifications.Impl
       Share.Notifications.Queries
       Share.Notifications.Types
+      Share.Notifications.Webhooks.Secrets
       Share.Postgres
       Share.Postgres.Admin
       Share.Postgres.Authorization.Queries
@@ -103,6 +104,7 @@ library
       Share.Utils.Logging
       Share.Utils.Logging.Types
       Share.Utils.Postgres
+      Share.Utils.Servant
       Share.Utils.Servant.CBOR
       Share.Utils.Servant.Client
       Share.Utils.Servant.PathInfo

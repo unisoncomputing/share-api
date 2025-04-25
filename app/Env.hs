@@ -24,8 +24,9 @@ import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Web.Authentication (cookieSessionTTL)
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool
-import Network.URI (parseURI)
+import Network.URI (parseURI, uriScheme)
 import Servant.API qualified as Servant
+import Servant.Client qualified as ServantClient
 import System.Environment (lookupEnv)
 import System.Exit
 import System.Log.FastLogger qualified as FL
@@ -34,6 +35,10 @@ import System.Log.Raven.Transport.HttpConduit qualified as Sentry
 import System.Log.Raven.Types qualified as Sentry
 import Unison.Runtime.Interface as RT
 import Data.Time.Clock qualified as Time
+import Network.HTTP.Client.TLS qualified as TLS
+import Network.HTTP.Client qualified as HTTPClient
+import Vault qualified
+import Data.ByteString.Char8 qualified as BSC
 
 withEnv :: (Env () -> IO a) -> IO a
 withEnv action = do
@@ -114,6 +119,31 @@ withEnv action = do
   pgConnectionPool <- Pool.acquire pgSettings
   timeCache <- FL.newTimeCache FL.simpleTimeFormat -- E.g. 05/Sep/2023:13:23:56 -0700
   sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"
+
+  -- Vault setup
+  unproxiedHttpClient <- TLS.newTlsManager 
+  vaultHost <- fromEnv "VAULT_HOST" parseBaseUrl
+  shareVaultMount <- fromEnv "VAULT_MOUNT" ((fmap . fmap) Vault.SecretMount . nonEmptyTextParser "VAULT_MOUNT")
+  shareVaultToken <- fromEnv "VAULT_TOKEN" ((fmap . fmap) Vault.VaultToken . nonEmptyTextParser "VAULT_TOKEN")
+  let vaultClientEnv = ServantClient.mkClientEnv unproxiedHttpClient vaultHost
+
+
+
+  httpProxyHost <- fromEnv "SHARE_PROXY_HOST" (\proxyHost -> case parseURI proxyHost of
+    Nothing -> pure $ Left "Invalid SHARE_PROXY_ADDRESS"
+    Just uri -> if uriScheme uri == "http:" || uriScheme uri == "https:"
+      then pure $ Right (BSC.pack proxyHost)
+      else pure $ Left "SHARE_PROXY_ADDRESS must be http or https")
+  httpProxyPort <- fromEnv "SHARE_PROXY_PORT" (pure . maybeToEither "Invalid SHARE_PROXY_PORT" . readMaybe)
+
+  -- http proxy setup
+  let proxyOverride = HTTPClient.useProxy (HTTPClient.Proxy{HTTPClient.proxyHost = httpProxyHost, HTTPClient.proxyPort = httpProxyPort})
+  let proxiedManagerSettings =
+        TLS.tlsManagerSettings
+        & HTTPClient.managerSetProxy proxyOverride
+  proxiedHttpClient <- TLS.newTlsManagerWith proxiedManagerSettings
+
+  -- Logging setup
   let ctx = ()
   -- We use a zero-width-space to separate log-lines on ingestion, this allows us to use newlines for
   -- formatting, but without affecting log-grouping.
@@ -122,6 +152,15 @@ withEnv action = do
     action $ Env {logger = (logger . (\msg -> zeroWidthSpace <> msg <> "\n")), ..}
   where
     readPort p = pure $ maybeToRight "SHARE_PORT was not a number" (readMaybe p)
+    nonEmptyTextParser :: Text -> String -> IO (Either String Text)
+    nonEmptyTextParser varName = \case
+      "" -> pure . Left . Text.unpack $ "Expected a value for env var " <> varName <> ", but got an empty string"
+      str -> pure . Right $ Text.pack str
+
+    parseBaseUrl :: String -> IO (Either String ServantClient.BaseUrl)
+    parseBaseUrl str = do
+      u <- ServantClient.parseBaseUrl str
+      pure $ Right u
 
 fromEnv :: String -> (String -> IO (Either String a)) -> IO a
 fromEnv var from = do
