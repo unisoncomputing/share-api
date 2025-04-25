@@ -1,4 +1,4 @@
-.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures
+.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts
 
 UNAME := $(shell uname)
 STACK_FLAGS := "--fast"
@@ -69,3 +69,6 @@ fixtures:
 	echo "Resetting local database to fixture data"
 	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/clean.sql"
 	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/inserts.sql"
+
+transcripts:
+	./transcripts/run-transcripts.zsh

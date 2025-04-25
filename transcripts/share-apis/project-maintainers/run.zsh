@@ -76,7 +76,7 @@ fetch "$maintain_user" PATCH maintain-maintainer-ticket-close '/users/test/proje
     "status": "closed"
 }'
 
-# Maintain maintainers can't update the project
+# Maintain maintainers can update the project
 fetch "$maintain_user" PATCH maintain-maintainer-project-update '/users/test/projects/privatetestproject' '{
     "summary": "update"
 }'

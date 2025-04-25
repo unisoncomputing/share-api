@@ -1,8 +1,8 @@
 {
-  "body": "Permission Denied: Not permitted to update this project",
+  "body": [],
   "status": [
     {
-      "status_code": 403
+      "status_code": 200
     }
   ]
 }
