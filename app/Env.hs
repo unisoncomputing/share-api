@@ -129,19 +129,23 @@ withEnv action = do
 
 
 
-  httpProxyHost <- fromEnv "SHARE_PROXY_HOST" (\proxyHost -> case parseURI proxyHost of
-    Nothing -> pure $ Left "Invalid SHARE_PROXY_ADDRESS"
-    Just uri -> if uriScheme uri == "http:" || uriScheme uri == "https:"
-      then pure $ Right (BSC.pack proxyHost)
-      else pure $ Left "SHARE_PROXY_ADDRESS must be http or https")
-  httpProxyPort <- fromEnv "SHARE_PROXY_PORT" (pure . maybeToEither "Invalid SHARE_PROXY_PORT" . readMaybe)
+  proxiedHttpClient <- do
+    if  Deployment.onLocal 
+       then TLS.newTlsManager
+       else do
+          httpProxyHost <- fromEnv "SHARE_PROXY_HOST" (\proxyHost -> case parseURI proxyHost of
+            Nothing -> pure $ Left "Invalid SHARE_PROXY_ADDRESS"
+            Just uri -> if uriScheme uri == "http:" || uriScheme uri == "https:"
+              then pure $ Right (BSC.pack proxyHost)
+              else pure $ Left "SHARE_PROXY_ADDRESS must be http or https")
+          httpProxyPort <- fromEnv "SHARE_PROXY_PORT" (pure . maybeToEither "Invalid SHARE_PROXY_PORT" . readMaybe)
 
-  -- http proxy setup
-  let proxyOverride = HTTPClient.useProxy (HTTPClient.Proxy{HTTPClient.proxyHost = httpProxyHost, HTTPClient.proxyPort = httpProxyPort})
-  let proxiedManagerSettings =
-        TLS.tlsManagerSettings
-        & HTTPClient.managerSetProxy proxyOverride
-  proxiedHttpClient <- TLS.newTlsManagerWith proxiedManagerSettings
+          -- http proxy setup
+          let proxyOverride = HTTPClient.useProxy (HTTPClient.Proxy{HTTPClient.proxyHost = httpProxyHost, HTTPClient.proxyPort = httpProxyPort})
+          let proxiedManagerSettings =
+                TLS.tlsManagerSettings
+                & HTTPClient.managerSetProxy proxyOverride
+          TLS.newTlsManagerWith proxiedManagerSettings
 
   -- Logging setup
   let ctx = ()

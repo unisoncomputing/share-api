@@ -32,12 +32,28 @@ services:
     ports:
      - "6379:6379"
 
+  vault:
+    image: 'hashicorp/vault:1.19'
+    container_name: vault
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=sekrit
+    cap_add:
+      - IPC_LOCK
+
   share:
     image: share-api
     container_name: share-api
     depends_on:
       - redis
       - postgres
+      - vault
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5424/health"]
       interval: 3s
