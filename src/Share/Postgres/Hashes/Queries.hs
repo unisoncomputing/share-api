@@ -29,6 +29,7 @@ module Share.Postgres.Hashes.Queries
     loadCausalIdByHash,
     expectCausalIdByHash,
     expectNamespaceIdsByCausalIdsOf,
+    pipelinedExpectNamespaceIdsByCausalIdsOf,
     expectNamespaceHashesByNamespaceHashIdsOf,
     isComponentHashAllowedToBeMismatched,
     isCausalHashAllowedToBeMismatched,
@@ -303,6 +304,30 @@ expectNamespaceIdsByCausalIdsOf trav s = do
       if length results /= length causalIds
         then unrecoverableError . MissingExpectedEntity $ "expectNamespaceIdsByCausalIdsOf: Expected to get the same number of results as causal ids. " <> tShow causalIds
         else pure results
+
+-- | Mitchell says: this could/should just have replaced 'expectNamespaceIdsByCausalIdsOf', but that function has
+-- many callers, so having two temporarily eases the transition.
+pipelinedExpectNamespaceIdsByCausalIdsOf :: Traversal s t CausalId BranchHashId -> s -> Pipeline e t
+pipelinedExpectNamespaceIdsByCausalIdsOf trav s = do
+  s
+    & unsafePartsOf trav %%~ \causalIds ->
+      let causalIdsTable = ordered causalIds
+       in pUnrecoverableEitherMap
+            ( \results ->
+                if length results /= length causalIds
+                  then Left (MissingExpectedEntity $ "expectNamespaceIdsByCausalIdsOf: Expected to get the same number of results as causal ids. " <> tShow causalIds)
+                  else Right results
+            )
+            ( queryListCol @(BranchHashId)
+                [sql| WITH causal_ids(ord, causal_id) AS (
+                SELECT ord, causal_id FROM ^{toTable causalIdsTable} as t(ord, causal_id)
+              )
+              SELECT c.namespace_hash_id
+                FROM causal_ids cid
+                JOIN causals c ON cid.causal_id = c.id
+                ORDER BY cid.ord
+        |]
+            )
 
 expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t BranchHashId BranchHash -> s -> m t
 expectNamespaceHashesByNamespaceHashIdsOf trav s = do

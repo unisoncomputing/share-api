@@ -3,6 +3,8 @@
 module Share.Postgres.Definitions.Queries
   ( loadTerm,
     expectTerm,
+    pipelinedExpectTermId,
+    pipelinedExpectTermById,
     saveTermComponent,
     saveEncodedTermComponent,
     loadTermComponent,
@@ -31,6 +33,10 @@ module Share.Postgres.Definitions.Queries
 
     -- * For Migrations
     saveSerializedComponent,
+
+    -- * Errors
+    expectedTermError,
+    missingDeclKindError,
   )
 where
 
@@ -81,7 +87,7 @@ import Unison.ConstructorType qualified as CT
 import Unison.Hash (Hash)
 import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
-import Unison.Reference (Reference, TypeReference)
+import Unison.Reference (Reference, TermReferenceId, TypeReference, TypeReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1Reference
 import Unison.Referent qualified as V1Referent
@@ -129,26 +135,37 @@ instance Logging.Loggable DefinitionQueryError where
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
-loadTerm :: UserId -> Reference.Id -> PG.Transaction e (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTerm userId (Reference.Id compHash (pgComponentIndex -> compIndex)) = runMaybeT $ do
-  termId <-
-    MaybeT $
-      query1Col
-        [sql|
-    SELECT term.id
-      FROM terms term
-        JOIN component_hashes ON term.component_hash_id = component_hashes.id
-        WHERE component_hashes.base32 = #{compHash}
-          AND term.component_index = #{compIndex}
-    |]
+loadTerm :: UserId -> TermReferenceId -> PG.Transaction e (Maybe (V2.Term Symbol, V2.Type Symbol))
+loadTerm userId refId = runMaybeT do
+  termId <- MaybeT $ loadTermId refId
   MaybeT $ loadTermById userId termId
+
+loadTermId :: (QueryA m) => TermReferenceId -> m (Maybe TermId)
+loadTermId (Reference.Id compHash (pgComponentIndex -> compIndex)) =
+  query1Col
+    [sql|
+      SELECT term.id
+        FROM terms term
+          JOIN component_hashes ON term.component_hash_id = component_hashes.id
+          WHERE component_hashes.base32 = #{compHash}
+            AND term.component_index = #{compIndex}
+      |]
+
+pipelinedExpectTermId :: TermReferenceId -> PG.Pipeline e TermId
+pipelinedExpectTermId refId =
+  pUnrecoverableEitherMap
+    ( \case
+        Nothing -> Left (expectedTermError refId)
+        Just termId -> Right termId
+    )
+    (loadTermId refId)
 
 expectTerm :: UserId -> Reference.Id -> PG.Transaction e (V2.Term Symbol, V2.Type Symbol)
 expectTerm userId refId = do
   mayTerm <- loadTerm userId refId
   case mayTerm of
     Just term -> pure term
-    Nothing -> unrecoverableError $ InternalServerError "expected-term" (ExpectedTermNotFound refId)
+    Nothing -> unrecoverableError $ expectedTermError refId
 
 resolveComponentHash :: ComponentRef -> CodebaseM e (ComponentHash, ComponentHashId)
 resolveComponentHash = \case
@@ -279,25 +296,44 @@ expectTypeComponent componentRef = do
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
-loadTermById :: (QueryM m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTermById codebaseUser termId = runMaybeT $ do
-  (TermComponentElement trm typ) <-
-    MaybeT $
-      query1Col
-        [sql|
-    SELECT bytes.bytes
-      FROM sandboxed_terms sandboxed
-        JOIN bytes ON sandboxed.bytes_id = bytes.id
-        WHERE sandboxed.user_id = #{codebaseUser}
-          AND sandboxed.term_id = #{termId}
-    |]
-  textLookup <- lift $ termLocalTextReferences termId
-  defnLookup <- lift $ termLocalComponentReferences termId
-  let localIds :: ResolvedLocalIds
-      localIds = LocalIds.LocalIds {textLookup = Vector.fromList textLookup, defnLookup = Vector.fromList defnLookup}
-  pure $ s2cTermWithType (localIds, trm, typ)
+loadTermById :: (QueryA m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
+loadTermById codebaseUser termId = do
+  ( \maybeTermComponentElement localIds ->
+      maybeTermComponentElement <&> \(TermComponentElement trm typ) ->
+        s2cTermWithType (localIds, trm, typ)
+    )
+    <$> loadTermComponentElementByTermId codebaseUser termId
+    <*> loadResolvedLocalIdsByTermId termId
 
-termLocalTextReferences :: (QueryM m) => TermId -> m [Text]
+pipelinedExpectTermById :: UserId -> TermReferenceId -> TermId -> Pipeline e (V2.Term Symbol, V2.Type Symbol)
+pipelinedExpectTermById userId refId termId =
+  pUnrecoverableEitherMap
+    ( \case
+        Nothing -> Left (expectedTermError refId)
+        Just term -> Right term
+    )
+    (loadTermById userId termId)
+
+loadTermComponentElementByTermId :: (QueryA m) => UserId -> TermId -> m (Maybe TermComponentElement)
+loadTermComponentElementByTermId codebaseUser termId =
+  query1Col
+    [sql|
+        SELECT bytes.bytes
+          FROM sandboxed_terms sandboxed
+            JOIN bytes ON sandboxed.bytes_id = bytes.id
+            WHERE sandboxed.user_id = #{codebaseUser}
+              AND sandboxed.term_id = #{termId}
+      |]
+
+loadResolvedLocalIdsByTermId :: (QueryA m) => TermId -> m ResolvedLocalIds
+loadResolvedLocalIdsByTermId termId =
+  ( \textLookup defnLookup ->
+      LocalIds.LocalIds {textLookup = Vector.fromList textLookup, defnLookup = Vector.fromList defnLookup}
+  )
+    <$> termLocalTextReferences termId
+    <*> termLocalComponentReferences termId
+
+termLocalTextReferences :: (QueryA m) => TermId -> m [Text]
 termLocalTextReferences termId =
   queryListCol
     [sql|
@@ -308,7 +344,7 @@ termLocalTextReferences termId =
           ORDER BY local_index ASC
       |]
 
-termLocalComponentReferences :: (QueryM m) => TermId -> m [ComponentHash]
+termLocalComponentReferences :: (QueryA m) => TermId -> m [ComponentHash]
 termLocalComponentReferences termId =
   queryListCol
     [sql|
@@ -351,10 +387,10 @@ resolveConstructorTypeLocalIds (LocalIds.LocalIds {textLookup, defnLookup}) =
     substText i = textLookup ^?! ix (fromIntegral i)
     substHash i = unComponentHash $ (defnLookup ^?! ix (fromIntegral i))
 
-loadDeclKind :: (PG.QueryM m) => Reference.Id -> m (Maybe CT.ConstructorType)
+loadDeclKind :: (PG.QueryA m) => TypeReferenceId -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.Id (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryA m) => Traversal s t TypeReferenceId (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refIds -> do
@@ -1167,3 +1203,11 @@ saveSerializedComponent chId (CBORBytes bytes) = do
         VALUES (#{codebaseOwnerUserId}, #{chId}, #{bytesId})
       ON CONFLICT DO NOTHING
     |]
+
+expectedTermError :: TermReferenceId -> InternalServerError DefinitionQueryError
+expectedTermError refId =
+  InternalServerError "expected-term" (ExpectedTermNotFound refId)
+
+missingDeclKindError :: TypeReference -> InternalServerError Text
+missingDeclKindError r =
+  InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r

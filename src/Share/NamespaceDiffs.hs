@@ -49,6 +49,7 @@ import Servant (err400, err404, err500)
 import Share.Codebase qualified as Codebase
 import Share.Names.Postgres qualified as PGNames
 import Share.Postgres qualified as PG
+import Share.Postgres.Definitions.Queries qualified as DefnsQ
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
@@ -623,14 +624,23 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
           (TypeReferenceId, Decl Symbol Ann)
       ) <- do
-    let hydrateTerm ::
+    let hydrateTerms ::
           Codebase.CodebaseEnv ->
-          TermReferenceId ->
-          PG.Transaction e (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
-        hydrateTerm codebaseEnv ref =
-          Codebase.codebaseMToTransaction codebaseEnv do
-            term <- Codebase.expectTerm ref
-            pure (ref, term)
+          BiMultimap Referent Name ->
+          PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
+        hydrateTerms codebaseEnv termReferents = do
+          let codebaseUser = Codebase.codebaseOwner codebaseEnv
+          let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
+          termIds <-
+            PG.pFor termReferenceIds \refId ->
+              (refId,) <$> DefnsQ.pipelinedExpectTermId refId
+          v2Terms <-
+            PG.pFor termIds \(refId, termId) ->
+              (refId,) <$> DefnsQ.pipelinedExpectTermById codebaseUser refId termId
+          v1Terms <-
+            for v2Terms \(refId, (term, typ)) ->
+              (refId,) <$> Codebase.convertTerm2to1 (Reference.idToHash refId) term typ
+          pure v1Terms
         hydrateType ::
           Codebase.CodebaseEnv ->
           TypeReferenceId ->
@@ -651,7 +661,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
             )
         f codebaseEnv =
           bitraverse
-            (traverse (hydrateTerm codebaseEnv) . Map.mapMaybe Referent.toTermReferenceId . BiMultimap.range)
+            (hydrateTerms codebaseEnv)
             (traverse (hydrateType codebaseEnv) . Map.mapMaybe Reference.toId . BiMultimap.range)
 
     let -- Here we assume that the LCA is in the same codebase as Alice.

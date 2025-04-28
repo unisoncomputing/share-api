@@ -44,6 +44,8 @@ module Share.Postgres
     unliftSession,
     defaultIsolationLevel,
     pipelined,
+    pEitherMap,
+    pUnrecoverableEitherMap,
     pFor,
     pFor_,
 
@@ -128,6 +130,22 @@ newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (
 -- | Run a pipeline in a transaction
 pipelined :: Pipeline e a -> Transaction e a
 pipelined p = Transaction (Hasql.pipeline (unPipeline p))
+
+-- | Like fmap, but the provided function can throw a recoverable error by returning 'Left'.
+pEitherMap :: (a -> Either e b) -> Pipeline e a -> Pipeline e b
+pEitherMap f (Pipeline p) =
+  Pipeline $
+    p <&> \case
+      Right x -> mapLeft Err (f x)
+      Left e -> Left e
+
+-- | Like 'pEitherMap', but for throwing unrecoverable errors.
+pUnrecoverableEitherMap :: (Loggable e, Show e, ToServerError e) => (a -> Either e b) -> Pipeline e' a -> Pipeline e' b
+pUnrecoverableEitherMap f (Pipeline p) =
+  Pipeline $
+    p <&> \case
+      Right x -> mapLeft (Unrecoverable . someServerError) (f x)
+      Left e -> Left e
 
 pFor :: (Traversable f) => f a -> (a -> Pipeline e b) -> Transaction e (f b)
 pFor f p = pipelined $ for f p

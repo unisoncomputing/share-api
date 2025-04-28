@@ -20,6 +20,7 @@ module Share.Postgres.Causal.Queries
     expectNamespaceStatsOf,
     expectNamespaceHashByCausalHash,
     HashQ.expectNamespaceIdsByCausalIdsOf,
+    HashQ.pipelinedExpectNamespaceIdsByCausalIdsOf,
     importAccessibleCausals,
     importCausalIntoCodebase,
     hashCausal,

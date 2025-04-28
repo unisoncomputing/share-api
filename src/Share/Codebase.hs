@@ -67,6 +67,9 @@ module Share.Codebase
     LCQ.ensureLooseCodeRootHash,
     setLooseCodeRoot,
 
+    -- * Conversions
+    convertTerm2to1,
+
     -- * Utilities
     cachedCodebaseResponse,
   )
@@ -111,6 +114,8 @@ import U.Codebase.Causal qualified as Causal
 import U.Codebase.Decl qualified as V2
 import U.Codebase.Reference qualified as V2
 import U.Codebase.Referent qualified as V2
+import U.Codebase.Sqlite.Symbol qualified as V2
+import U.Codebase.Term qualified as V2.Term
 import Unison.Builtin qualified as Builtin
 import Unison.Builtin qualified as Builtins
 import Unison.Codebase.CodeLookup qualified as CL
@@ -119,9 +124,11 @@ import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration qualified as V1
+import Unison.Hash (Hash)
 import Unison.Parser.Ann
 import Unison.Parser.Ann qualified as Ann
 import Unison.Prelude (askUnliftIO)
+import Unison.Reference (TermReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
@@ -261,20 +268,24 @@ cachedCodebaseResponse authzReceipt codebaseOwner endpointName providedCachePara
     codebaseViewCacheKey = IDs.toText (codebaseOwnerUserId codebaseOwner)
 
 -- | Load a term and its type.
-loadTerm :: Reference.Id -> CodebaseM e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+loadTerm :: TermReferenceId -> CodebaseM e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
 loadTerm refId = do
   codebaseUser <- asks codebaseOwner
   lift $ loadTermForCodeLookup codebaseUser refId
 
 -- | Load a term and its type.
-loadTermForCodeLookup :: UserId -> Reference.Id -> PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+loadTermForCodeLookup :: UserId -> TermReferenceId -> PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
 loadTermForCodeLookup codebaseUser refId@(Reference.Id h _) = runMaybeT $ do
   (v2Term, v2Type) <- MaybeT $ DefnQ.loadTerm codebaseUser refId
-  v1Term <- Cv.term2to1 h (lift . expectDeclKind) v2Term
+  convertTerm2to1 h v2Term v2Type
+
+convertTerm2to1 :: (PG.QueryM m) => Hash -> V2.Term.Term V2.Symbol -> V2.Term.Type V2.Symbol -> m (V1.Term Symbol Ann, V1.Type Symbol Ann)
+convertTerm2to1 h v2Term v2Type = do
+  v1Term <- Cv.term2to1 h expectDeclKind v2Term
   let v1Type = Cv.ttype2to1 v2Type
   pure (v1Term, v1Type)
 
-expectTerm :: Reference.Id -> CodebaseM e (V1.Term Symbol Ann, V1.Type Symbol Ann)
+expectTerm :: TermReferenceId -> CodebaseM e (V1.Term Symbol Ann, V1.Type Symbol Ann)
 expectTerm refId = loadTerm refId `whenNothingM` lift (unrecoverableError (MissingTerm refId))
 
 -- | Load the type of a term.
@@ -308,7 +319,7 @@ expectTypeOfReferents trav s = do
   s & trav %%~ expectTypeOfReferent
 
 expectDeclKind :: (PG.QueryM m) => Reference.TypeReference -> m CT.ConstructorType
-expectDeclKind r = loadDeclKind r `whenNothingM` (unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r))
+expectDeclKind r = loadDeclKind r `whenNothingM` unrecoverableError (DefnQ.missingDeclKindError r)
 
 expectDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
 expectDeclKindsOf trav s = do
@@ -316,7 +327,7 @@ expectDeclKindsOf trav s = do
     & unsafePartsOf trav %%~ \refs -> do
       results <- loadDeclKindsOf traversed refs
       for (zip refs results) \case
-        (r, Nothing) -> unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r)
+        (r, Nothing) -> unrecoverableError (DefnQ.missingDeclKindError r)
         (_, Just ct) -> pure ct
 
 loadDeclKind :: (PG.QueryM m) => V2.TypeReference -> m (Maybe CT.ConstructorType)
