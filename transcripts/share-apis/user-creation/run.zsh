@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 
-set -ex
+set -e
 
 source "../../transcript_helpers.sh"
 
@@ -8,12 +8,9 @@ source "../../transcript_helpers.sh"
 new_user_cookie_jar=$(cookie_jar_for_user_id "new_user")
 
 # Should be able to create a new user via the login flow by following redirects.
-curl -v -s -L -I -o /dev/null -w '{"status_code": %{http_code}, "result_url": "%{url_effective}"}' --request "GET" --cookie "$new_user_cookie_jar" --cookie-jar "$new_user_cookie_jar" "localhost:5424/login" > ./new-user-login.json
-
-echo "Created new user!"
+# Note that the end of the redirect chain ends up on the Share UI (localhost:1234) which may or may not be running, so
+# we just ignore bad status codes from that server.
+curl -s -L -I -o /dev/null -w '{"result_url": "%{url_effective}"}' --request "GET" --cookie "$new_user_cookie_jar" --cookie-jar "$new_user_cookie_jar" "localhost:5424/login" > ./new-user-login.json || true
 
 # user should now be logged in as the local github user.
 fetch "new_user" GET new-user-profile /account
-
-
-echo "DONE"
