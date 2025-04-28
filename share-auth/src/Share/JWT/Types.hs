@@ -233,6 +233,7 @@ instance (Applicative m) => JWT.VerificationKeyStore m (JWT.JWSHeader ()) payloa
 
 -- | A newtype for JWTs which provides the appropriate encoding/decoding instances.
 newtype JWTParam = JWTParam JWT.SignedJWT
+  deriving newtype (Eq)
   deriving (Show) via (Censored JWTParam)
 
 instance ToHttpApiData JWTParam where

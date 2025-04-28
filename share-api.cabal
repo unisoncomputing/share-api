@@ -36,6 +36,8 @@ library
       Share.BackgroundJobs.Search.DefinitionSync.Types
       Share.BackgroundJobs.SerializedEntitiesMigration.Queries
       Share.BackgroundJobs.SerializedEntitiesMigration.Worker
+      Share.BackgroundJobs.Webhooks.Queries
+      Share.BackgroundJobs.Webhooks.Worker
       Share.BackgroundJobs.Workers
       Share.Branch
       Share.Codebase

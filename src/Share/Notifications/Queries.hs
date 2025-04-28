@@ -1,5 +1,6 @@
 module Share.Notifications.Queries
   ( recordEvent,
+    expectEvent,
     listNotificationHubEntries,
     updateNotificationHubEntries,
     listNotificationDeliveryMethods,
@@ -36,6 +37,15 @@ recordEvent (NotificationEvent {eventScope, eventData, eventResourceId}) = do
     [sql|
       INSERT INTO notification_events (topic, scope_user_id, resource_id, data)
       VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventResourceId}, #{eventData})
+    |]
+
+expectEvent :: (QueryM m) => NotificationEventId -> m (NotificationEvent NotificationEventId UTCTime)
+expectEvent eventId = do
+  queryExpect1Row @(NotificationEvent NotificationEventId UTCTime)
+    [sql|
+      SELECT id, occurred_at, scope_user_id, resource_id, topic, data
+        FROM notification_events
+      WHERE id = #{eventId}
     |]
 
 listNotificationHubEntries :: (QueryA m) => UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> m [NotificationHubEntry]

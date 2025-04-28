@@ -120,6 +120,7 @@ data ProjectBranchData = ProjectBranchData
     branchId :: BranchId,
     branchContributorUserId :: Maybe UserId
   }
+  deriving stock (Eq, Show)
 
 instance Aeson.ToJSON ProjectBranchData where
   toJSON ProjectBranchData {projectId, branchId, branchContributorUserId} =
@@ -143,6 +144,7 @@ data ProjectContributionData = ProjectContributionData
     toBranchId :: BranchId,
     contributorUserId :: UserId
   }
+  deriving stock (Eq, Show)
 
 instance Aeson.ToJSON ProjectContributionData where
   toJSON ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId} =
@@ -166,6 +168,7 @@ instance Aeson.FromJSON ProjectContributionData where
 data NotificationEventData
   = ProjectBranchUpdatedData ProjectBranchData
   | ProjectContributionCreatedData ProjectContributionData
+  deriving stock (Eq, Show)
 
 instance Aeson.ToJSON NotificationEventData where
   toJSON ned =

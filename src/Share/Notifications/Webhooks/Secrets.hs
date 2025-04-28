@@ -1,28 +1,42 @@
 module Share.Notifications.Webhooks.Secrets
-  ( putWebhookSecret,
-    fetchWebhookSecret,
+  ( putWebhookConfig,
+    fetchWebhookConfig,
     WebhookConfig (..),
+    WebhookSecretError (..),
   )
 where
 
 import Control.Monad.Except
-import Data.Aeson ((.:), (.:?), (.=))
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
+import Servant (ServerError (..))
 import Servant.Client (ClientError, ClientM)
 import Servant.Client qualified as ServantClient
+import Servant.Server (err500)
 import Share.App (AppM)
 import Share.Env qualified as Env
 import Share.IDs (NotificationWebhookId)
 import Share.IDs qualified as IDs
 import Share.Prelude
 import Share.Utils.URI (URIParam)
+import Share.Web.Errors (ToServerError (..))
 import Vault (SecretPath (..), SecretRequest (..))
 import Vault qualified
 
 data WebhookSecretError
   = InvalidSecretJSON NotificationWebhookId Text
   | VaultError ClientError
+  deriving stock (Eq, Show)
+
+instance ToServerError WebhookSecretError where
+  toServerError = \case
+    InvalidSecretJSON webhookId err ->
+      ("webhook:vault:invalid-webhook-config", err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Invalid JSON in webhook config for " <> IDs.toText webhookId <> ": " <> err})
+    VaultError err ->
+      ("webhook:vault:request-failed", err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Vault request failed: " <> Text.pack (show err)})
 
 runVaultClientM :: ClientM a -> AppM r (Either ClientError a)
 runVaultClientM m = do
@@ -32,35 +46,26 @@ runVaultClientM m = do
 -- | Configuration for webhooks, which will be stashed in encrypted storage.
 data WebhookConfig
   = WebhookConfig
-  { uri :: URIParam,
-    headers :: [(Text, Text)],
-    method :: Text,
-    body :: Maybe Text
+  { uri :: URIParam
   }
 
 instance Aeson.ToJSON WebhookConfig where
-  toJSON (WebhookConfig uri headers method body) =
+  toJSON (WebhookConfig uri) =
     Aeson.object
-      [ "uri" .= uri,
-        "headers" .= headers,
-        "method" .= method,
-        "body" .= body
+      [ "uri" .= uri
       ]
 
 instance Aeson.FromJSON WebhookConfig where
   parseJSON = Aeson.withObject "WebhookConfig" $ \o -> do
     uri <- o .: "uri"
-    headers <- o .: "headers"
-    method <- o .: "method"
-    body <- o .:? "body"
-    return $ WebhookConfig uri headers method body
+    return $ WebhookConfig uri
 
 makeWebhookSecretPath :: NotificationWebhookId -> SecretPath
 makeWebhookSecretPath webhookId =
   SecretPath $ Text.intercalate "/" ["webhooks", IDs.toText webhookId]
 
-putWebhookSecret :: NotificationWebhookId -> WebhookConfig -> AppM r (Either WebhookSecretError ())
-putWebhookSecret webhookId config = runExceptT do
+putWebhookConfig :: NotificationWebhookId -> WebhookConfig -> AppM r (Either WebhookSecretError ())
+putWebhookConfig webhookId config = runExceptT do
   let secretPath = makeWebhookSecretPath webhookId
   shareVaultMount <- asks Env.shareVaultMount
   shareVaultToken <- asks Env.shareVaultToken
@@ -68,8 +73,8 @@ putWebhookSecret webhookId config = runExceptT do
   withExceptT VaultError . ExceptT . runVaultClientM $ Vault.putSecret shareVaultToken shareVaultMount secretPath secretRequest
   pure ()
 
-fetchWebhookSecret :: NotificationWebhookId -> AppM r (Either WebhookSecretError WebhookConfig)
-fetchWebhookSecret webhookId = runExceptT do
+fetchWebhookConfig :: NotificationWebhookId -> AppM r (Either WebhookSecretError WebhookConfig)
+fetchWebhookConfig webhookId = runExceptT do
   let secretPath = makeWebhookSecretPath webhookId
   shareVaultMount <- asks Env.shareVaultMount
   shareVaultToken <- asks Env.shareVaultToken

@@ -33,15 +33,15 @@ CREATE TYPE notification_topic AS ENUM (
 
 -- Returns the list of permissions a user must have for an event's resource in order to be notified.
 CREATE FUNCTION topic_permission(topic notification_topic)
-RETURNS permission 
+RETURNS permission
 PARALLEL SAFE
 IMMUTABLE
 AS $$
 BEGIN
   CASE topic
-    WHEN 'project:branch:updated' THEN 
+    WHEN 'project:branch:updated' THEN
       RETURN 'project:view'::permission;
-    WHEN 'project:contribution:created' THEN 
+    WHEN 'project:contribution:created' THEN
       RETURN 'project:view'::permission;
     ELSE
       RAISE EXCEPTION 'topic_permissions: topic % must declare its necessary permissions', topic;
