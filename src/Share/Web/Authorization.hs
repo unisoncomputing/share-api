@@ -407,7 +407,7 @@ checkProjectCreate mayReqUserId targetUserId = maybePermissionFailure (ProjectPe
 checkProjectUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure ())
 checkProjectUpdate mayReqUserId targetProjectId = maybePermissionFailure (ProjectPermission (ProjectUpdate targetProjectId)) $ do
   reqUserId <- guardMaybe mayReqUserId
-  assertUserHasProjectPermission AuthZ.ProjectManage (Just reqUserId) targetProjectId
+  assertUserHasProjectPermission AuthZ.ProjectMaintain (Just reqUserId) targetProjectId
 
 checkProjectDelete :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure ())
 checkProjectDelete mayReqUserId targetProjectId = maybePermissionFailure (ProjectPermission (ProjectDelete targetProjectId)) $ do
