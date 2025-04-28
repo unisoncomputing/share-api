@@ -49,7 +49,7 @@ services:
     environment:
       # Placeholder values for development
       - SHARE_DEPLOYMENT=local
-      - SHARE_API_ORIGIN=http://share:5424
+      - SHARE_API_ORIGIN=http://localhost:5424
       - SHARE_SERVER_PORT=5424
       - SHARE_REDIS=redis://redis:6379
       - SHARE_POSTGRES=postgresql://postgres:sekrit@postgres:5432
