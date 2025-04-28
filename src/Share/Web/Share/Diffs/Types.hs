@@ -22,64 +22,64 @@ data ShareNamespaceDiffStatus
   | ShareNamespaceDiffStatus'Error NamespaceDiffError
   | ShareNamespaceDiffStatus'StillComputing
 
-instance ToJSON ShareNamespaceDiffStatus where
-  toJSON = \case
-    ShareNamespaceDiffStatus'Ok diff ->
-      object
-        [ "diff" .= diff,
-          "diffKind" .= ("ok" :: Text)
-        ]
-    ShareNamespaceDiffStatus'Error err ->
-      object
-        [ "diffKind" .= ("error" :: Text),
-          "error"
-            .= case err of
-              NamespaceDiffs.ImpossibleError _ ->
-                object
-                  [ "errorKind" .= ("impossibleError" :: Text)
-                  ]
-              NamespaceDiffs.IncoherentDecl reason ->
-                let f :: Text -> IncoherentDeclReason -> Value
-                    f which reason =
-                      object
-                        ( "oldOrNewBranch" .= which
-                            : case reason of
-                              IncoherentDeclReason'ConstructorAlias typeName constructorName1 constructorName2 ->
-                                [ "errorKind" .= ("constructorAlias" :: Text),
-                                  "typeName" .= typeName,
-                                  "constructorName1" .= constructorName1,
-                                  "constructorName2" .= constructorName2
-                                ]
-                              IncoherentDeclReason'MissingConstructorName typeName ->
-                                [ "errorKind" .= ("missingConstructorName" :: Text),
-                                  "typeName" .= typeName
-                                ]
-                              IncoherentDeclReason'NestedDeclAlias constructorName1 constructorName2 ->
-                                [ "errorKind" .= ("constructorAlias" :: Text),
-                                  "constructorName1" .= constructorName1,
-                                  "constructorName2" .= constructorName2
-                                ]
-                              IncoherentDeclReason'StrayConstructor _ constructorName ->
-                                [ "errorKind" .= ("strayConstructor" :: Text),
-                                  "constructorName" .= constructorName
-                                ]
-                        )
-                 in case reason of
-                      EitherWay.Alice reason -> f "old" reason
-                      EitherWay.Bob reason -> f "new" reason
-              NamespaceDiffs.LibFoundAtUnexpectedPath _ ->
-                object
-                  [ "errorKind" .= ("libFoundAtUnexpectedPath" :: Text)
-                  ]
-              NamespaceDiffs.MissingEntityError _ ->
-                object
-                  [ "errorKind" .= ("missingEntityError" :: Text)
-                  ]
-        ]
-    ShareNamespaceDiffStatus'StillComputing ->
-      object
-        [ "diffKind" .= ("computing" :: Text)
-        ]
+-- instance ToJSON ShareNamespaceDiffStatus where
+--   toJSON = \case
+--     ShareNamespaceDiffStatus'Ok diff ->
+--       object
+--         [ "diff" .= diff,
+--           "diffKind" .= ("ok" :: Text)
+--         ]
+--     ShareNamespaceDiffStatus'Error err ->
+--       object
+--         [ "diffKind" .= ("error" :: Text),
+--           "error"
+--             .= case err of
+--               NamespaceDiffs.ImpossibleError _ ->
+--                 object
+--                   [ "errorKind" .= ("impossibleError" :: Text)
+--                   ]
+--               NamespaceDiffs.IncoherentDecl reason ->
+--                 let f :: Text -> IncoherentDeclReason -> Value
+--                     f which reason =
+--                       object
+--                         ( "oldOrNewBranch" .= which
+--                             : case reason of
+--                               IncoherentDeclReason'ConstructorAlias typeName constructorName1 constructorName2 ->
+--                                 [ "errorKind" .= ("constructorAlias" :: Text),
+--                                   "typeName" .= typeName,
+--                                   "constructorName1" .= constructorName1,
+--                                   "constructorName2" .= constructorName2
+--                                 ]
+--                               IncoherentDeclReason'MissingConstructorName typeName ->
+--                                 [ "errorKind" .= ("missingConstructorName" :: Text),
+--                                   "typeName" .= typeName
+--                                 ]
+--                               IncoherentDeclReason'NestedDeclAlias constructorName1 constructorName2 ->
+--                                 [ "errorKind" .= ("constructorAlias" :: Text),
+--                                   "constructorName1" .= constructorName1,
+--                                   "constructorName2" .= constructorName2
+--                                 ]
+--                               IncoherentDeclReason'StrayConstructor _ constructorName ->
+--                                 [ "errorKind" .= ("strayConstructor" :: Text),
+--                                   "constructorName" .= constructorName
+--                                 ]
+--                         )
+--                  in case reason of
+--                       EitherWay.Alice reason -> f "old" reason
+--                       EitherWay.Bob reason -> f "new" reason
+--               NamespaceDiffs.LibFoundAtUnexpectedPath _ ->
+--                 object
+--                   [ "errorKind" .= ("libFoundAtUnexpectedPath" :: Text)
+--                   ]
+--               NamespaceDiffs.MissingEntityError _ ->
+--                 object
+--                   [ "errorKind" .= ("missingEntityError" :: Text)
+--                   ]
+--         ]
+--     ShareNamespaceDiffStatus'StillComputing ->
+--       object
+--         [ "diffKind" .= ("computing" :: Text)
+--         ]
 
 data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
   { project :: ProjectShortHand,
@@ -92,15 +92,75 @@ data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
 
 instance ToJSON ShareNamespaceDiffResponse where
   toJSON (ShareNamespaceDiffResponse {diff, project, oldRef, newRef, oldRefHash, newRefHash}) =
-    object
-      [ "diff" .= diff,
-        "project" .= project,
-        "oldRef" .= oldRef,
-        "oldRefHash" .= oldRefHash,
-        "newRef" .= newRef,
-        "newRefHash" .= newRefHash
-      ]
+    object $
+      (maybe [] (\v -> ["diff" .= v]) diffProperty)
+        ++ [ "diffKind" .= diffKindProperty,
+             "project" .= toJSON project,
+             "oldRef" .= oldRef,
+             "oldRefHash" .= oldRefHash,
+             "newRef" .= newRef,
+             "newRefHash" .= newRefHash
+           ]
     where
+      diffKindProperty :: Text
+      diffKindProperty =
+        case diff of
+          ShareNamespaceDiffStatus'Ok _ -> "ok"
+          ShareNamespaceDiffStatus'Error _ -> "error"
+          ShareNamespaceDiffStatus'StillComputing -> "computing"
+
+      diffProperty :: Maybe Value
+      diffProperty =
+        case diff of
+          ShareNamespaceDiffStatus'Ok diff -> Just (toJSON diff)
+          ShareNamespaceDiffStatus'Error err ->
+            Just $
+              object
+                [ "error"
+                    .= case err of
+                      NamespaceDiffs.ImpossibleError _ ->
+                        object
+                          [ "errorKind" .= ("impossibleError" :: Text)
+                          ]
+                      NamespaceDiffs.IncoherentDecl reason ->
+                        let f :: Text -> IncoherentDeclReason -> Value
+                            f which reason =
+                              object
+                                ( "oldOrNewBranch" .= which
+                                    : case reason of
+                                      IncoherentDeclReason'ConstructorAlias typeName constructorName1 constructorName2 ->
+                                        [ "errorKind" .= ("constructorAlias" :: Text),
+                                          "typeName" .= typeName,
+                                          "constructorName1" .= constructorName1,
+                                          "constructorName2" .= constructorName2
+                                        ]
+                                      IncoherentDeclReason'MissingConstructorName typeName ->
+                                        [ "errorKind" .= ("missingConstructorName" :: Text),
+                                          "typeName" .= typeName
+                                        ]
+                                      IncoherentDeclReason'NestedDeclAlias constructorName1 constructorName2 ->
+                                        [ "errorKind" .= ("constructorAlias" :: Text),
+                                          "constructorName1" .= constructorName1,
+                                          "constructorName2" .= constructorName2
+                                        ]
+                                      IncoherentDeclReason'StrayConstructor _ constructorName ->
+                                        [ "errorKind" .= ("strayConstructor" :: Text),
+                                          "constructorName" .= constructorName
+                                        ]
+                                )
+                         in case reason of
+                              EitherWay.Alice reason -> f "old" reason
+                              EitherWay.Bob reason -> f "new" reason
+                      NamespaceDiffs.LibFoundAtUnexpectedPath _ ->
+                        object
+                          [ "errorKind" .= ("libFoundAtUnexpectedPath" :: Text)
+                          ]
+                      NamespaceDiffs.MissingEntityError _ ->
+                        object
+                          [ "errorKind" .= ("missingEntityError" :: Text)
+                          ]
+                ]
+          ShareNamespaceDiffStatus'StillComputing -> Nothing
 
 data ShareTermDiffResponse = ShareTermDiffResponse
   { project :: ProjectShortHand,
