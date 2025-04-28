@@ -318,15 +318,16 @@ pipelinedExpectNamespaceIdsByCausalIdsOf trav s = do
                   then Left (MissingExpectedEntity $ "expectNamespaceIdsByCausalIdsOf: Expected to get the same number of results as causal ids. " <> tShow causalIds)
                   else Right results
             )
-            ( queryListCol @(BranchHashId)
-                [sql| WITH causal_ids(ord, causal_id) AS (
-                SELECT ord, causal_id FROM ^{toTable causalIdsTable} as t(ord, causal_id)
-              )
-              SELECT c.namespace_hash_id
-                FROM causal_ids cid
-                JOIN causals c ON cid.causal_id = c.id
-                ORDER BY cid.ord
-        |]
+            ( queryListCol @BranchHashId
+                [sql|
+                  WITH causal_ids(ord, causal_id) AS (
+                    SELECT ord, causal_id FROM ^{toTable causalIdsTable} as t(ord, causal_id)
+                  )
+                  SELECT c.namespace_hash_id
+                    FROM causal_ids cid
+                    JOIN causals c ON cid.causal_id = c.id
+                    ORDER BY cid.ord
+                  |]
             )
 
 expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t BranchHashId BranchHash -> s -> m t
