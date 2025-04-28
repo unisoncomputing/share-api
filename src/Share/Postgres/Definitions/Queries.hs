@@ -19,6 +19,8 @@ module Share.Postgres.Definitions.Queries
     loadDeclKindsOf,
     loadDecl,
     expectDecl,
+    loadDeclByTypeComponentElementAndTypeId,
+    pipelinedExpectTypeComponentElementAndTypeId,
     loadCachedEvalResult,
     saveCachedEvalResult,
     termReferencesByPrefix,
@@ -36,6 +38,7 @@ module Share.Postgres.Definitions.Queries
 
     -- * Errors
     expectedTermError,
+    expectedTypeError,
     missingDeclKindError,
   )
 where
@@ -47,7 +50,6 @@ import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Servant (err500)
 import Share.Codebase.Types (CodebaseEnv (..), CodebaseM)
@@ -105,9 +107,9 @@ type PgLocalIds = LocalIds.LocalIds' TextId ComponentHashId
 type ComponentRef = These ComponentHash ComponentHashId
 
 data DefinitionQueryError
-  = ExpectedTermNotFound Reference.Id
+  = ExpectedTermNotFound TermReferenceId
   | ExpectedTermComponentNotFound ComponentRef
-  | ExpectedTypeNotFound Reference.Id
+  | ExpectedTypeNotFound TypeReferenceId
   | ExpectedTypeComponentNotFound ComponentRef
   deriving stock (Show)
 
@@ -247,10 +249,8 @@ expectShareTermComponent componentHashId = do
       )
       `whenNothingM` do
         lift . unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound (That componentHashId))
-  second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) -> do
-    textLookup <- lift $ termLocalTextReferences termId
-    defnLookup <- lift $ termLocalComponentReferences termId
-    pure (Share.LocalIds {texts = textLookup, hashes = defnLookup}, bytes)
+  second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) ->
+    (,bytes) <$> termLocalReferences termId
   where
     checkElements :: [(TermId, Maybe LocalTermBytes)] -> Maybe (NonEmpty (TermId, LocalTermBytes))
     checkElements rows =
@@ -277,10 +277,8 @@ expectShareTypeComponent componentHashId = do
       )
       `whenNothingM` do
         lift . unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound (That componentHashId))
-  second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList <$> for componentElements \(typeId, LocalTypeBytes bytes) -> do
-    textLookup <- lift $ typeLocalTextReferences typeId
-    defnLookup <- lift $ typeLocalComponentReferences typeId
-    pure (Share.LocalIds {texts = Vector.toList textLookup, hashes = Vector.toList defnLookup}, bytes)
+  second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList <$> for componentElements \(typeId, LocalTypeBytes bytes) ->
+    (,bytes) <$> typeLocalReferences typeId
   where
     checkElements :: [(TypeId, Maybe LocalTypeBytes)] -> Maybe (NonEmpty (TypeId, LocalTypeBytes))
     checkElements rows =
@@ -298,12 +296,19 @@ expectTypeComponent componentRef = do
 -- Lookup.
 loadTermById :: (QueryA m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
 loadTermById codebaseUser termId = do
-  ( \maybeTermComponentElement localIds ->
+  ( \maybeTermComponentElement Share.LocalIds {texts, hashes} ->
       maybeTermComponentElement <&> \(TermComponentElement trm typ) ->
-        s2cTermWithType (localIds, trm, typ)
+        s2cTermWithType
+          ( LocalIds.LocalIds
+              { textLookup = Vector.fromList texts,
+                defnLookup = Vector.fromList hashes
+              },
+            trm,
+            typ
+          )
     )
     <$> loadTermComponentElementByTermId codebaseUser termId
-    <*> loadResolvedLocalIdsByTermId termId
+    <*> termLocalReferences termId
 
 pipelinedExpectTermById :: UserId -> TermReferenceId -> TermId -> Pipeline e (V2.Term Symbol, V2.Type Symbol)
 pipelinedExpectTermById userId refId termId =
@@ -325,11 +330,9 @@ loadTermComponentElementByTermId codebaseUser termId =
               AND sandboxed.term_id = #{termId}
       |]
 
-loadResolvedLocalIdsByTermId :: (QueryA m) => TermId -> m ResolvedLocalIds
-loadResolvedLocalIdsByTermId termId =
-  ( \textLookup defnLookup ->
-      LocalIds.LocalIds {textLookup = Vector.fromList textLookup, defnLookup = Vector.fromList defnLookup}
-  )
+termLocalReferences :: (QueryA m) => TermId -> m (Share.LocalIds Text ComponentHash)
+termLocalReferences termId =
+  Share.LocalIds
     <$> termLocalTextReferences termId
     <*> termLocalComponentReferences termId
 
@@ -413,50 +416,52 @@ loadDeclKindsOf trav s =
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
-loadDecl :: UserId -> Reference.Id -> PG.Transaction e (Maybe (V2.Decl Symbol))
-loadDecl codebaseUser (Reference.Id compHash (pgComponentIndex -> compIndex)) = runMaybeT $ do
-  (TypeComponentElement decl, typeId :: TypeId) <-
-    MaybeT $
-      query1Row
-        [sql|
-    SELECT bytes.bytes, typ.id
-      FROM types typ
-        JOIN component_hashes ON typ.component_hash_id = component_hashes.id
-        JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
-        JOIN bytes ON sandboxed.bytes_id = bytes.id
-        WHERE sandboxed.user_id = #{codebaseUser}
-          AND component_hashes.base32 = #{compHash}
-          AND typ.component_index = #{compIndex}
-    |]
-  textLookup <-
-    Vector.fromList
-      <$> queryListCol
-        [sql|
-      SELECT text.text
-        FROM type_local_text_references
-          JOIN text ON type_local_text_references.text_id = text.id
-        WHERE type_id = #{typeId}
-          ORDER BY local_index ASC
-      |]
-  defnLookup <-
-    Vector.fromList
-      <$> queryListCol
-        [sql|
-      SELECT component_hashes.base32
-        FROM type_local_component_references
-          JOIN component_hashes ON type_local_component_references.component_hash_id = component_hashes.id
-        WHERE type_id = #{typeId}
-          ORDER BY local_index ASC
-      |]
-  let localIds :: ResolvedLocalIds
-      localIds = LocalIds.LocalIds {textLookup, defnLookup}
+loadDecl :: (QueryM m) => UserId -> TypeReferenceId -> m (Maybe (V2.Decl Symbol))
+loadDecl codebaseUser refId = runMaybeT $ do
+  (TypeComponentElement decl, typeId :: TypeId) <- MaybeT (loadTypeComponentElementAndTypeId codebaseUser refId)
+  Share.LocalIds {texts, hashes} <- typeLocalReferences typeId
+  let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
   pure $ s2cDecl localIds decl
 
-typeLocalTextReferences :: TypeId -> Transaction e (Vector Text)
+loadDeclByTypeComponentElementAndTypeId :: QueryA m => (TypeComponentElement, TypeId) -> m (V2.Decl Symbol)
+loadDeclByTypeComponentElementAndTypeId (TypeComponentElement decl, typeId) =
+  typeLocalReferences typeId <&> \Share.LocalIds {texts, hashes} ->
+    let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
+    in s2cDecl localIds decl
+
+loadTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TypeReferenceId -> m (Maybe (TypeComponentElement, TypeId))
+loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgComponentIndex -> compIndex)) = do
+  query1Row
+    [sql|
+      SELECT bytes.bytes, typ.id
+        FROM types typ
+          JOIN component_hashes ON typ.component_hash_id = component_hashes.id
+          JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
+          JOIN bytes ON sandboxed.bytes_id = bytes.id
+          WHERE sandboxed.user_id = #{codebaseUser}
+            AND component_hashes.base32 = #{compHash}
+            AND typ.component_index = #{compIndex}
+      |]
+
+pipelinedExpectTypeComponentElementAndTypeId :: UserId -> TermReferenceId -> PG.Pipeline e (TypeComponentElement, TypeId)
+pipelinedExpectTypeComponentElementAndTypeId codebaseUser refId =
+  pUnrecoverableEitherMap
+    ( \case
+        Nothing -> Left (expectedTypeError refId)
+        Just decl -> Right decl
+    )
+    (loadTypeComponentElementAndTypeId codebaseUser refId)
+
+typeLocalReferences :: (QueryA m) => TypeId -> m (Share.LocalIds Text ComponentHash)
+typeLocalReferences typeId =
+  Share.LocalIds
+    <$> typeLocalTextReferences typeId
+    <*> typeLocalComponentReferences typeId
+
+typeLocalTextReferences :: (QueryA m) => TypeId -> m [Text]
 typeLocalTextReferences typeId =
-  Vector.fromList
-    <$> queryListCol
-      [sql|
+  queryListCol
+    [sql|
       SELECT text.text
         FROM type_local_text_references
           JOIN text ON type_local_text_references.text_id = text.id
@@ -464,11 +469,10 @@ typeLocalTextReferences typeId =
           ORDER BY local_index ASC
       |]
 
-typeLocalComponentReferences :: TypeId -> Transaction e (Vector ComponentHash)
+typeLocalComponentReferences :: (QueryA m) => TypeId -> m [ComponentHash]
 typeLocalComponentReferences typeId =
-  Vector.fromList
-    <$> queryListCol
-      [sql|
+  queryListCol
+    [sql|
       SELECT component_hashes.base32
         FROM type_local_component_references
           JOIN component_hashes ON type_local_component_references.component_hash_id = component_hashes.id
@@ -1207,6 +1211,10 @@ saveSerializedComponent chId (CBORBytes bytes) = do
 expectedTermError :: TermReferenceId -> InternalServerError DefinitionQueryError
 expectedTermError refId =
   InternalServerError "expected-term" (ExpectedTermNotFound refId)
+
+expectedTypeError :: TypeReferenceId -> InternalServerError DefinitionQueryError
+expectedTypeError refId =
+  InternalServerError "expected-type" (ExpectedTypeNotFound refId)
 
 missingDeclKindError :: TypeReference -> InternalServerError Text
 missingDeclKindError r =

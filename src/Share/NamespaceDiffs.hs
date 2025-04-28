@@ -47,6 +47,7 @@ import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Servant (err400, err404, err500)
 import Share.Codebase qualified as Codebase
+import Share.IDs (UserId)
 import Share.Names.Postgres qualified as PGNames
 import Share.Postgres qualified as PG
 import Share.Postgres.Definitions.Queries qualified as DefnsQ
@@ -59,6 +60,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
+import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.DataDeclaration (Decl)
 import Unison.LabeledDependency (LabeledDependency)
 import Unison.Merge (DiffOp, EitherWay, Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
@@ -625,11 +627,10 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           (TypeReferenceId, Decl Symbol Ann)
       ) <- do
     let hydrateTerms ::
-          Codebase.CodebaseEnv ->
+          UserId ->
           BiMultimap Referent Name ->
           PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
-        hydrateTerms codebaseEnv termReferents = do
-          let codebaseUser = Codebase.codebaseOwner codebaseEnv
+        hydrateTerms codebaseUser termReferents = do
           let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
           termIds <-
             PG.pFor termReferenceIds \refId ->
@@ -641,14 +642,21 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
             for v2Terms \(refId, (term, typ)) ->
               (refId,) <$> Codebase.convertTerm2to1 (Reference.idToHash refId) term typ
           pure v1Terms
-        hydrateType ::
-          Codebase.CodebaseEnv ->
-          TypeReferenceId ->
-          PG.Transaction e (TypeReferenceId, Decl Symbol Ann)
-        hydrateType codebaseEnv ref =
-          Codebase.codebaseMToTransaction codebaseEnv do
-            type_ <- Codebase.expectTypeDeclaration ref
-            pure (ref, type_)
+        hydrateTypes ::
+          UserId ->
+          BiMultimap TypeReference Name ->
+          PG.Transaction e (Map Name (TypeReferenceId, Decl Symbol Ann))
+        hydrateTypes codebaseUser typeReferences = do
+          let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
+          typeIds <-
+            PG.pFor typeReferenceIds \refId ->
+              (refId,) <$> DefnsQ.pipelinedExpectTypeComponentElementAndTypeId codebaseUser refId
+          v1Decls <-
+            PG.pFor typeIds \(refId, typeId) ->
+              DefnsQ.loadDeclByTypeComponentElementAndTypeId typeId <&> \v2Decl ->
+                let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
+                 in (refId, v1Decl)
+          pure v1Decls
         f ::
           Codebase.CodebaseEnv ->
           Defns (BiMultimap Referent Name) (BiMultimap TypeReference Name) ->
@@ -660,9 +668,8 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
                 (TypeReferenceId, Decl Symbol Ann)
             )
         f codebaseEnv =
-          bitraverse
-            (hydrateTerms codebaseEnv)
-            (traverse (hydrateType codebaseEnv) . Map.mapMaybe Reference.toId . BiMultimap.range)
+          let codebaseUser = Codebase.codebaseOwner codebaseEnv
+           in bitraverse (hydrateTerms codebaseUser) (hydrateTypes codebaseUser)
 
     let -- Here we assume that the LCA is in the same codebase as Alice.
         codebaseEnvs3 :: ThreeWay Codebase.CodebaseEnv
