@@ -1,6 +1,8 @@
+#!/bin/env python3
 import http.server
 import socketserver
 import sys
+import threading
 
 PORT = int(sys.argv[1])
 log_file = sys.argv[2]
@@ -32,11 +34,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b"Request logged to " + log_file.encode())
         
         # Exit after handling one request
         print(f"Request received and logged to {log_file}")
-        self.server.shutdown()
+        threading.Timer(0.1, self.server.shutdown).start()
+        # self.server.shutdown()
 
 with socketserver.TCPServer(("", PORT), RequestHandler) as httpd:
     print(f"Webhook listener started on port {PORT}")

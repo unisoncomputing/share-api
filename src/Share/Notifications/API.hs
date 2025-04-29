@@ -153,7 +153,7 @@ instance ToJSON CreateSubscriptionResponse where
 type DeleteSubscriptionEndpoint =
   AuthenticatedUserId
     :> Capture "subscription_id" NotificationSubscriptionId
-    :> Delete '[JSON] NoContent
+    :> Delete '[JSON] ()
 
 type UpdateSubscriptionEndpoint =
   AuthenticatedUserId
@@ -222,7 +222,7 @@ instance ToJSON GetHubEntriesResponse where
 type UpdateHubEntriesEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] UpdateHubEntriesRequest
-    :> Patch '[JSON] NoContent
+    :> Patch '[JSON] ()
 
 data UpdateHubEntriesRequest
   = UpdateHubEntriesRequest
@@ -263,13 +263,13 @@ instance ToJSON CreateEmailDeliveryMethodResponse where
 type DeleteEmailDeliveryMethodEndpoint =
   AuthenticatedUserId
     :> Capture "emailDeliveryMethodId" NotificationEmailDeliveryMethodId
-    :> Delete '[JSON] NoContent
+    :> Delete '[JSON] ()
 
 type UpdateEmailDeliveryMethodEndpoint =
   AuthenticatedUserId
     :> Capture "emailDeliveryMethodId" NotificationEmailDeliveryMethodId
     :> ReqBody '[JSON] UpdateEmailDeliveryMethodRequest
-    :> Patch '[JSON] NoContent
+    :> Patch '[JSON] ()
 
 data UpdateEmailDeliveryMethodRequest
   = UpdateEmailDeliveryMethodRequest
@@ -308,13 +308,13 @@ instance ToJSON CreateWebhookResponse where
 type DeleteWebhookEndpoint =
   AuthenticatedUserId
     :> Capture "webhookId" NotificationWebhookId
-    :> Delete '[JSON] NoContent
+    :> Delete '[JSON] ()
 
 type UpdateWebhookEndpoint =
   AuthenticatedUserId
     :> Capture "webhookId" NotificationWebhookId
     :> ReqBody '[JSON] UpdateWebhookRequest
-    :> Patch '[JSON] NoContent
+    :> Patch '[JSON] ()
 
 data UpdateWebhookRequest
   = UpdateWebhookRequest
@@ -329,12 +329,12 @@ instance FromJSON UpdateWebhookRequest where
 type AddSubscriptionDeliveryMethodsEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] AddSubscriptionDeliveryMethodsRequest
-    :> Post '[JSON] NoContent
+    :> Post '[JSON] ()
 
 type RemoveSubscriptionDeliveryMethodsEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] RemoveSubscriptionDeliveryMethodsRequest
-    :> Delete '[JSON] NoContent
+    :> Delete '[JSON] ()
 
 data AddSubscriptionDeliveryMethodsRequest
   = AddSubscriptionDeliveryMethodsRequest

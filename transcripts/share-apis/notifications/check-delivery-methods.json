@@ -1,25 +1,8 @@
 {
-  "body": {
-    "deliveryMethods": [
-      {
-        "config": {
-          "email": "me@example.com",
-          "id": "NE-<UUID>"
-        },
-        "kind": "email"
-      },
-      {
-        "config": {
-          "id": "NW-<UUID>",
-          "url": "https://example.com/webhook"
-        },
-        "kind": "webhook"
-      }
-    ]
-  },
+  "body": "Vault request failed: FailureResponse (Request {requestPath = (BaseUrl {baseUrlScheme = Http, baseUrlHost = \"localhost\", baseUrlPort = 8200, baseUrlPath = \"/v1\"},\"/share/data/webhooks%2FNW-<UUID>\"), requestQueryString = fromList [], requestBody = Nothing, requestAccept = fromList [application/json;charset=utf-8,application/json], requestHeaders = fromList [(\"X-Vault-Token\",\"sekrit\")], requestHttpVersion = HTTP/1.1, requestMethod = \"GET\"}) (Response {responseStatusCode = Status {statusCode = 404, statusMessage = \"Not Found\"}, responseHeaders = fromList [(\"Cache-Control\",\"no-store\"),(\"Content-Type\",\"application/json\"),(\"Strict-Transport-Security\",\"max-age=31536000; includeSubDomains\"),(\"Date\",\"Wed, 30 Apr 2025 18:04:08 GMT\"),(\"Content-Length\",\"124\")], responseHttpVersion = HTTP/1.1, responseBody = \"{\\\"errors\\\":[\\\"no handler for route \\\\\\\"share/data/webhooks/NW-<UUID>\\\\\\\". route entry not found.\\\"]}\\n\"})",
   "status": [
     {
-      "status_code": 200
+      "status_code": 500
     }
   ]
 }

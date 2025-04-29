@@ -3,17 +3,15 @@ module Share.Notifications.Queries
     expectEvent,
     listNotificationHubEntries,
     updateNotificationHubEntries,
-    listNotificationDeliveryMethods,
     addSubscriptionDeliveryMethods,
     removeSubscriptionDeliveryMethods,
     listEmailDeliveryMethods,
-    listWebhookDeliveryMethods,
+    listWebhooks,
     createEmailDeliveryMethod,
     createWebhookDeliveryMethod,
     deleteEmailDeliveryMethod,
     deleteWebhookDeliveryMethod,
     updateEmailDeliveryMethod,
-    updateWebhookDeliveryMethod,
     listNotificationSubscriptions,
     createNotificationSubscription,
     deleteNotificationSubscription,
@@ -30,7 +28,6 @@ import Share.IDs
 import Share.Notifications.Types
 import Share.Postgres
 import Share.Prelude
-import Share.Utils.URI (URIParam)
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
 recordEvent (NotificationEvent {eventScope, eventData, eventResourceId}) = do
@@ -77,12 +74,6 @@ updateNotificationHubEntries hubEntryIds status = do
       WHERE id IN (SELECT notification_id FROM to_update)
     |]
 
-listNotificationDeliveryMethods :: UserId -> Maybe NotificationSubscriptionId -> Transaction e [NotificationDeliveryMethod]
-listNotificationDeliveryMethods userId maySubscriptionId = pipelined do
-  emailDeliveryMethods <- listEmailDeliveryMethods userId maySubscriptionId
-  webhookDeliveryMethods <- listWebhookDeliveryMethods userId maySubscriptionId
-  pure $ (EmailDeliveryMethod <$> emailDeliveryMethods) <> (WebhookDeliveryMethod <$> webhookDeliveryMethods)
-
 -- | Note: If a given delivery method belongs to a different subscriber user, it will simply be ignored,
 -- this should never happen in non-malicious workflows so it's fine to ignore it.
 addSubscriptionDeliveryMethods :: UserId -> NotificationSubscriptionId -> NESet DeliveryMethodId -> Transaction e ()
@@ -95,7 +86,7 @@ addSubscriptionDeliveryMethods subscriberUserId subscriptionId deliveryMethods =
     [sql|
       WITH email_ids(email_id) AS (
         SELECT * FROM ^{singleColumnTable emailIds}
-      ),
+      )
       INSERT INTO notification_by_email (subscription_id, email_id)
       SELECT #{subscriptionId}, ei.email_id
         FROM email_ids ei
@@ -107,7 +98,7 @@ addSubscriptionDeliveryMethods subscriberUserId subscriptionId deliveryMethods =
     [sql|
       WITH webhook_ids(webhook_id) AS (
         SELECT * FROM ^{singleColumnTable webhookIds}
-      ),
+      )
       INSERT INTO notification_by_webhook (subscription_id, webhook_id)
       SELECT #{subscriptionId}, wi.webhook_id
         FROM webhook_ids wi
@@ -164,11 +155,11 @@ listEmailDeliveryMethods userId maySubscriptionId = do
       ORDER BY ne.email
     |]
 
-listWebhookDeliveryMethods :: (QueryA m) => UserId -> Maybe NotificationSubscriptionId -> m [NotificationWebhookDeliveryConfig]
-listWebhookDeliveryMethods userId maySubscriptionId = do
-  queryListRows
+listWebhooks :: (QueryA m) => UserId -> Maybe NotificationSubscriptionId -> m [NotificationWebhookId]
+listWebhooks userId maySubscriptionId = do
+  queryListCol
     [sql|
-      SELECT nw.id, nw.url
+      SELECT nw.id
         FROM notification_webhooks nw
       WHERE nw.subscriber_user_id = #{userId}
         AND (#{maySubscriptionId} IS NULL
@@ -178,7 +169,7 @@ listWebhookDeliveryMethods userId maySubscriptionId = do
                            AND nbw.webhook_id = nw.id
                        )
             )
-      ORDER BY nw.url
+        ORDER BY nw.created_at
     |]
 
 createEmailDeliveryMethod :: UserId -> Email -> Transaction e NotificationEmailDeliveryMethodId
@@ -220,35 +211,14 @@ deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-createWebhookDeliveryMethod :: UserId -> URIParam -> Transaction e NotificationWebhookId
-createWebhookDeliveryMethod userId url = do
-  existingWebhookDeliveryMethodId <-
-    query1Col
-      [sql|
-      SELECT id
-        FROM notification_webhooks
-      WHERE subscriber_user_id = #{userId}
-            AND url = #{url}
-    |]
-  case existingWebhookDeliveryMethodId of
-    Just webhookDeliveryMethodId -> pure webhookDeliveryMethodId
-    Nothing -> do
-      queryExpect1Col
-        [sql|
-          INSERT INTO notification_webhooks (subscriber_user_id, url)
-          VALUES (#{userId}, #{url})
+createWebhookDeliveryMethod :: UserId -> Transaction e NotificationWebhookId
+createWebhookDeliveryMethod userId = do
+  queryExpect1Col
+    [sql|
+          INSERT INTO notification_webhooks (subscriber_user_id)
+          VALUES (#{userId})
           RETURNING id
         |]
-
-updateWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> URIParam -> Transaction e ()
-updateWebhookDeliveryMethod notificationUser webhookDeliveryMethodId url = do
-  execute_
-    [sql|
-      UPDATE notification_webhooks
-      SET url = #{url}
-      WHERE id = #{webhookDeliveryMethodId}
-        AND subscriber_user_id = #{notificationUser}
-    |]
 
 deleteWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> Transaction e ()
 deleteWebhookDeliveryMethod notificationUserId webhookDeliveryMethodId = do

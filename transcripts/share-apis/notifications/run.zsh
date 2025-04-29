@@ -10,10 +10,10 @@ publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject
 capture_port=9999
 capture_request './webhook.http' "${capture_port}" &
 SERVER_PID=$!
-trap "kill $SERVER_PID" EXIT INT TERM
+trap "kill $SERVER_PID >/dev/null 2>&1 || true" EXIT INT TERM
 
 # Subscribe to project:contribution:created notifications for the test user's publictetestproject.
-subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' "{
+subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' '.subscription.id' "{
   \"scope\": \"test\",
   \"topics\": [
     \"project:contribution:created\"
@@ -21,14 +21,14 @@ subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-projec
   \"filter\": {
     \"projectId\": \"$publictestproject_id\"
   }
-}" '.subscription.subscriptionId')
+}" )
 
-webhook_id=$(fetch_data_jq "$test_user" POST create-webhook '/users/test/notifications/delivery-methods/webhooks' "{
+webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
   \"url\": \"http://localhost:${capture_port}\"
-}" '.webhookId')
+}" )
 
 fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/subscriptions/${subscription_id}/delivery-methods/add" "{
-  \"deliveryMethods\": [\"${webhook_id}\"]
+  \"deliveryMethods\": [{\"kind\": \"webhook\",  \"id\": \"${webhook_id}\"}]
 }"
 
 # Add a subscription within the transcripts user to notifications for contributions created in any project belonging to the test user.
@@ -100,5 +100,6 @@ fetch "$test_user" GET list-notifications-unread-test '/users/test/notifications
 # Show only read notifications (the one we just marked as read):
 fetch "$transcripts_user" GET list-notifications-read-transcripts '/users/transcripts/notifications/hub?status=read'
 
+echo "Waiting for webhooks to be delivered..."
 # The server should take itself down once it gets a webhook.
 wait $SERVER_PID

@@ -44,8 +44,7 @@ BEGIN
       SELECT the_event_id, nbw.webhook_id
       FROM notification_by_webhook nbw
       WHERE nbw.subscription_id = the_subscription_id
-      ON CONFLICT DO NOTHING
-      RETURNING webhook_id;
+      ON CONFLICT DO NOTHING;
 
       -- Notify listeners on the channel IF any webhooks were added to the queue
 
@@ -62,7 +61,7 @@ BEGIN
     -- If there are any new webhooks to process, trigger workers via LISTEN/NOTIFY
     GET DIAGNOSTICS rows_affected = ROW_COUNT;
     IF rows_affected > 0 THEN
-        NOTIFY 'webhooks'
+        PERFORM pg_notify('webhooks');
     END IF;
 
     -- Also add the notification to the hub.

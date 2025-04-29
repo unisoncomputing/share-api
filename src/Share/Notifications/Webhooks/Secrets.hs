@@ -1,6 +1,7 @@
 module Share.Notifications.Webhooks.Secrets
   ( putWebhookConfig,
     fetchWebhookConfig,
+    deleteWebhookConfig,
     WebhookConfig (..),
     WebhookSecretError (..),
   )
@@ -21,6 +22,7 @@ import Share.Env qualified as Env
 import Share.IDs (NotificationWebhookId)
 import Share.IDs qualified as IDs
 import Share.Prelude
+import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam)
 import Share.Web.Errors (ToServerError (..))
 import Vault (SecretPath (..), SecretRequest (..))
@@ -30,6 +32,15 @@ data WebhookSecretError
   = InvalidSecretJSON NotificationWebhookId Text
   | VaultError ClientError
   deriving stock (Eq, Show)
+
+instance Logging.Loggable WebhookSecretError where
+  toLog = \case
+    InvalidSecretJSON webhookId err ->
+      (Logging.textLog $ "Invalid JSON in webhook config for " <> IDs.toText webhookId <> ": " <> err)
+        & Logging.withSeverity Logging.Error
+    VaultError err ->
+      (Logging.textLog $ "Vault request failed: " <> Text.pack (show err))
+        & Logging.withSeverity Logging.Error
 
 instance ToServerError WebhookSecretError where
   toServerError = \case
@@ -82,3 +93,11 @@ fetchWebhookConfig webhookId = runExceptT do
   case Aeson.fromJSON v of
     Aeson.Error err -> throwError $ InvalidSecretJSON webhookId (Text.pack err)
     Aeson.Success config -> pure config
+
+deleteWebhookConfig :: NotificationWebhookId -> AppM r (Either WebhookSecretError ())
+deleteWebhookConfig webhookId = runExceptT do
+  let secretPath = makeWebhookSecretPath webhookId
+  shareVaultMount <- asks Env.shareVaultMount
+  shareVaultToken <- asks Env.shareVaultToken
+  withExceptT VaultError . ExceptT . runVaultClientM $ Vault.deleteSecret shareVaultToken shareVaultMount secretPath
+  pure ()

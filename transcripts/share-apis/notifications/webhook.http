@@ -1,0 +1,11 @@
+Request method: POST
+Request path: /login
+Headers:
+  Host: localhost:9999
+  User-Agent: curl/8.7.1
+  Accept: */*
+  Content-Length: 10
+  Content-Type: application/x-www-form-urlencoded
+
+Body:
+{"test":1}

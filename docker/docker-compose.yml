@@ -44,8 +44,11 @@ services:
       - "8200:8200"
     environment:
       - VAULT_DEV_ROOT_TOKEN_ID=sekrit
+      - VAULT_KV_V1_MOUNT_PATH=secret
     cap_add:
       - IPC_LOCK
+    # # Use kv version 1
+    # command: server -dev
 
   share:
     image: share-api

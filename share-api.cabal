@@ -53,6 +53,7 @@ library
       Share.NamespaceDiffs
       Share.Notifications.API
       Share.Notifications.Impl
+      Share.Notifications.Ops
       Share.Notifications.Queries
       Share.Notifications.Types
       Share.Notifications.Webhooks.Secrets

@@ -1,6 +1,6 @@
 {
   "body": {
-    "webhookDeliveryMethodId": "NW-<UUID>"
+    "webhookId": "NW-<UUID>"
   },
   "status": [
     {

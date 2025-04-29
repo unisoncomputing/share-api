@@ -13,7 +13,7 @@ module Share.Notifications.Types
     DeliveryMethodId (..),
     NotificationDeliveryMethod (..),
     NotificationEmailDeliveryConfig (..),
-    NotificationWebhookDeliveryConfig (..),
+    NotificationWebhookConfig (..),
     eventTopic,
   )
 where
@@ -255,19 +255,19 @@ instance Aeson.ToJSON NotificationEmailDeliveryConfig where
         "email" Aeson..= emailDeliveryEmail
       ]
 
-data NotificationWebhookDeliveryConfig = NotificationWebhookConfig
+data NotificationWebhookConfig = NotificationWebhookConfig
   { webhookDeliveryId :: NotificationWebhookId,
     webhookDeliveryUrl :: URI
   }
   deriving (Eq, Ord, Show)
 
-instance PG.DecodeRow NotificationWebhookDeliveryConfig where
+instance PG.DecodeRow NotificationWebhookConfig where
   decodeRow = do
     webhookDeliveryId <- PG.decodeField
     URIParam webhookDeliveryUrl <- PG.decodeField
     pure $ NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl}
 
-instance Aeson.ToJSON NotificationWebhookDeliveryConfig where
+instance Aeson.ToJSON NotificationWebhookConfig where
   toJSON NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl} =
     Aeson.object
       [ "id" Aeson..= webhookDeliveryId,
@@ -289,7 +289,7 @@ instance Aeson.FromJSON DeliveryMethodId where
 
 data NotificationDeliveryMethod
   = EmailDeliveryMethod NotificationEmailDeliveryConfig
-  | WebhookDeliveryMethod NotificationWebhookDeliveryConfig
+  | WebhookDeliveryMethod NotificationWebhookConfig
   deriving (Eq, Ord, Show)
 
 instance Aeson.ToJSON NotificationDeliveryMethod where
