@@ -166,7 +166,7 @@ userByUserId uid = do
         WHERE u.id = #{uid}
       |]
 
-expectUser :: (PG.QueryA m) => UserId -> m User
+expectUser :: (PG.QueryM m) => UserId -> m User
 expectUser userId = do
   PG.queryExpect1Row
     [PG.sql|
@@ -239,7 +239,7 @@ createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_
 createUser :: AuthZ.AuthZReceipt -> Text -> Maybe Text -> Maybe URIParam -> UserHandle -> Bool -> PG.Transaction UserCreationError UserId
 createUser !_authZReceipt userEmail userName avatarUrl userHandle emailVerified = do
   handleExists <-
-    PG.expectUserById
+    PG.queryExpect1Col
       [PG.sql|
         SELECT EXISTS (SELECT from users WHERE handle = #{userHandle})
       |]

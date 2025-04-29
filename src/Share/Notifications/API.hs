@@ -16,6 +16,10 @@ module Share.Notifications.API
     CreateSubscriptionRequest (..),
     CreateSubscriptionResponse (..),
     UpdateSubscriptionRequest (..),
+    SubscriptionDeliveryMethodRoutes (..),
+    SubscriptionResourceRoutes (..),
+    AddSubscriptionDeliveryMethodsRequest (..),
+    RemoveSubscriptionDeliveryMethodsRequest (..),
     GetDeliveryMethodsResponse (..),
     CreateEmailDeliveryMethodRequest (..),
     CreateEmailDeliveryMethodResponse (..),
@@ -35,7 +39,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
+import Share.Notifications.Types (DeliveryMethodId, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.URI (URIParam)
@@ -70,7 +74,22 @@ data SubscriptionRoutes mode
   { getSubscriptionsEndpoint :: mode :- GetSubscriptionsEndpoint,
     createSubscriptionEndpoint :: mode :- CreateSubscriptionEndpoint,
     deleteSubscriptionEndpoint :: mode :- DeleteSubscriptionEndpoint,
-    updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint
+    updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint,
+    subscriptionResourceRoutes :: mode :- Capture "subscriptionId" NotificationSubscriptionId :> NamedRoutes SubscriptionResourceRoutes
+  }
+  deriving stock (Generic)
+
+data SubscriptionResourceRoutes mode
+  = SubscriptionResourceRoutes
+  { subscriptionDeliveryMethodRoutes :: mode :- "delivery-methods" :> NamedRoutes SubscriptionDeliveryMethodRoutes
+  }
+  deriving stock (Generic)
+
+data SubscriptionDeliveryMethodRoutes mode
+  = SubscriptionDeliveryMethodRoutes
+  { getSubscriptionDeliveryMethodsEndpoint :: mode :- GetDeliveryMethodsEndpoint,
+    addSubscriptionDeliveryMethodsEndpoint :: mode :- AddSubscriptionDeliveryMethodsEndpoint,
+    removeSubscriptionDeliveryMethodsEndpoint :: mode :- RemoveSubscriptionDeliveryMethodsEndpoint
   }
   deriving stock (Generic)
 
@@ -279,21 +298,21 @@ instance FromJSON CreateWebhookRequest where
 
 data CreateWebhookResponse
   = CreateWebhookResponse
-  { webhookDeliveryMethodId :: NotificationWebhookId
+  { webhookId :: NotificationWebhookId
   }
 
 instance ToJSON CreateWebhookResponse where
-  toJSON CreateWebhookResponse {webhookDeliveryMethodId} =
-    object ["webhookDeliveryMethodId" .= webhookDeliveryMethodId]
+  toJSON CreateWebhookResponse {webhookId} =
+    object ["webhookId" .= webhookId]
 
 type DeleteWebhookEndpoint =
   AuthenticatedUserId
-    :> Capture "webhookDeliveryMethodId" NotificationWebhookId
+    :> Capture "webhookId" NotificationWebhookId
     :> Delete '[JSON] NoContent
 
 type UpdateWebhookEndpoint =
   AuthenticatedUserId
-    :> Capture "webhookDeliveryMethodId" NotificationWebhookId
+    :> Capture "webhookId" NotificationWebhookId
     :> ReqBody '[JSON] UpdateWebhookRequest
     :> Patch '[JSON] NoContent
 
@@ -306,3 +325,35 @@ instance FromJSON UpdateWebhookRequest where
   parseJSON = withObject "UpdateWebhookRequest" $ \o -> do
     url <- o .: "url"
     pure UpdateWebhookRequest {url}
+
+type AddSubscriptionDeliveryMethodsEndpoint =
+  AuthenticatedUserId
+    :> ReqBody '[JSON] AddSubscriptionDeliveryMethodsRequest
+    :> Post '[JSON] NoContent
+
+type RemoveSubscriptionDeliveryMethodsEndpoint =
+  AuthenticatedUserId
+    :> ReqBody '[JSON] RemoveSubscriptionDeliveryMethodsRequest
+    :> Delete '[JSON] NoContent
+
+data AddSubscriptionDeliveryMethodsRequest
+  = AddSubscriptionDeliveryMethodsRequest
+  { deliveryMethodIds :: NESet DeliveryMethodId
+  }
+  deriving stock (Show, Eq, Ord)
+
+instance FromJSON AddSubscriptionDeliveryMethodsRequest where
+  parseJSON = withObject "AddSubscriptionDeliveryMethodsRequest" $ \o -> do
+    deliveryMethodIds <- o .: "deliveryMethodIds"
+    pure AddSubscriptionDeliveryMethodsRequest {deliveryMethodIds}
+
+data RemoveSubscriptionDeliveryMethodsRequest
+  = RemoveSubscriptionDeliveryMethodsRequest
+  { deliveryMethodIds :: NESet DeliveryMethodId
+  }
+  deriving stock (Show, Eq, Ord)
+
+instance FromJSON RemoveSubscriptionDeliveryMethodsRequest where
+  parseJSON = withObject "RemoveSubscriptionDeliveryMethodsRequest" $ \o -> do
+    deliveryMethodIds <- o .: "deliveryMethodIds"
+    pure RemoveSubscriptionDeliveryMethodsRequest {deliveryMethodIds}

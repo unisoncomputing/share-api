@@ -10,6 +10,7 @@ module Share.Notifications.Types
     ProjectContributionData (..),
     NotificationHubEntry (..),
     NotificationStatus (..),
+    DeliveryMethodId (..),
     NotificationDeliveryMethod (..),
     NotificationEmailDeliveryConfig (..),
     NotificationWebhookDeliveryConfig (..),
@@ -272,6 +273,19 @@ instance Aeson.ToJSON NotificationWebhookDeliveryConfig where
       [ "id" Aeson..= webhookDeliveryId,
         "url" Aeson..= show webhookDeliveryUrl
       ]
+
+data DeliveryMethodId
+  = EmailDeliveryMethodId NotificationEmailDeliveryMethodId
+  | WebhookDeliveryMethodId NotificationWebhookId
+  deriving stock (Show, Eq, Ord)
+
+instance Aeson.FromJSON DeliveryMethodId where
+  parseJSON = Aeson.withObject "DeliveryMethodId" $ \o -> do
+    deliveryMethodKind <- o .: "kind"
+    case deliveryMethodKind of
+      "email" -> EmailDeliveryMethodId <$> o .: "id"
+      "webhook" -> WebhookDeliveryMethodId <$> o .: "id"
+      _ -> fail $ "Unknown delivery method kind: " <> Text.unpack deliveryMethodKind
 
 data NotificationDeliveryMethod
   = EmailDeliveryMethod NotificationEmailDeliveryConfig

@@ -34,7 +34,22 @@ subscriptionsRoutes userHandle =
     { getSubscriptionsEndpoint = getSubscriptionsEndpoint userHandle,
       createSubscriptionEndpoint = createSubscriptionEndpoint userHandle,
       deleteSubscriptionEndpoint = deleteSubscriptionEndpoint userHandle,
-      updateSubscriptionEndpoint = updateSubscriptionEndpoint userHandle
+      updateSubscriptionEndpoint = updateSubscriptionEndpoint userHandle,
+      subscriptionResourceRoutes = subscriptionResourceRoutes userHandle
+    }
+
+subscriptionResourceRoutes :: UserHandle -> NotificationSubscriptionId -> API.SubscriptionResourceRoutes (AsServerT WebApp)
+subscriptionResourceRoutes handle subscriptionId =
+  API.SubscriptionResourceRoutes
+    { subscriptionDeliveryMethodRoutes = subscriptionDeliveryMethodRoutes handle subscriptionId
+    }
+
+subscriptionDeliveryMethodRoutes :: UserHandle -> NotificationSubscriptionId -> API.SubscriptionDeliveryMethodRoutes (AsServerT WebApp)
+subscriptionDeliveryMethodRoutes handle subscriptionId =
+  API.SubscriptionDeliveryMethodRoutes
+    { getSubscriptionDeliveryMethodsEndpoint = getSubscriptionDeliveryMethodsEndpoint handle subscriptionId,
+      addSubscriptionDeliveryMethodsEndpoint = addSubscriptionDeliveryMethodsEndpoint handle subscriptionId,
+      removeSubscriptionDeliveryMethodsEndpoint = removeSubscriptionDeliveryMethodsEndpoint handle subscriptionId
     }
 
 emailDeliveryRoutes :: UserHandle -> API.EmailRoutes (AsServerT WebApp)
@@ -79,7 +94,7 @@ getDeliveryMethodsEndpoint :: UserHandle -> UserId -> WebApp API.GetDeliveryMeth
 getDeliveryMethodsEndpoint userHandle callerUserId = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsView callerUserId notificationUserId
-  deliveryMethods <- fmap Set.fromList . PG.runTransaction $ NotificationQ.listNotificationDeliveryMethods notificationUserId
+  deliveryMethods <- fmap Set.fromList . PG.runTransaction $ NotificationQ.listNotificationDeliveryMethods notificationUserId Nothing
   pure $ API.GetDeliveryMethodsResponse {deliveryMethods}
 
 createEmailDeliveryMethodEndpoint :: UserHandle -> UserId -> API.CreateEmailDeliveryMethodRequest -> WebApp API.CreateEmailDeliveryMethodResponse
@@ -103,12 +118,33 @@ updateEmailDeliveryMethodEndpoint userHandle callerUserId emailDeliveryMethodId 
   PG.runTransaction $ NotificationQ.updateEmailDeliveryMethod notificationUserId emailDeliveryMethodId email
   pure NoContent
 
+getSubscriptionDeliveryMethodsEndpoint :: UserHandle -> NotificationSubscriptionId -> UserId -> WebApp API.GetDeliveryMethodsResponse
+getSubscriptionDeliveryMethodsEndpoint userHandle subscriptionId callerUserId = do
+  User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsView callerUserId notificationUserId
+  deliveryMethods <- fmap Set.fromList . PG.runTransaction $ NotificationQ.listNotificationDeliveryMethods notificationUserId (Just subscriptionId)
+  pure $ API.GetDeliveryMethodsResponse {deliveryMethods}
+
+addSubscriptionDeliveryMethodsEndpoint :: UserHandle -> NotificationSubscriptionId -> UserId -> API.AddSubscriptionDeliveryMethodsRequest -> WebApp NoContent
+addSubscriptionDeliveryMethodsEndpoint userHandle subscriptionId callerUserId API.AddSubscriptionDeliveryMethodsRequest {deliveryMethodIds} = do
+  User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
+  PG.runTransaction $ NotificationQ.addSubscriptionDeliveryMethods notificationUserId subscriptionId deliveryMethodIds
+  pure NoContent
+
+removeSubscriptionDeliveryMethodsEndpoint :: UserHandle -> NotificationSubscriptionId -> UserId -> API.RemoveSubscriptionDeliveryMethodsRequest -> WebApp NoContent
+removeSubscriptionDeliveryMethodsEndpoint userHandle subscriptionId callerUserId API.RemoveSubscriptionDeliveryMethodsRequest {deliveryMethodIds} = do
+  User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
+  PG.runTransaction $ NotificationQ.removeSubscriptionDeliveryMethods notificationUserId subscriptionId deliveryMethodIds
+  pure NoContent
+
 createWebhookEndpoint :: UserHandle -> UserId -> API.CreateWebhookRequest -> WebApp API.CreateWebhookResponse
 createWebhookEndpoint userHandle callerUserId API.CreateWebhookRequest {url} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
-  webhookDeliveryMethodId <- PG.runTransaction $ NotificationQ.createWebhookDeliveryMethod notificationUserId url
-  pure $ API.CreateWebhookResponse {webhookDeliveryMethodId}
+  webhookId <- PG.runTransaction $ NotificationQ.createWebhookDeliveryMethod notificationUserId url
+  pure $ API.CreateWebhookResponse {webhookId}
 
 deleteWebhookEndpoint :: UserHandle -> UserId -> NotificationWebhookId -> WebApp NoContent
 deleteWebhookEndpoint userHandle callerUserId webhookDeliveryMethodId = do
