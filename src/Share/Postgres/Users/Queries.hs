@@ -10,6 +10,7 @@ module Share.Postgres.Users.Queries
     updateUser,
     expectUserByUserId,
     userByUserId,
+    expectUser,
     userByEmail,
     userByGithubUserId,
     userByHandle,
@@ -165,6 +166,15 @@ userByUserId uid = do
         WHERE u.id = #{uid}
       |]
 
+expectUser :: (PG.QueryA m) => UserId -> m User
+expectUser userId = do
+  PG.queryExpect1Row
+    [PG.sql|
+        SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
+        FROM users u
+        WHERE u.id = #{userId}
+      |]
+
 userByEmail :: Text -> PG.Transaction e (Maybe User)
 userByEmail email = do
   PG.query1Row
@@ -229,7 +239,7 @@ createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_
 createUser :: AuthZ.AuthZReceipt -> Text -> Maybe Text -> Maybe URIParam -> UserHandle -> Bool -> PG.Transaction UserCreationError UserId
 createUser !_authZReceipt userEmail userName avatarUrl userHandle emailVerified = do
   handleExists <-
-    PG.queryExpect1Col
+    PG.expectUserById
       [PG.sql|
         SELECT EXISTS (SELECT from users WHERE handle = #{userHandle})
       |]

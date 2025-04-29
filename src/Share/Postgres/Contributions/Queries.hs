@@ -235,9 +235,9 @@ listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFi
         xs
       )
 
-contributionById :: ContributionId -> PG.Transaction e (Maybe Contribution)
+contributionById :: (PG.QueryM m) => ContributionId -> m Contribution
 contributionById contributionId = do
-  PG.query1Row @Contribution
+  PG.queryExpect1Row @Contribution
     [PG.sql|
         SELECT
           contribution.id,
@@ -259,7 +259,7 @@ contributionById contributionId = do
 updateContribution :: UserId -> ContributionId -> Maybe Text -> NullableUpdate Text -> Maybe ContributionStatus -> Maybe BranchId -> Maybe BranchId -> PG.Transaction e Bool
 updateContribution callerUserId contributionId newTitle newDescription newStatus newSourceBranchId newTargetBranchId = do
   isJust <$> runMaybeT do
-    Contribution {..} <- MaybeT $ contributionById contributionId
+    Contribution {..} <- lift $ contributionById contributionId
     let updatedTitle = fromMaybe title newTitle
     let updatedDescription = fromNullableUpdate description newDescription
     let updatedStatus = fromMaybe status newStatus
