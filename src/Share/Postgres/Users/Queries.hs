@@ -197,7 +197,7 @@ userByHandle handle = do
 
 createFromGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> Maybe UserHandle -> PG.Transaction UserCreationError User
 createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail mayPreferredHandle = do
-  let (GithubEmail {github_email_email = user_email, github_email_verified = emailVerified}) = primaryEmail
+  let (GithubEmail {githubEmailEmail = user_email, githubEmailIsVerified = emailVerified}) = primaryEmail
   userHandle <- case mayPreferredHandle of
     Just handle -> pure handle
     Nothing -> case IDs.fromText @UserHandle (Text.toLower githubHandle) of
