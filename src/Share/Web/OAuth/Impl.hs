@@ -40,6 +40,7 @@ import Share.OAuth.Session qualified as Session
 import Share.OAuth.Types (AccessToken, AuthenticationRequest (..), Code, GrantType (AuthorizationCode), OAuth2State, OAuthClientConfig (..), OAuthClientId, PKCEChallenge, PKCEChallengeMethod, RedirectReceiverErr (..), ResponseType (ResponseTypeCode), TokenRequest (..), TokenResponse (..), TokenType (BearerToken))
 import Share.OAuth.Types qualified as OAuth
 import Share.Postgres qualified as PG
+import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.User (User (User))
@@ -141,14 +142,18 @@ redirectReceiverEndpoint _mayGithubCode _mayStatePSID (Just errorType) mayErrorD
     otherErrType -> do
       Logging.logErrorText ("Github authentication error: " <> otherErrType <> " " <> fold mayErrorDescription)
       errorRedirect UnspecifiedError
-redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayErrorDescription mayCookiePSID _existingAuthSession = do
+redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayErrorDescription mayCookiePSID existingAuthSession = do
   cookiePSID <- case cookieVal mayCookiePSID of
     Nothing -> respondError $ MissingOrExpiredPendingSession
     Just psid -> pure psid
   PendingSession {loginRequest, returnToURI = unvalidatedReturnToURI, additionalData} <- ensurePendingSession cookiePSID
-  newOrPreExistingUser <- case (mayGithubCode, mayStatePSID) of
+  newOrPreExistingUser <- case (mayGithubCode, mayStatePSID, existingAuthSession) of
+    -- The user has an already valid session, we can use that.
+    (_, _, Just session) -> do
+      user <- (PGO.expectUserById (sessionUserId session))
+      pure (UserQ.PreExisting user)
     -- The user has completed the Github flow, we can log them in or create a new user.
-    (Just githubCode, Just statePSID) -> do
+    (Just githubCode, Just statePSID, _) -> do
       (ghUser, ghEmail) <-
         -- Skip the github flow when developing locally, and just use some dummy github user
         -- data.
@@ -165,9 +170,9 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
             handle <- hoistMaybe $ Map.lookup ("handle" :: Text) m
             hoistMaybe . eitherToMaybe $ IDs.fromText handle
       completeGithubFlow ghUser ghEmail mayPreferredHandle
-    (Nothing, _) -> do
+    (Nothing, _, _) -> do
       respondError $ MissingCode
-    (_, Nothing) -> do
+    (_, Nothing, _) -> do
       respondError $ MissingState
   let (User {User.user_id = uid}) = UserQ.getNewOrPreExisting newOrPreExistingUser
   when (UserQ.isNew newOrPreExistingUser) do
