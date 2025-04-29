@@ -19,7 +19,9 @@ import Control.Monad.Reader
 import Data.Aeson (ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Data.Map qualified as Map
+import Data.Maybe (fromJust)
 import Data.Set qualified as Set
+import Network.URI (parseURI)
 import Servant
 import Share.App (shareAud, shareIssuer)
 import Share.Env qualified as Env
@@ -38,11 +40,11 @@ import Share.OAuth.Session qualified as Session
 import Share.OAuth.Types (AccessToken, AuthenticationRequest (..), Code, GrantType (AuthorizationCode), OAuth2State, OAuthClientConfig (..), OAuthClientId, PKCEChallenge, PKCEChallengeMethod, RedirectReceiverErr (..), ResponseType (ResponseTypeCode), TokenRequest (..), TokenResponse (..), TokenType (BearerToken))
 import Share.OAuth.Types qualified as OAuth
 import Share.Postgres qualified as PG
-import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.User (User (User))
 import Share.User qualified as User
+import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant
 import Share.Utils.Servant.Cookies (CookieVal, cookieVal)
@@ -139,18 +141,20 @@ redirectReceiverEndpoint _mayGithubCode _mayStatePSID (Just errorType) mayErrorD
     otherErrType -> do
       Logging.logErrorText ("Github authentication error: " <> otherErrType <> " " <> fold mayErrorDescription)
       errorRedirect UnspecifiedError
-redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayErrorDescription mayCookiePSID existingAuthSession = do
+redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayErrorDescription mayCookiePSID _existingAuthSession = do
   cookiePSID <- case cookieVal mayCookiePSID of
     Nothing -> respondError $ MissingOrExpiredPendingSession
     Just psid -> pure psid
   PendingSession {loginRequest, returnToURI = unvalidatedReturnToURI, additionalData} <- ensurePendingSession cookiePSID
-  newOrPreExistingUser <- case (mayGithubCode, mayStatePSID, existingAuthSession) of
-    -- The user has an already valid session, we can use that.
-    (_, _, Just session) -> do
-      user <- (PGO.expectUserById (sessionUserId session))
-      pure (UserQ.PreExisting user)
+  newOrPreExistingUser <- case (mayGithubCode, mayStatePSID) of
     -- The user has completed the Github flow, we can log them in or create a new user.
-    (Just githubCode, Just statePSID, _noSession) -> do
+    (Just githubCode, Just statePSID) -> do
+      (ghUser, ghEmail) <-
+        -- Skip the github flow when developing locally, and just use some dummy github user
+        -- data.
+        if Deployment.onLocal
+          then pure localGithubUserInfo
+          else getGithubUserInfo githubCode statePSID cookiePSID
       mayPreferredHandle <- runMaybeT do
         obj <- hoistMaybe additionalData
         case Aeson.fromJSON obj of
@@ -160,10 +164,10 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
           Aeson.Success m -> do
             handle <- hoistMaybe $ Map.lookup ("handle" :: Text) m
             hoistMaybe . eitherToMaybe $ IDs.fromText handle
-      completeGithubFlow githubCode statePSID cookiePSID mayPreferredHandle
-    (Nothing, _, _) -> do
+      completeGithubFlow ghUser ghEmail mayPreferredHandle
+    (Nothing, _) -> do
       respondError $ MissingCode
-    (_, Nothing, _) -> do
+    (_, Nothing) -> do
       respondError $ MissingState
   let (User {User.user_id = uid}) = UserQ.getNewOrPreExisting newOrPreExistingUser
   when (UserQ.isNew newOrPreExistingUser) do
@@ -198,20 +202,37 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
         Nothing -> respondError $ InternalServerError "session-create-failure" ("Failed to create session" :: Text)
         Just setAuthHeaders -> pure . clearPendingSessionCookie cookieSettings $ setAuthHeaders response
   where
-    completeGithubFlow ::
+    localGithubUserInfo :: (Github.GithubUser, Github.GithubEmail)
+    localGithubUserInfo =
+      ( Github.GithubUser
+          { githubHandle = "LocalGithubUser",
+            githubUserId = 1,
+            githubUserAvatarUrl = URIParam $ fromJust $ parseURI "https://avatars.githubusercontent.com/u/0?v=4",
+            githubUserName = Just "Local Github User"
+          },
+        Github.GithubEmail
+          { githubEmailEmail = "local@example.com",
+            githubEmailIsPrimary = True,
+            githubEmailIsVerified = True
+          }
+      )
+
+    getGithubUserInfo ::
       ( OAuth.Code ->
         PendingSessionId ->
         PendingSessionId ->
-        Maybe UserHandle ->
-        WebApp (UserQ.NewOrPreExisting User)
+        WebApp (Github.GithubUser, Github.GithubEmail)
       )
-    completeGithubFlow githubCode statePSID cookiePSID mayPreferredHandle = do
+    getGithubUserInfo githubCode statePSID cookiePSID = do
       when (statePSID /= cookiePSID) do
         Redis.liftRedis $ Redis.failPendingSession cookiePSID
         respondError (MismatchedState cookiePSID statePSID)
       token <- Github.githubTokenForCode githubCode
       ghUser <- Github.githubUser token
       ghEmail <- Github.primaryGithubEmail token
+      pure (ghUser, ghEmail)
+    completeGithubFlow :: Github.GithubUser -> Github.GithubEmail -> Maybe UserHandle -> WebApp (UserQ.NewOrPreExisting User)
+    completeGithubFlow ghUser ghEmail mayPreferredHandle = do
       PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail mayPreferredHandle) >>= \case
         Left (UserQ.UserHandleTaken _) -> do
           errorRedirect AccountCreationHandleAlreadyTaken
@@ -269,8 +290,19 @@ loginWithGithub ::
         NoContent
     )
 loginWithGithub psid = do
-  githubAuthURI <- Github.githubAuthenticationURI psid
+  githubAuthURI <-
+    if Deployment.onLocal
+      then skipGithubLoginURL psid
+      else Github.githubAuthenticationURI psid
   pure $ redirectTo githubAuthURI
+  where
+    skipGithubLoginURL :: OAuth2State -> WebApp URI
+    skipGithubLoginURL oauth2State = do
+      sharePathQ ["oauth", "redirect"] $
+        Map.fromList
+          [ ("code", "code"),
+            ("state", toQueryParam oauth2State)
+          ]
 
 -- | Log out the user by telling the browser to clear the session cookies.
 -- Note that this doesn't (yet) invalidate the session itself, it just removes its cookie from the
