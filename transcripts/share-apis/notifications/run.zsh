@@ -6,6 +6,12 @@ source "../../transcript_helpers.sh"
 
 publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject')
 
+# Set up to capture any configured webhooks
+capture_port=9999
+capture_request './webhook.http' "${capture_port}" &
+SERVER_PID=$!
+trap "kill $SERVER_PID" EXIT INT TERM
+
 # Subscribe to project:contribution:created notifications for the test user's publictetestproject.
 fetch "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' "{
   \"scope\": \"test\",
@@ -16,6 +22,10 @@ fetch "$test_user" POST create-subscription-for-project '/users/test/notificatio
     \"projectId\": \"$publictestproject_id\"
   }
 }"
+
+webhookId=$(fetch_data_jq "$test_user" POST create-webhook '/users/transcripts/notifications/delivery-methods/webhooks' "{
+  \"url\": \"http://localhost:${capture_port}\"
+}" '.webhookId')
 
 # Add a subscription within the transcripts user to notifications for contributions created in any project belonging to the test user.
 # No filter is applied.
@@ -58,12 +68,12 @@ fetch "$test_user" POST private-contribution-create '/users/test/projects/privat
 
 # Notification APIs
 
-fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notifications/hub' 
+fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notifications/hub'
 
 test_notification_id=$(fetch_data_jq "$test_user" GET list-notifications-test '/users/test/notifications/hub' '.notifications[0].id')
 transcripts_notification_id=$(fetch_data_jq "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' '.notifications[0].id')
 
-fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' 
+fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub'
 
 # Mark notifications as read
 fetch "$test_user" PATCH mark-notifications-read-test '/users/test/notifications/hub' "{
@@ -81,7 +91,11 @@ fetch "$transcripts_user" PATCH mark-notifications-read-transcripts '/users/tran
 }"
 
 # Show only unread notifications (none should be unread):
-fetch "$test_user" GET list-notifications-unread-test '/users/test/notifications/hub?status=unread' 
+fetch "$test_user" GET list-notifications-unread-test '/users/test/notifications/hub?status=unread'
 
 # Show only read notifications (the one we just marked as read):
 fetch "$transcripts_user" GET list-notifications-read-transcripts '/users/transcripts/notifications/hub?status=read'
+
+
+
+

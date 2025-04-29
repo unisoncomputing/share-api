@@ -215,4 +215,12 @@ cat << EOF > "${ucm_credentials_file}"
 EOF
 }
 
+# request capturing (useful for webhooks and such)
+capture_request() {
+  local output_file=${1}
+  local port=${2:-9999}
+
+  "${transcripts_dir}/capture_request.py" "$port" "$output_file"
+}
+
 login_user_for_ucm 'transcripts'
