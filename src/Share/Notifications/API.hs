@@ -88,8 +88,8 @@ data SubscriptionResourceRoutes mode
 data SubscriptionDeliveryMethodRoutes mode
   = SubscriptionDeliveryMethodRoutes
   { getSubscriptionDeliveryMethodsEndpoint :: mode :- GetDeliveryMethodsEndpoint,
-    addSubscriptionDeliveryMethodsEndpoint :: mode :- AddSubscriptionDeliveryMethodsEndpoint,
-    removeSubscriptionDeliveryMethodsEndpoint :: mode :- RemoveSubscriptionDeliveryMethodsEndpoint
+    addSubscriptionDeliveryMethodsEndpoint :: mode :- "add" :> AddSubscriptionDeliveryMethodsEndpoint,
+    removeSubscriptionDeliveryMethodsEndpoint :: mode :- "remove" :> RemoveSubscriptionDeliveryMethodsEndpoint
   }
   deriving stock (Generic)
 
@@ -338,22 +338,22 @@ type RemoveSubscriptionDeliveryMethodsEndpoint =
 
 data AddSubscriptionDeliveryMethodsRequest
   = AddSubscriptionDeliveryMethodsRequest
-  { deliveryMethodIds :: NESet DeliveryMethodId
+  { deliveryMethods :: NESet DeliveryMethodId
   }
   deriving stock (Show, Eq, Ord)
 
 instance FromJSON AddSubscriptionDeliveryMethodsRequest where
   parseJSON = withObject "AddSubscriptionDeliveryMethodsRequest" $ \o -> do
-    deliveryMethodIds <- o .: "deliveryMethodIds"
-    pure AddSubscriptionDeliveryMethodsRequest {deliveryMethodIds}
+    deliveryMethods <- o .: "deliveryMethods"
+    pure AddSubscriptionDeliveryMethodsRequest {deliveryMethods}
 
 data RemoveSubscriptionDeliveryMethodsRequest
   = RemoveSubscriptionDeliveryMethodsRequest
-  { deliveryMethodIds :: NESet DeliveryMethodId
+  { deliveryMethods :: NESet DeliveryMethodId
   }
   deriving stock (Show, Eq, Ord)
 
 instance FromJSON RemoveSubscriptionDeliveryMethodsRequest where
   parseJSON = withObject "RemoveSubscriptionDeliveryMethodsRequest" $ \o -> do
-    deliveryMethodIds <- o .: "deliveryMethodIds"
-    pure RemoveSubscriptionDeliveryMethodsRequest {deliveryMethodIds}
+    deliveryMethods <- o .: "deliveryMethods"
+    pure RemoveSubscriptionDeliveryMethodsRequest {deliveryMethods}

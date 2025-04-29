@@ -13,7 +13,7 @@ SERVER_PID=$!
 trap "kill $SERVER_PID" EXIT INT TERM
 
 # Subscribe to project:contribution:created notifications for the test user's publictetestproject.
-fetch "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' "{
+subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' "{
   \"scope\": \"test\",
   \"topics\": [
     \"project:contribution:created\"
@@ -21,11 +21,15 @@ fetch "$test_user" POST create-subscription-for-project '/users/test/notificatio
   \"filter\": {
     \"projectId\": \"$publictestproject_id\"
   }
-}"
+}" '.subscription.subscriptionId')
 
-webhookId=$(fetch_data_jq "$test_user" POST create-webhook '/users/transcripts/notifications/delivery-methods/webhooks' "{
+webhook_id=$(fetch_data_jq "$test_user" POST create-webhook '/users/test/notifications/delivery-methods/webhooks' "{
   \"url\": \"http://localhost:${capture_port}\"
 }" '.webhookId')
+
+fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/subscriptions/${subscription_id}/delivery-methods/add" "{
+  \"deliveryMethods\": [\"${webhook_id}\"]
+}"
 
 # Add a subscription within the transcripts user to notifications for contributions created in any project belonging to the test user.
 # No filter is applied.
@@ -96,6 +100,5 @@ fetch "$test_user" GET list-notifications-unread-test '/users/test/notifications
 # Show only read notifications (the one we just marked as read):
 fetch "$transcripts_user" GET list-notifications-read-transcripts '/users/transcripts/notifications/hub?status=read'
 
-
-
-
+# The server should take itself down once it gets a webhook.
+wait $SERVER_PID
