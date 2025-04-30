@@ -11,14 +11,14 @@
       {
         "config": {
           "id": "NW-<UUID>",
-          "url": "https://example.com/webhook"
+          "url": "http://localhost:9999"
         },
         "kind": "webhook"
       },
       {
         "config": {
           "id": "NW-<UUID>",
-          "url": "http://localhost:9999"
+          "url": "https://example.com/webhook"
         },
         "kind": "webhook"
       }

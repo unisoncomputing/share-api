@@ -9,7 +9,7 @@ publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject
 # Set up to capture any configured webhooks
 capture_port=9999
 # capture_request './webhook.http' "${capture_port}" &
-python "${transcripts_dir}/capture_request.py" 9999 './webhook.http' &
+python "${transcripts_dir}/capture_request.py" 9999 | jq --sort-keys . | clean_for_transcript  > './webhook.http'  &
 SERVER_PID=$!
 trap "kill $SERVER_PID >/dev/null 2>&1 || true" EXIT INT TERM
 

@@ -108,7 +108,9 @@ clean_for_transcript() {
     # Replace all uuids in stdin with the string "<UUID>"
     sed -E 's/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/<UUID>/g' | \
     # Replace all cursors in stdin with the string "<CURSOR>"
-    sed -E 's/"cursor": ?"[^"]+"/"cursor": "<CURSOR>"/g'
+    sed -E 's/"cursor": ?"[^"]+"/"cursor": "<CURSOR>"/g' | \
+    # Replace all JWTs in stdin with the string "<JWT>"
+    sed -E 's/eyJ([[:alnum:]_.-]+)/<JWT>/g'
 }
 
 fetch() {

@@ -3,9 +3,9 @@ import http.server
 import socketserver
 import sys
 import threading
+import json
 
 PORT = int(sys.argv[1])
-log_file = sys.argv[2]
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -15,20 +15,25 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         self._handle_request()
         
     def _handle_request(self):
-        # Log headers
-        with open(log_file, 'wb') as f:
-            f.write(f"Request method: {self.command}\n".encode())
-            f.write(f"Request path: {self.path}\n".encode())
-            f.write(b"Headers:\n")
-            for header in self.headers:
-                f.write(f"  {header}: {self.headers[header]}\n".encode())
-            
+        # open stdout for writing in binary mode
+        with open(sys.stdout.fileno(), 'wb', buffering=0) as f:
+            json_object = {
+                "method": self.command,
+                "path": self.path,
+                "headers": {header: self.headers[header] for header in sorted(self.headers)},
+            }
             # Log body if present
             if 'Content-Length' in self.headers:
                 content_length = int(self.headers['Content-Length'])
                 body = self.rfile.read(content_length)
-                f.write(b"\nBody:\n")
-                f.write(body)
+                # decode body into dictionary
+                try:
+                    body = json.loads(body)
+                    json_object['body'] = body
+                except json.JSONDecodeError:
+                    json_object['body'] = body.decode('utf-8')
+            json_string = json.dumps(json_object, indent=2)
+            _  = f.write(json_string.encode())
         
         # Send response
         self.send_response(200)
@@ -36,11 +41,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         
         # Exit after handling one request
-        print(f"Request received and logged to {log_file}")
         threading.Timer(0.1, self.server.shutdown).start()
-        # self.server.shutdown()
 
 with socketserver.TCPServer(("", PORT), RequestHandler) as httpd:
-    print(f"Webhook listener started on port {PORT}")
-    print(f"Waiting for a single request (will be logged to {log_file})...")
     httpd.serve_forever()
