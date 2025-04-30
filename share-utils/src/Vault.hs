@@ -12,6 +12,7 @@ module Vault
     SecretPath (..),
     SecretRequest (..),
     SecretResponse (..),
+    SecretData (..),
     SecretPatch (..),
     Options (..),
   )
@@ -77,7 +78,12 @@ newtype Options = Options
 
 instance Aeson.ToJSON Options
 
-newtype SecretResponse = SecretResponse {data_ :: Aeson.Value}
+newtype SecretResponse = SecretResponse
+  { -- yes, the data is nested under two separate "data" keys
+    data_ :: SecretData
+  }
+
+newtype SecretData = SecretData {data_ :: Aeson.Value}
 
 data SecretPatch = SecretPatch !(Maybe Options) !(Map Text (Maybe Text))
 
@@ -88,3 +94,8 @@ instance Aeson.FromJSON SecretResponse where
   parseJSON = Aeson.withObject "SecretResponse" $ \o -> do
     data_ <- o Aeson..: "data"
     return $ SecretResponse {data_}
+
+instance Aeson.FromJSON SecretData where
+  parseJSON = Aeson.withObject "SecretData" $ \o -> do
+    data_ <- o Aeson..: "data"
+    return $ SecretData {data_}

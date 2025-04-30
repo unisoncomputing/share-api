@@ -78,18 +78,18 @@ makeWebhookSecretPath webhookId =
 putWebhookConfig :: NotificationWebhookId -> WebhookConfig -> AppM r (Either WebhookSecretError ())
 putWebhookConfig webhookId config = runExceptT do
   let secretPath = makeWebhookSecretPath webhookId
-  shareVaultMount <- asks Env.shareVaultMount
+  userSecretsVaultMount <- asks Env.userSecretsVaultMount
   shareVaultToken <- asks Env.shareVaultToken
   let secretRequest = SecretRequest {options = Nothing, data_ = Aeson.toJSON config}
-  withExceptT VaultError . ExceptT . runVaultClientM $ Vault.putSecret shareVaultToken shareVaultMount secretPath secretRequest
+  withExceptT VaultError . ExceptT . runVaultClientM $ Vault.putSecret shareVaultToken userSecretsVaultMount secretPath secretRequest
   pure ()
 
 fetchWebhookConfig :: NotificationWebhookId -> AppM r (Either WebhookSecretError WebhookConfig)
 fetchWebhookConfig webhookId = runExceptT do
   let secretPath = makeWebhookSecretPath webhookId
-  shareVaultMount <- asks Env.shareVaultMount
+  userSecretsVaultMount <- asks Env.userSecretsVaultMount
   shareVaultToken <- asks Env.shareVaultToken
-  Vault.SecretResponse {Vault.data_ = v} <- withExceptT VaultError . ExceptT . runVaultClientM $ Vault.fetchSecret shareVaultToken shareVaultMount secretPath
+  Vault.SecretResponse {Vault.data_ = Vault.SecretData v} <- withExceptT VaultError . ExceptT . runVaultClientM $ Vault.fetchSecret shareVaultToken userSecretsVaultMount secretPath
   case Aeson.fromJSON v of
     Aeson.Error err -> throwError $ InvalidSecretJSON webhookId (Text.pack err)
     Aeson.Success config -> pure config
@@ -97,7 +97,7 @@ fetchWebhookConfig webhookId = runExceptT do
 deleteWebhookConfig :: NotificationWebhookId -> AppM r (Either WebhookSecretError ())
 deleteWebhookConfig webhookId = runExceptT do
   let secretPath = makeWebhookSecretPath webhookId
-  shareVaultMount <- asks Env.shareVaultMount
+  userSecretsVaultMount <- asks Env.userSecretsVaultMount
   shareVaultToken <- asks Env.shareVaultToken
-  withExceptT VaultError . ExceptT . runVaultClientM $ Vault.deleteSecret shareVaultToken shareVaultMount secretPath
+  withExceptT VaultError . ExceptT . runVaultClientM $ Vault.deleteSecret shareVaultToken userSecretsVaultMount secretPath
   pure ()
