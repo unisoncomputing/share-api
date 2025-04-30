@@ -91,18 +91,19 @@ worker scope = do
       toIO <- UnliftIO.askRunInIO
       -- Need to unlift so we can use this in transactions
       let tryWebhookIO eventId eventData webhookId = toIO $ tryWebhook eventId eventData webhookId
-      (mayErr, maySentWebhook) <- Metrics.recordWebhookSendingDuration $ PG.runTransaction $ do
-        mayWebhookInfo <- WQ.getUnsentWebhook
-        mayErr <- runMaybeT $ (hoistMaybe mayWebhookInfo >>= (\(eventId, webhookId) -> MaybeT $ attemptWebhookSend authZReceipt tryWebhookIO eventId webhookId))
-        pure (mayErr, mayWebhookInfo)
-      case mayErr of
-        Just err -> do
+      mayResult <- Metrics.recordWebhookSendingDuration $ PG.runTransaction $ runMaybeT $ do
+        webhookInfo@(eventId, webhookId) <- MaybeT WQ.getUnsentWebhook
+        mayErr <- lift $ attemptWebhookSend authZReceipt tryWebhookIO eventId webhookId
+        pure (mayErr, webhookInfo)
+      case mayResult of
+        Just (Just err, _) -> do
           case err of
             WebhookSecretFetchError {} -> reportError err
             _ -> Logging.logErrorText $ "Webhook send errors: " <> tShow err
-        _ -> pure ()
-      case maySentWebhook of
-        Just (eventId, webhookId) -> do
+          -- If we got an error, we can retry it.
+          -- TODO: Add some sort of backoff?
+          processWebhooks authZReceipt
+        (Just (Nothing, (eventId, webhookId))) -> do
           Logging.textLog ("Webhook sent successfully: " <> Text.pack (show webhookId))
             & Logging.withTag ("webhook_id", tShow webhookId)
             & Logging.withTag ("event_id", tShow eventId)
@@ -110,7 +111,9 @@ worker scope = do
             & Logging.logMsg
           -- Keep processing releases until we run out of them.
           processWebhooks authZReceipt
-        Nothing -> pure ()
+        Nothing -> do
+          -- No webhooks ready to try at the moment, we can wait till more are available.
+          pure ()
 
 --
 webhookTimeout :: HTTPClient.ResponseTimeout
@@ -165,7 +168,7 @@ tryWebhook ::
   WebhookPayloadData ->
   NotificationWebhookId ->
   Background (Maybe WebhookSendFailure)
-tryWebhook event eventData webhookId = do
+tryWebhook event eventData webhookId = UnliftIO.handleAny (\someException -> pure $ Just $ InvalidRequest event.eventId webhookId someException) do
   fmap (either Just (const Nothing)) $ runExceptT do
     proxiedHTTPManager <- asks Env.proxiedHttpClient
     WebhookConfig {uri = URIParam uri} <-
