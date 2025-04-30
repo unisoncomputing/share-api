@@ -45,7 +45,7 @@ recordFailedDeliveryAttempt eventId webhookId = do
   execute_
     [sql|
     UPDATE notification_webhook_queue
-    SET delivery_attempts_remaining = delivery_attempts_remaining - 1,
+    SET delivery_attempts_remaining = delivery_attempts_remaining - 1
     WHERE event_id = #{eventId} AND webhook_id = #{webhookId}
     |]
 
