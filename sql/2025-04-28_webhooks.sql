@@ -46,10 +46,10 @@ BEGIN
       WHERE nbw.subscription_id = the_subscription_id
       ON CONFLICT DO NOTHING;
 
-      -- Notify listeners on the channel IF any webhooks were added to the queue
-
-      IF (SELECT COUNT(*) FROM notification_webhook_queue WHERE event_id = the_event_id) > 0 THEN
-        PERFORM pg_notify('notification_webhook_queue', the_event_id::TEXT);
+      -- If there are any new webhooks to process, trigger workers via LISTEN/NOTIFY
+      GET DIAGNOSTICS rows_affected = ROW_COUNT;
+      IF rows_affected > 0 THEN
+        NOTIFY webhooks;
       END IF;
 
     INSERT INTO notification_email_queue (event_id, email_id)
@@ -61,7 +61,7 @@ BEGIN
     -- If there are any new webhooks to process, trigger workers via LISTEN/NOTIFY
     GET DIAGNOSTICS rows_affected = ROW_COUNT;
     IF rows_affected > 0 THEN
-        PERFORM pg_notify('webhooks');
+        NOTIFY emails;
     END IF;
 
     -- Also add the notification to the hub.
