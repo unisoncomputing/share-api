@@ -98,7 +98,7 @@ hydrateEventData = \case
           [sql|
           SELECT b.name, contributor.id, contributor.handle
           FROM project_branches b
-          LEFT JOIN users contributor ON b.contributor_user_id = contributor.id
+          LEFT JOIN users contributor ON b.contributor_id = contributor.id
           WHERE b.id = #{branchId}
           |]
       let branchShortHand = BranchShortHand {contributorHandle = branchContributorHandle, branchName}
@@ -118,8 +118,9 @@ hydrateEventData = \case
         queryExpect1Row
           [sql|
           SELECT p.slug, owner.handle, p.owner_user_id
-          FROM projects
-          WHERE id = #{projectId}
+          FROM projects p
+          JOIN users owner ON p.owner_user_id = owner.id
+          WHERE p.id = #{projectId}
           |]
       let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
       pure $

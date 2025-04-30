@@ -1,9 +1,12 @@
+{-# LANGUAGE StandaloneDeriving #-}
+
 -- | This module provides the background worker for sending notification webhooks.
 module Share.BackgroundJobs.Webhooks.Worker (worker) where
 
 import Control.Lens
 import Control.Monad.Except (runExceptT)
-import Data.Aeson (ToJSON)
+import Crypto.JWT (JWTError)
+import Data.Aeson (FromJSON (..), ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Text qualified as Text
@@ -20,7 +23,8 @@ import Share.BackgroundJobs.Webhooks.Types (WebhookPayloadData)
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Env qualified as Env
 import Share.IDs (NotificationEventId, NotificationWebhookId)
-import Share.JWT (JWTParam)
+import Share.JWT (JWTParam (..))
+import Share.JWT qualified as JWT
 import Share.Metrics qualified as Metrics
 import Share.Notifications.Queries qualified as NQ
 import Share.Notifications.Types (NotificationEvent (..), NotificationTopic, eventTopic)
@@ -38,6 +42,7 @@ data WebhookSendFailure
   = ReceiverError NotificationEventId NotificationWebhookId HTTP.Status BL.ByteString
   | InvalidRequest NotificationEventId NotificationWebhookId UnliftIO.SomeException
   | WebhookSecretFetchError NotificationEventId NotificationWebhookId WebhookSecretError
+  | JWTError NotificationEventId NotificationWebhookId JWTError
   deriving stock (Show)
 
 instance Logging.Loggable WebhookSendFailure where
@@ -60,6 +65,11 @@ instance Logging.Loggable WebhookSendFailure where
         & Logging.withSeverity Logging.UserFault
     WebhookSecretFetchError eventId webhookId err ->
       Logging.textLog ("Failed to fetch webhook secret: " <> Text.pack (show err))
+        & Logging.withTag ("event_id", tShow eventId)
+        & Logging.withTag ("webhook_id", tShow webhookId)
+        & Logging.withSeverity Logging.Error
+    JWTError eventId webhookId err ->
+      Logging.textLog ("JWT error: " <> Text.pack (show err))
         & Logging.withTag ("event_id", tShow eventId)
         & Logging.withTag ("webhook_id", tShow webhookId)
         & Logging.withSeverity Logging.Error
@@ -106,7 +116,7 @@ worker scope = do
 webhookTimeout :: HTTPClient.ResponseTimeout
 webhookTimeout = HTTPClient.responseTimeoutMicro (20 * 1000000 {- 20 seconds -})
 
-data WebhookEventPayload = WebhookEventPayload
+data WebhookEventPayload jwt = WebhookEventPayload
   { -- | The event ID of the notification event.
     eventId :: NotificationEventId,
     -- | The time at which the event occurred.
@@ -116,11 +126,13 @@ data WebhookEventPayload = WebhookEventPayload
     -- | The data associated with the notification event.
     data_ :: WebhookPayloadData,
     -- | A signed token containing all of the same data.
-    jwt :: JWTParam
+    jwt :: jwt
   }
   deriving stock (Show, Eq)
 
-instance ToJSON WebhookEventPayload where
+deriving via JWT.JSONJWTClaims (WebhookEventPayload ()) instance JWT.AsJWTClaims (WebhookEventPayload ())
+
+instance ToJSON (WebhookEventPayload JWTParam) where
   toJSON WebhookEventPayload {eventId, occurredAt, topic, data_, jwt} =
     Aeson.object
       [ "eventId" Aeson..= eventId,
@@ -129,6 +141,24 @@ instance ToJSON WebhookEventPayload where
         "data" Aeson..= data_,
         "signed" Aeson..= jwt
       ]
+
+instance ToJSON (WebhookEventPayload ()) where
+  toJSON WebhookEventPayload {eventId, occurredAt, topic, data_} =
+    Aeson.object
+      [ "eventId" Aeson..= eventId,
+        "occurredAt" Aeson..= occurredAt,
+        "topic" Aeson..= topic,
+        "data" Aeson..= data_
+      ]
+
+instance FromJSON (WebhookEventPayload ()) where
+  parseJSON = Aeson.withObject "WebhookEventPayload" $ \o ->
+    WebhookEventPayload
+      <$> o Aeson..: "eventId"
+      <*> o Aeson..: "occurredAt"
+      <*> o Aeson..: "topic"
+      <*> o Aeson..: "data"
+      <*> pure ()
 
 tryWebhook ::
   NotificationEvent NotificationEventId UTCTime ->
@@ -142,22 +172,27 @@ tryWebhook event eventData webhookId = do
       lift (Webhooks.fetchWebhookConfig webhookId) >>= \case
         Left err -> throwError $ WebhookSecretFetchError event.eventId webhookId err
         Right config -> pure config
-    let payloadJWT = error "TODO"
+    jwtSettings <- asks Env.jwtSettings
     let payload =
           WebhookEventPayload
             { eventId = event.eventId,
               occurredAt = event.eventOccurredAt,
               topic = eventTopic event.eventData,
               data_ = eventData,
-              jwt = payloadJWT
+              jwt = ()
             }
+    payloadJWT <-
+      JWT.signJWT jwtSettings payload >>= \case
+        Left jwtErr -> throwError $ JWTError event.eventId webhookId jwtErr
+        Right jwt -> pure jwt
+    let payloadWithJWT = payload {jwt = JWTParam payloadJWT}
     let reqResult =
           HTTPClient.requestFromURI uri <&> \req ->
             req
               { HTTPClient.method = "POST",
                 HTTPClient.responseTimeout = webhookTimeout,
                 HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
-                HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode $ payload
+                HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode $ payloadWithJWT
               }
     req <- case reqResult of
       Left parseErr -> throwError $ InvalidRequest event.eventId webhookId parseErr
