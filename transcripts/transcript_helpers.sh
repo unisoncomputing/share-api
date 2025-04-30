@@ -122,6 +122,12 @@ fetch() {
     jq --sort-keys -n --slurpfile status "${status_code_file}" --slurpfile body "${result_file}" '{"status": $status, "body": ($body | .[0])}' > "./$testname.json" 2> /dev/null || {
         jq --sort-keys -n --slurpfile status "${status_code_file}" --rawfile body "${result_file}" '{"status": $status, "body": $body}'  > "./$testname.json"
     }
+    jq_exit=$?
+    if [ $jq_exit -ne 0 ]; then
+        echo "Failed to parse JSON response for test ${testname} with jq exit code ${jq_exit}" >&2
+        echo "Response body: $(cat "${result_file}")" >&2
+        exit 1
+    fi
 }
 
 # fetch which returns the result,
