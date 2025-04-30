@@ -121,16 +121,16 @@ withEnv action = do
   sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"
 
   -- Vault setup
-  unproxiedHttpClient <- TLS.newTlsManager 
+  unproxiedHttpClient <- TLS.newTlsManager
   vaultHost <- fromEnv "VAULT_HOST" parseBaseUrl
-  shareVaultMount <- fromEnv "VAULT_MOUNT" ((fmap . fmap) Vault.SecretMount . nonEmptyTextParser "VAULT_MOUNT")
+  userSecretsVaultMount <- fromEnv "USER_SECRETS_VAULT_MOUNT" ((fmap . fmap) Vault.SecretMount . nonEmptyTextParser "USER_SECRETS_VAULT_MOUNT")
   shareVaultToken <- fromEnv "VAULT_TOKEN" ((fmap . fmap) Vault.VaultToken . nonEmptyTextParser "VAULT_TOKEN")
   let vaultClientEnv = ServantClient.mkClientEnv unproxiedHttpClient vaultHost
 
 
 
   proxiedHttpClient <- do
-    if  Deployment.onLocal 
+    if  Deployment.onLocal
        then TLS.newTlsManager
        else do
           httpProxyHost <- fromEnv "SHARE_PROXY_HOST" (\proxyHost -> case parseURI proxyHost of

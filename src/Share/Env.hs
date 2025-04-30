@@ -33,7 +33,7 @@ data Env ctx = Env
     cloudUiOrigin :: URI, -- E.g. "https://app.unison.cloud"
     cloudWebsiteOrigin :: URI, -- E.g. "https://www.unison.cloud"
     vaultClientEnv :: S.ClientEnv,
-    shareVaultMount :: Vault.SecretMount,
+    userSecretsVaultMount :: Vault.SecretMount,
     shareVaultToken :: Vault.VaultToken,
     -- An HTTP client for making requests which are configured by end users, and thus
     -- shouldn't
