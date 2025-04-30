@@ -8,8 +8,7 @@ publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject
 
 # Set up to capture any configured webhooks
 capture_port=9999
-# capture_request './webhook.http' "${capture_port}" &
-python "${transcripts_dir}/capture_request.py" 9999 | jq --sort-keys . | clean_for_transcript  > './webhook.http'  &
+python "${transcripts_dir}/capture_request.py" "${capture_port}" | jq --sort-keys . | clean_for_transcript  > './webhook.http'  &
 SERVER_PID=$!
 trap "kill $SERVER_PID >/dev/null 2>&1 || true" EXIT INT TERM
 
@@ -28,8 +27,12 @@ webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifi
   \"url\": \"http://localhost:${capture_port}\"
 }" )
 
+failing_webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
+  \"url\": \"http://localhost:99999/invalid\"
+}" )
+
 fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/subscriptions/${subscription_id}/delivery-methods/add" "{
-  \"deliveryMethods\": [{\"kind\": \"webhook\",  \"id\": \"${webhook_id}\"}]
+  \"deliveryMethods\": [{\"kind\": \"webhook\",  \"id\": \"${webhook_id}\"}, {\"kind\": \"webhook\",  \"id\": \"${failing_webhook_id}\"}]
 }"
 
 # Add a subscription within the transcripts user to notifications for contributions created in any project belonging to the test user.

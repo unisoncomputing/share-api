@@ -18,6 +18,13 @@
       {
         "config": {
           "id": "NW-<UUID>",
+          "url": "http://localhost:99999/invalid"
+        },
+        "kind": "webhook"
+      },
+      {
+        "config": {
+          "id": "NW-<UUID>",
           "url": "https://example.com/webhook"
         },
         "kind": "webhook"
