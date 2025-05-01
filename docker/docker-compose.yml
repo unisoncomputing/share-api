@@ -65,6 +65,8 @@ services:
       retries: 3
     ports:
       - "5424:5424"
+      # Bind the webhook-listener port to the host machine for transcripts
+      - "9999:9999"
 
     environment:
       # Placeholder values for development
