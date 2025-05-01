@@ -43,8 +43,9 @@ services:
     ports:
       - "8200:8200"
     environment:
-      - VAULT_DEV_ROOT_TOKEN_ID=sekrit
-      - VAULT_KV_V1_MOUNT_PATH=secret
+      VAULT_DEV_ROOT_TOKEN_ID: "sekrit"
+      VAULT_KV_V1_MOUNT_PATH: "secret"
+      VAULT_ADDR: "http://127.0.0.1:8200"
     cap_add:
       - IPC_LOCK
     # # Use kv version 1
