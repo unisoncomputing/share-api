@@ -72,10 +72,10 @@ services:
       - SHARE_SERVER_PORT=5424
       - SHARE_REDIS=redis://redis:6379
       - SHARE_POSTGRES=postgresql://postgres:sekrit@postgres:5432
-      - SHARE_HMAC_KEY=hmac-key-test-key-test-key-test-
-      - SHARE_EDDSA_KEY=eddsa-key-test-key-test-key-test
       - SHARE_POSTGRES_CONN_TTL=30
       - SHARE_POSTGRES_CONN_MAX=10
+      - SHARE_HMAC_KEY=hmac-key-test-key-test-key-test-
+      - SHARE_EDDSA_KEY=eddsa-key-test-key-test-key-test
       - SHARE_SHARE_UI_ORIGIN=http://localhost:1234
       - SHARE_CLOUD_UI_ORIGIN=http://localhost:5678
       - SHARE_HOMEPAGE_ORIGIN=http://localhost:1111
@@ -84,17 +84,18 @@ services:
       - SHARE_COMMIT=dev
       - SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST=1
       - SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST=5
+      - VAULT_HOST="http://vault:8200/v1"
+      - VAULT_TOKEN="sekrit"
+      - USER_SECRETS_VAULT_MOUNT="secret" # A default mount in dev vault
       - SHARE_ZENDESK_API_USER=invaliduser@example.com
       - SHARE_ZENDESK_API_TOKEN=bad-password
       - SHARE_GITHUB_CLIENTID=invalid
       - SHARE_GITHUB_CLIENT_SECRET=invalid
-      - VAULT_HOST="http://vault:8200/v1"
-      - VAULT_TOKEN="sekrit"
-      - USER_SECRETS_VAULT_MOUNT="secret" # A default mount in dev vault
 
     links:
       - redis
       - postgres
+      - vault
 
 # volumes:
 #   postgresVolume:
