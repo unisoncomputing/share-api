@@ -6,13 +6,7 @@ source "../../transcript_helpers.sh"
 
 publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject')
 
-# Set up to capture any configured webhooks
-capture_port=9999
-python "${transcripts_dir}/capture_request.py" "${capture_port}" | jq --sort-keys . | clean_for_transcript  > './webhook.http'  &
-SERVER_PID=$!
-trap "kill $SERVER_PID >/dev/null 2>&1 || true" EXIT INT TERM
-
-# Subscribe to project:contribution:created notifications for the test user's publictetestproject.
+# Subscribe to project:contribution:created notifications for the test user's publictestproject.
 subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' '.subscription.id' "{
   \"scope\": \"test\",
   \"topics\": [
@@ -24,11 +18,11 @@ subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-projec
 }" )
 
 webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"http://localhost:${capture_port}\"
+  \"url\": \"http://localhost:${echo_server_port}\"
 }" )
 
 failing_webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"http://localhost:99999/invalid\"
+  \"url\": \"http://localhost:${echo_server_port}/invalid?x-set-response-status-code=500\"
 }" )
 
 fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/subscriptions/${subscription_id}/delivery-methods/add" "{
@@ -46,10 +40,6 @@ fetch "$transcripts_user" POST create-subscription-for-other-user-project '/user
 
 fetch "$test_user" POST create-email-delivery '/users/test/notifications/delivery-methods/emails' '{
   "email": "me@example.com"
-}'
-
-fetch "$test_user" POST create-webhook-delivery '/users/test/notifications/delivery-methods/webhooks' '{
-  "url": "https://example.com/webhook"
 }'
 
 fetch "$test_user" GET check-delivery-methods '/users/test/notifications/delivery-methods'
@@ -104,6 +94,13 @@ fetch "$test_user" GET list-notifications-unread-test '/users/test/notifications
 # Show only read notifications (the one we just marked as read):
 fetch "$transcripts_user" GET list-notifications-read-transcripts '/users/transcripts/notifications/hub?status=read'
 
-echo "Waiting for webhooks to be delivered..."
-# The server should take itself down once it gets a webhook.
-wait $SERVER_PID
+# loop until sql query returns 0;
+while  [ $(pg_sql "SELECT COUNT(*) FROM notification_webhook_queue WHERE delivery_attempts_remaining > 0 AND NOT delivered;") -gt 0 ]; do \
+  echo "Waiting for notification webhooks..." >&2; \
+  sleep 1; \
+done;
+
+successful_webhooks=$(pg_sql "SELECT COUNT(*) FROM notification_webhook_queue WHERE delivered;")
+unsuccessful_webhooks=$(pg_sql "SELECT COUNT(*) FROM notification_webhook_queue WHERE NOT delivered;")
+
+echo "Successful webhooks: $successful_webhooks\nUnsuccessful webhooks: $unsuccessful_webhooks\n" > ./webhook_results.txt

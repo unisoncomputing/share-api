@@ -18,14 +18,14 @@
       {
         "config": {
           "id": "NW-<UUID>",
-          "url": "https://example.com/webhook"
+          "url": "http://localhost:9999/invalid?x-set-response-status-code=500"
         },
         "kind": "webhook"
       },
       {
         "config": {
           "id": "NW-<UUID>",
-          "url": "http://localhost:99999/invalid"
+          "url": "https://example.com/webhook"
         },
         "kind": "webhook"
       }
