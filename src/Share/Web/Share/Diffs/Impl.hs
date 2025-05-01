@@ -5,26 +5,13 @@ module Share.Web.Share.Diffs.Impl
   )
 where
 
-import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens hiding ((.=))
 import Control.Monad.Except
-import Data.Aeson (ToJSON (..), Value, (.=))
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Types (object)
-import Data.Foldable qualified as Foldable
-import Data.Map qualified as Map
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Share.Codebase qualified as Codebase
-import Share.NamespaceDiffs
-  ( DefinitionDiff (..),
-    DefinitionDiffKind (..),
-    DiffAtPath (..),
-    GNamespaceTreeDiff,
-    NamespaceAndLibdepsDiff,
-    NamespaceDiffError (..),
-    NamespaceTreeDiff,
-  )
+import Share.NamespaceDiffs (DefinitionDiffKind (..), GNamespaceTreeDiff, NamespaceDiffError (..))
 import Share.NamespaceDiffs qualified as NamespaceDiffs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
@@ -42,8 +29,7 @@ import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
 import Unison.Codebase.SqliteCodebase.Conversions (referent1to2)
 import Unison.ConstructorReference (ConstructorReference)
-import Unison.Merge (DiffOp (..), TwoOrThreeWay (..), TwoWay (..))
-import Unison.Merge qualified as Merge
+import Unison.Merge (TwoOrThreeWay (..), TwoWay (..))
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.PrettyPrintEnvDecl qualified as PPED
@@ -62,20 +48,36 @@ computeAndStoreCausalDiff ::
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
   Maybe CausalId ->
+  PG.Transaction e (PreEncoded NamespaceDiffs.NamespaceDiffResult)
+computeAndStoreCausalDiff authZReceipt old@(oldCodebase, _, oldCausalId) new@(newCodebase, _, newCausalId) lca = do
+  result <-
+    PG.catchTransaction (tryComputeCausalDiff authZReceipt old new lca) <&> \case
+      Right diff -> NamespaceDiffs.NamespaceDiffResult'Ok diff
+      Left err -> NamespaceDiffs.NamespaceDiffResult'Err err
+  let encoded = Aeson.encode result
+  ContributionQ.savePrecomputedNamespaceDiff
+    (oldCodebase, oldCausalId)
+    (newCodebase, newCausalId)
+    (TL.toStrict $ TL.decodeUtf8 encoded)
+  pure (PreEncoded encoded)
+
+tryComputeCausalDiff ::
+  AuthZReceipt ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
+  Maybe CausalId ->
   PG.Transaction
     NamespaceDiffError
-    ( PreEncoded
-        ( NamespaceDiffs.NamespaceAndLibdepsDiff
-            (TermTag, ShortHash)
-            (TypeTag, ShortHash)
-            TermDefinition
-            TypeDefinition
-            TermDefinitionDiff
-            TypeDefinitionDiff
-            BranchHash
-        )
+    ( NamespaceDiffs.NamespaceAndLibdepsDiff
+        (TermTag, ShortHash)
+        (TypeTag, ShortHash)
+        TermDefinition
+        TypeDefinition
+        TermDefinitionDiff
+        TypeDefinitionDiff
+        BranchHash
     )
-computeAndStoreCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = do
+tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = do
   -- Ensure name lookups for the things we're diffing.
   let getBranch :: CausalId -> PG.Transaction NamespaceDiffError (BranchHashId, NameLookupReceipt)
       getBranch causalId = do
@@ -125,12 +127,7 @@ computeAndStoreCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (
           authZReceipt
           (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
           (newCodebase, newRuntime, newBranchHashId)
-  let encoded = Aeson.encode (RenderedNamespaceAndLibdepsDiff diff4)
-  ContributionQ.savePrecomputedNamespaceDiff
-    (oldCodebase, oldCausalId)
-    (newCodebase, newCausalId)
-    (TL.toStrict $ TL.decodeUtf8 encoded)
-  pure (PreEncoded encoded)
+  pure diff4
 
 computeUpdatedDefinitionDiffs ::
   forall a b.
@@ -248,120 +245,3 @@ getTypeDefinition (codebase, rt, bhId, name) = do
   where
     renderWidth :: Width
     renderWidth = 80
-
-newtype RenderedNamespaceAndLibdepsDiff
-  = RenderedNamespaceAndLibdepsDiff
-      (NamespaceAndLibdepsDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff BranchHash)
-
-instance ToJSON RenderedNamespaceAndLibdepsDiff where
-  toJSON (RenderedNamespaceAndLibdepsDiff diff) =
-    object
-      [ "defns" .= namespaceTreeDiffJSON diff.defns,
-        "libdeps" .= libdepsDiffJSON diff.libdeps
-      ]
-    where
-      text :: Text -> Text
-      text t = t
-      hqNameJSON :: Name -> NameSegment -> ShortHash -> Value -> Value
-      hqNameJSON fqn name sh rendered = object ["hash" .= sh, "shortName" .= name, "fullName" .= fqn, "rendered" .= rendered]
-      -- The preferred frontend format is a bit clunky to calculate here:
-      diffDataJSON :: (ToJSON tag) => NameSegment -> DefinitionDiff (tag, ShortHash) Value Value -> (tag, Value)
-      diffDataJSON shortName (DefinitionDiff {fqn, kind}) = case kind of
-        Added (defnTag, r) rendered -> (defnTag, object ["tag" .= text "Added", "contents" .= hqNameJSON fqn shortName r rendered])
-        NewAlias (defnTag, r) existingNames rendered ->
-          let contents = object ["hash" .= r, "aliasShortName" .= shortName, "aliasFullName" .= fqn, "otherNames" .= toList existingNames, "rendered" .= rendered]
-           in (defnTag, object ["tag" .= text "Aliased", "contents" .= contents])
-        Removed (defnTag, r) rendered -> (defnTag, object ["tag" .= text "Removed", "contents" .= hqNameJSON fqn shortName r rendered])
-        Updated (oldTag, oldRef) (newTag, newRef) diffVal ->
-          let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
-           in (newTag, object ["tag" .= text "Updated", "contents" .= contents])
-        Propagated (oldTag, oldRef) (newTag, newRef) diffVal ->
-          let contents = object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
-           in (newTag, object ["tag" .= text "Propagated", "contents" .= contents])
-        RenamedTo (defnTag, r) newNames rendered ->
-          let contents = object ["oldShortName" .= shortName, "oldFullName" .= fqn, "newNames" .= newNames, "hash" .= r, "rendered" .= rendered]
-           in (defnTag, object ["tag" .= text "RenamedTo", "contents" .= contents])
-        RenamedFrom (defnTag, r) oldNames rendered ->
-          let contents = object ["oldNames" .= oldNames, "newShortName" .= shortName, "newFullName" .= fqn, "hash" .= r, "rendered" .= rendered]
-           in (defnTag, object ["tag" .= text "RenamedFrom", "contents" .= contents])
-      displayObjectDiffToJSON :: DisplayObjectDiff -> Value
-      displayObjectDiffToJSON = \case
-        DisplayObjectDiff dispDiff ->
-          object ["diff" .= dispDiff, "diffKind" .= ("diff" :: Text)]
-        MismatchedDisplayObjects {} ->
-          object ["diffKind" .= ("mismatched" :: Text)]
-
-      termDefinitionDiffToJSON :: TermDefinitionDiff -> Value
-      termDefinitionDiffToJSON (TermDefinitionDiff {left, right, diff}) = object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
-
-      typeDefinitionDiffToJSON :: TypeDefinitionDiff -> Value
-      typeDefinitionDiffToJSON (TypeDefinitionDiff {left, right, diff}) = object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
-
-      namespaceTreeDiffJSON ::
-        NamespaceTreeDiff
-          (TermTag, ShortHash)
-          (TypeTag, ShortHash)
-          TermDefinition
-          TypeDefinition
-          TermDefinitionDiff
-          TypeDefinitionDiff ->
-        Value
-      namespaceTreeDiffJSON (diffs Cofree.:< children) =
-        let changesJSON =
-              diffs
-                & Map.toList
-                & foldMap
-                  ( \(name, DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) ->
-                      ( Foldable.toList termDiffsAtPath
-                          <&> over NamespaceDiffs.definitionDiffDiffs_ termDefinitionDiffToJSON
-                          <&> over NamespaceDiffs.definitionDiffRendered_ toJSON
-                          & fmap (diffDataJSON name)
-                          & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
-                      )
-                        <> ( Foldable.toList typeDiffsAtPath
-                               <&> over NamespaceDiffs.definitionDiffDiffs_ typeDefinitionDiffToJSON
-                               <&> over NamespaceDiffs.definitionDiffRendered_ toJSON
-                               & fmap (diffDataJSON name)
-                               & fmap (\(tag, dJSON) -> object ["tag" .= tag, "contents" .= dJSON])
-                           )
-                  )
-                & toJSON @[Value]
-            childrenJSON =
-              children
-                & Map.toList
-                & fmap
-                  ( \(path, childNode) ->
-                      object ["path" .= path, "contents" .= namespaceTreeDiffJSON childNode]
-                  )
-         in object
-              [ "changes" .= changesJSON,
-                "children" .= childrenJSON
-              ]
-
-      libdepsDiffJSON :: Map NameSegment (DiffOp BranchHash) -> Value
-      libdepsDiffJSON =
-        Map.toList
-          >>> map
-            ( \(name, op) ->
-                case op of
-                  DiffOp'Add hash ->
-                    object
-                      [ "hash" .= hash,
-                        "name" .= name,
-                        "tag" .= ("Added" :: Text)
-                      ]
-                  DiffOp'Delete hash ->
-                    object
-                      [ "hash" .= hash,
-                        "name" .= name,
-                        "tag" .= ("Removed" :: Text)
-                      ]
-                  DiffOp'Update Merge.Updated {old, new} ->
-                    object
-                      [ "name" .= name,
-                        "newHash" .= new,
-                        "oldHash" .= old,
-                        "tag" .= ("Updated" :: Text)
-                      ]
-            )
-          >>> toJSON @[Value]

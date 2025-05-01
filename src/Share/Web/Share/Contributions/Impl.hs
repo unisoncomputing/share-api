@@ -303,7 +303,7 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
               oldRefHash = Just $ PrefixedHash oldBranchCausalHash,
               diff =
                 case maybeNamespaceDiff of
-                  Just diff -> ShareNamespaceDiffStatus'Ok (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
+                  Just diff -> ShareNamespaceDiffStatus'Done (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
                   Nothing -> ShareNamespaceDiffStatus'StillComputing
             }
     let shouldCache = isJust maybeNamespaceDiff

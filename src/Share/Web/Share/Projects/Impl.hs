@@ -177,8 +177,8 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
         makeRuntime codebase = do
           runtime <- Codebase.codebaseRuntime' unisonRuntime codebase
           pure (badUnliftCodebaseRuntime runtime)
-    diffOrError <-
-      PG.tryRunTransaction do
+    diff <-
+      PG.runTransaction do
         ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
           Just diff -> pure (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
           Nothing -> do
@@ -196,10 +196,7 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
           oldRefHash = Just $ PrefixedHash oldCausalHash,
           newRef = newShortHand,
           newRefHash = Just $ PrefixedHash newCausalHash,
-          diff =
-            case diffOrError of
-              Right diff -> ShareNamespaceDiffStatus'Ok diff
-              Left err -> ShareNamespaceDiffStatus'Error err
+          diff = ShareNamespaceDiffStatus'Done diff
         }
   where
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}

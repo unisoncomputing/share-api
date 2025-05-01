@@ -12,16 +12,12 @@ import Unison.Prelude
 
 submitContributionToBeDiffed :: (QueryM m) => ContributionId -> m ()
 submitContributionToBeDiffed contributionId = do
-  result <-
-    query1Col @Int64
-      [sql|
-        INSERT INTO contribution_diff_queue (contribution_id)
-        VALUES (#{contributionId})
-        ON CONFLICT DO NOTHING
-        RETURNING 1
-      |]
-  whenJust result \_ ->
-    Notif.notifyChannel Notif.ContributionDiffChannel
+  execute_
+    [sql|
+      INSERT INTO contribution_diff_queue (contribution_id)
+      VALUES (#{contributionId})
+    |]
+  Notif.notifyChannel Notif.ContributionDiffChannel
 
 submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
 submitContributionsToBeDiffed contributions = do
@@ -32,7 +28,6 @@ submitContributionsToBeDiffed contributions = do
       )
       INSERT INTO contribution_diff_queue (contribution_id)
         SELECT nc.contribution_id FROM new_contributions nc
-        ON CONFLICT DO NOTHING
     |]
   Notif.notifyChannel Notif.ContributionDiffChannel
 

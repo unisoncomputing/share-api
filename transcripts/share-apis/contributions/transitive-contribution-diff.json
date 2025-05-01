@@ -248,14 +248,15 @@
         ],
         "children": []
       },
-      "libdeps": []
+      "libdeps": [],
+      "tag": "ok"
     },
-    "diffKind": "ok",
     "newRef": "feature-two",
     "newRefHash": "#ktjspqi8s5ngg129a6lt7i9kd488isfoq8hqmsv54f327de28dq9u0n1dp1vlbgs8jdc6bqss3h46ep9241405ml19nr0gekel56pig",
     "oldRef": "main",
     "oldRefHash": "#7shvkj0gn9mfne1pemp3oudmo23vio4d8ualvbah6avr7m5471rssu9cd4o6i4pn91bgc62vgnm0oper0itgtmopqmff7c0b40ui1s0",
-    "project": "@transcripts/bca-updates"
+    "project": "@transcripts/bca-updates",
+    "tag": "done"
   },
   "status": [
     {

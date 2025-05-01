@@ -14,7 +14,6 @@ import Share.Env qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Metrics qualified as Metrics
-import Share.NamespaceDiffs (NamespaceDiffError (MissingEntityError))
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.Notifications qualified as Notif
@@ -79,13 +78,13 @@ maybeComputeAndStoreCausalDiff ::
   AuthZ.AuthZReceipt ->
   (Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)) ->
   ContributionId ->
-  PG.Transaction NamespaceDiffError Bool
+  PG.Transaction EntityMissing Bool
 maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId = do
   Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <-
-    ContributionsQ.contributionById contributionId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-  project <- Q.projectById projectId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "project:missing") "Project not found")
-  newBranch <- Q.branchById newBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Source branch not found")
-  oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    ContributionsQ.contributionById contributionId `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+  project <- Q.projectById projectId `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+  newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+  oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
   let oldCausal = oldBranch ^. branchCausals_
