@@ -195,14 +195,9 @@ userByHandle handle = do
         WHERE u.handle = lower(#{handle})
       |]
 
-createFromGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> Maybe UserHandle -> PG.Transaction UserCreationError User
-createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_url user_name) primaryEmail mayPreferredHandle = do
+createFromGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> UserHandle -> PG.Transaction UserCreationError User
+createFromGithubUser !authzReceipt (GithubUser _githubHandle githubUserId avatar_url user_name) primaryEmail userHandle = do
   let (GithubEmail {githubEmailEmail = user_email, githubEmailIsVerified = emailVerified}) = primaryEmail
-  userHandle <- case mayPreferredHandle of
-    Just handle -> pure handle
-    Nothing -> case IDs.fromText @UserHandle (Text.toLower githubHandle) of
-      Left err -> throwError (InvalidUserHandle err githubHandle)
-      Right handle -> pure handle
   userId <- createUser authzReceipt user_email user_name (Just avatar_url) userHandle emailVerified
   PG.execute_
     [PG.sql|
@@ -261,13 +256,13 @@ isNew :: NewOrPreExisting a -> Bool
 isNew New {} = True
 isNew _ = False
 
-findOrCreateGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> Maybe UserHandle -> PG.Transaction UserCreationError (NewOrPreExisting User)
-findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarUrl _name) primaryEmail mayPreferredHandle = do
+findOrCreateGithubUser :: AuthZ.AuthZReceipt -> GithubUser -> GithubEmail -> UserHandle -> PG.Transaction UserCreationError (NewOrPreExisting User)
+findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarUrl _name) primaryEmail userHandle = do
   user <- userByGithubUserId githubUserId
   case user of
     Just user' -> pure (PreExisting user')
     Nothing -> do
-      New <$> createFromGithubUser authZReceipt ghu primaryEmail mayPreferredHandle
+      New <$> createFromGithubUser authZReceipt ghu primaryEmail userHandle
 
 searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(User, Maybe OrgId)]
 searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do

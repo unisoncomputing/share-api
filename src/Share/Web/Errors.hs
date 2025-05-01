@@ -9,6 +9,7 @@ module Share.Web.Errors
   ( respondError,
     respondExceptT,
     reportError,
+    serverErrorRedirect,
     ToServerError (..),
     SimpleServerError (..),
     ErrorRedirect (..),
@@ -245,15 +246,22 @@ data ErrorRedirect = ErrorRedirect Text URI
   deriving stock (Show)
 
 instance Loggable ErrorRedirect where
-  toLog (ErrorRedirect msg _) = withSeverity Error $ textLog msg
+  toLog (ErrorRedirect msg _) = withSeverity UserFault $ textLog msg
 
 instance ToServerError ErrorRedirect where
   toServerError (ErrorRedirect errorID redirectURI) =
     ( ErrorID errorID,
       err302
-        { errHeaders = [("Location", BS.pack $ show redirectURI)]
+        { errHeaders = [("Location", BS.pack $ show @URI redirectURI)]
         }
     )
+
+-- | Create a ServerError which performs a redirect.
+serverErrorRedirect :: URI -> ServerError
+serverErrorRedirect redirectURI =
+  err302
+    { errHeaders = [("Location", BS.pack $ show @URI redirectURI)]
+    }
 
 missingParameter :: Text -> WebApp a
 missingParameter param = respondError $ EntityMissing (ErrorID "missing-parameter") $ "Missing parameter: " <> param
@@ -292,16 +300,16 @@ instance ToServerError Backend.BackendError where
 
 -- | Redirect the user to the Share UI and show an error message.
 errorRedirect :: ShareUIError -> WebApp a
-errorRedirect shareUIError = do
-  errURI <- shareUIPathQ ["error"] (Map.fromList [("appError", shareUIErrorToUIText shareUIError)])
-  respondError $ ErrorRedirect (shareUIErrorToUIText shareUIError) errURI
+errorRedirect = \case
+  shareUIError -> do
+    errURI <- shareUIPathQ ["error"] (Map.fromList [("appError", shareUIErrorToUIText shareUIError)])
+    respondError $ ErrorRedirect (shareUIErrorToUIText shareUIError) errURI
 
 -- | Various Error types that the Share UI knows how to interpret
 data ShareUIError
   = UnspecifiedError
   | AccountCreationGitHubPermissionsRejected
-  | AccountCreationHandleAlreadyTaken
-  | AccountCreationInvalidHandle
+  | AccountCreationInvalidHandle Text {- the invalid handle -}
   deriving (Show)
 
 -- | Convert ShareUIError to the Text that the UI expects
@@ -310,11 +318,9 @@ shareUIErrorToUIText e =
   case e of
     UnspecifiedError ->
       "UnspecifiedError"
-    AccountCreationGitHubPermissionsRejected ->
+    AccountCreationGitHubPermissionsRejected {} ->
       "AccountCreationGitHubPermissionsRejected"
-    AccountCreationHandleAlreadyTaken ->
-      "AccountCreationHandleAlreadyTaken"
-    AccountCreationInvalidHandle ->
+    AccountCreationInvalidHandle {} ->
       "AccountCreationInvalidHandle"
 
 data Unimplemented = Unimplemented

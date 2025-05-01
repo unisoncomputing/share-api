@@ -21,6 +21,7 @@ import Data.Aeson qualified as Aeson
 import Data.Map qualified as Map
 import Data.Maybe (fromJust)
 import Data.Set qualified as Set
+import Data.Text qualified as Text
 import Network.URI (parseURI)
 import Servant
 import Share.App (shareAud, shareIssuer)
@@ -58,6 +59,19 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.OAuth.Clients (validateOAuthClientForTokenExchange, validateOAuthClientRedirectURI)
 import Web.Cookie as Cookie (SetCookie (..))
+
+data AuthError = HandleAlreadyTaken UserHandle URI
+  deriving (Eq, Show)
+
+instance Logging.Loggable AuthError where
+  toLog = \case
+    (HandleAlreadyTaken handle _) ->
+      Logging.textLog ("User handle already taken: " <> Text.pack (show handle))
+        & Logging.withSeverity Logging.UserFault
+
+instance ToServerError AuthError where
+  toServerError (HandleAlreadyTaken _handle uri) =
+    (ErrorID "handle-already-taken", serverErrorRedirect uri)
 
 -- | The URL used to kick off a login using Share for oauth2 clients like the Cloud app or UCM.
 -- if the user isn't already logged in it will authenticate them via the Github login page.
@@ -237,13 +251,19 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       ghEmail <- Github.primaryGithubEmail token
       pure (ghUser, ghEmail)
     completeGithubFlow :: Github.GithubUser -> Github.GithubEmail -> Maybe UserHandle -> WebApp (UserQ.NewOrPreExisting User)
-    completeGithubFlow ghUser ghEmail mayPreferredHandle = do
-      PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail mayPreferredHandle) >>= \case
+    completeGithubFlow ghUser@(Github.GithubUser githubHandle _githubUserId _avatarUrl _name) ghEmail mayPreferredHandle = do
+      userHandle <- case mayPreferredHandle of
+        Just handle -> pure handle
+        Nothing -> case IDs.fromText @UserHandle (Text.toLower githubHandle) of
+          Left _err -> errorRedirect $ AccountCreationInvalidHandle (Text.toLower githubHandle)
+          Right handle -> pure handle
+      PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail userHandle) >>= \case
         Left (UserQ.UserHandleTaken _) -> do
-          errorRedirect AccountCreationHandleAlreadyTaken
+          handleTakenUri <- (shareUIPathQ ["finish-signup"] (Map.fromList [("state", "handle-taken"), ("handle", IDs.toText userHandle)]))
+          respondError $ HandleAlreadyTaken userHandle handleTakenUri
         Left (UserQ.InvalidUserHandle err handle) -> do
           Logging.logErrorText ("Invalid user handle: " <> handle <> " " <> err)
-          errorRedirect AccountCreationInvalidHandle
+          errorRedirect $ AccountCreationInvalidHandle handle
         Right u -> pure u
 
     mkLoginLandingPageURI :: UserQ.NewOrPreExisting User -> WebApp URI
