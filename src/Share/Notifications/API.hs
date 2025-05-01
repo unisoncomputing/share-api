@@ -179,7 +179,7 @@ type GetDeliveryMethodsEndpoint =
 
 data GetDeliveryMethodsResponse
   = GetDeliveryMethodsResponse
-  { deliveryMethods :: Set NotificationDeliveryMethod
+  { deliveryMethods :: [NotificationDeliveryMethod]
   }
 
 instance ToJSON GetDeliveryMethodsResponse where

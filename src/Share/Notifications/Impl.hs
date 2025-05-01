@@ -1,6 +1,5 @@
 module Share.Notifications.Impl (server) where
 
-import Data.Set qualified as Set
 import Data.Time
 import Servant
 import Servant.Server.Generic (AsServerT)
@@ -95,7 +94,7 @@ getDeliveryMethodsEndpoint :: UserHandle -> UserId -> WebApp API.GetDeliveryMeth
 getDeliveryMethodsEndpoint userHandle callerUserId = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsView callerUserId notificationUserId
-  deliveryMethods <- fmap Set.fromList $ NotifOps.listNotificationDeliveryMethods notificationUserId Nothing
+  deliveryMethods <- NotifOps.listNotificationDeliveryMethods notificationUserId Nothing
   pure $ API.GetDeliveryMethodsResponse {deliveryMethods}
 
 createEmailDeliveryMethodEndpoint :: UserHandle -> UserId -> API.CreateEmailDeliveryMethodRequest -> WebApp API.CreateEmailDeliveryMethodResponse
@@ -123,7 +122,7 @@ getSubscriptionDeliveryMethodsEndpoint :: UserHandle -> NotificationSubscription
 getSubscriptionDeliveryMethodsEndpoint userHandle subscriptionId callerUserId = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsView callerUserId notificationUserId
-  deliveryMethods <- fmap Set.fromList $ NotifOps.listNotificationDeliveryMethods notificationUserId (Just subscriptionId)
+  deliveryMethods <- NotifOps.listNotificationDeliveryMethods notificationUserId (Just subscriptionId)
   pure $ API.GetDeliveryMethodsResponse {deliveryMethods}
 
 addSubscriptionDeliveryMethodsEndpoint :: UserHandle -> NotificationSubscriptionId -> UserId -> API.AddSubscriptionDeliveryMethodsRequest -> WebApp ()
