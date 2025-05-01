@@ -23,8 +23,7 @@ fetch "$admin_user" POST org-create-by-admin '/orgs' '{
   "name": "ACME",
   "handle": "acme",
   "avatarUrl": "https://example.com/anvil.png",
-  "owner": "transcripts",
-  "email": "wile.e.coyote@example.com"
+  "owner": "transcripts"
 }'
 
 

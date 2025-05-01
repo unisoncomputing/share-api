@@ -4,7 +4,7 @@ module Share.Web.Share.Orgs.Operations
 where
 
 import Data.Set qualified as Set
-import Share.IDs (OrgHandle (..), OrgId, UserHandle (..), UserId)
+import Share.IDs (Email, OrgHandle (..), OrgId, UserHandle (..), UserId)
 import Share.Postgres
 import Share.Postgres.Users.Queries (UserCreationError)
 import Share.Postgres.Users.Queries qualified as UserQ
@@ -14,10 +14,11 @@ import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Roles.Queries qualified as RoleQ
 
-createOrg :: AuthZ.AuthZReceipt -> Text -> OrgHandle -> Text -> Maybe URIParam -> UserId -> Transaction UserCreationError OrgId
+createOrg :: AuthZ.AuthZReceipt -> Text -> OrgHandle -> Maybe Email -> Maybe URIParam -> UserId -> Transaction UserCreationError OrgId
 createOrg !authZReceipt name (OrgHandle handle) email avatarUrl owner = do
   let emailVerified = False
-  orgUserId <- UserQ.createUser authZReceipt email (Just name) avatarUrl (UserHandle handle) emailVerified
+  let isOrg = True
+  orgUserId <- UserQ.createUser authZReceipt isOrg email (Just name) avatarUrl (UserHandle handle) emailVerified
   (orgId, orgResourceId) <-
     queryExpect1Row
       [sql|
