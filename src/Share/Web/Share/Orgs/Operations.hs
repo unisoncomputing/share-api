@@ -14,15 +14,16 @@ import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Roles.Queries qualified as RoleQ
 
-createOrg :: AuthZ.AuthZReceipt -> Text -> OrgHandle -> Maybe Email -> Maybe URIParam -> UserId -> Transaction UserCreationError OrgId
-createOrg !authZReceipt name (OrgHandle handle) email avatarUrl owner = do
+createOrg :: AuthZ.AuthZReceipt -> Text -> OrgHandle -> Maybe Email -> Maybe URIParam -> UserId -> UserId -> Transaction UserCreationError OrgId
+createOrg !authZReceipt name (OrgHandle handle) email avatarUrl owner creator = do
   let emailVerified = False
   let isOrg = True
   orgUserId <- UserQ.createUser authZReceipt isOrg email (Just name) avatarUrl (UserHandle handle) emailVerified
   (orgId, orgResourceId) <-
     queryExpect1Row
       [sql|
-    INSERT INTO orgs (user_id) VALUES (#{orgUserId})
+    INSERT INTO orgs (user_id, creator_user_id) 
+      VALUES (#{orgUserId}, #{creator})
       RETURNING id, resource_id
     |]
   RoleQ.assignUserRoleMembership authZReceipt owner orgResourceId AuthZ.RoleOrgOwner

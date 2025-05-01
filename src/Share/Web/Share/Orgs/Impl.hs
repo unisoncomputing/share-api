@@ -62,7 +62,7 @@ orgCreateEndpoint :: UserId -> CreateOrgRequest -> WebApp OrgDisplayInfo
 orgCreateEndpoint callerUserId (CreateOrgRequest {name, handle, avatarUrl, email, owner = ownerHandle}) = do
   User {user_id = ownerUserId} <- PG.runTransaction (UserQ.userByHandle ownerHandle) `whenNothingM` respondError (EntityMissing (ErrorID "missing-user") "Owner not found")
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkCreateOrg callerUserId ownerUserId
-  orgId <- PG.runTransactionOrRespondError $ OrgOps.createOrg authZReceipt name handle email avatarUrl ownerUserId
+  orgId <- PG.runTransactionOrRespondError $ OrgOps.createOrg authZReceipt name handle email avatarUrl ownerUserId callerUserId
   PG.runTransaction $ OrgQ.orgDisplayInfoOf id orgId
 
 rolesServer :: UserHandle -> API.OrgRolesRoutes (AsServerT WebApp)
