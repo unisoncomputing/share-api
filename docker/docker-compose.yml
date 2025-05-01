@@ -55,9 +55,14 @@ services:
     image: share-api
     container_name: share-api
     depends_on:
-      - redis
-      - postgres
-      - vault
+          redis:
+            condition: service_healthy
+          postgres:
+            condition: service_healthy
+          vault:
+            condition: service_healthy
+          http-echo:
+            condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5424/health"]
       interval: 3s
