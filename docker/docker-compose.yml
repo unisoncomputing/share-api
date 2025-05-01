@@ -101,13 +101,7 @@ services:
 
   http-echo:
     image: 'mendhak/http-https-echo:36'
-
     container_name: http-echo
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9999/healthcheck"]
-      interval: 3s
-      timeout: 10s
-      retries: 3
     environment:
       HTTP_PORT: 9999
       ECHO_BACK_TO_CLIENT: "false"
