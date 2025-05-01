@@ -259,7 +259,7 @@ instance ToJSON NamespaceDiffResult where
           case err of
             ImpossibleError _ ->
               Aeson.object
-                [ "errorKind" .= ("impossibleError" :: Text)
+                [ "tag" .= ("impossibleError" :: Text)
                 ]
             IncoherentDecl reason ->
               let f :: Text -> IncoherentDeclReason -> Aeson.Value
@@ -268,22 +268,22 @@ instance ToJSON NamespaceDiffResult where
                       ( "oldOrNewBranch" .= which
                           : case reason of
                             IncoherentDeclReason'ConstructorAlias typeName constructorName1 constructorName2 ->
-                              [ "errorKind" .= ("constructorAlias" :: Text),
+                              [ "tag" .= ("constructorAlias" :: Text),
                                 "typeName" .= typeName,
                                 "constructorName1" .= constructorName1,
                                 "constructorName2" .= constructorName2
                               ]
                             IncoherentDeclReason'MissingConstructorName typeName ->
-                              [ "errorKind" .= ("missingConstructorName" :: Text),
+                              [ "tag" .= ("missingConstructorName" :: Text),
                                 "typeName" .= typeName
                               ]
                             IncoherentDeclReason'NestedDeclAlias constructorName1 constructorName2 ->
-                              [ "errorKind" .= ("constructorAlias" :: Text),
+                              [ "tag" .= ("constructorAlias" :: Text),
                                 "constructorName1" .= constructorName1,
                                 "constructorName2" .= constructorName2
                               ]
                             IncoherentDeclReason'StrayConstructor _ constructorName ->
-                              [ "errorKind" .= ("strayConstructor" :: Text),
+                              [ "tag" .= ("strayConstructor" :: Text),
                                 "constructorName" .= constructorName
                               ]
                       )
@@ -292,11 +292,11 @@ instance ToJSON NamespaceDiffResult where
                     EitherWay.Bob reason -> f "new" reason
             LibFoundAtUnexpectedPath _ ->
               Aeson.object
-                [ "errorKind" .= ("libFoundAtUnexpectedPath" :: Text)
+                [ "tag" .= ("libFoundAtUnexpectedPath" :: Text)
                 ]
             MissingEntityError _ ->
               Aeson.object
-                [ "errorKind" .= ("missingEntityError" :: Text)
+                [ "tag" .= ("missingEntityError" :: Text)
                 ]
     where
       text :: Text -> Text
