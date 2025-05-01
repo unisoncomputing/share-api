@@ -9,6 +9,7 @@ ucm_credentials_file="${ucm_xdg_data_dir}/unisonlanguage/credentials.json"
 
 # Executable to use when running unison transcripts
 export UCM_PATH="${1:-"$(which ucm)"}"
+export echo_server_port=9999
 
 # UCM to use within transcripts
 transcript_ucm() {

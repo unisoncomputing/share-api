@@ -65,8 +65,6 @@ services:
       retries: 3
     ports:
       - "5424:5424"
-      # Bind the webhook-listener port to the host machine for transcripts
-      - "9999:9999"
 
     environment:
       # Placeholder values for development
@@ -99,6 +97,22 @@ services:
       - redis
       - postgres
       - vault
+      - http-echo
+
+  http-echo:
+    image: 'mendhak/http-https-echo:36'
+
+    container_name: http-echo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9999/healthcheck"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    environment:
+      HTTP_PORT: 9999
+      ECHO_BACK_TO_CLIENT: "false"
+    ports:
+      - "9999:9999"
 
 # volumes:
 #   postgresVolume:
