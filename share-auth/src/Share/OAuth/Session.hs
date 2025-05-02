@@ -261,10 +261,10 @@ data LoginRequest
   deriving anyclass (ToJSON, FromJSON)
   deriving (Binary) via JSONBinary LoginRequest
 
--- | Sessions expire in 30 days
+-- | Sessions expire in 1 year
 sessionTTL :: NominalDiffTime
 sessionTTL =
-  (30 * nominalDay)
+  (365 * nominalDay)
 
 createSession :: (MonadIO m) => URI -> Set URI -> UserId -> m Session
 createSession sessionIssuer sessionAudience sessionUserId = do
