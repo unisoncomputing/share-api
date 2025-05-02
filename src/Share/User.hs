@@ -31,7 +31,7 @@ instance Hasql.EncodeValue UserVisibility where
 data User = User
   { user_id :: UserId,
     user_name :: Maybe Text,
-    user_email :: Text,
+    user_email :: Maybe Email,
     avatar_url :: Maybe URIParam,
     handle :: UserHandle,
     visibility :: UserVisibility

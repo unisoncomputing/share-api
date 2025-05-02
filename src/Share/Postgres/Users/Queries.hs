@@ -219,7 +219,7 @@ createFromGithubUser !authzReceipt (GithubUser githubHandle githubUserId avatar_
         avatar_url = Just avatar_url,
         user_id = userId,
         user_name,
-        user_email,
+        user_email = Just $ Email user_email,
         visibility
       }
 
