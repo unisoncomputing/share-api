@@ -10,6 +10,11 @@ ucm_credentials_file="${ucm_xdg_data_dir}/unisonlanguage/credentials.json"
 # Executable to use when running unison transcripts
 export UCM_PATH="${1:-"$(which ucm)"}"
 export echo_server_port=9999
+export echo_server="http://localhost:${echo_server_port}"
+# if CI=true, change the echo server url to a url from the docker network.
+if [ "${CI:-false}" = "true" ]; then
+  export echo_server="http://echo-server:${echo_server_port}"
+fi
 
 # UCM to use within transcripts
 transcript_ucm() {
@@ -111,7 +116,10 @@ clean_for_transcript() {
     # Replace all cursors in stdin with the string "<CURSOR>"
     sed -E 's/"cursor": ?"[^"]+"/"cursor": "<CURSOR>"/g' | \
     # Replace all JWTs in stdin with the string "<JWT>"
-    sed -E 's/eyJ([[:alnum:]_.-]+)/<JWT>/g'
+    sed -E 's/eyJ([[:alnum:]_.-]+)/<JWT>/g' | \
+    # In docker we network things together with host names, but locally we just use localhost; so 
+    # this normalizes everything in transcripts.
+    sed -E 's/(localhost|http-echo):/<HOST>:/g'
 }
 
 fetch() {
