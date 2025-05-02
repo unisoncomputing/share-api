@@ -21,3 +21,7 @@ WITH org_users(user_id) AS (
 ALTER TABLE orgs
   ADD COLUMN creator_user_id uuid NULL REFERENCES users (id) ON DELETE SET NULL
 ;
+
+ALTER TABLE orgs
+  ADD COLUMN is_commercial boolean NOT NULL DEFAULT false
+;
