@@ -253,10 +253,6 @@ jobs:
           # Run the transcript tests
           zsh ./transcripts/run-transcripts.zsh
 
-          # Get container logs from share-api and http-echo containers
-          docker logs http-echo
-          docker logs share-api
-
           # Track all files so they'll show in the diff
           git add ./transcripts
           # Fail if there are any uncommited transcript changes

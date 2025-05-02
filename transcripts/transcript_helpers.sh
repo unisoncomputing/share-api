@@ -13,7 +13,7 @@ export echo_server_port=9999
 export echo_server="http://localhost:${echo_server_port}"
 # if CI=true, change the echo server url to a url from the docker network.
 if [ "${CI:-false}" = "true" ]; then
-  export echo_server="http://echo-server:${echo_server_port}"
+  export echo_server="http://http-echo:${echo_server_port}"
 fi
 
 # UCM to use within transcripts
