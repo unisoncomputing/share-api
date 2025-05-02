@@ -1,5 +1,6 @@
 {
   "body": {
+    "isCommercial": true,
     "orgId": "ORG-<UUID>",
     "user": {
       "avatarUrl": "https://example.com/anvil.png",

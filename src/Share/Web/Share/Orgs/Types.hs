@@ -16,11 +16,14 @@ import Share.Postgres (DecodeRow (..), decodeField)
 import Share.Utils.URI (URIParam)
 import Share.Web.Share.DisplayInfo (UserDisplayInfo)
 
-newtype Org = Org {orgId :: OrgId}
-  deriving (Show, Eq)
+data Org = Org {orgId :: OrgId, isCommercial :: Bool}
+  deriving (Show, Eq, Ord)
 
 instance DecodeRow Org where
-  decodeRow = Org <$> decodeField
+  decodeRow = do
+    orgId <- decodeField
+    isCommercial <- decodeField
+    pure Org {..}
 
 data CreateOrgRequest = CreateOrgRequest
   { name :: Text,

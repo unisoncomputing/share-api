@@ -36,15 +36,17 @@ instance ToJSON UserDisplayInfo where
 -- | Common type for displaying an Org.
 data OrgDisplayInfo = OrgDisplayInfo
   { user :: UserDisplayInfo,
-    orgId :: OrgId
+    orgId :: OrgId,
+    isCommercial :: Bool
   }
   deriving (Show, Eq, Ord)
 
 instance ToJSON OrgDisplayInfo where
-  toJSON OrgDisplayInfo {user, orgId} =
+  toJSON OrgDisplayInfo {user, orgId, isCommercial} =
     Aeson.object
       [ "user" Aeson..= user,
-        "orgId" Aeson..= orgId
+        "orgId" Aeson..= orgId,
+        "isCommercial" Aeson..= isCommercial
       ]
 
 data TeamDisplayInfo = TeamDisplayInfo
