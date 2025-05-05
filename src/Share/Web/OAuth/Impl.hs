@@ -259,7 +259,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
           Right handle -> pure handle
       PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail userHandle) >>= \case
         Left (UserQ.UserHandleTaken _) -> do
-          handleTakenUri <- (shareUIPathQ ["finish-signup"] (Map.fromList [("state", "handle-taken"), ("handle", IDs.toText userHandle)]))
+          handleTakenUri <- (shareUIPathQ ["finish-signup"] (Map.fromList [("state", "handle-taken"), ("conflictingHandle", IDs.toText userHandle)]))
           respondError $ HandleAlreadyTaken userHandle handleTakenUri
         Left (UserQ.InvalidUserHandle err handle) -> do
           Logging.logErrorText ("Invalid user handle: " <> handle <> " " <> err)
