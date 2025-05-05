@@ -9,14 +9,14 @@ module Share.Web.Support.Zendesk where
 import Control.Monad.Reader
 import Data.Aeson
 import Data.Either (fromRight)
+import Servant
+import Servant.Client
 import Share.Env qualified as Env
 import Share.IDs
 import Share.Prelude
 import Share.Utils.Servant.Client (runClient)
 import Share.Web.App
 import Share.Web.Support.Types
-import Servant
-import Servant.Client
 
 -- | Field Id for the Share Handle custom ticket field. See https://unison-computing.zendesk.com/admin/objects-rules/tickets/ticket-fields
 zendeskShareHandleFieldId :: Int
@@ -42,7 +42,7 @@ data ZendeskTicket = ZendeskTicket
     body :: Text,
     priority :: Priority,
     requesterName :: Text,
-    requesterEmail :: Text,
+    requesterEmail :: Maybe Email,
     shareHandle :: UserHandle,
     shareUserId :: UserId
   }

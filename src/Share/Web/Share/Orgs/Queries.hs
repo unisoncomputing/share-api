@@ -3,6 +3,7 @@
 module Share.Web.Share.Orgs.Queries
   ( orgByUserId,
     orgByUserHandle,
+    orgsByIdsOf,
     listOrgRoles,
     addOrgRoles,
     removeOrgRoles,
@@ -23,13 +24,14 @@ import Share.Prelude
 import Share.Utils.URI
 import Share.Web.Authorization.Types
 import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
-import Share.Web.Share.Orgs.Types (Org)
+import Share.Web.Share.Orgs.Types (Org (..))
 
 orgByUserId :: UserId -> Transaction e (Maybe Org)
 orgByUserId orgUserId = do
   query1Row
     [sql|
-      SELECT org.id FROM orgs org
+      SELECT org.id, org.is_commercial
+      FROM orgs org
       WHERE org.user_id = #{orgUserId}
     |]
 
@@ -37,11 +39,26 @@ orgByUserHandle :: UserHandle -> Transaction e (Maybe Org)
 orgByUserHandle orgHandle = do
   query1Row
     [sql|
-      SELECT org.id
+      SELECT org.id, org.is_commercial
         FROM orgs org
         JOIN users u ON org.user_id = u.id
       WHERE u.handle = #{orgHandle}
     |]
+
+orgsByIdsOf :: (QueryA m) => Traversal s t OrgId Org -> s -> m t
+orgsByIdsOf trav s = do
+  s
+    & unsafePartsOf trav %%~ \orgIds -> do
+      let orgTable = zip [0 :: Int32 ..] orgIds
+      queryListRows
+        [sql|
+          WITH values(ord, org_id)  AS (
+            SELECT * FROM ^{toTable orgTable} AS t(ord, org_id)
+          ) SELECT org.id, org.is_commercial
+            FROM values
+            JOIN orgs org ON org.id = values.org_id
+          ORDER BY values.ord
+        |]
 
 -- | Efficiently resolve Org Display Info for OrgIds within a structure.
 orgDisplayInfoOf :: (QueryA m) => Traversal s t OrgId OrgDisplayInfo -> s -> m t
@@ -49,7 +66,8 @@ orgDisplayInfoOf trav s = do
   s
     & unsafePartsOf trav %%~ \orgIds -> do
       userDisplayInfos <- userDisplayInfoByOrgIdOf traversed orgIds
-      pure $ zipWith (\orgId userDisplayInfo -> OrgDisplayInfo {orgId, user = userDisplayInfo}) orgIds userDisplayInfos
+      orgs <- orgsByIdsOf traversed orgIds
+      pure $ zipWith (\(Org {orgId, isCommercial}) userDisplayInfo -> OrgDisplayInfo {orgId, user = userDisplayInfo, isCommercial}) orgs userDisplayInfos
 
 userDisplayInfoByOrgIdOf :: (QueryA m) => Traversal s t OrgId UserDisplayInfo -> s -> m t
 userDisplayInfoByOrgIdOf trav s = do

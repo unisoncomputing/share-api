@@ -213,7 +213,6 @@ CREATE TRIGGER users_create_subject
 
 CREATE TABLE orgs (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  -- There's no subject_id on the org, since the org is a user, and the user has a subject_id.
   user_id UUID UNIQUE NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   -- Subject representing the org itself.
   -- Note that orgs also have a subject on their associated user, but since you can't log in as a subject that

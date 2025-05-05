@@ -140,7 +140,7 @@ data UserAccountInfo = UserAccountInfo
     name :: Maybe Text,
     avatarUrl :: Maybe URIParam,
     userId :: UserId,
-    primaryEmail :: Text,
+    primaryEmail :: Maybe Email,
     -- List of tours which the user has completed.
     completedTours :: [TourId],
     organizationMemberships :: [UserHandle],

@@ -41,7 +41,7 @@ data UserInfo = UserInfo
     name :: Maybe Text,
     picture :: Maybe URIParam,
     profile :: URIParam, -- Link to the user's profile page
-    email :: Text,
+    email :: Maybe Email,
     -- Additional claims
     handle :: UserHandle
   }

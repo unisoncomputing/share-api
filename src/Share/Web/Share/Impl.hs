@@ -367,12 +367,13 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
   (users, projects) <- PG.runTransaction $ do
     users <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
     projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
-    pure (users, projects)
+    userResultsWithOrgInfo <- OrgQ.orgsByIdsOf (traversed . _2 . _Just) users
+    pure (userResultsWithOrgInfo, projects)
   let userResults =
         users
-          <&> \(User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId}, mayOrgId) ->
-            case mayOrgId of
-              Just orgId -> SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId}, orgId})
+          <&> \(User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId}, mayOrgInfo) ->
+            case mayOrgInfo of
+              Just (Org {orgId, isCommercial}) -> SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId}, orgId, isCommercial})
               Nothing -> SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
   let projectResults =
         projects
