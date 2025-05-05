@@ -14,17 +14,17 @@ module Share.Web.Authentication
 where
 
 import Data.Time
+import Servant
 import Share.IDs
 import Share.OAuth.Session (Session (..), pattern AuthenticatedUser, pattern MaybeAuthedUserID, pattern Unauthenticated)
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Errors
 import Share.Web.Errors qualified as Errors
-import Servant
 
 cookieSessionTTL :: NominalDiffTime
 cookieSessionTTL =
-  30 * nominalDay
+  365 * nominalDay
 
 data UnauthenticatedError = UnauthenticatedError
   deriving stock (Show)
