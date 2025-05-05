@@ -192,11 +192,11 @@ getTermTag r termType = do
     V2Referent.Con ref _ -> Just <$> Codebase.expectDeclKind ref
   pure $
     if
-      | isDoc -> Doc
-      | isTest -> Test
-      | Just CT.Effect <- constructorType -> Constructor Ability
-      | Just CT.Data <- constructorType -> Constructor Data
-      | otherwise -> Plain
+        | isDoc -> Doc
+        | isTest -> Test
+        | Just CT.Effect <- constructorType -> Constructor Ability
+        | Just CT.Data <- constructorType -> Constructor Data
+        | otherwise -> Plain
 
 getTypeTag ::
   (PG.QueryM m) =>
@@ -315,7 +315,7 @@ typeDeclHeader ppe r = case Reference.toId r of
       Just decl ->
         DisplayObject.UserObject $
           Syntax.convertElement
-            <$> Pretty.render defaultWidth (DeclPrinter.prettyDeclHeader name decl)
+            <$> Pretty.render defaultWidth (DeclPrinter.prettyDeclHeader DeclPrinter.RenderUniqueTypeGuids'No name decl)
   Nothing ->
     pure (DisplayObject.BuiltinObject (Backend.formatTypeName ppe r))
   where
