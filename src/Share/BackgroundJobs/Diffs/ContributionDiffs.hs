@@ -25,10 +25,10 @@ import Share.Web.Errors (EntityMissing (..), ErrorID (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import System.Clock qualified as Clock
 
--- | Check every 30 seconds if we haven't heard on the notifications channel.
+-- | Check every 10 minutes if we haven't heard on the notifications channel.
 -- Just in case we missed a notification.
 maxPollingIntervalSeconds :: Int
-maxPollingIntervalSeconds = 30
+maxPollingIntervalSeconds = 10 * 60
 
 worker :: Ki.Scope -> Background ()
 worker scope = do
