@@ -1,6 +1,5 @@
 module Share.BackgroundJobs.Diffs.Queries
-  ( submitContributionToBeDiffed,
-    submitContributionsToBeDiffed,
+  ( submitContributionsToBeDiffed,
     claimContributionToDiff,
   )
 where
@@ -9,15 +8,6 @@ import Share.IDs
 import Share.Postgres
 import Share.Postgres.Notifications qualified as Notif
 import Unison.Prelude
-
-submitContributionToBeDiffed :: (QueryM m) => ContributionId -> m ()
-submitContributionToBeDiffed contributionId = do
-  execute_
-    [sql|
-      INSERT INTO contribution_diff_queue (contribution_id)
-      VALUES (#{contributionId})
-    |]
-  Notif.notifyChannel Notif.ContributionDiffChannel
 
 submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
 submitContributionsToBeDiffed contributions = do
