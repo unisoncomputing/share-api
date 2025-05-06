@@ -37,7 +37,6 @@ library
       Share.BackgroundJobs.SerializedEntitiesMigration.Queries
       Share.BackgroundJobs.SerializedEntitiesMigration.Worker
       Share.BackgroundJobs.Webhooks.Queries
-      Share.BackgroundJobs.Webhooks.Types
       Share.BackgroundJobs.Webhooks.Worker
       Share.BackgroundJobs.Workers
       Share.Branch
@@ -64,6 +63,7 @@ library
       Share.Postgres.Causal.Queries
       Share.Postgres.Causal.Types
       Share.Postgres.Comments.Queries
+      Share.Postgres.Contributions.Ops
       Share.Postgres.Contributions.Queries
       Share.Postgres.Cursors
       Share.Postgres.Definitions.Queries

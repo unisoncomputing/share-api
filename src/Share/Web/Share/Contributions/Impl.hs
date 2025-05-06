@@ -30,6 +30,7 @@ import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.Contributions.Ops qualified as ContributionOps
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.Queries qualified as BranchQ
@@ -163,7 +164,7 @@ createContributionEndpoint session userHandle projectSlug (CreateContributionReq
     pure (project, sourceBranch, targetBranch)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionCreate callerUserId projectId
   PG.runTransactionOrRespondError $ do
-    (contributionId, contributionNumber) <- ContributionsQ.createContribution callerUserId projectId title description status sourceBranchId targetBranchId
+    (contributionId, contributionNumber) <- ContributionOps.createContribution callerUserId projectId title description status sourceBranchId targetBranchId
     DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
     ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (InternalServerError "create-contribution-error" internalServerError)
       >>= UsersQ.userDisplayInfoOf traversed
