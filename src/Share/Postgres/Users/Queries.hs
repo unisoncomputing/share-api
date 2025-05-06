@@ -10,6 +10,7 @@ module Share.Postgres.Users.Queries
     updateUser,
     expectUserByUserId,
     userByUserId,
+    expectUser,
     userByEmail,
     userByGithubUserId,
     userByHandle,
@@ -163,6 +164,15 @@ userByUserId uid = do
         SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
         FROM users u
         WHERE u.id = #{uid}
+      |]
+
+expectUser :: (PG.QueryM m) => UserId -> m User
+expectUser userId = do
+  PG.queryExpect1Row
+    [PG.sql|
+        SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private
+        FROM users u
+        WHERE u.id = #{userId}
       |]
 
 userByEmail :: Text -> PG.Transaction e (Maybe User)

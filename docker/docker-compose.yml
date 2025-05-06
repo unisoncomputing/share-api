@@ -32,12 +32,37 @@ services:
     ports:
      - "6379:6379"
 
+  vault:
+    image: 'hashicorp/vault:1.19'
+    container_name: vault
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "sekrit"
+      VAULT_KV_V1_MOUNT_PATH: "secret"
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    cap_add:
+      - IPC_LOCK
+    # # Use kv version 1
+    # command: server -dev
+
   share:
     image: share-api
     container_name: share-api
     depends_on:
-      - redis
-      - postgres
+          redis:
+            condition: service_healthy
+          postgres:
+            condition: service_healthy
+          vault:
+            condition: service_healthy
+          http-echo:
+            condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5424/health"]
       interval: 3s
@@ -53,10 +78,10 @@ services:
       - SHARE_SERVER_PORT=5424
       - SHARE_REDIS=redis://redis:6379
       - SHARE_POSTGRES=postgresql://postgres:sekrit@postgres:5432
-      - SHARE_HMAC_KEY=hmac-key-test-key-test-key-test-
-      - SHARE_EDDSA_KEY=eddsa-key-test-key-test-key-test
       - SHARE_POSTGRES_CONN_TTL=30
       - SHARE_POSTGRES_CONN_MAX=10
+      - SHARE_HMAC_KEY=hmac-key-test-key-test-key-test-
+      - SHARE_EDDSA_KEY=eddsa-key-test-key-test-key-test
       - SHARE_SHARE_UI_ORIGIN=http://localhost:1234
       - SHARE_CLOUD_UI_ORIGIN=http://localhost:5678
       - SHARE_HOMEPAGE_ORIGIN=http://localhost:1111
@@ -65,6 +90,9 @@ services:
       - SHARE_COMMIT=dev
       - SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST=1
       - SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST=5
+      - VAULT_HOST=http://vault:8200/v1
+      - VAULT_TOKEN=sekrit
+      - USER_SECRETS_VAULT_MOUNT=secret # A default mount in dev vault
       - SHARE_ZENDESK_API_USER=invaliduser@example.com
       - SHARE_ZENDESK_API_TOKEN=bad-password
       - SHARE_GITHUB_CLIENTID=invalid
@@ -73,6 +101,17 @@ services:
     links:
       - redis
       - postgres
+      - vault
+      - http-echo
+
+  http-echo:
+    image: 'mendhak/http-https-echo:36'
+    container_name: http-echo
+    environment:
+      HTTP_PORT: 9999
+      ECHO_BACK_TO_CLIENT: "false"
+    ports:
+      - "9999:9999"
 
 # volumes:
 #   postgresVolume:

@@ -727,12 +727,12 @@ checkNotificationsUpdate caller notificationUser = maybePermissionFailure (UserP
 
 checkDeliveryMethodsView :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkDeliveryMethodsView caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationDeliveryMethodView notificationUser) do
-  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationHubEntryView
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationDeliveryMethodView
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 checkDeliveryMethodsManage :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkDeliveryMethodsManage caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationDeliveryMethodManage notificationUser) do
-  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationHubEntryUpdate
+  assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationDeliveryMethodManage
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 checkSubscriptionsView :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)

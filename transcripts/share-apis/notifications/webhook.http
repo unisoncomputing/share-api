@@ -1,0 +1,50 @@
+{
+  "body": {
+    "data": {
+      "author": {
+        "avatarUrl": null,
+        "handle": "test",
+        "name": null,
+        "userId": "U-<UUID>"
+      },
+      "contributionId": "C-<UUID>",
+      "description": "My description",
+      "kind": "projectContributionCreated",
+      "mergeSourceBranch": {
+        "branchContributorHandle": null,
+        "branchContributorUserId": null,
+        "branchId": "B-<UUID>",
+        "branchName": "main",
+        "branchShortHand": "main"
+      },
+      "mergeTargetBranch": {
+        "branchContributorHandle": null,
+        "branchContributorUserId": null,
+        "branchId": "B-<UUID>",
+        "branchName": "feature",
+        "branchShortHand": "feature"
+      },
+      "project": {
+        "projectId": "P-<UUID>",
+        "projectOwnerHandle": "test",
+        "projectOwnerUserId": "U-<UUID>",
+        "projectShortHand": "@test/publictestproject",
+        "projectSlug": "publictestproject"
+      },
+      "status": "draft",
+      "title": "My contribution"
+    },
+    "eventId": "EVENT-<UUID>",
+    "occurredAt": "<TIMESTAMP>",
+    "signed": "<JWT>",
+    "topic": "project:contribution:created"
+  },
+  "headers": {
+    "Accept-Encoding": "gzip",
+    "Content-Length": "2577",
+    "Content-Type": "application/json",
+    "Host": "localhost:9999"
+  },
+  "method": "POST",
+  "path": "/"
+}

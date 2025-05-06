@@ -63,17 +63,20 @@ initialize scope = void $ Ki.fork scope $ forever do
 data ChannelKind
   = DefinitionSyncChannel
   | ContributionDiffChannel
+  | WebhooksChannel
   deriving stock (Eq, Ord, Show, Bounded, Enum)
 
 toChannelText :: ChannelKind -> Text
 toChannelText = \case
   DefinitionSyncChannel -> "definition_sync"
   ContributionDiffChannel -> "contribution_diff"
+  WebhooksChannel -> "webhooks"
 
 fromChannelText :: Text -> Maybe ChannelKind
 fromChannelText = \case
   "definition_sync" -> Just DefinitionSyncChannel
   "contribution_diff" -> Just ContributionDiffChannel
+  "webhooks" -> Just WebhooksChannel
   _ -> Nothing
 
 -- | Block waiting on a channel until either we get a notification OR until the max polling time has been reached

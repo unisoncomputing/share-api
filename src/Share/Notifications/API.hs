@@ -16,6 +16,10 @@ module Share.Notifications.API
     CreateSubscriptionRequest (..),
     CreateSubscriptionResponse (..),
     UpdateSubscriptionRequest (..),
+    SubscriptionDeliveryMethodRoutes (..),
+    SubscriptionResourceRoutes (..),
+    AddSubscriptionDeliveryMethodsRequest (..),
+    RemoveSubscriptionDeliveryMethodsRequest (..),
     GetDeliveryMethodsResponse (..),
     CreateEmailDeliveryMethodRequest (..),
     CreateEmailDeliveryMethodResponse (..),
@@ -35,7 +39,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
+import Share.Notifications.Types (DeliveryMethodId, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.URI (URIParam)
@@ -70,7 +74,22 @@ data SubscriptionRoutes mode
   { getSubscriptionsEndpoint :: mode :- GetSubscriptionsEndpoint,
     createSubscriptionEndpoint :: mode :- CreateSubscriptionEndpoint,
     deleteSubscriptionEndpoint :: mode :- DeleteSubscriptionEndpoint,
-    updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint
+    updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint,
+    subscriptionResourceRoutes :: mode :- Capture "subscriptionId" NotificationSubscriptionId :> NamedRoutes SubscriptionResourceRoutes
+  }
+  deriving stock (Generic)
+
+data SubscriptionResourceRoutes mode
+  = SubscriptionResourceRoutes
+  { subscriptionDeliveryMethodRoutes :: mode :- "delivery-methods" :> NamedRoutes SubscriptionDeliveryMethodRoutes
+  }
+  deriving stock (Generic)
+
+data SubscriptionDeliveryMethodRoutes mode
+  = SubscriptionDeliveryMethodRoutes
+  { getSubscriptionDeliveryMethodsEndpoint :: mode :- GetDeliveryMethodsEndpoint,
+    addSubscriptionDeliveryMethodsEndpoint :: mode :- "add" :> AddSubscriptionDeliveryMethodsEndpoint,
+    removeSubscriptionDeliveryMethodsEndpoint :: mode :- "remove" :> RemoveSubscriptionDeliveryMethodsEndpoint
   }
   deriving stock (Generic)
 
@@ -134,7 +153,7 @@ instance ToJSON CreateSubscriptionResponse where
 type DeleteSubscriptionEndpoint =
   AuthenticatedUserId
     :> Capture "subscription_id" NotificationSubscriptionId
-    :> Delete '[JSON] NoContent
+    :> Delete '[JSON] ()
 
 type UpdateSubscriptionEndpoint =
   AuthenticatedUserId
@@ -160,7 +179,7 @@ type GetDeliveryMethodsEndpoint =
 
 data GetDeliveryMethodsResponse
   = GetDeliveryMethodsResponse
-  { deliveryMethods :: Set NotificationDeliveryMethod
+  { deliveryMethods :: [NotificationDeliveryMethod]
   }
 
 instance ToJSON GetDeliveryMethodsResponse where
@@ -203,7 +222,7 @@ instance ToJSON GetHubEntriesResponse where
 type UpdateHubEntriesEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] UpdateHubEntriesRequest
-    :> Patch '[JSON] NoContent
+    :> Patch '[JSON] ()
 
 data UpdateHubEntriesRequest
   = UpdateHubEntriesRequest
@@ -244,13 +263,13 @@ instance ToJSON CreateEmailDeliveryMethodResponse where
 type DeleteEmailDeliveryMethodEndpoint =
   AuthenticatedUserId
     :> Capture "emailDeliveryMethodId" NotificationEmailDeliveryMethodId
-    :> Delete '[JSON] NoContent
+    :> Delete '[JSON] ()
 
 type UpdateEmailDeliveryMethodEndpoint =
   AuthenticatedUserId
     :> Capture "emailDeliveryMethodId" NotificationEmailDeliveryMethodId
     :> ReqBody '[JSON] UpdateEmailDeliveryMethodRequest
-    :> Patch '[JSON] NoContent
+    :> Patch '[JSON] ()
 
 data UpdateEmailDeliveryMethodRequest
   = UpdateEmailDeliveryMethodRequest
@@ -279,23 +298,23 @@ instance FromJSON CreateWebhookRequest where
 
 data CreateWebhookResponse
   = CreateWebhookResponse
-  { webhookDeliveryMethodId :: NotificationWebhookId
+  { webhookId :: NotificationWebhookId
   }
 
 instance ToJSON CreateWebhookResponse where
-  toJSON CreateWebhookResponse {webhookDeliveryMethodId} =
-    object ["webhookDeliveryMethodId" .= webhookDeliveryMethodId]
+  toJSON CreateWebhookResponse {webhookId} =
+    object ["webhookId" .= webhookId]
 
 type DeleteWebhookEndpoint =
   AuthenticatedUserId
-    :> Capture "webhookDeliveryMethodId" NotificationWebhookId
-    :> Delete '[JSON] NoContent
+    :> Capture "webhookId" NotificationWebhookId
+    :> Delete '[JSON] ()
 
 type UpdateWebhookEndpoint =
   AuthenticatedUserId
-    :> Capture "webhookDeliveryMethodId" NotificationWebhookId
+    :> Capture "webhookId" NotificationWebhookId
     :> ReqBody '[JSON] UpdateWebhookRequest
-    :> Patch '[JSON] NoContent
+    :> Patch '[JSON] ()
 
 data UpdateWebhookRequest
   = UpdateWebhookRequest
@@ -306,3 +325,35 @@ instance FromJSON UpdateWebhookRequest where
   parseJSON = withObject "UpdateWebhookRequest" $ \o -> do
     url <- o .: "url"
     pure UpdateWebhookRequest {url}
+
+type AddSubscriptionDeliveryMethodsEndpoint =
+  AuthenticatedUserId
+    :> ReqBody '[JSON] AddSubscriptionDeliveryMethodsRequest
+    :> Post '[JSON] ()
+
+type RemoveSubscriptionDeliveryMethodsEndpoint =
+  AuthenticatedUserId
+    :> ReqBody '[JSON] RemoveSubscriptionDeliveryMethodsRequest
+    :> Delete '[JSON] ()
+
+data AddSubscriptionDeliveryMethodsRequest
+  = AddSubscriptionDeliveryMethodsRequest
+  { deliveryMethods :: NESet DeliveryMethodId
+  }
+  deriving stock (Show, Eq, Ord)
+
+instance FromJSON AddSubscriptionDeliveryMethodsRequest where
+  parseJSON = withObject "AddSubscriptionDeliveryMethodsRequest" $ \o -> do
+    deliveryMethods <- o .: "deliveryMethods"
+    pure AddSubscriptionDeliveryMethodsRequest {deliveryMethods}
+
+data RemoveSubscriptionDeliveryMethodsRequest
+  = RemoveSubscriptionDeliveryMethodsRequest
+  { deliveryMethods :: NESet DeliveryMethodId
+  }
+  deriving stock (Show, Eq, Ord)
+
+instance FromJSON RemoveSubscriptionDeliveryMethodsRequest where
+  parseJSON = withObject "RemoveSubscriptionDeliveryMethodsRequest" $ \o -> do
+    deliveryMethods <- o .: "deliveryMethods"
+    pure RemoveSubscriptionDeliveryMethodsRequest {deliveryMethods}

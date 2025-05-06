@@ -6,8 +6,10 @@ where
 import Crypto.JOSE.JWK qualified as JWK
 import Database.Redis qualified as R
 import Hasql.Pool qualified as Hasql
+import Network.HTTP.Client qualified as HTTPClient
 import Network.URI (URI)
 import Servant qualified as S
+import Servant.Client qualified as S
 import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Utils.Logging.Types qualified as Logging
@@ -16,6 +18,7 @@ import System.Log.FastLogger (FormattedTime, LogStr)
 import System.Log.Raven.Types (SentryService)
 import Unison.Codebase.Runtime (Runtime)
 import Unison.Symbol (Symbol)
+import Vault qualified
 
 data Env ctx = Env
   { redisConnection :: R.Connection,
@@ -29,6 +32,12 @@ data Env ctx = Env
     websiteOrigin :: URI, -- E.g. "https://www.unison-lang.org"
     cloudUiOrigin :: URI, -- E.g. "https://app.unison.cloud"
     cloudWebsiteOrigin :: URI, -- E.g. "https://www.unison.cloud"
+    vaultClientEnv :: S.ClientEnv,
+    userSecretsVaultMount :: Vault.SecretMount,
+    shareVaultToken :: Vault.VaultToken,
+    -- An HTTP client for making requests which are configured by end users, and thus
+    -- shouldn't
+    proxiedHttpClient :: HTTPClient.Manager,
     serverPort :: Int,
     redisConfig :: R.ConnectInfo,
     postgresConfig :: Text,

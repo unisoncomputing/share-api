@@ -10,9 +10,10 @@ module Share.Notifications.Types
     ProjectContributionData (..),
     NotificationHubEntry (..),
     NotificationStatus (..),
+    DeliveryMethodId (..),
     NotificationDeliveryMethod (..),
     NotificationEmailDeliveryConfig (..),
-    NotificationWebhookDeliveryConfig (..),
+    NotificationWebhookConfig (..),
     eventTopic,
   )
 where
@@ -120,6 +121,7 @@ data ProjectBranchData = ProjectBranchData
     branchId :: BranchId,
     branchContributorUserId :: Maybe UserId
   }
+  deriving stock (Eq, Show)
 
 instance Aeson.ToJSON ProjectBranchData where
   toJSON ProjectBranchData {projectId, branchId, branchContributorUserId} =
@@ -143,6 +145,7 @@ data ProjectContributionData = ProjectContributionData
     toBranchId :: BranchId,
     contributorUserId :: UserId
   }
+  deriving stock (Eq, Show)
 
 instance Aeson.ToJSON ProjectContributionData where
   toJSON ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId} =
@@ -166,6 +169,7 @@ instance Aeson.FromJSON ProjectContributionData where
 data NotificationEventData
   = ProjectBranchUpdatedData ProjectBranchData
   | ProjectContributionCreatedData ProjectContributionData
+  deriving stock (Eq, Show)
 
 instance Aeson.ToJSON NotificationEventData where
   toJSON ned =
@@ -251,28 +255,41 @@ instance Aeson.ToJSON NotificationEmailDeliveryConfig where
         "email" Aeson..= emailDeliveryEmail
       ]
 
-data NotificationWebhookDeliveryConfig = NotificationWebhookConfig
+data NotificationWebhookConfig = NotificationWebhookConfig
   { webhookDeliveryId :: NotificationWebhookId,
     webhookDeliveryUrl :: URI
   }
   deriving (Eq, Ord, Show)
 
-instance PG.DecodeRow NotificationWebhookDeliveryConfig where
+instance PG.DecodeRow NotificationWebhookConfig where
   decodeRow = do
     webhookDeliveryId <- PG.decodeField
     URIParam webhookDeliveryUrl <- PG.decodeField
     pure $ NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl}
 
-instance Aeson.ToJSON NotificationWebhookDeliveryConfig where
+instance Aeson.ToJSON NotificationWebhookConfig where
   toJSON NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl} =
     Aeson.object
       [ "id" Aeson..= webhookDeliveryId,
         "url" Aeson..= show webhookDeliveryUrl
       ]
 
+data DeliveryMethodId
+  = EmailDeliveryMethodId NotificationEmailDeliveryMethodId
+  | WebhookDeliveryMethodId NotificationWebhookId
+  deriving stock (Show, Eq, Ord)
+
+instance Aeson.FromJSON DeliveryMethodId where
+  parseJSON = Aeson.withObject "DeliveryMethodId" $ \o -> do
+    deliveryMethodKind <- o .: "kind"
+    case deliveryMethodKind of
+      "email" -> EmailDeliveryMethodId <$> o .: "id"
+      "webhook" -> WebhookDeliveryMethodId <$> o .: "id"
+      _ -> fail $ "Unknown delivery method kind: " <> Text.unpack deliveryMethodKind
+
 data NotificationDeliveryMethod
   = EmailDeliveryMethod NotificationEmailDeliveryConfig
-  | WebhookDeliveryMethod NotificationWebhookDeliveryConfig
+  | WebhookDeliveryMethod NotificationWebhookConfig
   deriving (Eq, Ord, Show)
 
 instance Aeson.ToJSON NotificationDeliveryMethod where
