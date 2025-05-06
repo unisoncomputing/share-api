@@ -29,10 +29,10 @@ data CodebaseEnv = CodebaseEnv
   { codebaseOwner :: UserId
   }
 
-data CodebaseRuntime = CodebaseRuntime
-  { codeLookup :: CL.CodeLookup Symbol IO Ann,
+data CodebaseRuntime m = CodebaseRuntime
+  { codeLookup :: CL.CodeLookup Symbol m Ann,
     -- Function to look up cached evaluation results for the runtime.
-    cachedEvalResult :: Reference.Id -> IO (Maybe (Rt.Term Symbol)),
+    cachedEvalResult :: Reference.Id -> m (Maybe (Rt.Term Symbol)),
     unisonRuntime :: Rt.Runtime Symbol
   }
 

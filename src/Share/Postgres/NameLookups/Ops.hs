@@ -20,7 +20,7 @@ import Control.Lens
 import Control.Monad.Trans.Maybe
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
-import Share.Postgres (QueryM)
+import Share.Postgres (QueryA, QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.Hashes.Queries qualified as HashQ
@@ -188,10 +188,10 @@ deleteNameLookupsExceptFor reachable = do
   bhIds <- for (Set.toList reachable) HashQ.ensureBranchHashId
   Q.deleteNameLookupsExceptFor bhIds
 
-ensureNameLookupForBranchId :: (QueryM m) => BranchHashId -> m NameLookupReceipt
-ensureNameLookupForBranchId branchHashId = do
-  PG.execute_ [PG.sql| SELECT ensure_name_lookup(#{branchHashId}) |]
-  pure $ UnsafeNameLookupReceipt
+ensureNameLookupForBranchId :: (QueryA m) => BranchHashId -> m NameLookupReceipt
+ensureNameLookupForBranchId branchHashId =
+  UnsafeNameLookupReceipt
+    <$ PG.execute_ [PG.sql| SELECT ensure_name_lookup(#{branchHashId}) |]
 
 -- | Build a 'Names' for all definitions within the given root, without any dependencies.
 -- Note: This loads everything into memory at once, so avoid this and prefer streaming when possible.

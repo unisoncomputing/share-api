@@ -17,6 +17,7 @@ module Share.Postgres.Contributions.Queries
     performMergesAndBCAUpdatesFromBranchPush,
     rebaseContributionsFromMergedBranches,
     contributionStateTokenById,
+    existsPrecomputedNamespaceDiff,
     getPrecomputedNamespaceDiff,
     savePrecomputedNamespaceDiff,
     contributionsRelatedToBranches,
@@ -539,13 +540,31 @@ contributionStateTokenById contributionId = do
         WHERE contribution.id = #{contributionId}
       |]
 
-getPrecomputedNamespaceDiff ::
-  (CodebaseEnv, CausalId) ->
-  (CodebaseEnv, CausalId) ->
-  PG.Transaction e (Maybe Text)
-getPrecomputedNamespaceDiff
+-- | Get whether a precomputed namespace diff exists.
+existsPrecomputedNamespaceDiff :: (CodebaseEnv, CausalId) -> (CodebaseEnv, CausalId) -> PG.Transaction e Bool
+existsPrecomputedNamespaceDiff
   (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId)
   (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) = do
+    PG.queryExpect1Col @Bool
+      [PG.sql|
+        SELECT EXISTS (
+          SELECT
+          FROM namespace_diffs
+          WHERE left_causal_id = #{leftCausalId}
+            AND right_causal_id = #{rightCausalId}
+            AND left_codebase_owner_user_id = #{leftCodebaseUser}
+            AND right_codebase_owner_user_id = #{rightCodebaseUser}
+        )
+      |]
+
+getPrecomputedNamespaceDiff ::
+  (PG.QueryA m) =>
+  (CodebaseEnv, CausalId) ->
+  (CodebaseEnv, CausalId) ->
+  m (Maybe Text)
+getPrecomputedNamespaceDiff
+  (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId)
+  (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) =
     PG.query1Col @Text
       [PG.sql|
           SELECT (diff :: text)

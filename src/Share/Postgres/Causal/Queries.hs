@@ -976,7 +976,7 @@ importAccessibleCausals causalHashes = do
   pure results
 
 -- | Find the best common ancestor between two causals for diffs or merges.
-bestCommonAncestor :: (QueryM m) => CausalId -> CausalId -> m (Maybe CausalId)
+bestCommonAncestor :: (QueryA m) => CausalId -> CausalId -> m (Maybe CausalId)
 bestCommonAncestor a b = do
   query1Col
     [sql| SELECT best_common_causal_ancestor(#{a}, #{b}) as causal_id

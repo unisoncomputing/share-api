@@ -30,8 +30,10 @@ data NotificationError
   deriving stock (Show)
   deriving (Logging.Loggable) via (Logging.ShowLoggable Logging.Error NotificationError)
 
+-- Initialize the set of channel kinds to check with every channel kind, so that on server startup, workers do any
+-- outstanding work.
 notifs :: TVar (Set ChannelKind)
-notifs = unsafePerformIO $ STM.newTVarIO mempty
+notifs = unsafePerformIO $ STM.newTVarIO allChannels
 {-# NOINLINE notifs #-}
 
 -- | Initializes the notification worker, which listens for notifications from the database.
@@ -39,10 +41,10 @@ notifs = unsafePerformIO $ STM.newTVarIO mempty
 initialize ::
   Ki.Scope -> -- The scope of the server
   Background ()
-initialize scope = void $ Ki.fork scope $ forever do
+initialize scope = Ki.fork_ scope $ forever do
   result <- UnliftIO.try $ do
     PG.runSession $ do
-      for_ [minBound .. maxBound] \kind -> do
+      for_ allChannels \kind -> do
         PG.statement () $ Hasql.listen (Hasql.Identifier . Text.encodeUtf8 $ toChannelText kind)
       -- Wait for notifications
       let loop = do
@@ -78,6 +80,10 @@ fromChannelText = \case
   "contribution_diff" -> Just ContributionDiffChannel
   "webhooks" -> Just WebhooksChannel
   _ -> Nothing
+
+allChannels :: Set ChannelKind
+allChannels =
+  Set.fromList [minBound .. maxBound]
 
 -- | Block waiting on a channel until either we get a notification OR until the max polling time has been reached
 --

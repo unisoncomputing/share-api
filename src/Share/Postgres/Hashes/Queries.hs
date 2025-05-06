@@ -236,30 +236,27 @@ addKnownCausalHashMismatch providedHash actualHash = do
     |]
 
 -- | Generic helper which fetches both branch hashes and causal hashes
-expectCausalHashesOfG :: (HasCallStack, QueryM m) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
+expectCausalHashesOfG :: (HasCallStack, QueryA m) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
 expectCausalHashesOfG project trav = do
   unsafePartsOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
-    results :: [(BranchHash, CausalHash)] <-
-      queryListRows
+    (\results -> if length results /= length hashIds then error "expectCausalHashesOf: Missing expected causal hash" else (project <$> results))
+      <$> queryListRows
         [sql|
-      WITH causal_ids(ord, id) AS (
-        SELECT * FROM ^{toTable numberedHashIds}
-      )
-      SELECT bh.base32, causal.hash
-        FROM causal_ids
-          JOIN causals causal ON causal.id = causal_ids.id
-          JOIN branch_hashes bh ON causal.namespace_hash_id = bh.id
-        ORDER BY causal_ids.ord ASC
-      |]
-    if length results /= length hashIds
-      then error "expectCausalHashesOf: Missing expected causal hash"
-      else pure (project <$> results)
+          WITH causal_ids(ord, id) AS (
+            SELECT * FROM ^{toTable numberedHashIds}
+          )
+          SELECT bh.base32, causal.hash
+            FROM causal_ids
+              JOIN causals causal ON causal.id = causal_ids.id
+              JOIN branch_hashes bh ON causal.namespace_hash_id = bh.id
+            ORDER BY causal_ids.ord ASC
+        |]
 
-expectCausalAndBranchHashesOf :: (HasCallStack, QueryM m) => Traversal s t CausalId (BranchHash, CausalHash) -> s -> m t
+expectCausalAndBranchHashesOf :: (HasCallStack, QueryA m) => Traversal s t CausalId (BranchHash, CausalHash) -> s -> m t
 expectCausalAndBranchHashesOf = expectCausalHashesOfG id
 
-expectCausalHashesByIdsOf :: (HasCallStack, QueryM m) => Traversal s t CausalId CausalHash -> s -> m t
+expectCausalHashesByIdsOf :: (HasCallStack, QueryA m) => Traversal s t CausalId CausalHash -> s -> m t
 expectCausalHashesByIdsOf = expectCausalHashesOfG snd
 
 expectCausalIdsOf :: (HasCallStack) => Traversal s t CausalHash (BranchHashId, CausalId) -> s -> CodebaseM e t

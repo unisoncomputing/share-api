@@ -4,15 +4,27 @@ module Share.Web.Share.Diffs.Types where
 
 import Data.Aeson
 import Share.IDs
-import Share.NamespaceDiffs (NamespaceAndLibdepsDiff)
+import Share.NamespaceDiffs (NamespaceAndLibdepsDiff, NamespaceDiffResult)
 import Share.Postgres.IDs (BranchHash, CausalHash)
 import Share.Prelude
 import Share.Utils.Aeson (PreEncoded)
-import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermDefinitionDiff (..), TermTag, TypeDefinition, TypeDefinitionDiff (..), TypeTag)
+import Unison.Server.Types
+  ( DisplayObjectDiff (..),
+    TermDefinition,
+    TermDefinitionDiff (..),
+    TermTag,
+    TypeDefinition,
+    TypeDefinitionDiff (..),
+    TypeTag,
+  )
 import Unison.ShortHash (ShortHash)
 
 type ShareNamespaceDiff =
   NamespaceAndLibdepsDiff (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff BranchHash
+
+data ShareNamespaceDiffStatus
+  = ShareNamespaceDiffStatus'Done (PreEncoded NamespaceDiffResult)
+  | ShareNamespaceDiffStatus'StillComputing
 
 data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
   { project :: ProjectShortHand,
@@ -20,20 +32,30 @@ data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
     oldRefHash :: Maybe (PrefixedHash "#" CausalHash),
     newRef :: BranchOrReleaseShortHand,
     newRefHash :: Maybe (PrefixedHash "#" CausalHash),
-    diff :: PreEncoded ShareNamespaceDiff
+    diff :: ShareNamespaceDiffStatus
   }
 
 instance ToJSON ShareNamespaceDiffResponse where
   toJSON (ShareNamespaceDiffResponse {diff, project, oldRef, newRef, oldRefHash, newRefHash}) =
-    object
-      [ "diff" .= diff,
-        "project" .= project,
-        "oldRef" .= oldRef,
-        "oldRefHash" .= oldRefHash,
-        "newRef" .= newRef,
-        "newRefHash" .= newRefHash
-      ]
+    object $
+      diffPairs ++
+           [ "project" .= toJSON project,
+             "oldRef" .= oldRef,
+             "oldRefHash" .= oldRefHash,
+             "newRef" .= newRef,
+             "newRefHash" .= newRefHash
+           ]
     where
+      diffPairs :: [(Key, Value)]
+      diffPairs =
+        case diff of
+          ShareNamespaceDiffStatus'Done diff ->
+            [ "diff" .= toJSON diff
+            , "tag" .= ("done" :: Text)
+            ]
+          ShareNamespaceDiffStatus'StillComputing ->
+            [ "tag" .= ("computing" :: Text)
+            ]
 
 data ShareTermDiffResponse = ShareTermDiffResponse
   { project :: ProjectShortHand,

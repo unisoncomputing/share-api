@@ -17,6 +17,8 @@ module Share.Codebase
     CodebaseRuntime (..),
     codebaseEnv,
     codebaseRuntime,
+    codebaseRuntimeTransaction,
+    badAskUnliftCodebaseRuntime,
     codebaseForProjectBranch,
     codebaseLocationForUserCodebase,
     codebaseLocationForProjectBranchCodebase,
@@ -65,12 +67,17 @@ module Share.Codebase
     LCQ.ensureLooseCodeRootHash,
     setLooseCodeRoot,
 
+    -- * Conversions
+    convertTerm2to1,
+
     -- * Utilities
     cachedCodebaseResponse,
   )
 where
 
+import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Lens
+import Control.Monad.Morph (hoist)
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
@@ -107,16 +114,21 @@ import U.Codebase.Causal qualified as Causal
 import U.Codebase.Decl qualified as V2
 import U.Codebase.Reference qualified as V2
 import U.Codebase.Referent qualified as V2
+import U.Codebase.Sqlite.Symbol qualified as V2
+import U.Codebase.Term qualified as V2.Term
 import Unison.Builtin qualified as Builtin
 import Unison.Builtin qualified as Builtins
 import Unison.Codebase.CodeLookup qualified as CL
+import Unison.Codebase.Runtime (Runtime)
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration qualified as V1
+import Unison.Hash (Hash)
 import Unison.Parser.Ann
 import Unison.Parser.Ann qualified as Ann
 import Unison.Prelude (askUnliftIO)
+import Unison.Reference (TermReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
@@ -174,14 +186,40 @@ codebaseEnv !_authZReceipt codebaseLoc = do
 
 -- | Construct a Runtime linked to a specific codebase.
 -- Don't use the runtime for one codebase with another codebase.
-codebaseRuntime :: (MonadReader (Env.Env x) m, MonadUnliftIO m) => CodebaseEnv -> m CodebaseRuntime
-codebaseRuntime CodebaseEnv {codebaseOwner} = do
+codebaseRuntime :: (MonadReader (Env.Env x) m, MonadUnliftIO m) => CodebaseEnv -> m (CodebaseRuntime IO)
+codebaseRuntime codebase = do
   unisonRuntime <- asks Env.sandboxedRuntime
-  codeLookup <- codeLookupForUser codebaseOwner
-  toIO <- UnliftIO.askRunInIO
-  let codebaseRt = CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}
-      cachedEvalResult r = (fmap . fmap) Term.unannotate . toIO . PG.runTransaction . loadCachedEvalResult codebaseOwner $ r
-  pure codebaseRt
+  rt <- liftIO (codebaseRuntimeTransaction unisonRuntime codebase)
+  unlift <- badAskUnliftCodebaseRuntime
+  pure (unlift rt)
+
+-- | Ideally, we'd use this – a runtime with lookup actions in transaction, not IO. But that will require refactoring to
+-- the runtime interface in ucm, so we can't use it for now. That's bad: we end up unsafely running separate
+-- transactions for inner calls to 'codeLookup' / 'cachedEvalResult', which can lead to deadlock due to a starved
+-- connection pool.
+codebaseRuntimeTransaction :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime (PG.Transaction e))
+codebaseRuntimeTransaction unisonRuntime CodebaseEnv {codebaseOwner} = do
+  cacheVar <- newTVarIO (CodeLookupCache mempty mempty)
+  pure
+    CodebaseRuntime
+      { codeLookup = codeLookupForUser cacheVar codebaseOwner,
+        cachedEvalResult = (fmap . fmap) Term.unannotate . loadCachedEvalResult codebaseOwner,
+        unisonRuntime
+      }
+
+-- Why bad: see above comment on `codebaseRuntimeTransaction`. We don't want to use a `CodebaseRuntime IO`, because it
+-- will run every lookup in a separate transaction. But we can't use a `CodebaseRuntime Transaction` because we call
+-- back into UCM library code that expects a `CodebaseRuntime IO`.
+badAskUnliftCodebaseRuntime ::
+  (MonadReader (Env.Env x) m, MonadUnliftIO m) =>
+  m (CodebaseRuntime (PG.Transaction Void) -> CodebaseRuntime IO)
+badAskUnliftCodebaseRuntime = do
+  UnliftIO.UnliftIO toIO <- askUnliftIO
+  pure \rt@CodebaseRuntime {codeLookup, cachedEvalResult} ->
+    rt
+      { codeLookup = hoist (toIO . PG.runTransaction) codeLookup,
+        cachedEvalResult = toIO . PG.runTransaction . cachedEvalResult
+      }
 
 runCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m) => CodebaseEnv -> CodebaseM Void a -> m a
 runCodebaseTransaction codebaseEnv m = do
@@ -233,20 +271,24 @@ cachedCodebaseResponse authzReceipt codebaseOwner endpointName providedCachePara
     codebaseViewCacheKey = IDs.toText (codebaseOwnerUserId codebaseOwner)
 
 -- | Load a term and its type.
-loadTerm :: Reference.Id -> CodebaseM e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+loadTerm :: TermReferenceId -> CodebaseM e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
 loadTerm refId = do
   codebaseUser <- asks codebaseOwner
   lift $ loadTermForCodeLookup codebaseUser refId
 
 -- | Load a term and its type.
-loadTermForCodeLookup :: UserId -> Reference.Id -> PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+loadTermForCodeLookup :: UserId -> TermReferenceId -> PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
 loadTermForCodeLookup codebaseUser refId@(Reference.Id h _) = runMaybeT $ do
   (v2Term, v2Type) <- MaybeT $ DefnQ.loadTerm codebaseUser refId
-  v1Term <- Cv.term2to1 h (lift . expectDeclKind) v2Term
+  convertTerm2to1 h v2Term v2Type
+
+convertTerm2to1 :: (PG.QueryM m) => Hash -> V2.Term.Term V2.Symbol -> V2.Term.Type V2.Symbol -> m (V1.Term Symbol Ann, V1.Type Symbol Ann)
+convertTerm2to1 h v2Term v2Type = do
+  v1Term <- Cv.term2to1 h expectDeclKind v2Term
   let v1Type = Cv.ttype2to1 v2Type
   pure (v1Term, v1Type)
 
-expectTerm :: Reference.Id -> CodebaseM e (V1.Term Symbol Ann, V1.Type Symbol Ann)
+expectTerm :: TermReferenceId -> CodebaseM e (V1.Term Symbol Ann, V1.Type Symbol Ann)
 expectTerm refId = loadTerm refId `whenNothingM` lift (unrecoverableError (MissingTerm refId))
 
 -- | Load the type of a term.
@@ -280,7 +322,7 @@ expectTypeOfReferents trav s = do
   s & trav %%~ expectTypeOfReferent
 
 expectDeclKind :: (PG.QueryM m) => Reference.TypeReference -> m CT.ConstructorType
-expectDeclKind r = loadDeclKind r `whenNothingM` (unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r))
+expectDeclKind r = loadDeclKind r `whenNothingM` unrecoverableError (DefnQ.missingDeclKindError r)
 
 expectDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
 expectDeclKindsOf trav s = do
@@ -288,7 +330,7 @@ expectDeclKindsOf trav s = do
     & unsafePartsOf trav %%~ \refs -> do
       results <- loadDeclKindsOf traversed refs
       for (zip refs results) \case
-        (r, Nothing) -> unrecoverableError (InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r)
+        (r, Nothing) -> unrecoverableError (DefnQ.missingDeclKindError r)
         (_, Just ct) -> pure ct
 
 loadDeclKind :: (PG.QueryM m) => V2.TypeReference -> m (Maybe CT.ConstructorType)
@@ -376,43 +418,41 @@ data CodeLookupCache = CodeLookupCache
     typeCache :: Map Reference.Id (V1.Decl Symbol Ann)
   }
 
-codeLookupForUser :: (MonadUnliftIO m, MonadReader (Env.Env ctx) m) => UserId -> m (CL.CodeLookup Symbol IO Ann)
-codeLookupForUser codebaseOwner = do
-  -- A simple append-only cache that lives for the duration of the request.
-  cacheVar <- UnliftIO.newTVarIO (CodeLookupCache mempty mempty)
-  unlift <- askUnliftIO
-  let getTermAndType :: Reference.Id -> IO (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
-      getTermAndType r = do
-        let UnliftIO.UnliftIO toIO = unlift
-        CodeLookupCache {termCache} <- UnliftIO.atomically $ UnliftIO.readTVar cacheVar
-        case Map.lookup r termCache of
-          Just termAndType -> pure (Just termAndType)
-          Nothing -> do
-            mayTermAndType <- toIO . PG.runTransaction $ loadTermForCodeLookup codebaseOwner r
-            case mayTermAndType of
-              Just termAndType -> do
-                UnliftIO.atomically $ UnliftIO.modifyTVar cacheVar $ \CodeLookupCache {termCache, ..} ->
+codeLookupForUser :: TVar CodeLookupCache -> UserId -> CL.CodeLookup Symbol (PG.Transaction e) Ann
+codeLookupForUser cacheVar codebaseOwner = do
+  CL.CodeLookup (fmap (fmap fst) . getTermAndType) (fmap (fmap snd) . getTermAndType) getTypeDecl
+    <> Builtin.codeLookup
+    <> IOSource.codeLookupM
+  where
+    getTermAndType ::
+      Reference.Id ->
+      PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+    getTermAndType r = do
+      CodeLookupCache {termCache} <- PG.transactionUnsafeIO (readTVarIO cacheVar)
+      case Map.lookup r termCache of
+        Just termAndType -> pure (Just termAndType)
+        Nothing -> do
+          maybeTermAndType <- loadTermForCodeLookup codebaseOwner r
+          whenJust maybeTermAndType \termAndType -> do
+            PG.transactionUnsafeIO do
+              atomically do
+                modifyTVar' cacheVar \CodeLookupCache {termCache, ..} ->
                   CodeLookupCache {termCache = Map.insert r termAndType termCache, ..}
-                pure (Just termAndType)
-              Nothing -> pure Nothing
+          pure maybeTermAndType
 
-  let getTypeDecl r = do
-        let UnliftIO.UnliftIO toIO = unlift
-        CodeLookupCache {typeCache} <- UnliftIO.atomically $ UnliftIO.readTVar cacheVar
-        case Map.lookup r typeCache of
-          Just typ -> pure (Just typ)
-          Nothing -> do
-            mayTypeDecl <- toIO . PG.runTransaction $ loadTypeDeclarationForCodeLookup codebaseOwner r
-            case mayTypeDecl of
-              Just typ -> do
-                UnliftIO.atomically $ UnliftIO.modifyTVar cacheVar $ \CodeLookupCache {typeCache, ..} ->
+    getTypeDecl :: Reference.Id -> PG.Transaction e (Maybe (V1.Decl Symbol Ann))
+    getTypeDecl r = do
+      CodeLookupCache {typeCache} <- PG.transactionUnsafeIO (readTVarIO cacheVar)
+      case Map.lookup r typeCache of
+        Just typ -> pure (Just typ)
+        Nothing -> do
+          maybeType <- loadTypeDeclarationForCodeLookup codebaseOwner r
+          whenJust maybeType \typ ->
+            PG.transactionUnsafeIO do
+              atomically do
+                modifyTVar' cacheVar \CodeLookupCache {typeCache, ..} ->
                   CodeLookupCache {typeCache = Map.insert r typ typeCache, ..}
-                pure (Just typ)
-              Nothing -> pure Nothing
-  pure $
-    CL.CodeLookup (\r -> fmap fst <$> getTermAndType r) (\r -> fmap snd <$> getTermAndType r) getTypeDecl
-      <> Builtin.codeLookup
-      <> IOSource.codeLookupM
+          pure maybeType
 
 -- | Look up the result of evaluating a term if we have it cached.
 --

@@ -1,7 +1,8 @@
 -- | Logic for computing the differerences between two namespaces,
 -- typically used when showing the differences caused by a contribution.
 module Share.NamespaceDiffs
-  ( NamespaceAndLibdepsDiff,
+  ( NamespaceDiffResult (..),
+    NamespaceAndLibdepsDiff,
     GNamespaceAndLibdepsDiff (..),
     NamespaceTreeDiff,
     GNamespaceTreeDiff,
@@ -35,8 +36,11 @@ where
 
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as Cofree
-import Control.Lens hiding ((:<))
+import Control.Lens hiding ((.=), (:<))
 import Control.Monad.Except
+import Data.Aeson (ToJSON, (.=))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (ToJSON (..))
 import Data.Align (Semialign (..))
 import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
@@ -47,9 +51,11 @@ import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Servant (err400, err404, err500)
 import Share.Codebase qualified as Codebase
+import Share.IDs (UserId)
 import Share.Names.Postgres qualified as PGNames
 import Share.Postgres qualified as PG
-import Share.Postgres.IDs (BranchHashId)
+import Share.Postgres.Definitions.Queries qualified as DefnsQ
+import Share.Postgres.IDs (BranchHash, BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NameLookups.Types qualified as NL
@@ -58,11 +64,12 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
+import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.DataDeclaration (Decl)
 import Unison.LabeledDependency (LabeledDependency)
-import Unison.Merge (DiffOp, EitherWay, Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge (DiffOp, EitherWay, IncoherentDeclReason (..), Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
-import Unison.Merge.DeclCoherencyCheck (IncoherentDeclReason)
+import Unison.Merge.EitherWay qualified as EitherWay
 import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
 import Unison.Merge.Mergeblob1 qualified as Mergeblob1
 import Unison.Merge.ThreeWay qualified as ThreeWay
@@ -77,6 +84,8 @@ import Unison.Reference (Reference, TermReferenceId, TypeReference, TypeReferenc
 import Unison.Reference qualified as Reference
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
+import Unison.Server.Types (DisplayObjectDiff (..), TermDefinition, TermDefinitionDiff (..), TermTag, TypeDefinition, TypeDefinitionDiff (..), TypeTag)
+import Unison.ShortHash (ShortHash)
 import Unison.Symbol (Symbol)
 import Unison.Syntax.NameSegment qualified as NameSegment
 import Unison.Term (Term)
@@ -218,6 +227,183 @@ definitionDiffKindRendered_ f = \case
   Updated old new diff -> Updated old new <$> pure diff
   RenamedTo r old rendered -> RenamedTo r old <$> f rendered
   RenamedFrom r old rendered -> RenamedFrom r old <$> f rendered
+
+data NamespaceDiffResult
+  = NamespaceDiffResult'Ok
+      ( NamespaceAndLibdepsDiff
+          (TermTag, ShortHash)
+          (TypeTag, ShortHash)
+          TermDefinition
+          TypeDefinition
+          TermDefinitionDiff
+          TypeDefinitionDiff
+          BranchHash
+      )
+  | NamespaceDiffResult'Err NamespaceDiffError
+
+instance ToJSON NamespaceDiffResult where
+  toJSON = \case
+    NamespaceDiffResult'Ok diff ->
+      Aeson.object
+        [ "defns" .= namespaceTreeDiffJSON diff.defns,
+          "libdeps" .= libdepsDiffJSON diff.libdeps,
+          "tag" .= ("ok" :: Text)
+        ]
+    NamespaceDiffResult'Err err ->
+      Aeson.object
+        [ "error" .= errValue,
+          "tag" .= ("error" :: Text)
+        ]
+      where
+        errValue =
+          case err of
+            ImpossibleError _ ->
+              Aeson.object
+                [ "tag" .= ("impossibleError" :: Text)
+                ]
+            IncoherentDecl reason ->
+              let f :: Text -> IncoherentDeclReason -> Aeson.Value
+                  f which reason =
+                    Aeson.object
+                      ( "oldOrNewBranch" .= which
+                          : case reason of
+                            IncoherentDeclReason'ConstructorAlias typeName constructorName1 constructorName2 ->
+                              [ "tag" .= ("constructorAlias" :: Text),
+                                "typeName" .= typeName,
+                                "constructorName1" .= constructorName1,
+                                "constructorName2" .= constructorName2
+                              ]
+                            IncoherentDeclReason'MissingConstructorName typeName ->
+                              [ "tag" .= ("missingConstructorName" :: Text),
+                                "typeName" .= typeName
+                              ]
+                            IncoherentDeclReason'NestedDeclAlias constructorName1 constructorName2 ->
+                              [ "tag" .= ("constructorAlias" :: Text),
+                                "constructorName1" .= constructorName1,
+                                "constructorName2" .= constructorName2
+                              ]
+                            IncoherentDeclReason'StrayConstructor _ constructorName ->
+                              [ "tag" .= ("strayConstructor" :: Text),
+                                "constructorName" .= constructorName
+                              ]
+                      )
+               in case reason of
+                    EitherWay.Alice reason -> f "old" reason
+                    EitherWay.Bob reason -> f "new" reason
+            LibFoundAtUnexpectedPath _ ->
+              Aeson.object
+                [ "tag" .= ("libFoundAtUnexpectedPath" :: Text)
+                ]
+            MissingEntityError _ ->
+              Aeson.object
+                [ "tag" .= ("missingEntityError" :: Text)
+                ]
+    where
+      text :: Text -> Text
+      text t = t
+      hqNameJSON :: Name -> NameSegment -> ShortHash -> Aeson.Value -> Aeson.Value
+      hqNameJSON fqn name sh rendered = Aeson.object ["hash" .= sh, "shortName" .= name, "fullName" .= fqn, "rendered" .= rendered]
+      -- The preferred frontend format is a bit clunky to calculate here:
+      diffDataJSON :: (ToJSON tag) => NameSegment -> DefinitionDiff (tag, ShortHash) Aeson.Value Aeson.Value -> (tag, Aeson.Value)
+      diffDataJSON shortName (DefinitionDiff {fqn, kind}) = case kind of
+        Added (defnTag, r) rendered -> (defnTag, Aeson.object ["tag" .= text "Added", "contents" .= hqNameJSON fqn shortName r rendered])
+        NewAlias (defnTag, r) existingNames rendered ->
+          let contents = Aeson.object ["hash" .= r, "aliasShortName" .= shortName, "aliasFullName" .= fqn, "otherNames" .= toList existingNames, "rendered" .= rendered]
+           in (defnTag, Aeson.object ["tag" .= text "Aliased", "contents" .= contents])
+        Removed (defnTag, r) rendered -> (defnTag, Aeson.object ["tag" .= text "Removed", "contents" .= hqNameJSON fqn shortName r rendered])
+        Updated (oldTag, oldRef) (newTag, newRef) diffVal ->
+          let contents = Aeson.object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
+           in (newTag, Aeson.object ["tag" .= text "Updated", "contents" .= contents])
+        Propagated (oldTag, oldRef) (newTag, newRef) diffVal ->
+          let contents = Aeson.object ["oldHash" .= oldRef, "newHash" .= newRef, "shortName" .= shortName, "fullName" .= fqn, "oldTag" .= oldTag, "newTag" .= newTag, "diff" .= diffVal]
+           in (newTag, Aeson.object ["tag" .= text "Propagated", "contents" .= contents])
+        RenamedTo (defnTag, r) newNames rendered ->
+          let contents = Aeson.object ["oldShortName" .= shortName, "oldFullName" .= fqn, "newNames" .= newNames, "hash" .= r, "rendered" .= rendered]
+           in (defnTag, Aeson.object ["tag" .= text "RenamedTo", "contents" .= contents])
+        RenamedFrom (defnTag, r) oldNames rendered ->
+          let contents = Aeson.object ["oldNames" .= oldNames, "newShortName" .= shortName, "newFullName" .= fqn, "hash" .= r, "rendered" .= rendered]
+           in (defnTag, Aeson.object ["tag" .= text "RenamedFrom", "contents" .= contents])
+      displayObjectDiffToJSON :: DisplayObjectDiff -> Aeson.Value
+      displayObjectDiffToJSON = \case
+        DisplayObjectDiff dispDiff ->
+          Aeson.object ["diff" .= dispDiff, "diffKind" .= ("diff" :: Text)]
+        MismatchedDisplayObjects {} ->
+          Aeson.object ["diffKind" .= ("mismatched" :: Text)]
+
+      termDefinitionDiffToJSON :: TermDefinitionDiff -> Aeson.Value
+      termDefinitionDiffToJSON (TermDefinitionDiff {left, right, diff}) = Aeson.object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
+
+      typeDefinitionDiffToJSON :: TypeDefinitionDiff -> Aeson.Value
+      typeDefinitionDiffToJSON (TypeDefinitionDiff {left, right, diff}) = Aeson.object ["left" .= left, "right" .= right, "diff" .= displayObjectDiffToJSON diff]
+
+      namespaceTreeDiffJSON ::
+        NamespaceTreeDiff
+          (TermTag, ShortHash)
+          (TypeTag, ShortHash)
+          TermDefinition
+          TypeDefinition
+          TermDefinitionDiff
+          TypeDefinitionDiff ->
+        Aeson.Value
+      namespaceTreeDiffJSON (diffs Cofree.:< children) =
+        let changesJSON =
+              diffs
+                & Map.toList
+                & foldMap
+                  ( \(name, DiffAtPath {termDiffsAtPath, typeDiffsAtPath}) ->
+                      ( Foldable.toList termDiffsAtPath
+                          <&> over definitionDiffDiffs_ termDefinitionDiffToJSON
+                          <&> over definitionDiffRendered_ toJSON
+                          & fmap (diffDataJSON name)
+                          & fmap (\(tag, dJSON) -> Aeson.object ["tag" .= tag, "contents" .= dJSON])
+                      )
+                        <> ( Foldable.toList typeDiffsAtPath
+                               <&> over definitionDiffDiffs_ typeDefinitionDiffToJSON
+                               <&> over definitionDiffRendered_ toJSON
+                               & fmap (diffDataJSON name)
+                               & fmap (\(tag, dJSON) -> Aeson.object ["tag" .= tag, "contents" .= dJSON])
+                           )
+                  )
+                & toJSON @[Aeson.Value]
+            childrenJSON =
+              children
+                & Map.toList
+                & fmap
+                  ( \(path, childNode) ->
+                      Aeson.object ["path" .= path, "contents" .= namespaceTreeDiffJSON childNode]
+                  )
+         in Aeson.object
+              [ "changes" .= changesJSON,
+                "children" .= childrenJSON
+              ]
+
+      libdepsDiffJSON :: Map NameSegment (DiffOp BranchHash) -> Aeson.Value
+      libdepsDiffJSON =
+        Map.toList
+          >>> map
+            ( \(name, op) ->
+                case op of
+                  Merge.DiffOp'Add hash ->
+                    Aeson.object
+                      [ "hash" .= hash,
+                        "name" .= name,
+                        "tag" .= ("Added" :: Text)
+                      ]
+                  Merge.DiffOp'Delete hash ->
+                    Aeson.object
+                      [ "hash" .= hash,
+                        "name" .= name,
+                        "tag" .= ("Removed" :: Text)
+                      ]
+                  Merge.DiffOp'Update Merge.Updated {old, new} ->
+                    Aeson.object
+                      [ "name" .= name,
+                        "newHash" .= new,
+                        "oldHash" .= old,
+                        "tag" .= ("Updated" :: Text)
+                      ]
+            )
+          >>> toJSON @[Aeson.Value]
 
 type NamespaceAndLibdepsDiff referent reference renderedTerm renderedType termDiff typeDiff libdep =
   GNamespaceAndLibdepsDiff Path referent reference renderedTerm renderedType termDiff typeDiff libdep
@@ -623,22 +809,37 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
           (TypeReferenceId, Decl Symbol Ann)
       ) <- do
-    let hydrateTerm ::
-          Codebase.CodebaseEnv ->
-          TermReferenceId ->
-          PG.Transaction e (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
-        hydrateTerm codebaseEnv ref =
-          Codebase.codebaseMToTransaction codebaseEnv do
-            term <- Codebase.expectTerm ref
-            pure (ref, term)
-        hydrateType ::
-          Codebase.CodebaseEnv ->
-          TypeReferenceId ->
-          PG.Transaction e (TypeReferenceId, Decl Symbol Ann)
-        hydrateType codebaseEnv ref =
-          Codebase.codebaseMToTransaction codebaseEnv do
-            type_ <- Codebase.expectTypeDeclaration ref
-            pure (ref, type_)
+    let hydrateTerms ::
+          UserId ->
+          BiMultimap Referent Name ->
+          PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
+        hydrateTerms codebaseUser termReferents = do
+          let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
+          termIds <-
+            PG.pFor termReferenceIds \refId ->
+              (refId,) <$> DefnsQ.expectTermId refId
+          v2Terms <-
+            PG.pFor termIds \(refId, termId) ->
+              (refId,) <$> DefnsQ.expectTermById codebaseUser refId termId
+          v1Terms <-
+            for v2Terms \(refId, (term, typ)) ->
+              (refId,) <$> Codebase.convertTerm2to1 (Reference.idToHash refId) term typ
+          pure v1Terms
+        hydrateTypes ::
+          UserId ->
+          BiMultimap TypeReference Name ->
+          PG.Transaction e (Map Name (TypeReferenceId, Decl Symbol Ann))
+        hydrateTypes codebaseUser typeReferences = do
+          let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
+          typeIds <-
+            PG.pFor typeReferenceIds \refId ->
+              (refId,) <$> DefnsQ.expectTypeComponentElementAndTypeId codebaseUser refId
+          v1Decls <-
+            PG.pFor typeIds \(refId, typeId) ->
+              DefnsQ.loadDeclByTypeComponentElementAndTypeId typeId <&> \v2Decl ->
+                let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
+                 in (refId, v1Decl)
+          pure v1Decls
         f ::
           Codebase.CodebaseEnv ->
           Defns (BiMultimap Referent Name) (BiMultimap TypeReference Name) ->
@@ -650,9 +851,8 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
                 (TypeReferenceId, Decl Symbol Ann)
             )
         f codebaseEnv =
-          bitraverse
-            (traverse (hydrateTerm codebaseEnv) . Map.mapMaybe Referent.toTermReferenceId . BiMultimap.range)
-            (traverse (hydrateType codebaseEnv) . Map.mapMaybe Reference.toId . BiMultimap.range)
+          let codebaseUser = Codebase.codebaseOwner codebaseEnv
+           in bitraverse (hydrateTerms codebaseUser) (hydrateTypes codebaseUser)
 
     let -- Here we assume that the LCA is in the same codebase as Alice.
         codebaseEnvs3 :: ThreeWay Codebase.CodebaseEnv

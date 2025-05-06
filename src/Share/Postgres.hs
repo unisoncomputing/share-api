@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
@@ -35,6 +36,7 @@ module Share.Postgres
     catchTransaction,
     unliftTransaction,
     runTransactionOrRespondError,
+    transaction,
     runSession,
     tryRunSession,
     runSessionOrRespondError,
@@ -43,6 +45,7 @@ module Share.Postgres
     unliftSession,
     defaultIsolationLevel,
     pipelined,
+    pEitherMap,
     pFor,
     pFor_,
 
@@ -127,6 +130,14 @@ newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (
 -- | Run a pipeline in a transaction
 pipelined :: Pipeline e a -> Transaction e a
 pipelined p = Transaction (Hasql.pipeline (unPipeline p))
+
+-- | Like fmap, but the provided function can throw a recoverable error by returning 'Left'.
+pEitherMap :: (a -> Either e b) -> Pipeline e a -> Pipeline e b
+pEitherMap f (Pipeline p) =
+  Pipeline $
+    p <&> \case
+      Right x -> mapLeft Err (f x)
+      Left e -> Left e
 
 pFor :: (Traversable f) => f a -> (a -> Pipeline e b) -> Transaction e (f b)
 pFor f p = pipelined $ for f p
@@ -327,6 +338,17 @@ class (Applicative m) => QueryA m where
   -- | Fail the transaction and whole request with an unrecoverable server error.
   unrecoverableError :: (HasCallStack, ToServerError e, Loggable e, Show e) => e -> m a
 
+  -- | Map an either-returning function over the result of an action; if it returns Left, throw an unrecoverable error.
+  -- This is a trivial combinator for any monad, hence the default signature, but it can be implemented by our
+  -- Pipeline applicative, too.
+  unrecoverableEitherMap :: (HasCallStack, Loggable e, Show e, ToServerError e) => (a -> Either e b) -> m a -> m b
+  default unrecoverableEitherMap :: (HasCallStack, Loggable e, Show e, ToServerError e, Monad m) => (a -> Either e b) -> m a -> m b
+  unrecoverableEitherMap f m = do
+    x <- m
+    case f x of
+      Right y -> pure y
+      Left e -> unrecoverableError e
+
 class (Monad m, QueryA m) => QueryM m where
   -- | Allow running IO actions in a transaction. These actions may be run multiple times if
   -- the transaction is retried.
@@ -356,6 +378,12 @@ instance QueryA (Pipeline e) where
   statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
 
   unrecoverableError e = Pipeline $ pure (Left (Unrecoverable (someServerError e)))
+
+  unrecoverableEitherMap f (Pipeline p) =
+    Pipeline $
+      p <&> \case
+        Right x -> mapLeft (Unrecoverable . someServerError) (f x)
+        Left e -> Left e
 
 instance (QueryM m) => QueryA (ReaderT e m) where
   statement q s = lift $ statement q s

@@ -99,12 +99,11 @@ requestMetricsMiddleware api app req handleResponse = do
           let path = Text.intercalate "/" <$> normalizePath api (Wai.pathInfo req)
           let status = Just $ Text.pack (show (HTTP.statusCode (Wai.responseStatus resp)))
           result <- handleResponse resp
-          let latency :: Double
-              latency = fromRational (toNanoSecs (end `diffTimeSpec` start) % 1000000000)
-          Prom.withLabel
+          recordLatency
             requestLatency
             (tShow Deployment.deployment, service, fromMaybe "" method, fromMaybe "" status, fromMaybe "unknown-path" path)
-            (flip Prom.observe latency)
+            start
+            end
           pure result
     else app req handleResponse
   where
@@ -426,14 +425,17 @@ webhookSendingDurationSeconds =
 
 timeActionIntoHistogram :: (Prom.Label l, MonadUnliftIO m) => (Prom.Vector l Prom.Histogram) -> l -> m c -> m c
 timeActionIntoHistogram histogram l m = do
-  UnliftIO.bracket start end \_ -> m
-  where
-    start = UnliftIO.liftIO $ Clock.getTime Monotonic
-    end startTime = UnliftIO.liftIO $ do
-      end <- Clock.getTime Monotonic
-      let latency :: Double
-          latency = fromRational (toNanoSecs (end `diffTimeSpec` startTime) % 1000000000)
-      Prom.withLabel histogram l (flip Prom.observe latency)
+  startTime <- liftIO $ Clock.getTime Monotonic
+  m `UnliftIO.finally` do
+    liftIO do
+      endTime <- Clock.getTime Monotonic
+      recordLatency histogram l startTime endTime
+
+recordLatency :: (Prom.Label l) => (Prom.Vector l Prom.Histogram) -> l -> Clock.TimeSpec -> Clock.TimeSpec -> IO ()
+recordLatency histogram l startTime endTime = do
+  let latency :: Double
+      latency = fromRational (toNanoSecs (endTime `diffTimeSpec` startTime) % 1000000000)
+  Prom.withLabel histogram l (flip Prom.observe latency)
 
 -- | Record the duration of a background import.
 recordBackgroundImportDuration :: (MonadUnliftIO m) => m r -> m r
@@ -443,8 +445,10 @@ recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDuratio
 recordDefinitionSearchIndexDuration :: (MonadUnliftIO m) => m r -> m r
 recordDefinitionSearchIndexDuration = timeActionIntoHistogram definitionSearchIndexDurationSeconds (deployment, service)
 
-recordContributionDiffDuration :: (MonadUnliftIO m) => m r -> m r
-recordContributionDiffDuration = timeActionIntoHistogram contributionDiffDurationSeconds (deployment, service)
+recordContributionDiffDuration :: Clock.TimeSpec -> IO ()
+recordContributionDiffDuration startTime = do
+  endTime <- Clock.getTime Monotonic
+  recordLatency contributionDiffDurationSeconds (deployment, service) startTime endTime
 
 -- | Record the duration of sending a webhook.
 recordWebhookSendingDuration :: (MonadUnliftIO m) => m r -> m r

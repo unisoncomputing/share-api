@@ -14,7 +14,9 @@ module Share.Web.Share.Contributions.Impl
 where
 
 import Control.Lens hiding ((.=))
+import Data.ByteString.Lazy qualified as ByteString.Lazy
 import Data.Set qualified as Set
+import Data.Text.Encoding qualified as Text
 import Servant
 import Servant.Server.Generic (AsServerT)
 import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
@@ -38,6 +40,7 @@ import Share.Prelude
 import Share.Project
 import Share.User qualified as User
 import Share.Utils.API
+import Share.Utils.Aeson (PreEncoded (..))
 import Share.Utils.Caching (Cached)
 import Share.Utils.Caching qualified as Caching
 import Share.Web.App
@@ -52,7 +55,7 @@ import Share.Web.Share.Contributions.API qualified as API
 import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
 import Share.Web.Share.Contributions.Types
 import Share.Web.Share.Diffs.Impl qualified as Diffs
-import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
+import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareNamespaceDiffStatus (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
 import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
 import Unison.Name (Name)
 import Unison.Server.Types
@@ -261,7 +264,7 @@ contributionDiffEndpoint ::
   WebApp (Cached JSON ShareNamespaceDiffResponse)
 contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber = do
   ( project@Project {projectId},
-    Contribution {contributionId, bestCommonAncestorCausalId},
+    Contribution {contributionId},
     oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
     newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
     ) <- PG.runTransactionOrRespondError $ do
@@ -279,21 +282,28 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
     lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
 
   let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldBranchCausalId]
-  Caching.cachedResponse authZReceipt "contribution-diff" cacheKeys do
-    namespaceDiff <- respondExceptT (Diffs.diffCausals authZReceipt (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId) bestCommonAncestorCausalId)
-    (newBranchCausalHash, oldBranchCausalHash) <- PG.runTransaction do
-      newBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
-      oldBranchCausalHash <- CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId
-      pure (newBranchCausalHash, oldBranchCausalHash)
-    pure $
-      ShareNamespaceDiffResponse
-        { project = projectShorthand,
-          newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-          newRefHash = Just $ PrefixedHash newBranchCausalHash,
-          oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
-          oldRefHash = Just $ PrefixedHash oldBranchCausalHash,
-          diff = namespaceDiff
-        }
+  Caching.conditionallyCachedResponse authZReceipt "contribution-diff" cacheKeys do
+    (oldBranchCausalHash, newBranchCausalHash, maybeNamespaceDiff) <-
+      PG.runTransaction do
+        PG.pipelined do
+          (,,)
+            <$> CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId
+            <*> CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
+            <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
+    let response =
+          ShareNamespaceDiffResponse
+            { project = projectShorthand,
+              newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
+              newRefHash = Just $ PrefixedHash newBranchCausalHash,
+              oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
+              oldRefHash = Just $ PrefixedHash oldBranchCausalHash,
+              diff =
+                case maybeNamespaceDiff of
+                  Just diff -> ShareNamespaceDiffStatus'Done (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
+                  Nothing -> ShareNamespaceDiffStatus'StillComputing
+            }
+    let shouldCache = isJust maybeNamespaceDiff
+    pure (response, shouldCache)
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
 
@@ -327,11 +337,21 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
-      (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      termDiff <-
-        respondExceptT (Diffs.diffTerms authZReceipt (oldCodebase, oldBranchHashId, oldTermName) (newCodebase, newBranchHashId, newTermName))
+      oldRuntime <- Codebase.codebaseRuntime oldCodebase
+      newRuntime <- Codebase.codebaseRuntime newCodebase
+      termDiff <- do
+        result <-
+          PG.tryRunTransaction do
+            (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
+            Diffs.diffTerms
+              authZReceipt
+              (oldCodebase, oldRuntime, oldBranchHashId, oldTermName)
+              (newCodebase, newRuntime, newBranchHashId, newTermName)
+        case result of
+          Left err -> respondError err
           -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
-          `whenNothingM` respondError (EntityMissing (ErrorID "term:missing") "Term not found")
+          Right Nothing -> respondError (EntityMissing (ErrorID "term:missing") "Term not found")
+          Right (Just diff) -> pure diff
       pure
         ShareTermDiffResponse
           { project = projectShorthand,
@@ -375,8 +395,13 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "contribution-diff-types" cacheKeys do
-      (oldBranchHashId, newBranchHashId) <- PG.runTransaction $ CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-      typeDiff <- respondExceptT (Diffs.diffTypes authZReceipt (oldCodebase, oldBranchHashId, oldTypeName) (newCodebase, newBranchHashId, newTypeName))
+      oldRuntime <- Codebase.codebaseRuntime oldCodebase
+      newRuntime <- Codebase.codebaseRuntime newCodebase
+      typeDiff <-
+        (either respondError pure =<<) do
+          PG.tryRunTransaction do
+            (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
+            Diffs.diffTypes authZReceipt (oldCodebase, oldRuntime, oldBranchHashId, oldTypeName) (newCodebase, newRuntime, newBranchHashId, newTypeName)
       pure $
         ShareTypeDiffResponse
           { project = projectShorthand,

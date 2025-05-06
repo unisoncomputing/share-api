@@ -2689,13 +2689,15 @@
           }
         ]
       },
-      "libdeps": []
+      "libdeps": [],
+      "tag": "ok"
     },
     "newRef": "diff-end",
     "newRefHash": "#f2bjgi4tm53bf6dcfcukt5a6as3ktlrbiacnqq81nco8i4g7dg6pt14vmc1b7ulsb7rt683qjt2rvg9u92uo5mk1gaqgo8cl30umep8",
     "oldRef": "diff-start",
     "oldRefHash": "#f8nji6tc2vaorc7gl8kjdmj8ucrht674blmb586iptgsa8v1pm8ovjplc4an2voirvlip91ick9g5mjkncsmr8sadaqqf8810eskbig",
-    "project": "@transcripts/contribution-diff"
+    "project": "@transcripts/contribution-diff",
+    "tag": "done"
   },
   "status": [
     {
