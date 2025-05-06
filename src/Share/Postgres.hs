@@ -423,17 +423,17 @@ queryListCol sql = queryListRows @(Interp.OneColumn a) sql <&> coerce @[Interp.O
 execute_ :: (QueryA m) => Interp.Sql -> m ()
 execute_ sql = statement () (Interp.interp prepareStatements sql)
 
-queryExpect1Row :: forall r m. (HasCallStack) => (Interp.DecodeRow r, QueryM m) => Interp.Sql -> m r
+queryExpect1Row :: forall r m. (HasCallStack) => (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m r
 queryExpect1Row sql =
-  query1Row sql >>= \case
+  query1Row sql <&> \case
     Nothing -> error "queryExpect1Row: expected 1 row, got 0"
-    Just r -> pure r
+    Just r -> r
 
-queryExpect1Col :: forall a m. (HasCallStack) => (Interp.DecodeField a, QueryM m) => Interp.Sql -> m a
+queryExpect1Col :: forall a m. (HasCallStack) => (Interp.DecodeField a, QueryA m) => Interp.Sql -> m a
 queryExpect1Col sql =
-  query1Col sql >>= \case
+  query1Col sql <&> \case
     Nothing -> error "queryExpect1Col: expected 1 row, got 0"
-    Just r -> pure r
+    Just r -> r
 
 -- | Decode a single field as part of a Row
 decodeField :: (Interp.DecodeField a) => Decoders.Row a
