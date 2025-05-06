@@ -24,7 +24,7 @@ import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Web.Authentication (cookieSessionTTL)
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool
-import Network.URI (parseURI, uriScheme)
+import Network.URI (parseURI)
 import Servant.API qualified as Servant
 import Servant.Client qualified as ServantClient
 import System.Environment (lookupEnv)
@@ -38,7 +38,6 @@ import Data.Time.Clock qualified as Time
 import Network.HTTP.Client.TLS qualified as TLS
 import Network.HTTP.Client qualified as HTTPClient
 import Vault qualified
-import Data.ByteString.Char8 qualified as BSC
 
 withEnv :: (Env () -> IO a) -> IO a
 withEnv action = do
@@ -133,11 +132,7 @@ withEnv action = do
     if  Deployment.onLocal
        then TLS.newTlsManager
        else do
-          httpProxyHost <- fromEnv "SHARE_PROXY_HOST" (\proxyHost -> case parseURI proxyHost of
-            Nothing -> pure $ Left "Invalid SHARE_PROXY_ADDRESS"
-            Just uri -> if uriScheme uri == "http:" || uriScheme uri == "https:"
-              then pure $ Right (BSC.pack proxyHost)
-              else pure $ Left "SHARE_PROXY_ADDRESS must be http or https")
+          httpProxyHost <- fromEnv "SHARE_PROXY_HOST" ((fmap . fmap) Text.encodeUtf8 . nonEmptyTextParser "SHARE_PROXY_HOST")
           httpProxyPort <- fromEnv "SHARE_PROXY_PORT" (pure . maybeToEither "Invalid SHARE_PROXY_PORT" . readMaybe)
 
           -- http proxy setup
