@@ -11,7 +11,14 @@
       {
         "config": {
           "id": "NW-<UUID>",
-          "url": "https://example.com/webhook"
+          "url": "http://<HOST>:9999/good-webhook"
+        },
+        "kind": "webhook"
+      },
+      {
+        "config": {
+          "id": "NW-<UUID>",
+          "url": "http://<HOST>:9999/invalid?x-set-response-status-code=500"
         },
         "kind": "webhook"
       }

@@ -10,6 +10,7 @@ where
 
 import Data.Aeson (ToJSON (..))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (FromJSON)
 import Network.URI (URI)
 import Share.IDs
 import Share.Prelude
@@ -33,18 +34,29 @@ instance ToJSON UserDisplayInfo where
         "userId" Aeson..= userId
       ]
 
+instance FromJSON UserDisplayInfo where
+  parseJSON =
+    Aeson.withObject "UserDisplayInfo" $ \o -> do
+      handle <- o Aeson..: "handle"
+      name <- o Aeson..:? "name"
+      avatarUrl <- fmap unpackURI <$> o Aeson..:? "avatarUrl"
+      userId <- o Aeson..: "userId"
+      pure UserDisplayInfo {handle, name, avatarUrl, userId}
+
 -- | Common type for displaying an Org.
 data OrgDisplayInfo = OrgDisplayInfo
   { user :: UserDisplayInfo,
-    orgId :: OrgId
+    orgId :: OrgId,
+    isCommercial :: Bool
   }
   deriving (Show, Eq, Ord)
 
 instance ToJSON OrgDisplayInfo where
-  toJSON OrgDisplayInfo {user, orgId} =
+  toJSON OrgDisplayInfo {user, orgId, isCommercial} =
     Aeson.object
       [ "user" Aeson..= user,
-        "orgId" Aeson..= orgId
+        "orgId" Aeson..= orgId,
+        "isCommercial" Aeson..= isCommercial
       ]
 
 data TeamDisplayInfo = TeamDisplayInfo

@@ -80,7 +80,7 @@ maybeComputeAndStoreCausalDiff ::
   PG.Transaction EntityMissing Bool
 maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId = do
   Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <-
-    ContributionsQ.contributionById contributionId `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    ContributionsQ.contributionById contributionId
   project <- Q.projectById projectId `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
   newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
   oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")

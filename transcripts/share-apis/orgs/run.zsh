@@ -15,7 +15,8 @@ fetch "$unauthorized_user" POST org-create-unauthorized '/orgs' '{
   "handle": "acme",
   "avatarUrl": "https://example.com/anvil.png",
   "owner": "unauthorized",
-  "email": "wile.e.coyote@example.com"
+  "email": "wile.e.coyote@example.com",
+  "isCommercial": false
 }'
 
 # Admin can create an org and assign any owner.
@@ -24,7 +25,7 @@ fetch "$admin_user" POST org-create-by-admin '/orgs' '{
   "handle": "acme",
   "avatarUrl": "https://example.com/anvil.png",
   "owner": "transcripts",
-  "email": "wile.e.coyote@example.com"
+  "isCommercial": true
 }'
 
 

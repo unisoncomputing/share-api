@@ -11,6 +11,7 @@ module Share.Metrics
     recordBackgroundImportDuration,
     recordDefinitionSearchIndexDuration,
     recordContributionDiffDuration,
+    recordWebhookSendingDuration,
   )
 where
 
@@ -410,6 +411,18 @@ contributionDiffDurationSeconds =
         "contribution_diff_duration_seconds"
         "The time it took to compute a contribution diff"
 
+{-# NOINLINE webhookSendingDurationSeconds #-}
+webhookSendingDurationSeconds :: Prom.Vector Prom.Label2 Prom.Histogram
+webhookSendingDurationSeconds =
+  Prom.unsafeRegister $
+    Prom.vector ("deployment", "service") $
+      Prom.histogram info Prom.defaultBuckets
+  where
+    info =
+      Prom.Info
+        "webhook_sending_duration_seconds"
+        "The time it took to send a notification webhook"
+
 timeActionIntoHistogram :: (Prom.Label l, MonadUnliftIO m) => (Prom.Vector l Prom.Histogram) -> l -> m c -> m c
 timeActionIntoHistogram histogram l m = do
   startTime <- liftIO $ Clock.getTime Monotonic
@@ -428,7 +441,7 @@ recordLatency histogram l startTime endTime = do
 recordBackgroundImportDuration :: (MonadUnliftIO m) => m r -> m r
 recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDurationSeconds (deployment, service)
 
--- | Record the duration of a background import.
+-- | Record the duration of creating a search index for a release
 recordDefinitionSearchIndexDuration :: (MonadUnliftIO m) => m r -> m r
 recordDefinitionSearchIndexDuration = timeActionIntoHistogram definitionSearchIndexDurationSeconds (deployment, service)
 
@@ -436,3 +449,7 @@ recordContributionDiffDuration :: Clock.TimeSpec -> IO ()
 recordContributionDiffDuration startTime = do
   endTime <- Clock.getTime Monotonic
   recordLatency contributionDiffDurationSeconds (deployment, service) startTime endTime
+
+-- | Record the duration of sending a webhook.
+recordWebhookSendingDuration :: (MonadUnliftIO m) => m r -> m r
+recordWebhookSendingDuration = timeActionIntoHistogram webhookSendingDurationSeconds (deployment, service)

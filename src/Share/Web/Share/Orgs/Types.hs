@@ -16,18 +16,22 @@ import Share.Postgres (DecodeRow (..), decodeField)
 import Share.Utils.URI (URIParam)
 import Share.Web.Share.DisplayInfo (UserDisplayInfo)
 
-newtype Org = Org {orgId :: OrgId}
-  deriving (Show, Eq)
+data Org = Org {orgId :: OrgId, isCommercial :: Bool}
+  deriving (Show, Eq, Ord)
 
 instance DecodeRow Org where
-  decodeRow = Org <$> decodeField
+  decodeRow = do
+    orgId <- decodeField
+    isCommercial <- decodeField
+    pure Org {..}
 
 data CreateOrgRequest = CreateOrgRequest
   { name :: Text,
     handle :: OrgHandle,
     avatarUrl :: Maybe URIParam,
     owner :: UserHandle,
-    email :: Text
+    email :: Maybe Email,
+    isCommercial :: Bool
   }
   deriving (Show, Eq)
 
@@ -37,7 +41,8 @@ instance FromJSON CreateOrgRequest where
     handle <- o .: "handle"
     avatarUrl <- o .:? "avatarUrl"
     owner <- o .: "owner"
-    email <- o .: "email"
+    email <- o .:? "email"
+    isCommercial <- o .: "isCommercial"
     pure CreateOrgRequest {..}
 
 data OrgMembersAddRequest = OrgMembersAddRequest

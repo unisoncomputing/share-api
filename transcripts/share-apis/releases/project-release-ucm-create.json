@@ -1,12 +1,12 @@
 {
   "body": {
     "payload": {
-      "branch-head": "eyJhbGciOiJIUzI1NiIsImtpZCI6IkxCVkJwSlZBZ2hJVHctbll1VlMxZUw3RjFyaWp5VXNqcV9Xd2QzNWJkYXcifQ.eyJoIjoic2c2MGJ2am85MWZzb283cGtoOWdlamJuMHFnYzk1dnJhODdhcDZsNWQzNXJpMGxrYXVkbDdiczEyZDcxc2YzZmg2cDIzdGVlbXVvcjdtazFpOW41NjdtNTBpYmFrY2doamVjNWFqZyIsInQiOiJoaiIsInUiOiJVLWQzMmY0ZGRmLTI0MjMtNGYxMC1hNGRlLTQ2NTkzOTk1MTM1NCJ9.X-GqvqfKSn4im2wDpQq3Zj3Rli4ge4SmmPuNgtvZL0A",
+      "branch-head": "<JWT>",
       "branch-id": "R-<UUID>",
       "branch-name": "releases/4.5.6",
       "project-id": "P-<UUID>",
       "project-name": "@test/publictestproject",
-      "squashed-branch-head": "eyJhbGciOiJIUzI1NiIsImtpZCI6IkxCVkJwSlZBZ2hJVHctbll1VlMxZUw3RjFyaWp5VXNqcV9Xd2QzNWJkYXcifQ.eyJoIjoic2c2MGJ2am85MWZzb283cGtoOWdlamJuMHFnYzk1dnJhODdhcDZsNWQzNXJpMGxrYXVkbDdiczEyZDcxc2YzZmg2cDIzdGVlbXVvcjdtazFpOW41NjdtNTBpYmFrY2doamVjNWFqZyIsInQiOiJoaiIsInUiOiJVLWQzMmY0ZGRmLTI0MjMtNGYxMC1hNGRlLTQ2NTkzOTk1MTM1NCJ9.X-GqvqfKSn4im2wDpQq3Zj3Rli4ge4SmmPuNgtvZL0A"
+      "squashed-branch-head": "<JWT>"
     },
     "type": "success"
   },

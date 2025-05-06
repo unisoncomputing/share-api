@@ -65,17 +65,20 @@ initialize scope = Ki.fork_ scope $ forever do
 data ChannelKind
   = DefinitionSyncChannel
   | ContributionDiffChannel
+  | WebhooksChannel
   deriving stock (Eq, Ord, Show, Bounded, Enum)
 
 toChannelText :: ChannelKind -> Text
 toChannelText = \case
   DefinitionSyncChannel -> "definition_sync"
   ContributionDiffChannel -> "contribution_diff"
+  WebhooksChannel -> "webhooks"
 
 fromChannelText :: Text -> Maybe ChannelKind
 fromChannelText = \case
   "definition_sync" -> Just DefinitionSyncChannel
   "contribution_diff" -> Just ContributionDiffChannel
+  "webhooks" -> Just WebhooksChannel
   _ -> Nothing
 
 allChannels :: Set ChannelKind

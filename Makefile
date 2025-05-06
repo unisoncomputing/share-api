@@ -53,8 +53,8 @@ docker_staging_push: $(docker_server_release)
 
 serve: $(installed_share)
 	trap 'docker compose -f docker/docker-compose.yml down' EXIT INT TERM
-	docker compose -f docker/docker-compose.yml up postgres redis &
-	while  ! (  pg_isready --host localhost -U postgres -p 5432 && redis-cli -p 6379 ping)  do \
+	docker compose -f docker/docker-compose.yml up postgres redis vault &
+	while  ! (  pg_isready --host localhost -U postgres -p 5432 && redis-cli -p 6379 ping && VAULT_ADDR=http://localhost:8200 vault status)  do \
 		echo "Waiting for postgres and redis..."; \
 	  sleep 1; \
 	done;
