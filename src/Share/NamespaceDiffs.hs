@@ -817,10 +817,10 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
           termIds <-
             PG.pFor termReferenceIds \refId ->
-              (refId,) <$> DefnsQ.pipelinedExpectTermId refId
+              (refId,) <$> DefnsQ.expectTermId refId
           v2Terms <-
             PG.pFor termIds \(refId, termId) ->
-              (refId,) <$> DefnsQ.pipelinedExpectTermById codebaseUser refId termId
+              (refId,) <$> DefnsQ.expectTermById codebaseUser refId termId
           v1Terms <-
             for v2Terms \(refId, (term, typ)) ->
               (refId,) <$> Codebase.convertTerm2to1 (Reference.idToHash refId) term typ
@@ -833,7 +833,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
           typeIds <-
             PG.pFor typeReferenceIds \refId ->
-              (refId,) <$> DefnsQ.pipelinedExpectTypeComponentElementAndTypeId codebaseUser refId
+              (refId,) <$> DefnsQ.expectTypeComponentElementAndTypeId codebaseUser refId
           v1Decls <-
             PG.pFor typeIds \(refId, typeId) ->
               DefnsQ.loadDeclByTypeComponentElementAndTypeId typeId <&> \v2Decl ->

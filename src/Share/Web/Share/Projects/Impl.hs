@@ -175,7 +175,7 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
     unisonRuntime <- asks Env.sandboxedRuntime
     let makeRuntime :: Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)
         makeRuntime codebase = do
-          runtime <- Codebase.codebaseRuntime' unisonRuntime codebase
+          runtime <- Codebase.codebaseRuntimeTransaction unisonRuntime codebase
           pure (badUnliftCodebaseRuntime runtime)
     diff <-
       PG.runTransaction do

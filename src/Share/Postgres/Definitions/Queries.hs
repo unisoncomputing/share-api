@@ -3,8 +3,8 @@
 module Share.Postgres.Definitions.Queries
   ( loadTerm,
     expectTerm,
-    pipelinedExpectTermId,
-    pipelinedExpectTermById,
+    expectTermId,
+    expectTermById,
     saveTermComponent,
     saveEncodedTermComponent,
     loadTermComponent,
@@ -20,7 +20,7 @@ module Share.Postgres.Definitions.Queries
     loadDecl,
     expectDecl,
     loadDeclByTypeComponentElementAndTypeId,
-    pipelinedExpectTypeComponentElementAndTypeId,
+    expectTypeComponentElementAndTypeId,
     loadCachedEvalResult,
     saveCachedEvalResult,
     termReferencesByPrefix,
@@ -153,9 +153,9 @@ loadTermId (Reference.Id compHash (pgComponentIndex -> compIndex)) =
             AND term.component_index = #{compIndex}
       |]
 
-pipelinedExpectTermId :: TermReferenceId -> PG.Pipeline e TermId
-pipelinedExpectTermId refId =
-  pUnrecoverableEitherMap
+expectTermId :: QueryA m => TermReferenceId -> m TermId
+expectTermId refId =
+  unrecoverableEitherMap
     ( \case
         Nothing -> Left (expectedTermError refId)
         Just termId -> Right termId
@@ -310,9 +310,9 @@ loadTermById codebaseUser termId = do
     <$> loadTermComponentElementByTermId codebaseUser termId
     <*> termLocalReferences termId
 
-pipelinedExpectTermById :: UserId -> TermReferenceId -> TermId -> Pipeline e (V2.Term Symbol, V2.Type Symbol)
-pipelinedExpectTermById userId refId termId =
-  pUnrecoverableEitherMap
+expectTermById :: QueryA m => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
+expectTermById userId refId termId =
+  unrecoverableEitherMap
     ( \case
         Nothing -> Left (expectedTermError refId)
         Just term -> Right term
@@ -443,9 +443,9 @@ loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgCompone
             AND typ.component_index = #{compIndex}
       |]
 
-pipelinedExpectTypeComponentElementAndTypeId :: UserId -> TermReferenceId -> PG.Pipeline e (TypeComponentElement, TypeId)
-pipelinedExpectTypeComponentElementAndTypeId codebaseUser refId =
-  pUnrecoverableEitherMap
+expectTypeComponentElementAndTypeId :: QueryA m => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
+expectTypeComponentElementAndTypeId codebaseUser refId =
+  unrecoverableEitherMap
     ( \case
         Nothing -> Left (expectedTypeError refId)
         Just decl -> Right decl

@@ -17,7 +17,7 @@ module Share.Codebase
     CodebaseRuntime (..),
     codebaseEnv,
     codebaseRuntime,
-    codebaseRuntime',
+    codebaseRuntimeTransaction,
     badAskUnliftCodebaseRuntime,
     codebaseForProjectBranch,
     codebaseLocationForUserCodebase,
@@ -189,7 +189,7 @@ codebaseEnv !_authZReceipt codebaseLoc = do
 codebaseRuntime :: (MonadReader (Env.Env x) m, MonadUnliftIO m) => CodebaseEnv -> m (CodebaseRuntime IO)
 codebaseRuntime codebase = do
   unisonRuntime <- asks Env.sandboxedRuntime
-  rt <- liftIO (codebaseRuntime' unisonRuntime codebase)
+  rt <- liftIO (codebaseRuntimeTransaction unisonRuntime codebase)
   unlift <- badAskUnliftCodebaseRuntime
   pure (unlift rt)
 
@@ -197,8 +197,8 @@ codebaseRuntime codebase = do
 -- the runtime interface in ucm, so we can't use it for now. That's bad: we end up unsafely running separate
 -- transactions for inner calls to 'codeLookup' / 'cachedEvalResult', which can lead to deadlock due to a starved
 -- connection pool.
-codebaseRuntime' :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime (PG.Transaction e))
-codebaseRuntime' unisonRuntime CodebaseEnv {codebaseOwner} = do
+codebaseRuntimeTransaction :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime (PG.Transaction e))
+codebaseRuntimeTransaction unisonRuntime CodebaseEnv {codebaseOwner} = do
   cacheVar <- newTVarIO (CodeLookupCache mempty mempty)
   pure
     CodebaseRuntime
@@ -207,6 +207,9 @@ codebaseRuntime' unisonRuntime CodebaseEnv {codebaseOwner} = do
         unisonRuntime
       }
 
+-- Why bad: see above comment on `codebaseRuntimeTransaction`. We don't want to use a `CodebaseRuntime IO`, because it
+-- will run every lookup in a separate transaction. But we can't use a `CodebaseRuntime Transaction` because we call
+-- back into UCM library code that expects a `CodebaseRuntime IO`.
 badAskUnliftCodebaseRuntime ::
   (MonadReader (Env.Env x) m, MonadUnliftIO m) =>
   m (CodebaseRuntime (PG.Transaction Void) -> CodebaseRuntime IO)

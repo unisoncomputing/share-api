@@ -37,16 +37,15 @@ worker scope = do
   unisonRuntime <- asks Env.sandboxedRuntime
   let makeRuntime :: Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)
       makeRuntime codebase = do
-        runtime <- Codebase.codebaseRuntime' unisonRuntime codebase
+        runtime <- Codebase.codebaseRuntimeTransaction unisonRuntime codebase
         pure (badUnliftCodebaseRuntime runtime)
   newWorker scope "diffs:contributions" $ forever do
     Notif.waitOnChannel Notif.ContributionDiffChannel (maxPollingIntervalSeconds * 1000000)
     processDiffs authZReceipt makeRuntime
 
--- Process diffs until we run out of them. We claim a diff in a transaction, commit it, then proceed to compute the
--- diff. There's therefore a chance we claim a diff and fail to compute it (due to e.g. server restart). The current
--- solution to these "at most once" semantics is to simply re-enqueue a diff job if necessary; e.g. in the view diff
--- endpoint handler.
+-- Process diffs until we run out of them. We claim a diff in a transaction and compute the diff in the same
+-- transaction, with a row lock on the contribution id (which is skipped by other workers). There's therefore no chance
+-- that we claim a diff but fail to write the result of computing that diff back to the database.
 processDiffs :: AuthZ.AuthZReceipt -> (Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)) -> Background ()
 processDiffs authZReceipt makeRuntime = do
   let loop :: Background ()
