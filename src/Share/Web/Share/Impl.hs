@@ -125,9 +125,9 @@ browseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle relativeTo name
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner namespacePrefix
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "browse" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransactionOrRespondError codebase $ do
+    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
       NL.serve rootCausalId relativeTo namespace `whenNothingM` throwError (EntityMissing (ErrorID "no-namespace") $ "No namespace found at " <> Path.toText namespacePrefix)
   where
     cacheParams = [tShow $ fromMaybe mempty relativeTo, tShow $ fromMaybe mempty namespace]
@@ -151,9 +151,9 @@ definitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle name
   let query = name
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-name" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
     cacheParams = [HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -181,9 +181,9 @@ definitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle refe
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-hash" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
     cacheParams = [toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -203,9 +203,9 @@ termSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "term-summary" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       serveTermSummary ref mayName rootCausalId relativeTo renderWidth
   where
     cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -230,9 +230,9 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "type-summary" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       serveTypeSummary ref mayName renderWidth
   where
     cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -260,8 +260,8 @@ findEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle mayRelativeTo lim
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
-  Codebase.runCodebaseTransaction codebase $ do
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
+  Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
     Fuzzy.serveFuzzyFind isInScratch searchDependencies rootCausalId relativeTo limit renderWidth query
   where
     isInScratch = True
@@ -280,9 +280,9 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner path
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "namespaces-by-name" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransactionOrRespondError codebase $ do
+    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
       ND.namespaceDetails rt path rootCausalId renderWidth `whenNothingM` throwError (EntityMissing (ErrorID "no-namespace") $ "No namespace found at " <> Path.toText path)
   where
     cacheParams = [tShow path]
@@ -334,9 +334,9 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner path
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
-  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransaction codebase Codebase.expectLooseCodeRoot
+  (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-user-readme" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       mayNamespaceDetails <- ND.namespaceDetails rt path rootCausalId Nothing
       let mayReadme = do
             NamespaceDetails {readme} <- mayNamespaceDetails

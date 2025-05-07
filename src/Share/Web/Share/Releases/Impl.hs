@@ -120,7 +120,7 @@ projectReleaseBrowseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle p
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-browse" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionOrRespondError codebase $ do
+    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
       NL.serve releaseHead relativeTo namespace `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -145,7 +145,7 @@ projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-name" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -171,7 +171,7 @@ projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-hash" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -195,7 +195,7 @@ projectReleaseTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-term-summary" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       serveTermSummary ref mayName releaseHead relativeTo renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -219,7 +219,7 @@ projectReleaseTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-type-summary" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       serveTypeSummary ref mayName renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -244,7 +244,7 @@ projectReleaseFindEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle pro
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  Codebase.runCodebaseTransaction codebase $ do
+  Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
     Fuzzy.serveFuzzyFind isInScratch searchDependencies releaseHead relativeTo limit renderWidth query
   where
     isInScratch = False
@@ -267,7 +267,7 @@ projectReleaseNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-namespaces-by-name" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionOrRespondError codebase $ do
+    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
       ND.namespaceDetails rt (fromMaybe mempty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
   where
     cacheParams = [IDs.toText projectReleaseShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
@@ -309,7 +309,7 @@ getProjectReleaseReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandl
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-project-release-doc" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       mayNamespaceDetails <- ND.namespaceDetails rt rootPath releaseHead Nothing
       let mayReadme = do
             NamespaceDetails {readme} <- mayNamespaceDetails
@@ -346,7 +346,7 @@ getProjectReleaseDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUs
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams releaseHead $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       doc <- findAndRenderDoc docNames rt rootPath releaseHead Nothing
       pure $ DocResponse {doc}
   where

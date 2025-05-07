@@ -130,7 +130,7 @@ getCausalHashByPathEndpoint callerUserId (GetCausalHashByPathRequest sharePath) 
         Left {} -> throwError (GetCausalHashByPathNoReadPermission sharePath)
         Right authZReceipt -> do
           let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-          lift . Codebase.runCodebaseTransaction codebase $ do
+          lift . Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
             (codebaseLooseCodeRootCausalId, _) <- Codebase.expectLooseCodeRoot
             Codebase.loadCausalNamespaceAtPath codebaseLooseCodeRootCausalId localPath
     case mayCausalAtPath of

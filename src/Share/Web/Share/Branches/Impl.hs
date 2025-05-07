@@ -124,7 +124,7 @@ projectBranchBrowseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle pr
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-browse" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionOrRespondError codebase $ do
+    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
       NL.serve causalId relativeTo namespace `whenNothingM` throwError (EntityMissing (ErrorID "namespace-not-found") "Namespace not found")
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle = mayContributorHandle, branchName}
@@ -149,7 +149,7 @@ projectBranchDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-name" cacheParams causalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -175,7 +175,7 @@ projectBranchDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-hash" cacheParams causalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -199,7 +199,7 @@ projectBranchTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHand
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-term-summary" cacheParams causalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       serveTermSummary ref mayName causalId relativeTo renderWidth
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -223,7 +223,7 @@ projectBranchTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHand
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-type-summary" cacheParams causalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       serveTypeSummary ref mayName renderWidth
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -248,7 +248,7 @@ projectBranchFindEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proj
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
-  Codebase.runCodebaseTransaction codebase $ do
+  Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
     Fuzzy.serveFuzzyFind inScratch searchDependencies causalId relativeTo limit renderWidth query
   where
     inScratch = False
@@ -271,7 +271,7 @@ projectBranchNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) use
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-namespaces-by-name" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionOrRespondError codebase $ do
+    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
       ND.namespaceDetails rt (fromMaybe mempty path) causalId renderWidth
         `whenNothingM` throwError (EntityMissing (ErrorID "namespace-not-found") "Namespace not found")
   where
@@ -295,7 +295,7 @@ getProjectBranchReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-project-branch-readme" cacheParams causalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       mayNamespaceDetails <- ND.namespaceDetails rt rootPath causalId Nothing
       let mayReadme = do
             NamespaceDetails {readme} <- mayNamespaceDetails
@@ -374,7 +374,7 @@ getProjectBranchDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUse
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams causalId $ do
-    Codebase.runCodebaseTransaction codebase $ do
+    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
       doc <- findAndRenderDoc docNames rt rootPath causalId Nothing
       pure $ DocResponse {doc}
   where
@@ -517,7 +517,7 @@ resolveRootHash :: Codebase.CodebaseEnv -> CausalId -> Maybe CausalHash -> WebAp
 resolveRootHash codebase branchHead rootHash = do
   case rootHash of
     Just rh -> do
-      rootCausalId <- Codebase.runCodebaseTransaction codebase $ Codebase.expectCausalIdByHash rh
+      rootCausalId <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase $ Codebase.expectCausalIdByHash rh
       AuthZ.assertCausalHashAccessibleFromRoot branchHead rootCausalId
       pure rootCausalId
     Nothing -> pure branchHead

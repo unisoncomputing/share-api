@@ -7,6 +7,7 @@ module Share.Codebase
   ( shorthashLength,
     runCodebaseTransaction,
     runCodebaseTransactionOrRespondError,
+    runCodebaseTransactionModeOrRespondError,
     runCodebaseTransactionMode,
     tryRunCodebaseTransaction,
     tryRunCodebaseTransactionMode,
@@ -233,6 +234,12 @@ runCodebaseTransactionMode isoLevel rwmode codebaseEnv m = do
 runCodebaseTransactionOrRespondError :: (ToServerError e, Loggable e) => CodebaseEnv -> CodebaseM e a -> WebApp a
 runCodebaseTransactionOrRespondError codebaseEnv m = do
   tryRunCodebaseTransaction codebaseEnv m >>= \case
+    Left e -> respondError e
+    Right a -> pure a
+
+runCodebaseTransactionModeOrRespondError :: (ToServerError e, Loggable e) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM e a -> WebApp a
+runCodebaseTransactionModeOrRespondError isoLevel mode codebaseEnv m = do
+  tryRunCodebaseTransactionMode isoLevel mode codebaseEnv m >>= \case
     Left e -> respondError e
     Right a -> pure a
 
