@@ -29,7 +29,6 @@ where
 import Control.Lens hiding ((.=))
 import Data.Aeson (ToJSON (..), (.:), (.=))
 import Data.Aeson qualified as Aeson
-import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (FromJSON)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -495,18 +494,14 @@ hydratedEventTopic = \case
 instance ToJSON HydratedEventPayload where
   toJSON = \case
     (ProjectBranchUpdatedPayload payload) ->
-      toJSON payload & \case
-        Aeson.Object o -> Aeson.Object (o <> KeyMap.singleton "kind" (Aeson.String "projectBranchUpdated"))
-        _ -> error "Expected JSON object for ProjectBranchUpdatedPayload"
+      Aeson.object ["kind" .= ("projectBranchUpdated" :: Text), "payload" .= payload]
     (ProjectContributionCreatedPayload payload) ->
-      toJSON payload & \case
-        Aeson.Object o -> Aeson.Object (o <> KeyMap.singleton "kind" (Aeson.String "projectContributionCreated"))
-        _ -> error "Expected JSON object for ProjectContributionCreatedPayload"
+      Aeson.object ["kind" .= ("projectContributionCreated" :: Text), "payload" .= payload]
 
 instance FromJSON HydratedEventPayload where
   parseJSON = Aeson.withObject "HydratedEventPayload" $ \o -> do
     kind <- o Aeson..: "kind"
     case kind of
-      "projectBranchUpdated" -> ProjectBranchUpdatedPayload <$> Aeson.parseJSON (Aeson.Object o)
-      "projectContributionCreated" -> ProjectContributionCreatedPayload <$> Aeson.parseJSON (Aeson.Object o)
+      "projectBranchUpdated" -> ProjectBranchUpdatedPayload <$> o Aeson..: "payload"
+      "projectContributionCreated" -> ProjectContributionCreatedPayload <$> o Aeson..: "payload"
       _ -> fail $ "Unknown kind: " <> Text.unpack kind
