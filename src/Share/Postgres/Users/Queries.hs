@@ -15,6 +15,7 @@ module Share.Postgres.Users.Queries
     userByGithubUserId,
     userByHandle,
     createFromGithubUser,
+    joinOrgIdsToUserIdsOf,
     NewOrPreExisting (..),
     getNewOrPreExisting,
     isNew,
@@ -274,7 +275,7 @@ findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarU
     Nothing -> do
       New <$> createFromGithubUser authZReceipt ghu primaryEmail userHandle
 
-searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(UserLike UserId Void OrgId)]
+searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(UserLike UserId team OrgId)]
 searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
   let q = likeEscape prefix <> "%"
   PG.queryListRows @(UserId, Maybe OrgId)
@@ -290,6 +291,27 @@ searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
     <&> fmap \(userId, mayOrgId) -> case mayOrgId of
       Just orgId -> UnifiedOrg orgId
       Nothing -> UnifiedUser userId
+
+joinOrgIdsToUserIdsOf :: Traversal s t UserId (UserId, Maybe OrgId) -> s -> PG.Transaction e t
+joinOrgIdsToUserIdsOf trav s = do
+  s
+    & unsafePartsOf trav %%~ \userIds -> do
+      let usersTable = zip [0 :: Int32 ..] userIds
+      PG.queryListRows @(UserId, Maybe OrgId)
+        [PG.sql|
+      WITH values(ord, user_id) AS (
+        SELECT * FROM ^{PG.toTable usersTable}
+      )
+      SELECT u.id, org.id
+        FROM values
+          LEFT JOIN orgs org ON org.user_id = values.user_id
+          JOIN users u ON u.id = values.user_id
+      ORDER BY ord
+      |]
+        <&> fmap \(userId, mayOrgId) ->
+          if length userIds /= length userIds
+            then error "joinOrgIdsToUserIdsOf: Missing user ids."
+            else (userId, mayOrgId)
 
 data UserCreationError
   = UserHandleTaken UserHandle
