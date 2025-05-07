@@ -74,7 +74,8 @@ createContribution authorId projectId title description status sourceBranchId ta
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
             eventData = ProjectContributionCreatedData contributionEventData,
-            eventScope = projectOwnerUserId
+            eventScope = projectOwnerUserId,
+            eventActor = authorId
           }
   NotifQ.recordEvent notifEvent
   pure (contributionId, number)

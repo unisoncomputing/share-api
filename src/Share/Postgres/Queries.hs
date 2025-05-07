@@ -606,7 +606,8 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
                 eventData = ProjectBranchUpdatedData branchUpdateEventData,
-                eventScope = projectOwnerUserId
+                eventScope = projectOwnerUserId,
+                eventActor = creatorId
               }
       NotifQ.recordEvent notifEvent
 
@@ -710,7 +711,8 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
                 eventData = ProjectBranchUpdatedData branchUpdateEventData,
-                eventScope = projectOwnerUserId
+                eventScope = projectOwnerUserId,
+                eventActor = callerUserId
               }
       NotifQ.recordEvent notifEvent
 

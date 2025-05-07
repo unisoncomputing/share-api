@@ -36,18 +36,18 @@ import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
-recordEvent (NotificationEvent {eventScope, eventData, eventResourceId}) = do
+recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventActor}) = do
   execute_
     [sql|
-      INSERT INTO notification_events (topic, scope_user_id, resource_id, data)
-      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventResourceId}, #{eventData})
+      INSERT INTO notification_events (topic, scope_user_id, actor_user_id, resource_id, data)
+      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventActor} #{eventResourceId}, #{eventData})
     |]
 
 expectEvent :: (QueryM m) => NotificationEventId -> m (NotificationEvent NotificationEventId UTCTime NotificationEventData)
 expectEvent eventId = do
   queryExpect1Row @PGNotificationEvent
     [sql|
-      SELECT id, occurred_at, scope_user_id, resource_id, topic, data
+      SELECT id, occurred_at, scope_user_id, actor_user_id, resource_id, topic, data
         FROM notification_events
       WHERE id = #{eventId}
     |]
