@@ -34,6 +34,7 @@ import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..))
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 import UnliftIO qualified
 
 data WebhookSendFailure
@@ -162,7 +163,7 @@ instance FromJSON (WebhookEventPayload ()) where
       <*> pure ()
 
 tryWebhook ::
-  NotificationEvent NotificationEventId UTCTime HydratedEventPayload ->
+  NotificationEvent NotificationEventId UserDisplayInfo UTCTime HydratedEventPayload ->
   NotificationWebhookId ->
   Background (Maybe WebhookSendFailure)
 tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $ InvalidRequest event.eventId webhookId someException) do
@@ -205,7 +206,7 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->
-  (NotificationEvent NotificationEventId UTCTime HydratedEventPayload -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
+  (NotificationEvent NotificationEventId UserDisplayInfo UTCTime HydratedEventPayload -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
   NotificationEventId ->
   NotificationWebhookId ->
   PG.Transaction e (Maybe WebhookSendFailure)
