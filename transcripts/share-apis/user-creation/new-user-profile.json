@@ -2,6 +2,15 @@
   "body": {
     "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
     "completedTours": [],
+    "displayInfo": {
+      "info": {
+        "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
+        "handle": "localgithubuser",
+        "name": "Local Github User",
+        "userId": "U-<UUID>"
+      },
+      "kind": "user"
+    },
     "handle": "localgithubuser",
     "isSuperadmin": false,
     "name": "Local Github User",

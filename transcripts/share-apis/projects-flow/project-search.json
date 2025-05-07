@@ -1,11 +1,16 @@
 {
   "body": [
     {
-      "avatarUrl": null,
-      "handle": "test",
-      "name": null,
-      "tag": "User",
-      "userId": "U-<UUID>"
+      "displayInfo": {
+        "info": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        },
+        "kind": "user"
+      },
+      "tag": "UserLike"
     },
     {
       "projectRef": "@test/publictestproject",
