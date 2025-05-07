@@ -15,7 +15,7 @@ import Data.Text qualified as Text
 import Share.Contribution (ContributionStatus)
 import Share.IDs
 import Share.Prelude
-import Share.Web.Share.DisplayInfo (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 
 data BranchPayload = BranchPayload
   { branchId :: BranchId,

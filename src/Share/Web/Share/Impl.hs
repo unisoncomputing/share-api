@@ -48,7 +48,7 @@ import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
-import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UserDisplayInfo (..))
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
@@ -365,7 +365,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
   -- of 5 users (who match the query as a prefix), then return the rest of the results from
   -- projects.
   (users, projects) <- PG.runTransaction $ do
-    users <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+    userLikes <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
     projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
     userResultsWithOrgInfo <- OrgQ.orgsByIdsOf (traversed . _2 . _Just) users
     pure (userResultsWithOrgInfo, projects)
@@ -374,7 +374,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
           <&> \(User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId}, mayOrgInfo) ->
             case mayOrgInfo of
               Just (Org {orgId, isCommercial}) -> SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId}, orgId, isCommercial})
-              Nothing -> SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
+              Nothing -> SearchResultUserLike (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
   let projectResults =
         projects
           <&> \(Project {slug, summary, visibility}, ownerHandle) ->
@@ -501,7 +501,8 @@ accountInfoEndpoint Session {sessionUserId} = do
         primaryEmail = user_email,
         completedTours,
         organizationMemberships,
-        isSuperadmin
+        isSuperadmin,
+        displayInfo
       }
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent
