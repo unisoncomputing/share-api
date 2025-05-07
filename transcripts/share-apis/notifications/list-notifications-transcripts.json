@@ -4,6 +4,34 @@
       {
         "event": {
           "data": {
+            "kind": "projectBranchUpdated",
+            "payload": {
+              "branch": {
+                "branchContributorHandle": null,
+                "branchContributorUserId": null,
+                "branchId": "B-<UUID>",
+                "branchName": "newbranch",
+                "branchShortHand": "newbranch"
+              },
+              "project": {
+                "projectId": "P-<UUID>",
+                "projectOwnerHandle": "test",
+                "projectOwnerUserId": "U-<UUID>",
+                "projectShortHand": "@test/publictestproject",
+                "projectSlug": "publictestproject"
+              }
+            }
+          },
+          "id": "EVENT-<UUID>",
+          "occurredAt": "<TIMESTAMP>",
+          "scope": "U-<UUID>"
+        },
+        "id": "NOT-<UUID>",
+        "status": "unread"
+      },
+      {
+        "event": {
+          "data": {
             "kind": "projectContributionCreated",
             "payload": {
               "author": {

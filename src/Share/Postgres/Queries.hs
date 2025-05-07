@@ -542,6 +542,7 @@ createBranch ::
 createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget creatorId = do
   branchId <- PG.queryExpect1Col createBranchSQL
   PG.execute_ (updateReflogSQL branchId ("Branch Created" :: Text))
+  recordNotificationEvent branchId
   pure branchId
   where
     createBranchSQL =
@@ -582,6 +583,32 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
         FROM project_branches
         WHERE id = #{branchId}
       |]
+
+    recordNotificationEvent :: BranchId -> PG.Transaction e ()
+    recordNotificationEvent branchId = do
+      (projectId, projectResourceId, projectOwnerUserId, branchContributorUserId) <-
+        PG.queryExpect1Row
+          [PG.sql|
+        SELECT p.id, p.resource_id, p.owner_user_id, pb.contributor_id
+          FROM project_branches pb
+          JOIN projects p ON p.id = pb.project_id
+        WHERE pb.id = #{branchId}
+        |]
+      let branchUpdateEventData =
+            ProjectBranchData
+              { projectId,
+                branchId,
+                branchContributorUserId
+              }
+      let notifEvent =
+            NotificationEvent
+              { eventId = (),
+                eventOccurredAt = (),
+                eventResourceId = projectResourceId,
+                eventData = ProjectBranchUpdatedData branchUpdateEventData,
+                eventScope = projectOwnerUserId
+              }
+      NotifQ.recordEvent notifEvent
 
 createRelease ::
   (PG.QueryM m) =>
