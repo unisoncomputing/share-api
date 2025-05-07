@@ -226,9 +226,9 @@ runCodebaseTransaction codebaseEnv m = do
   either absurd id <$> tryRunCodebaseTransaction codebaseEnv m
 
 -- | Run a CodebaseM transaction using the specified mode.
-runCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m) => PG.IsolationLevel -> CodebaseEnv -> CodebaseM Void a -> m a
-runCodebaseTransactionMode isoLevel codebaseEnv m = do
-  either absurd id <$> tryRunCodebaseTransactionMode isoLevel codebaseEnv m
+runCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM Void a -> m a
+runCodebaseTransactionMode isoLevel rwmode codebaseEnv m = do
+  either absurd id <$> tryRunCodebaseTransactionMode isoLevel rwmode codebaseEnv m
 
 runCodebaseTransactionOrRespondError :: (ToServerError e, Loggable e) => CodebaseEnv -> CodebaseM e a -> WebApp a
 runCodebaseTransactionOrRespondError codebaseEnv m = do
@@ -236,9 +236,9 @@ runCodebaseTransactionOrRespondError codebaseEnv m = do
     Left e -> respondError e
     Right a -> pure a
 
-tryRunCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m) => PG.IsolationLevel -> CodebaseEnv -> CodebaseM e a -> m (Either e a)
-tryRunCodebaseTransactionMode isoLevel codebaseEnv m = do
-  PG.tryRunTransactionMode isoLevel PG.ReadWrite . codebaseMToTransaction codebaseEnv $ m
+tryRunCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM e a -> m (Either e a)
+tryRunCodebaseTransactionMode isoLevel rwmode codebaseEnv m = do
+  PG.tryRunTransactionMode isoLevel rwmode . codebaseMToTransaction codebaseEnv $ m
 
 tryRunCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m) => CodebaseEnv -> CodebaseM e a -> m (Either e a)
 tryRunCodebaseTransaction codebaseEnv m = do

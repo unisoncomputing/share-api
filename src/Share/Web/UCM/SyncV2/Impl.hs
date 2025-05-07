@@ -86,7 +86,7 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
       pure q
     streamResults <- lift $ UnliftIO.toIO do
       Logging.logInfoText "Starting download entities stream"
-      Codebase.runCodebaseTransaction codebase $ do
+      Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
         let knownCausalHashes = Set.map hash32ToCausalHash knownHashes
         cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId knownCausalHashes
@@ -110,7 +110,7 @@ causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {
     q <- UnliftIO.atomically $ STM.newTBMQueue 10
     streamResults <- lift $ UnliftIO.toIO do
       Logging.logInfoText "Starting causal dependencies stream"
-      Codebase.runCodebaseTransaction codebase $ do
+      Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase $ do
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
         cursor <- SSQ.spineAndLibDependenciesOfCausalCursor causalId
         Cursor.foldBatched cursor batchSize \batch -> do

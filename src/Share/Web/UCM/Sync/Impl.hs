@@ -184,7 +184,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
       HashJWT.verifyHashJWT mayUserId hashJWT >>= \case
         Left ae -> respondError ae
         Right HashJWTClaims {hash} -> do
-          entity <- Codebase.runCodebaseTransactionMode PG.ReadCommitted codebase $ SyncQ.expectEntity hash
+          entity <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase $ SyncQ.expectEntity hash
           pure (hash, entity)
 
 uploadEntitiesEndpoint :: UserId -> UploadEntitiesRequest -> WebApp UploadEntitiesResponse
