@@ -34,6 +34,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
 recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventActor}) = do
@@ -43,7 +44,7 @@ recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventAct
       VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventActor} #{eventResourceId}, #{eventData})
     |]
 
-expectEvent :: (QueryM m) => NotificationEventId -> m (NotificationEvent NotificationEventId UTCTime NotificationEventData)
+expectEvent :: (QueryM m) => NotificationEventId -> m PGNotificationEvent
 expectEvent eventId = do
   queryExpect1Row @PGNotificationEvent
     [sql|
@@ -52,12 +53,12 @@ expectEvent eventId = do
       WHERE id = #{eventId}
     |]
 
-listNotificationHubEntries :: UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry HydratedEventPayload]
+listNotificationHubEntries :: UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry UserDisplayInfo HydratedEventPayload]
 listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = do
   let limit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
   let statusFilterList = Foldable.toList <$> statusFilter
   dbNotifications <-
-    queryListRows @(NotificationHubEntry NotificationEventData)
+    queryListRows @(NotificationHubEntry UserId NotificationEventData)
       [sql|
       SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.resource_id, event.topic, event.data
         FROM notification_hub_entries hub

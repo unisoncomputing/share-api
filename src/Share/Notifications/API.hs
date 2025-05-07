@@ -43,6 +43,7 @@ import Share.Notifications.Types (DeliveryMethodId, HydratedEventPayload, Notifi
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.URI (URIParam)
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 
 type API = NamedRoutes Routes
 
@@ -212,7 +213,7 @@ type GetHubEntriesEndpoint =
     :> Get '[JSON] GetHubEntriesResponse
 
 data GetHubEntriesResponse = GetHubEntriesResponse
-  { notifications :: [NotificationHubEntry HydratedEventPayload]
+  { notifications :: [NotificationHubEntry UserDisplayInfo HydratedEventPayload]
   }
 
 instance ToJSON GetHubEntriesResponse where

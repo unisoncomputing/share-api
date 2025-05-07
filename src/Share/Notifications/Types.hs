@@ -222,20 +222,20 @@ eventTopic = \case
   ProjectContributionCreatedData {} -> ProjectContributionCreated
 
 -- | Description of a notifiable event.
-data NotificationEvent id occurredAt eventPayload = NotificationEvent
+data NotificationEvent id userInfo occurredAt eventPayload = NotificationEvent
   { eventId :: id,
     eventOccurredAt :: occurredAt,
     eventResourceId :: ResourceId,
     eventData :: eventPayload,
-    eventScope :: UserId,
-    eventActor :: UserId
+    eventScope :: userInfo,
+    eventActor :: userInfo
   }
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-eventData_ :: Lens (NotificationEvent id occurredAt eventPayload) (NotificationEvent id occurredAt eventPayload') eventPayload eventPayload'
+eventData_ :: Lens (NotificationEvent id userInfo occurredAt eventPayload) (NotificationEvent id userInfo occurredAt eventPayload') eventPayload eventPayload'
 eventData_ f event = (\eventData -> event {eventData}) <$> f (eventData event)
 
-instance (Aeson.ToJSON eventPayload) => Aeson.ToJSON (NotificationEvent NotificationEventId UTCTime eventPayload) where
+instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
   toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor} =
     Aeson.object
       [ "id" Aeson..= eventId,
@@ -245,7 +245,7 @@ instance (Aeson.ToJSON eventPayload) => Aeson.ToJSON (NotificationEvent Notifica
         "actor" Aeson..= eventActor
       ]
 
-instance Hasql.DecodeRow (NotificationEvent NotificationEventId UTCTime NotificationEventData) where
+instance Hasql.DecodeRow (NotificationEvent NotificationEventId UserId UTCTime NotificationEventData) where
   decodeRow = do
     eventId <- PG.decodeField
     eventOccurredAt <- PG.decodeField
@@ -255,9 +255,9 @@ instance Hasql.DecodeRow (NotificationEvent NotificationEventId UTCTime Notifica
     eventData <- PG.decodeRow
     pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId}
 
-type NewNotificationEvent = NotificationEvent () () NotificationEventData
+type NewNotificationEvent = NotificationEvent () UserId () NotificationEventData
 
-type PGNotificationEvent = NotificationEvent NotificationEventId UTCTime NotificationEventData
+type PGNotificationEvent = NotificationEvent NotificationEventId UserId UTCTime NotificationEventData
 
 data NotificationEmailDeliveryConfig = NotificationEmailConfig
   { emailDeliveryId :: NotificationEmailDeliveryMethodId,
@@ -344,14 +344,14 @@ instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) wher
         "filter" Aeson..= subscriptionFilter
       ]
 
-data NotificationHubEntry eventPayload = NotificationHubEntry
+data NotificationHubEntry userInfo eventPayload = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,
-    hubEntryEvent :: NotificationEvent NotificationEventId UTCTime eventPayload,
+    hubEntryEvent :: NotificationEvent NotificationEventId userInfo UTCTime eventPayload,
     hubEntryStatus :: NotificationStatus
   }
   deriving stock (Functor, Foldable, Traversable)
 
-instance (Aeson.ToJSON eventPayload) => Aeson.ToJSON (NotificationHubEntry eventPayload) where
+instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (NotificationHubEntry userInfo eventPayload) where
   toJSON NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus} =
     Aeson.object
       [ "id" Aeson..= hubEntryId,
@@ -359,7 +359,7 @@ instance (Aeson.ToJSON eventPayload) => Aeson.ToJSON (NotificationHubEntry event
         "status" Aeson..= hubEntryStatus
       ]
 
-instance Hasql.DecodeRow (NotificationHubEntry NotificationEventData) where
+instance Hasql.DecodeRow (NotificationHubEntry UserId NotificationEventData) where
   decodeRow = do
     hubEntryId <- PG.decodeField
     hubEntryStatus <- PG.decodeField
