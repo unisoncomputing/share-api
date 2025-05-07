@@ -34,7 +34,7 @@ fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/s
 fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/transcripts/notifications/subscriptions' "{
   \"scope\": \"test\",
   \"topics\": [
-    \"project:contribution:created\"
+    \"project:contribution:created\", \"project:branch:updated\"
   ]
 }"
 
@@ -63,6 +63,12 @@ fetch "$test_user" POST private-contribution-create '/users/test/projects/privat
     "targetBranchRef": "main"
 }'
 
+# Create a new branch in the watched project, which should trigger a branch updated notification 
+fetch "$test_user" POST branch-create '/ucm/v1/projects/create-project-branch' "{
+  \"project-id\": \"${publictestproject_id}\",
+  \"branch-name\": \"newbranch\",
+  \"branch-head\": \"${empty_causal_hash}\"
+}"
 
 # Notification APIs
 

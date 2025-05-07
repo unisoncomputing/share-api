@@ -4,29 +4,14 @@
       {
         "event": {
           "data": {
-            "kind": "projectContributionCreated",
+            "kind": "projectBranchUpdated",
             "payload": {
-              "author": {
-                "avatarUrl": null,
-                "handle": "test",
-                "name": null,
-                "userId": "U-<UUID>"
-              },
-              "contributionId": "C-<UUID>",
-              "description": "My description",
-              "mergeSourceBranch": {
+              "branch": {
                 "branchContributorHandle": null,
                 "branchContributorUserId": null,
                 "branchId": "B-<UUID>",
-                "branchName": "main",
-                "branchShortHand": "main"
-              },
-              "mergeTargetBranch": {
-                "branchContributorHandle": null,
-                "branchContributorUserId": null,
-                "branchId": "B-<UUID>",
-                "branchName": "feature",
-                "branchShortHand": "feature"
+                "branchName": "newbranch",
+                "branchShortHand": "newbranch"
               },
               "project": {
                 "projectId": "P-<UUID>",
@@ -34,9 +19,7 @@
                 "projectOwnerUserId": "U-<UUID>",
                 "projectShortHand": "@test/publictestproject",
                 "projectSlug": "publictestproject"
-              },
-              "status": "draft",
-              "title": "My contribution"
+              }
             }
           },
           "id": "EVENT-<UUID>",
