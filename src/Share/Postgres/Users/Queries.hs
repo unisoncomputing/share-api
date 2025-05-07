@@ -48,7 +48,7 @@ import Share.Utils.Postgres
 import Share.Utils.URI (URIParam (..))
 import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..), ToServerError (..))
-import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..), UserLike (..))
 
 -- | Efficiently resolve User Display Info for UserIds within a structure.
 userDisplayInfoOf :: (PG.QueryA m) => Traversal s t UserId UserDisplayInfo -> s -> m t
@@ -274,12 +274,12 @@ findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarU
     Nothing -> do
       New <$> createFromGithubUser authZReceipt ghu primaryEmail userHandle
 
-searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(User, Maybe OrgId)]
+searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(UserLike UserId Void OrgId)]
 searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
   let q = likeEscape prefix <> "%"
-  PG.queryListRows @(User PG.:. (PG.Only (Maybe OrgId)))
+  PG.queryListRows @(UserId, Maybe OrgId)
     [PG.sql|
-    SELECT u.id, u.name, u.primary_email, u.avatar_url, u.handle, u.private, org.id
+    SELECT u.id, org.id
       FROM users u
       LEFT JOIN orgs org ON org.user_id = u.id
       WHERE (u.handle ILIKE #{q}
@@ -287,7 +287,9 @@ searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
             ) AND NOT u.private
       LIMIT #{limit}
       |]
-    <&> fmap \(user PG.:. PG.Only mayOrgId) -> (user, mayOrgId)
+    <&> fmap \(userId, mayOrgId) -> case mayOrgId of
+      Just orgId -> UnifiedOrg orgId
+      Nothing -> UnifiedUser userId
 
 data UserCreationError
   = UserHandleTaken UserHandle

@@ -6,7 +6,7 @@ where
 import Data.List qualified as List
 import Share.IDs qualified as IDs
 import Share.Web.Authorization.Types
-import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), TeamDisplayInfo (..), UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), TeamDisplayInfo (..), UserDisplayInfo (..))
 
 -- | The ordering isn't necessary logic, it just makes transcript tests much easier.
 canonicalRoleAssignmentOrdering :: [RoleAssignment DisplayAuthSubject] -> [RoleAssignment DisplayAuthSubject]

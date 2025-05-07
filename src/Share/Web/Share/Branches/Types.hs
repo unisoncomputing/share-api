@@ -14,7 +14,7 @@ import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Postgres.IDs
 import Share.Web.Share.Contributions.Types (ShareContribution)
-import Share.Web.Share.DisplayInfo (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 import Share.Web.Share.Projects.Types
 
 branchToShareBranch :: BranchShortHand -> Branch CausalHash -> APIProject -> [ShareContribution UserDisplayInfo] -> ShareBranch
