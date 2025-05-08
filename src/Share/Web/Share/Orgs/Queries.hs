@@ -23,7 +23,7 @@ import Share.Postgres
 import Share.Prelude
 import Share.Utils.URI
 import Share.Web.Authorization.Types
-import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UserDisplayInfo (..))
 import Share.Web.Share.Orgs.Types (Org (..))
 
 orgByUserId :: UserId -> Transaction e (Maybe Org)

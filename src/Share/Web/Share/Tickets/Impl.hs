@@ -31,7 +31,7 @@ import Share.Web.Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Comments.Impl qualified as Comments
 import Share.Web.Share.Comments.Types
-import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..))
 import Share.Web.Share.Tickets.API
 import Share.Web.Share.Tickets.API qualified as API
 import Share.Web.Share.Tickets.Types

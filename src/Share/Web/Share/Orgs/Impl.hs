@@ -17,7 +17,7 @@ import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Authorization.Types
 import Share.Web.Errors
-import Share.Web.Share.DisplayInfo (OrgDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo)
 import Share.Web.Share.Orgs.API as API
 import Share.Web.Share.Orgs.Operations qualified as OrgOps
 import Share.Web.Share.Orgs.Queries qualified as OrgQ

@@ -14,7 +14,7 @@ import Share.Prelude
 import Share.Ticket (TicketStatus)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Web.Share.Comments
-import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..))
 
 data ShareTicket user = ShareTicket
   { ticketId :: TicketId,

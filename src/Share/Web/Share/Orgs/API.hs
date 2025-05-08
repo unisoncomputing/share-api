@@ -14,7 +14,7 @@ import Servant
 import Share.IDs
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Web.Authorization.Types (AddRolesRequest, ListRolesResponse, RemoveRolesRequest)
-import Share.Web.Share.DisplayInfo (OrgDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo)
 import Share.Web.Share.Orgs.Types
 
 type API =
