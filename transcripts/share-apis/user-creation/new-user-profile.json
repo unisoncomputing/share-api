@@ -1,6 +1,5 @@
 {
   "body": {
-    "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
     "completedTours": [],
     "displayInfo": {
       "info": {
@@ -11,12 +10,9 @@
       },
       "kind": "user"
     },
-    "handle": "localgithubuser",
     "isSuperadmin": false,
-    "name": "Local Github User",
     "organizationMemberships": [],
-    "primaryEmail": "local@example.com",
-    "userId": "U-<UUID>"
+    "primaryEmail": "local@example.com"
   },
   "status": [
     {
