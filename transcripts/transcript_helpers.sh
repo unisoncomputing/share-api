@@ -9,6 +9,7 @@ ucm_credentials_file="${ucm_xdg_data_dir}/unisonlanguage/credentials.json"
 
 # Executable to use when running unison transcripts
 export UCM_PATH="${1:-"$(which ucm)"}"
+export empty_causal_hash='sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg'
 export echo_server_port=9999
 export echo_server="http://localhost:${echo_server_port}"
 # if CI=true, change the echo server url to a url from the docker network.
