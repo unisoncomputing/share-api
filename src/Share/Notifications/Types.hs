@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Share.Notifications.Types
   ( NotificationTopic (..),
     NotificationFilter (..),
@@ -23,6 +25,8 @@ module Share.Notifications.Types
     eventTopic,
     hydratedEventTopic,
     eventData_,
+    eventUserInfo_,
+    hubEntryUserInfo_,
   )
 where
 
@@ -235,6 +239,12 @@ data NotificationEvent id userInfo occurredAt eventPayload = NotificationEvent
 eventData_ :: Lens (NotificationEvent id userInfo occurredAt eventPayload) (NotificationEvent id userInfo occurredAt eventPayload') eventPayload eventPayload'
 eventData_ f event = (\eventData -> event {eventData}) <$> f (eventData event)
 
+eventUserInfo_ :: Traversal (NotificationEvent id userInfo occurredAt eventPayload) (NotificationEvent id userInfo' occurredAt eventPayload) userInfo userInfo'
+eventUserInfo_ f NotificationEvent {eventActor, eventScope, ..} = do
+  eventActor' <- f eventActor
+  eventScope' <- f eventScope
+  pure $ NotificationEvent {eventActor = eventActor', eventScope = eventScope', ..}
+
 instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
   toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor} =
     Aeson.object
@@ -365,6 +375,11 @@ instance Hasql.DecodeRow (NotificationHubEntry UserId NotificationEventData) whe
     hubEntryStatus <- PG.decodeField
     hubEntryEvent <- PG.decodeRow
     pure $ NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus}
+
+hubEntryUserInfo_ :: Traversal (NotificationHubEntry userInfo eventPayload) (NotificationHubEntry userInfo' eventPayload) userInfo userInfo'
+hubEntryUserInfo_ f (NotificationHubEntry {hubEntryEvent, ..}) = do
+  hubEntryEvent' <- hubEntryEvent & eventUserInfo_ %%~ f
+  pure $ NotificationHubEntry {hubEntryEvent = hubEntryEvent', ..}
 
 newtype SubscriptionFilter = SubscriptionFilter (Aeson.Value)
   deriving (Hasql.EncodeValue, Hasql.DecodeValue) via Hasql.Jsonb

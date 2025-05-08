@@ -3,6 +3,15 @@
     "notifications": [
       {
         "event": {
+          "actor": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          },
           "data": {
             "kind": "projectBranchUpdated",
             "payload": {
@@ -24,13 +33,30 @@
           },
           "id": "EVENT-<UUID>",
           "occurredAt": "<TIMESTAMP>",
-          "scope": "U-<UUID>"
+          "scope": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          }
         },
         "id": "NOT-<UUID>",
         "status": "unread"
       },
       {
         "event": {
+          "actor": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          },
           "data": {
             "kind": "projectContributionCreated",
             "payload": {
@@ -69,7 +95,15 @@
           },
           "id": "EVENT-<UUID>",
           "occurredAt": "<TIMESTAMP>",
-          "scope": "U-<UUID>"
+          "scope": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          }
         },
         "id": "NOT-<UUID>",
         "status": "unread"

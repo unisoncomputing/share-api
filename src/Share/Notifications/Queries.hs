@@ -34,14 +34,15 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
-import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
+import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
 recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventActor}) = do
   execute_
     [sql|
       INSERT INTO notification_events (topic, scope_user_id, actor_user_id, resource_id, data)
-      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventActor} #{eventResourceId}, #{eventData})
+      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventActor}, #{eventResourceId}, #{eventData})
     |]
 
 expectEvent :: (QueryM m) => NotificationEventId -> m PGNotificationEvent
@@ -53,14 +54,14 @@ expectEvent eventId = do
       WHERE id = #{eventId}
     |]
 
-listNotificationHubEntries :: UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry UserDisplayInfo HydratedEventPayload]
+listNotificationHubEntries :: UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload]
 listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = do
   let limit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
   let statusFilterList = Foldable.toList <$> statusFilter
   dbNotifications <-
     queryListRows @(NotificationHubEntry UserId NotificationEventData)
       [sql|
-      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.resource_id, event.topic, event.data
+      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.actor_user_id, event.resource_id, event.topic, event.data
         FROM notification_hub_entries hub
         JOIN notification_events event ON hub.event_id = event.id
       WHERE hub.user_id = #{notificationUserId}
@@ -69,7 +70,8 @@ listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = 
       ORDER BY hub.created_at DESC
       LIMIT #{limit}
     |]
-  PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventData
+  hydrated <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventData
+  hydrated & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
 
 updateNotificationHubEntries :: (QueryA m) => NESet NotificationHubEntryId -> NotificationStatus -> m ()
 updateNotificationHubEntries hubEntryIds status = do
