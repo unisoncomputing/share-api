@@ -25,7 +25,7 @@ import Share.JWT (JWTParam (..))
 import Share.JWT qualified as JWT
 import Share.Metrics qualified as Metrics
 import Share.Notifications.Queries qualified as NQ
-import Share.Notifications.Types (HydratedEventPayload, NotificationEvent (..), NotificationTopic, eventData_, hydratedEventTopic)
+import Share.Notifications.Types (HydratedEventPayload, NotificationEvent (..), NotificationTopic, eventData_, eventUserInfo_, hydratedEventTopic)
 import Share.Notifications.Webhooks.Secrets (WebhookConfig (..), WebhookSecretError)
 import Share.Notifications.Webhooks.Secrets qualified as Webhooks
 import Share.Postgres qualified as PG
@@ -34,7 +34,8 @@ import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..))
 import Share.Web.Authorization qualified as AuthZ
-import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
+import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 import UnliftIO qualified
 
 data WebhookSendFailure
@@ -163,7 +164,7 @@ instance FromJSON (WebhookEventPayload ()) where
       <*> pure ()
 
 tryWebhook ::
-  NotificationEvent NotificationEventId UserDisplayInfo UTCTime HydratedEventPayload ->
+  NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload ->
   NotificationWebhookId ->
   Background (Maybe WebhookSendFailure)
 tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $ InvalidRequest event.eventId webhookId someException) do
@@ -206,14 +207,15 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->
-  (NotificationEvent NotificationEventId UserDisplayInfo UTCTime HydratedEventPayload -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
+  (NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
   NotificationEventId ->
   NotificationWebhookId ->
   PG.Transaction e (Maybe WebhookSendFailure)
 attemptWebhookSend _authZReceipt tryWebhookIO eventId webhookId = do
   event <- NQ.expectEvent eventId
   hydratedEvent <- forOf eventData_ event NQ.hydrateEventData
-  PG.transactionUnsafeIO (tryWebhookIO hydratedEvent webhookId) >>= \case
+  populatedEvent <- hydratedEvent & DisplayInfoQ.unifiedDisplayInfoForUserOf eventUserInfo_
+  PG.transactionUnsafeIO (tryWebhookIO populatedEvent webhookId) >>= \case
     Just err -> do
       WQ.recordFailedDeliveryAttempt eventId webhookId
       pure $ Just err
