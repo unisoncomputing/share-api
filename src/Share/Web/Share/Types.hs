@@ -50,32 +50,28 @@ instance ToJSON UserKind where
     OrgKind -> "org"
 
 data DescribeUserProfile = DescribeUserProfile
-  { handle :: UserHandle,
-    name :: Maybe Text,
-    avatarUrl :: Maybe URIParam,
-    bio :: Maybe Text,
+  { bio :: Maybe Text,
     website :: Maybe Text,
     location :: Maybe Text,
     twitterHandle :: Maybe Text,
     pronouns :: Maybe Text,
     kind :: UserKind,
-    permissions :: Set RolePermission
+    permissions :: Set RolePermission,
+    displayInfo :: UnifiedDisplayInfo
   }
   deriving (Show)
 
 instance ToJSON DescribeUserProfile where
-  toJSON (DescribeUserProfile handle name avatarUrl bio website location twitterHandle pronouns kind permissions) =
+  toJSON (DescribeUserProfile bio website location twitterHandle pronouns kind permissions displayInfo) =
     Aeson.object
-      [ "handle" .= fromId @UserHandle @Text handle,
-        "name" .= name,
-        "avatarUrl" .= avatarUrl,
-        "bio" .= bio,
+      [ "bio" .= bio,
         "website" .= website,
         "location" .= location,
         "twitterHandle" .= twitterHandle,
         "pronouns" .= pronouns,
         "kind" .= kind,
-        "permissions" Aeson..= permissions
+        "permissions" Aeson..= permissions,
+        "displayInfo" .= displayInfo
       ]
 
 data ReadmeResponse = ReadmeResponse
@@ -133,11 +129,7 @@ instance ToJSON SearchResult where
         ]
 
 data UserAccountInfo = UserAccountInfo
-  { handle :: UserHandle,
-    name :: Maybe Text,
-    avatarUrl :: Maybe URIParam,
-    userId :: UserId,
-    primaryEmail :: Maybe Email,
+  { primaryEmail :: Maybe Email,
     -- List of tours which the user has completed.
     completedTours :: [TourId],
     organizationMemberships :: [UserHandle],
@@ -149,11 +141,7 @@ data UserAccountInfo = UserAccountInfo
 instance ToJSON UserAccountInfo where
   toJSON UserAccountInfo {..} =
     Aeson.object
-      [ "handle" .= fromId @UserHandle @Text handle,
-        "name" .= name,
-        "avatarUrl" .= avatarUrl,
-        "primaryEmail" .= primaryEmail,
-        "userId" .= userId,
+      [ "primaryEmail" .= primaryEmail,
         "completedTours" .= completedTours,
         "organizationMemberships" .= organizationMemberships,
         "isSuperadmin" .= isSuperadmin,
