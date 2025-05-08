@@ -288,29 +288,27 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
 
 getUserProfileEndpoint :: Maybe UserId -> UserHandle -> WebApp DescribeUserProfile
 getUserProfileEndpoint callerUserId userHandle = do
-  (UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns}, kind, permissions) <- PG.runTransactionOrRespondError do
+  PG.runTransactionOrRespondError do
     User {user_id} <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-    profile <- UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
+    UserProfile {bio, website, location, twitterHandle, pronouns} <- UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
     (kind, permissions) <-
       OrgQ.orgByUserId user_id >>= \case
         Just (Org {orgId}) -> do
           permissionsWithinOrg <- AuthZQ.permissionsForOrg callerUserId orgId
           pure (OrgKind, permissionsWithinOrg)
         Nothing -> pure (UserKind, mempty)
-    pure (profile, kind, permissions)
-  pure $
-    DescribeUserProfile
-      { handle = userHandle,
-        name = user_name,
-        avatarUrl = avatar_url,
-        bio = bio,
-        website = website,
-        location = location,
-        twitterHandle = twitterHandle,
-        pronouns = pronouns,
-        kind,
-        permissions
-      }
+    pure $
+      DescribeUserProfile
+        { bio = bio,
+          website = website,
+          location = location,
+          twitterHandle = twitterHandle,
+          pronouns = pronouns,
+          kind,
+          permissions,
+          displayInfo = displayInfo
+        }
 
 updateUserEndpoint :: UserHandle -> UserId -> UpdateUserRequest -> WebApp DescribeUserProfile
 updateUserEndpoint userHandle callerUserId (UpdateUserRequest {name, avatarUrl, bio, website, location, twitterHandle, pronouns}) = do
@@ -480,7 +478,7 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
 
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do
-  User {user_name, avatar_url, user_email, handle, user_id} <- PGO.expectUserById sessionUserId
+  User {user_email, user_id} <- PGO.expectUserById sessionUserId
   PG.runTransaction $ do
     completedTours <- Q.getCompletedToursForUser user_id
     organizationMemberships <- Q.organizationMemberships user_id
@@ -488,11 +486,7 @@ accountInfoEndpoint Session {sessionUserId} = do
     displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
     pure $
       UserAccountInfo
-        { handle = handle,
-          name = user_name,
-          avatarUrl = avatar_url,
-          userId = user_id,
-          primaryEmail = user_email,
+        { primaryEmail = user_email,
           completedTours,
           organizationMemberships,
           isSuperadmin,
