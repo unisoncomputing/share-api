@@ -18,6 +18,7 @@ submitContributionsToBeDiffed contributions = do
       )
       INSERT INTO contribution_diff_queue (contribution_id)
         SELECT nc.contribution_id FROM new_contributions nc
+        ON CONFLICT DO NOTHING
     |]
   Notif.notifyChannel Notif.ContributionDiffChannel
 
