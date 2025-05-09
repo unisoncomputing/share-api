@@ -588,7 +588,7 @@ savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, le
         ON CONFLICT DO NOTHING
       |]
 
--- | Get all contribution IDs for contributions which have a source or target branch in the
+-- | Get all draft and in-review contribution IDs for contributions which have a source or target branch in the
 -- provided set.
 contributionsRelatedToBranches :: Set BranchId -> PG.Transaction e [ContributionId]
 contributionsRelatedToBranches branchIds = do
@@ -599,6 +599,8 @@ contributionsRelatedToBranches branchIds = do
       )
         SELECT contr.id FROM contributions contr
           WHERE
-            contr.source_branch IN (SELECT branch_id FROM related_branches)
-            OR contr.target_branch IN (SELECT branch_id FROM related_branches)
+            (contr.source_branch IN (SELECT branch_id FROM related_branches)
+              OR contr.target_branch IN (SELECT branch_id FROM related_branches)
+            )
+            AND contr.status IN (#{Draft}, #{InReview})
       |]
