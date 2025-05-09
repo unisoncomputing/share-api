@@ -4,24 +4,25 @@ module Share.BackgroundJobs.Diffs.Queries
   )
 where
 
-import Data.Foldable (toList)
 import Data.Set (Set)
 import Share.IDs
 import Share.Postgres
-import Share.Postgres.Notifications qualified as Notif
 
 submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
-submitContributionsToBeDiffed contributions = do
-  execute_
-    [sql|
-    WITH new_contributions(contribution_id) AS (
-      SELECT * FROM ^{singleColumnTable (toList contributions)}
-    )
-    INSERT INTO contribution_diff_queue (contribution_id)
-      SELECT nc.contribution_id FROM new_contributions nc
-      ON CONFLICT DO NOTHING
-    |]
-  Notif.notifyChannel Notif.ContributionDiffChannel
+submitContributionsToBeDiffed _contributions = do
+  -- TODO: need to revive this.
+  pure ()
+
+-- execute_
+--   [sql|
+--   WITH new_contributions(contribution_id) AS (
+--     SELECT * FROM ^{singleColumnTable (toList contributions)}
+--   )
+--   INSERT INTO contribution_diff_queue (contribution_id)
+--     SELECT nc.contribution_id FROM new_contributions nc
+--     ON CONFLICT DO NOTHING
+--   |]
+-- Notif.notifyChannel Notif.ContributionDiffChannel
 
 -- | Claim the oldest contribution in the queue to be diffed.
 claimContributionToDiff :: Transaction e (Maybe ContributionId)
