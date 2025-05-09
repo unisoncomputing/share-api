@@ -7,7 +7,6 @@ import Share.BackgroundJobs.Diffs.Queries qualified as DQ
 import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background, withTag)
 import Share.BackgroundJobs.Workers (newWorker)
-import Share.Branch (branchCausals_)
 import Share.Codebase qualified as Codebase
 import Share.Contribution (Contribution (..))
 import Share.Env qualified as Env
@@ -79,16 +78,14 @@ maybeComputeAndStoreCausalDiff ::
   ContributionId ->
   PG.Transaction EntityMissing Bool
 maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId = do
-  Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <-
+  Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, sourceCausalId = newCausalId, targetCausalId = oldCausalId, projectId} <-
     ContributionsQ.contributionById contributionId
   project <- Q.projectById projectId `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
   newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
   oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-  let oldCausal = oldBranch ^. branchCausals_
-  let newCausal = newBranch ^. branchCausals_
-  ContributionsQ.existsPrecomputedNamespaceDiff (oldCodebase, oldCausal) (newCodebase, newCausal) >>= \case
+  ContributionsQ.existsPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
     True -> pure False
     False -> do
       oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
@@ -96,7 +93,7 @@ maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId = do
       _ <-
         Diffs.computeAndStoreCausalDiff
           authZReceipt
-          (oldCodebase, oldRuntime, oldCausal)
-          (newCodebase, newRuntime, newCausal)
+          (oldCodebase, oldRuntime, oldCausalId)
+          (newCodebase, newRuntime, newCausalId)
           bestCommonAncestorCausalId
       pure True
