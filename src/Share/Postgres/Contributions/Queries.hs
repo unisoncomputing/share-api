@@ -75,10 +75,12 @@ createContribution authorId projectId title description status sourceBranchId ta
           status,
           source_branch,
           target_branch,
+          source_causal_id,
+          target_causal_id,
           contribution_number,
           best_common_ancestor_causal_id
         )
-        SELECT #{authorId}, #{projectId}, #{title}, #{description}, #{status}, #{sourceBranchId}, #{targetBranchId}, contrib_number.new, best_common_causal_ancestor(source_branch.causal_id, target_branch.causal_id)
+        SELECT #{authorId}, #{projectId}, #{title}, #{description}, #{status}, #{sourceBranchId}, #{targetBranchId}, source_branch.causal_id, target_branch.causal_id, contrib_number.new, best_common_causal_ancestor(source_branch.causal_id, target_branch.causal_id)
           FROM contrib_number
           JOIN project_branches AS source_branch ON source_branch.id = #{sourceBranchId}
           JOIN project_branches AS target_branch ON target_branch.id = #{targetBranchId}
@@ -127,6 +129,8 @@ contributionByProjectIdAndNumber projectId contributionNumber = do
           contribution.status,
           contribution.source_branch,
           contribution.target_branch,
+          contribution.source_causal_id,
+          contribution.target_causal_id,
           contribution.best_common_ancestor_causal_id,
           contribution.created_at,
           contribution.updated_at,
@@ -249,6 +253,8 @@ contributionById contributionId = do
           contribution.status,
           contribution.source_branch,
           contribution.target_branch,
+          contribution.source_causal_id,
+          contribution.target_causal_id,
           contribution.best_common_ancestor_causal_id,
           contribution.created_at,
           contribution.updated_at,
@@ -278,7 +284,9 @@ updateContribution callerUserId contributionId newTitle newDescription newStatus
           description = #{updatedDescription},
           status = #{updatedStatus},
           source_branch = #{updatedSourceBranchId},
-          target_branch = #{updatedTargetBranchId}
+          target_branch = #{updatedTargetBranchId},
+          source_causal_id = (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedSourceBranchId}),
+          target_causal_id = (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedTargetBranchId})
         WHERE id = #{contributionId}
         |]
 
@@ -491,7 +499,9 @@ performMergesAndBCAUpdatesFromBranchPush callerUserId branchId = do
           AND new_bcas.bca_id = new_bcas.source_causal_id
     ), non_merged_bca_updates AS MATERIALIZED (
       UPDATE contributions contr
-        SET best_common_ancestor_causal_id = new_bcas.bca_id
+        SET best_common_ancestor_causal_id = new_bcas.bca_id,
+            source_causal_id = new_bcas.source_causal_id,
+            target_causal_id = new_bcas.target_causal_id
         FROM new_bcas
         WHERE
           contr.id = new_bcas.contribution_id
@@ -511,10 +521,12 @@ rebaseContributionsFromMergedBranches mergedContributions = do
         SELECT * FROM ^{PG.singleColumnTable $ Set.toList mergedContributions}
       )
       UPDATE contributions contr
-        SET target_branch = merged_contribution.target_branch
+        SET target_branch = merged_contribution.target_branch,
+            target_causal_id = new_target_branch.causal_id
         -- Update all open contributions which are merging into a branch that was just merged
         FROM merged_contribution_ids
           JOIN contributions merged_contribution ON merged_contribution.id = merged_contribution_ids.contribution_id
+          JOIN project_branches new_target_branch ON new_target_branch.id = merged_contribution.target_branch
         WHERE merged_contribution.source_branch = contr.target_branch
           AND contr.status IN (#{Draft}, #{InReview})
         RETURNING contr.id
@@ -533,10 +545,8 @@ contributionStateTokenById contributionId = do
           target_causal.hash,
           contribution.status
         FROM contributions contribution
-          JOIN project_branches AS source_branch ON source_branch.id = contribution.source_branch
-          JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch
-          JOIN causals source_causal ON source_causal.id = source_branch.causal_id
-          JOIN causals target_causal ON target_causal.id = target_branch.causal_id
+          JOIN causals source_causal ON source_causal.id = contribution.source_causal_id
+          JOIN causals target_causal ON target_causal.id = contribution.target_causal_id
         WHERE contribution.id = #{contributionId}
       |]
 
