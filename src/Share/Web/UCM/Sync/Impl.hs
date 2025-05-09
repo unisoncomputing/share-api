@@ -130,7 +130,7 @@ getCausalHashByPathEndpoint callerUserId (GetCausalHashByPathRequest sharePath) 
         Left {} -> throwError (GetCausalHashByPathNoReadPermission sharePath)
         Right authZReceipt -> do
           let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-          lift . Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
+          lift . Codebase.runCodebaseTransaction codebase $ do
             (codebaseLooseCodeRootCausalId, _) <- Codebase.expectLooseCodeRoot
             Codebase.loadCausalNamespaceAtPath codebaseLooseCodeRootCausalId localPath
     case mayCausalAtPath of
@@ -184,7 +184,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
       HashJWT.verifyHashJWT mayUserId hashJWT >>= \case
         Left ae -> respondError ae
         Right HashJWTClaims {hash} -> do
-          entity <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase $ SyncQ.expectEntity hash
+          entity <- Codebase.runCodebaseTransaction codebase $ SyncQ.expectEntity hash
           pure (hash, entity)
 
 uploadEntitiesEndpoint :: UserId -> UploadEntitiesRequest -> WebApp UploadEntitiesResponse
