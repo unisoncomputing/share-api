@@ -291,11 +291,7 @@ updateContribution callerUserId contributionId newTitle newDescription newStatus
     -- messes with the diffs.
     -- But we do want to update them if the source or target branch has changed.
     when
-      ( updatedStatus == InReview
-          || updatedStatus == Draft
-          || newSourceBranchId /= (Just sourceBranchId)
-          || newTargetBranchId /= (Just targetBranchId)
-      )
+      (updatedStatus == InReview || updatedStatus == Draft)
       do
         lift $
           PG.execute_
@@ -543,7 +539,11 @@ rebaseContributionsFromMergedBranches mergedContributions = do
       )
       UPDATE contributions contr
         SET target_branch = merged_contribution.target_branch,
-            target_causal_id = new_target_branch.causal_id
+            target_causal_id = new_target_branch.causal_id,
+            best_common_ancestor_causal_id = best_common_causal_ancestor(
+              contr.source_causal_id,
+              new_target_branch.causal_id
+            )
         -- Update all open contributions which are merging into a branch that was just merged
         FROM merged_contribution_ids
           JOIN contributions merged_contribution ON merged_contribution.id = merged_contribution_ids.contribution_id
