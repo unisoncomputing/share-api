@@ -40,6 +40,7 @@ where
 
 import Control.Lens
 import Data.Coerce (Coercible)
+import Share.IDs (IsID (..))
 import Share.Postgres qualified as PG
 import Share.Prelude
 import U.Codebase.HashTags (BranchHash (..), CausalHash (..), ComponentHash (..), PatchHash (..))
@@ -49,7 +50,7 @@ import Unison.Hash32 qualified as Hash32
 
 newtype CausalId = CausalId {unCausalId :: Int32}
   deriving stock (Eq, Ord, Show)
-  deriving (PG.DecodeValue, PG.EncodeValue) via Int32
+  deriving (PG.DecodeValue, PG.EncodeValue, IsID) via Int32
 
 newtype BranchHashId = BranchHashId {unBranchHashId :: Int32}
   deriving stock (Eq, Ord, Show)

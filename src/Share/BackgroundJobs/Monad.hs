@@ -5,6 +5,7 @@ module Share.BackgroundJobs.Monad
     withWorkerName,
     runBackground,
     withTag,
+    withTags,
   )
 where
 
@@ -29,7 +30,10 @@ withWorkerName :: Text -> Background a -> Background a
 withWorkerName name = localBackgroundCtx \ctx -> ctx {workerName = name}
 
 withTag :: Text -> Text -> Background a -> Background a
-withTag key value = localBackgroundCtx \ctx -> ctx {loggingTags = Map.insert key value (loggingTags ctx)}
+withTag key value = withTags [(key, value)]
+
+withTags :: [(Text, Text)] -> Background a -> Background a
+withTags tags = localBackgroundCtx \ctx -> ctx {loggingTags = Map.union (Map.fromList tags) (loggingTags ctx)}
 
 instance Logging.MonadLogger Background where
   logMsg msg = do
