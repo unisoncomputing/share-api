@@ -29,7 +29,7 @@ TRUNCATE TABLE team_members CASCADE;
 TRUNCATE TABLE orgs CASCADE;
 TRUNCATE TABLE subjects CASCADE;
 TRUNCATE TABLE resources CASCADE;
-TRUNCATE TABLE contribution_diff_queue CASCADE;
+TRUNCATE TABLE causal_diff_queue CASCADE;
 TRUNCATE TABLE namespace_diffs CASCADE;
 
 TRUNCATE TABLE namespace_ownership CASCADE;

@@ -21,8 +21,8 @@ submitContributionsToBeDiffed contributions = do
         SELECT c.source_causal_id, c.target_causal_id, COALESCE(source_branch.contributor_id, source_project.owner_user_id), COALESCE(target_branch.contributor_id, target_project.owner_user_id)
           FROM new_contributions nc
           JOIN contributions c ON c.id = nc.contribution_id
-          JOIN project_branches source_branch ON source_branch.id = c.source_branch_id
-          JOIN project_branches target_branch ON target_branch.id = c.target_branch_id
+          JOIN project_branches source_branch ON source_branch.id = c.source_branch
+          JOIN project_branches target_branch ON target_branch.id = c.target_branch
           JOIN projects source_project ON source_project.id = source_branch.project_id
           JOIN projects target_project ON target_project.id = target_branch.project_id
         ON CONFLICT DO NOTHING

@@ -1,3 +1,5 @@
+DROP TABLE contribution_diff_queue;
+
 -- Table for causal diffs we want to compute.
 -- Also keyed by the codebase owner of each side of the diff since 
 -- the sandboxed terms may affect how the diff looks.
