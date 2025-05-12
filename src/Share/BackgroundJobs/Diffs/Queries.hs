@@ -18,7 +18,7 @@ submitContributionsToBeDiffed contributions = do
         SELECT * FROM ^{singleColumnTable (toList contributions)}
       )
       INSERT INTO causal_diff_queue (from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner)
-        SELECT c.source_causal_id, c.target_causal_id, COALESCE(source_branch.contributor_id, source_project.owner_user_id), COALESCE(target_branch.contributor_id, target_project.owner_user_id)
+        SELECT c.target_causal_id, c.source_causal_id, COALESCE(target_branch.contributor_id, target_project.owner_user_id), COALESCE(source_branch.contributor_id, source_project.owner_user_id)
           FROM new_contributions nc
           JOIN contributions c ON c.id = nc.contribution_id
           JOIN project_branches source_branch ON source_branch.id = c.source_branch
