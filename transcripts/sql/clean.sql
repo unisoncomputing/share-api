@@ -2,6 +2,8 @@
 -- Doesn't clean codebase tables since that just slows things down, but does clean out codebase ownership.
 SET client_min_messages TO WARNING;
 TRUNCATE TABLE users CASCADE;
+TRUNCATE TABLE superadmins CASCADE;
+TRUNCATE TABLE role_memberships CASCADE;
 TRUNCATE TABLE loose_code_roots CASCADE;
 TRUNCATE TABLE org_members CASCADE;
 TRUNCATE TABLE tours CASCADE;
@@ -22,9 +24,18 @@ TRUNCATE TABLE contribution_status_events CASCADE;
 TRUNCATE TABLE tickets CASCADE;
 TRUNCATE TABLE comments CASCADE;
 TRUNCATE TABLE comment_revisions CASCADE;
+TRUNCATE TABLE teams CASCADE;
+TRUNCATE TABLE team_members CASCADE;
+TRUNCATE TABLE orgs CASCADE;
+TRUNCATE TABLE subjects CASCADE;
+TRUNCATE TABLE resources CASCADE;
+TRUNCATE TABLE contribution_diff_queue CASCADE;
+TRUNCATE TABLE namespace_diffs CASCADE;
 
 TRUNCATE TABLE namespace_ownership CASCADE;
 TRUNCATE TABLE causal_ownership CASCADE;
+-- Transcripts should generally behave the same with or without truncating these, and leaving them in place saves
+-- time when rerunning tests.
 -- TRUNCATE TABLE branch_hashes CASCADE;
 -- TRUNCATE TABLE namespaces CASCADE;
 -- TRUNCATE TABLE causals CASCADE;
