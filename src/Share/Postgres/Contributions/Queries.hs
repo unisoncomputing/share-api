@@ -284,11 +284,32 @@ updateContribution callerUserId contributionId newTitle newDescription newStatus
           description = #{updatedDescription},
           status = #{updatedStatus},
           source_branch = #{updatedSourceBranchId},
-          target_branch = #{updatedTargetBranchId},
-          source_causal_id = (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedSourceBranchId}),
-          target_causal_id = (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedTargetBranchId})
+          target_branch = #{updatedTargetBranchId}
         WHERE id = #{contributionId}
         |]
+    -- We don't want to change the causals for merged or closed contributions because it
+    -- messes with the diffs.
+    -- But we do want to update them if the source or target branch has changed.
+    when
+      ( updatedStatus == InReview
+          || updatedStatus == Draft
+          || newSourceBranchId /= (Just sourceBranchId)
+          || newTargetBranchId /= (Just targetBranchId)
+      )
+      do
+        lift $
+          PG.execute_
+            [PG.sql|
+          UPDATE contributions
+          SET
+            source_causal_id = (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedSourceBranchId}),
+            target_causal_id = (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedTargetBranchId}),
+            best_common_ancestor_causal_id = best_common_causal_ancestor(
+              (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedSourceBranchId}),
+              (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = #{updatedTargetBranchId})
+            )
+          WHERE id = #{contributionId}
+          |]
 
 insertContributionStatusChangeEvent :: ContributionId -> UserId -> Maybe ContributionStatus -> ContributionStatus -> PG.Transaction e ()
 insertContributionStatusChangeEvent contributionId actorUserId oldStatus newStatus = do
