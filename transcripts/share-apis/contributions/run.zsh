@@ -129,10 +129,8 @@ for i in {1..5}; do
   fi
 done
 
-# Temporarily commenting this test out
-
 # BCA of contribution diff should still be frozen at it's pre-merge hash. The bca and source hash should be different (or else we'd see no diff!)
-# fetch "$transcripts_user" GET merged-contribution-diff '/users/transcripts/projects/bca-updates/contributions/1/diff'
+fetch "$transcripts_user" GET merged-contribution-diff '/users/transcripts/projects/bca-updates/contributions/1/diff'
 
 # Fetch the contribution for feature-two which was based on feature-one, which was just merged.
 # It should now be marked as merging into main.

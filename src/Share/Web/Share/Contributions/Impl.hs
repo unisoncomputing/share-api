@@ -270,8 +270,8 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
     ) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     contribution@Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId} <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-    newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-    oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    newBranch <- Q.branchById Q.IncludeDeleted newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    oldBranch <- Q.branchById Q.IncludeDeleted oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     pure (project, contribution, oldBranch, newBranch)
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
@@ -324,8 +324,8 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
       ) <- PG.runTransactionOrRespondError $ do
       project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
       contribution@Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId} <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-      newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-      oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+      newBranch <- Q.branchById Q.IncludeDeleted newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+      oldBranch <- Q.branchById Q.IncludeDeleted oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
       pure (project, contribution, oldBranch, newBranch)
     authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
@@ -382,8 +382,8 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
       ) <- PG.runTransactionOrRespondError $ do
       project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
       contribution@Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId} <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
-      newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-      oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+      newBranch <- Q.branchById Q.IncludeDeleted newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+      oldBranch <- Q.branchById Q.IncludeDeleted oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
       pure (project, contribution, oldBranch, newBranch)
     authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
@@ -437,8 +437,8 @@ mergeContributionEndpoint session userHandle projectSlug contributionNumber (AtK
     currentContributionStateToken <- ContributionsQ.contributionStateTokenById contribution.contributionId
     when (currentContributionStateToken /= contributionStateToken) do
       throwSomeServerError (ContributionStateChangedError contributionStateToken currentContributionStateToken)
-    sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-    targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    sourceBranch <- Q.branchById Q.IncludeDeleted contribution.sourceBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    targetBranch <- Q.branchById Q.IncludeDeleted contribution.targetBranchId `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     isFastForward <- CausalQ.isFastForward targetBranch.causal sourceBranch.causal
     if isFastForward
       then do
@@ -472,8 +472,8 @@ checkMergeContributionEndpoint session userHandle projectSlug contributionNumber
     Merged -> pure $ CheckMergeContributionResponse {mergeability = AlreadyMerged}
     _ -> do
       isFastForward <- PG.runTransactionOrRespondError do
-        sourceBranch <- Q.branchById contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-        targetBranch <- Q.branchById contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+        sourceBranch <- Q.branchById Q.IncludeDeleted contribution.sourceBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+        targetBranch <- Q.branchById Q.IncludeDeleted contribution.targetBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
         CausalQ.isFastForward targetBranch.causal sourceBranch.causal
       if isFastForward
         then pure CheckMergeContributionResponse {mergeability = CanFastForward}
