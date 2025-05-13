@@ -82,6 +82,7 @@
                 "branchName": "feature",
                 "branchShortHand": "feature"
               },
+              "number": 3,
               "project": {
                 "projectId": "P-<UUID>",
                 "projectOwnerHandle": "test",

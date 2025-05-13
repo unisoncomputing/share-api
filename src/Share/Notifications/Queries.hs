@@ -318,7 +318,8 @@ hydrateEventData = \case
             title = contribution.title,
             description = contribution.description,
             contributionId,
-            status = contribution.status
+            status = contribution.status,
+            number = contribution.number
           }
     hydrateProjectBranchPayload projectId branchId = do
       branchInfo <- hydrateBranchPayload branchId

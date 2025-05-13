@@ -470,12 +470,13 @@ data ProjectContributionPayload = ProjectContributionPayload
     author :: UserDisplayInfo,
     title :: Text,
     description :: Maybe Text,
-    status :: ContributionStatus
+    status :: ContributionStatus,
+    number :: ContributionNumber
   }
   deriving stock (Show, Eq)
 
 instance ToJSON ProjectContributionPayload where
-  toJSON ProjectContributionPayload {projectInfo, mergeSourceBranch, mergeTargetBranch, contributionId, author, title, description, status} =
+  toJSON ProjectContributionPayload {projectInfo, mergeSourceBranch, mergeTargetBranch, contributionId, author, title, description, status, number} =
     Aeson.object
       [ "project" Aeson..= projectInfo,
         "mergeSourceBranch" Aeson..= mergeSourceBranch,
@@ -484,7 +485,8 @@ instance ToJSON ProjectContributionPayload where
         "author" Aeson..= author,
         "title" Aeson..= title,
         "description" Aeson..= description,
-        "status" Aeson..= status
+        "status" Aeson..= status,
+        "number" Aeson..= number
       ]
 
 instance FromJSON ProjectContributionPayload where
@@ -497,7 +499,8 @@ instance FromJSON ProjectContributionPayload where
     title <- o Aeson..: "title"
     description <- o Aeson..: "description"
     status <- o Aeson..: "status"
-    pure ProjectContributionPayload {projectInfo, mergeSourceBranch, mergeTargetBranch, contributionId, author, title, description, status}
+    number <- o Aeson..: "number"
+    pure ProjectContributionPayload {projectInfo, mergeSourceBranch, mergeTargetBranch, contributionId, author, title, description, status, number}
 
 data HydratedEventPayload
   = ProjectBranchUpdatedPayload ProjectBranchPayload
