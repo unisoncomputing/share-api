@@ -16,8 +16,7 @@ submitContributionsToBeDiffed contributions = do
     [sql|
       WITH new_contributions(contribution_id) AS (
         SELECT * FROM ^{singleColumnTable (toList contributions)}
-      )
-      INSERT INTO causal_diff_queue (from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner)
+      ), diff_info(from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner) AS (
         SELECT c.target_causal_id, c.source_causal_id, COALESCE(target_branch.contributor_id, target_project.owner_user_id), COALESCE(source_branch.contributor_id, source_project.owner_user_id)
           FROM new_contributions nc
           JOIN contributions c ON c.id = nc.contribution_id
@@ -25,6 +24,17 @@ submitContributionsToBeDiffed contributions = do
           JOIN project_branches target_branch ON target_branch.id = c.target_branch
           JOIN projects source_project ON source_project.id = source_branch.project_id
           JOIN projects target_project ON target_project.id = target_branch.project_id
+      )
+      INSERT INTO causal_diff_queue (from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner)
+        SELECT from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner
+        FROM diff_info
+          WHERE NOT EXISTS (
+            SELECT FROM namespace_diffs nd
+              WHERE nd.left_causal_id = diff_info.from_causal_id
+              AND nd.right_causal_id = diff_info.to_causal_id
+              AND nd.left_codebase_owner_user_id = diff_info.from_codebase_owner
+              AND nd.right_codebase_owner_user_id = diff_info.to_codebase_owner
+          )
         ON CONFLICT DO NOTHING
     |]
   Notif.notifyChannel Notif.CausalDiffChannel
