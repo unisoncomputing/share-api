@@ -147,7 +147,7 @@ jobs:
         with:
           images: ${{ env.container_registry }}/${{ env.docker_image_name }}
           tags: |
-            type=sha,priority=1000,format=short,prefix={{branch}}_{{date 'YYYY-MM-DD-HH-mm'}}_
+            type=sha,priority=1000,format=short,prefix={{branch}}_{{date 'YYYY-MM-DD-HH-mm'}}_gitref-
             type=sha,format=long
 
       # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
