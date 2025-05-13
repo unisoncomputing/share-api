@@ -1,13 +1,18 @@
 {
   "body": {
-    "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
     "completedTours": [],
-    "handle": "localgithubuser",
+    "displayInfo": {
+      "info": {
+        "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
+        "handle": "localgithubuser",
+        "name": "Local Github User",
+        "userId": "U-<UUID>"
+      },
+      "kind": "user"
+    },
     "isSuperadmin": false,
-    "name": "Local Github User",
     "organizationMemberships": [],
-    "primaryEmail": "local@example.com",
-    "userId": "U-<UUID>"
+    "primaryEmail": "local@example.com"
   },
   "status": [
     {

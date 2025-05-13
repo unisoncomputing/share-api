@@ -14,7 +14,7 @@ import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
 import Share.Web.Authorization.Types (RolePermission)
-import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UnifiedDisplayInfo, UserDisplayInfo (..))
 import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
@@ -50,32 +50,28 @@ instance ToJSON UserKind where
     OrgKind -> "org"
 
 data DescribeUserProfile = DescribeUserProfile
-  { handle :: UserHandle,
-    name :: Maybe Text,
-    avatarUrl :: Maybe URIParam,
-    bio :: Maybe Text,
+  { bio :: Maybe Text,
     website :: Maybe Text,
     location :: Maybe Text,
     twitterHandle :: Maybe Text,
     pronouns :: Maybe Text,
     kind :: UserKind,
-    permissions :: Set RolePermission
+    permissions :: Set RolePermission,
+    displayInfo :: UnifiedDisplayInfo
   }
   deriving (Show)
 
 instance ToJSON DescribeUserProfile where
-  toJSON (DescribeUserProfile handle name avatarUrl bio website location twitterHandle pronouns kind permissions) =
+  toJSON (DescribeUserProfile bio website location twitterHandle pronouns kind permissions displayInfo) =
     Aeson.object
-      [ "handle" .= fromId @UserHandle @Text handle,
-        "name" .= name,
-        "avatarUrl" .= avatarUrl,
-        "bio" .= bio,
+      [ "bio" .= bio,
         "website" .= website,
         "location" .= location,
         "twitterHandle" .= twitterHandle,
         "pronouns" .= pronouns,
         "kind" .= kind,
-        "permissions" Aeson..= permissions
+        "permissions" Aeson..= permissions,
+        "displayInfo" .= displayInfo
       ]
 
 data ReadmeResponse = ReadmeResponse
@@ -102,7 +98,7 @@ instance ToJSON DocResponse where
       ]
 
 data SearchResult
-  = SearchResultUser UserDisplayInfo
+  = SearchResultUserLike UnifiedDisplayInfo
   | -- | shorthand summary visibility
     SearchResultProject ProjectShortHand (Maybe Text) ProjectVisibility
   | SearchResultOrg OrgDisplayInfo
@@ -110,13 +106,10 @@ data SearchResult
 
 instance ToJSON SearchResult where
   toJSON = \case
-    SearchResultUser (UserDisplayInfo {handle, name, avatarUrl, userId}) ->
+    SearchResultUserLike userLike ->
       Aeson.object
-        [ "handle" .= fromId @UserHandle @Text handle,
-          "name" .= name,
-          "avatarUrl" .= avatarUrl,
-          "userId" .= userId,
-          "tag" .= ("User" :: Text)
+        [ "displayInfo" .= userLike,
+          "tag" .= ("UserLike" :: Text)
         ]
     SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl, userId}, orgId}) ->
       Aeson.object
@@ -136,29 +129,23 @@ instance ToJSON SearchResult where
         ]
 
 data UserAccountInfo = UserAccountInfo
-  { handle :: UserHandle,
-    name :: Maybe Text,
-    avatarUrl :: Maybe URIParam,
-    userId :: UserId,
-    primaryEmail :: Maybe Email,
+  { primaryEmail :: Maybe Email,
     -- List of tours which the user has completed.
     completedTours :: [TourId],
     organizationMemberships :: [UserHandle],
-    isSuperadmin :: Bool
+    isSuperadmin :: Bool,
+    displayInfo :: UnifiedDisplayInfo
   }
   deriving (Show)
 
 instance ToJSON UserAccountInfo where
   toJSON UserAccountInfo {..} =
     Aeson.object
-      [ "handle" .= fromId @UserHandle @Text handle,
-        "name" .= name,
-        "avatarUrl" .= avatarUrl,
-        "primaryEmail" .= primaryEmail,
-        "userId" .= userId,
+      [ "primaryEmail" .= primaryEmail,
         "completedTours" .= completedTours,
         "organizationMemberships" .= organizationMemberships,
-        "isSuperadmin" .= isSuperadmin
+        "isSuperadmin" .= isSuperadmin,
+        "displayInfo" .= displayInfo
       ]
 
 type PathSegment = Text

@@ -1,15 +1,20 @@
 {
   "body": {
-    "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
     "completedTours": [],
-    "handle": "transcripts",
+    "displayInfo": {
+      "info": {
+        "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+        "handle": "transcripts",
+        "name": "Transcript User",
+        "userId": "U-<UUID>"
+      },
+      "kind": "user"
+    },
     "isSuperadmin": false,
-    "name": "Transcript User",
     "organizationMemberships": [
       "unison"
     ],
-    "primaryEmail": "transcripts@example.com",
-    "userId": "U-<UUID>"
+    "primaryEmail": "transcripts@example.com"
   },
   "status": [
     {

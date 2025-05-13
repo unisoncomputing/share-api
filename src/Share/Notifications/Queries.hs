@@ -17,42 +17,51 @@ module Share.Notifications.Queries
     deleteNotificationSubscription,
     updateNotificationSubscription,
     getNotificationSubscription,
+    hydrateEventData,
   )
 where
 
+import Control.Lens
 import Data.Foldable qualified as Foldable
 import Data.Ord (clamp)
 import Data.Set.NonEmpty (NESet)
 import Data.Time (UTCTime)
+import Share.Contribution
 import Share.IDs
 import Share.Notifications.Types
 import Share.Postgres
+import Share.Postgres qualified as PG
+import Share.Postgres.Contributions.Queries qualified as ContributionQ
+import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
+import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
+import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
-recordEvent (NotificationEvent {eventScope, eventData, eventResourceId}) = do
+recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventActor}) = do
   execute_
     [sql|
-      INSERT INTO notification_events (topic, scope_user_id, resource_id, data)
-      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventResourceId}, #{eventData})
+      INSERT INTO notification_events (topic, scope_user_id, actor_user_id, resource_id, data)
+      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventActor}, #{eventResourceId}, #{eventData})
     |]
 
-expectEvent :: (QueryM m) => NotificationEventId -> m (NotificationEvent NotificationEventId UTCTime)
+expectEvent :: (QueryM m) => NotificationEventId -> m PGNotificationEvent
 expectEvent eventId = do
-  queryExpect1Row @(NotificationEvent NotificationEventId UTCTime)
+  queryExpect1Row @PGNotificationEvent
     [sql|
-      SELECT id, occurred_at, scope_user_id, resource_id, topic, data
+      SELECT id, occurred_at, scope_user_id, actor_user_id, resource_id, topic, data
         FROM notification_events
       WHERE id = #{eventId}
     |]
 
-listNotificationHubEntries :: (QueryA m) => UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> m [NotificationHubEntry]
+listNotificationHubEntries :: UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload]
 listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = do
   let limit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
   let statusFilterList = Foldable.toList <$> statusFilter
-  queryListRows @NotificationHubEntry
-    [sql|
-      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.resource_id, event.topic, event.data
+  dbNotifications <-
+    queryListRows @(NotificationHubEntry UserId NotificationEventData)
+      [sql|
+      SELECT hub.id, hub.status, event.id, event.occurred_at, event.scope_user_id, event.actor_user_id, event.resource_id, event.topic, event.data
         FROM notification_hub_entries hub
         JOIN notification_events event ON hub.event_id = event.id
       WHERE hub.user_id = #{notificationUserId}
@@ -61,6 +70,8 @@ listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = 
       ORDER BY hub.created_at DESC
       LIMIT #{limit}
     |]
+  hydrated <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventData
+  hydrated & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
 
 updateNotificationHubEntries :: (QueryA m) => NESet NotificationHubEntryId -> NotificationStatus -> m ()
 updateNotificationHubEntries hubEntryIds status = do
@@ -277,3 +288,81 @@ getNotificationSubscription subscriberUserId subscriptionId = do
       WHERE ns.id = #{subscriptionId}
         AND ns.subscriber_user_id = #{subscriberUserId}
     |]
+
+-- | Events are complex, so for now we hydrate them one at a time using a simple traverse
+-- (preferably pipelined).
+--
+-- If need be we can write a batch job in plpgsql to hydrate them all at once.
+hydrateEventData :: forall m. (QueryA m) => NotificationEventData -> m HydratedEventPayload
+hydrateEventData = \case
+  ProjectBranchUpdatedData
+    (ProjectBranchData {projectId, branchId}) -> do
+      ProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
+  ProjectContributionCreatedData
+    (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
+      ProjectContributionCreatedPayload <$> hydrateContributionInfo contributionId projectId fromBranchId toBranchId contributorUserId
+  where
+    hydrateContributionInfo :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionPayload
+    hydrateContributionInfo contributionId projectId fromBranchId toBranchId authorUserId = do
+      author <- UsersQ.userDisplayInfoOf id authorUserId
+      projectInfo <- hydrateProjectPayload projectId
+      mergeTargetBranch <- hydrateBranchPayload fromBranchId
+      mergeSourceBranch <- hydrateBranchPayload toBranchId
+      contribution <- ContributionQ.contributionById contributionId
+      pure $
+        ProjectContributionPayload
+          { projectInfo,
+            mergeSourceBranch,
+            mergeTargetBranch,
+            author,
+            title = contribution.title,
+            description = contribution.description,
+            contributionId,
+            status = contribution.status
+          }
+    hydrateProjectBranchPayload projectId branchId = do
+      branchInfo <- hydrateBranchPayload branchId
+      projectInfo <- hydrateProjectPayload projectId
+      pure $ ProjectBranchPayload {projectInfo, branchInfo}
+    hydrateBranchPayload :: BranchId -> m BranchPayload
+    hydrateBranchPayload branchId = do
+      queryExpect1Row
+        [sql|
+          SELECT b.name, contributor.id, contributor.handle
+          FROM project_branches b
+          LEFT JOIN users contributor ON b.contributor_id = contributor.id
+          WHERE b.id = #{branchId}
+          |]
+        <&> \( branchName,
+               branchContributorUserId,
+               branchContributorHandle
+               ) ->
+            let branchShortHand = BranchShortHand {contributorHandle = branchContributorHandle, branchName}
+             in BranchPayload
+                  { branchId,
+                    branchName,
+                    branchShortHand,
+                    branchContributorUserId,
+                    branchContributorHandle
+                  }
+    hydrateProjectPayload :: ProjectId -> m ProjectPayload
+    hydrateProjectPayload projectId = do
+      queryExpect1Row
+        [sql|
+          SELECT p.slug, owner.handle, p.owner_user_id
+          FROM projects p
+          JOIN users owner ON p.owner_user_id = owner.id
+          WHERE p.id = #{projectId}
+          |]
+        <&> \( projectSlug,
+               projectOwnerHandle,
+               projectOwnerUserId
+               ) ->
+            let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
+             in ProjectPayload
+                  { projectId,
+                    projectSlug,
+                    projectShortHand,
+                    projectOwnerHandle,
+                    projectOwnerUserId
+                  }

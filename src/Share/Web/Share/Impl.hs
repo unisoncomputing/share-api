@@ -38,7 +38,6 @@ import Share.Utils.API
 import Share.Utils.Caching
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
-import Share.Utils.URI (URIParam (..))
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
@@ -48,7 +47,7 @@ import Share.Web.Share.Branches.Impl qualified as Branches
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
-import Share.Web.Share.DisplayInfo (OrgDisplayInfo (..), UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
@@ -289,29 +288,27 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
 
 getUserProfileEndpoint :: Maybe UserId -> UserHandle -> WebApp DescribeUserProfile
 getUserProfileEndpoint callerUserId userHandle = do
-  (UserProfile {user_name, avatar_url, bio, website, location, twitterHandle, pronouns}, kind, permissions) <- PG.runTransactionOrRespondError do
+  PG.runTransactionOrRespondError do
     User {user_id} <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-    profile <- UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
+    displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
+    UserProfile {bio, website, location, twitterHandle, pronouns} <- UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
     (kind, permissions) <-
       OrgQ.orgByUserId user_id >>= \case
         Just (Org {orgId}) -> do
           permissionsWithinOrg <- AuthZQ.permissionsForOrg callerUserId orgId
           pure (OrgKind, permissionsWithinOrg)
         Nothing -> pure (UserKind, mempty)
-    pure (profile, kind, permissions)
-  pure $
-    DescribeUserProfile
-      { handle = userHandle,
-        name = user_name,
-        avatarUrl = avatar_url,
-        bio = bio,
-        website = website,
-        location = location,
-        twitterHandle = twitterHandle,
-        pronouns = pronouns,
-        kind,
-        permissions
-      }
+    pure $
+      DescribeUserProfile
+        { bio = bio,
+          website = website,
+          location = location,
+          twitterHandle = twitterHandle,
+          pronouns = pronouns,
+          kind,
+          permissions,
+          displayInfo = displayInfo
+        }
 
 updateUserEndpoint :: UserHandle -> UserId -> UpdateUserRequest -> WebApp DescribeUserProfile
 updateUserEndpoint userHandle callerUserId (UpdateUserRequest {name, avatarUrl, bio, website, location, twitterHandle, pronouns}) = do
@@ -364,17 +361,12 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
   -- We don't have a great way to order users and projects together, so we just limit to a max
   -- of 5 users (who match the query as a prefix), then return the rest of the results from
   -- projects.
-  (users, projects) <- PG.runTransaction $ do
-    users <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+  (userLikes, projects) <- PG.runTransaction $ do
+    userLikes <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+    userLikesWithInfo <- DisplayInfoQ.userLikeDisplayInfoOf traversed userLikes
     projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
-    userResultsWithOrgInfo <- OrgQ.orgsByIdsOf (traversed . _2 . _Just) users
-    pure (userResultsWithOrgInfo, projects)
-  let userResults =
-        users
-          <&> \(User {user_name = name, avatar_url = avatarUrl, handle, user_id = userId}, mayOrgInfo) ->
-            case mayOrgInfo of
-              Just (Org {orgId, isCommercial}) -> SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId}, orgId, isCommercial})
-              Nothing -> SearchResultUser (UserDisplayInfo {handle, name, avatarUrl = unpackURI <$> avatarUrl, userId})
+    pure (userLikesWithInfo, projects)
+  let userResults = SearchResultUserLike <$> userLikes
   let projectResults =
         projects
           <&> \(Project {slug, summary, visibility}, ownerHandle) ->
@@ -486,23 +478,20 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
 
 accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do
-  User {user_name, avatar_url, user_email, handle, user_id} <- PGO.expectUserById sessionUserId
-  (completedTours, organizationMemberships, isSuperadmin) <- PG.runTransaction $ do
-    tours <- Q.getCompletedToursForUser user_id
-    memberships <- Q.organizationMemberships user_id
+  User {user_email, user_id} <- PGO.expectUserById sessionUserId
+  PG.runTransaction $ do
+    completedTours <- Q.getCompletedToursForUser user_id
+    organizationMemberships <- Q.organizationMemberships user_id
     isSuperadmin <- AuthZQ.isSuperadmin user_id
-    pure (tours, memberships, isSuperadmin)
-  pure $
-    UserAccountInfo
-      { handle = handle,
-        name = user_name,
-        avatarUrl = avatar_url,
-        userId = user_id,
-        primaryEmail = user_email,
-        completedTours,
-        organizationMemberships,
-        isSuperadmin
-      }
+    displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
+    pure $
+      UserAccountInfo
+        { primaryEmail = user_email,
+          completedTours,
+          organizationMemberships,
+          isSuperadmin,
+          displayInfo
+        }
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent
 completeToursEndpoint Session {sessionUserId} flows = do

@@ -14,7 +14,7 @@ import Data.Text (Text)
 import Share.IDs
 import Share.Postgres (DecodeRow (..), decodeField)
 import Share.Utils.URI (URIParam)
-import Share.Web.Share.DisplayInfo (UserDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 
 data Org = Org {orgId :: OrgId, isCommercial :: Bool}
   deriving (Show, Eq, Ord)
