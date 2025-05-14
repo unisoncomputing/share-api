@@ -6,7 +6,7 @@
       "name": null,
       "userId": "U-<UUID>"
     },
-    "contributionStateToken": "C-<UUID>:B-<UUID>:B-<UUID>:glncbgqvg94ktnvdddlk96osvlnfi62dnm8u70vit40gk9htt683s2a4afcl13k2t14ah0ks02gp7qu4q6l1bapspju5eiu8q81ova8:glncbgqvg94ktnvdddlk96osvlnfi62dnm8u70vit40gk9htt683s2a4afcl13k2t14ah0ks02gp7qu4q6l1bapspju5eiu8q81ova8:merged",
+    "contributionStateToken": "C-<UUID>:B-<UUID>:B-<UUID>:glncbgqvg94ktnvdddlk96osvlnfi62dnm8u70vit40gk9htt683s2a4afcl13k2t14ah0ks02gp7qu4q6l1bapspju5eiu8q81ova8:rl08e4s9jm58fhj7uslg0qlndg2qhlp6gdd2thjicgpakqbkeumgeo220hgrh27jcd3kqh1o9b24dimpssr9eq2pe2icdu7nffkabsg:merged",
     "createdAt": "<TIMESTAMP>",
     "description": "My description",
     "id": "C-<UUID>",

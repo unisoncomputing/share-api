@@ -10,7 +10,7 @@ module Share.Metrics
     tickUserSignup,
     recordBackgroundImportDuration,
     recordDefinitionSearchIndexDuration,
-    recordContributionDiffDuration,
+    recordCausalDiffDuration,
     recordWebhookSendingDuration,
   )
 where
@@ -445,8 +445,8 @@ recordBackgroundImportDuration = timeActionIntoHistogram backgroundImportDuratio
 recordDefinitionSearchIndexDuration :: (MonadUnliftIO m) => m r -> m r
 recordDefinitionSearchIndexDuration = timeActionIntoHistogram definitionSearchIndexDurationSeconds (deployment, service)
 
-recordContributionDiffDuration :: Clock.TimeSpec -> IO ()
-recordContributionDiffDuration startTime = do
+recordCausalDiffDuration :: Clock.TimeSpec -> IO ()
+recordCausalDiffDuration startTime = do
   endTime <- Clock.getTime Monotonic
   recordLatency contributionDiffDurationSeconds (deployment, service) startTime endTime
 

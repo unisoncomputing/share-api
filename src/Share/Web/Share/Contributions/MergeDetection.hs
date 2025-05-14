@@ -14,7 +14,7 @@ import Share.Postgres.Contributions.Queries qualified as ContributionQ
 updateContributionsFromBranchUpdate :: UserId -> BranchId -> PG.Transaction e ()
 updateContributionsFromBranchUpdate callerUserId branchId = do
   contributionsWithUpdatedBCAs <- ContributionQ.performMergesAndBCAUpdatesFromBranchPush callerUserId branchId
-  _rebasedContributions <- ContributionQ.rebaseContributionsFromMergedBranches contributionsWithUpdatedBCAs
+  rebasedContributions <- ContributionQ.rebaseContributionsFromMergedBranches contributionsWithUpdatedBCAs
   affectedContributions <- ContributionQ.contributionsRelatedToBranches (Set.singleton branchId)
-  DiffsQ.submitContributionsToBeDiffed (Set.fromList affectedContributions)
+  DiffsQ.submitContributionsToBeDiffed (Set.fromList affectedContributions <> rebasedContributions)
   pure ()

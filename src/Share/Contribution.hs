@@ -77,6 +77,8 @@ data Contribution = Contribution
     status :: ContributionStatus,
     sourceBranchId :: BranchId,
     targetBranchId :: BranchId,
+    sourceCausalId :: CausalId,
+    targetCausalId :: CausalId,
     bestCommonAncestorCausalId :: Maybe CausalId,
     createdAt :: UTCTime,
     updatedAt :: UTCTime,
@@ -94,6 +96,8 @@ instance Hasql.DecodeRow Contribution where
     status <- PG.decodeField
     sourceBranchId <- PG.decodeField
     targetBranchId <- PG.decodeField
+    sourceCausalId <- PG.decodeField
+    targetCausalId <- PG.decodeField
     bestCommonAncestorCausalId <- PG.decodeField
     createdAt <- PG.decodeField
     updatedAt <- PG.decodeField

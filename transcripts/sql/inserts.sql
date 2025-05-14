@@ -287,6 +287,8 @@ INSERT INTO contributions (
     status,
     source_branch,
     target_branch,
+    source_causal_id,
+    target_causal_id,
     author_id)
 VALUES (
     '511fbf1c-5353-4e01-ba23-b94e6092ede5',
@@ -307,6 +309,8 @@ I tested this change locally on my development environment and confirmed that us
     'in_review',
     'bb343b05-2da8-47a4-b008-d45b8b367116',
     'a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
+    (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = 'bb343b05-2da8-47a4-b008-d45b8b367116' LIMIT 1),
+    (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = 'a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d' LIMIT 1),
     'd32f4ddf-2423-4f10-a4de-465939951354');
 
 INSERT INTO contribution_status_events (
@@ -359,6 +363,8 @@ INSERT INTO contributions (
     status,
     source_branch,
     target_branch,
+    source_causal_id,
+    target_causal_id,
     author_id)
 VALUES (
     '3560fa5d-d29d-49b8-bf4f-1045fef31c81',
@@ -379,6 +385,8 @@ I tested the pagination feature with a large dataset to ensure it functions corr
     'in_review',
     'bb343b05-2da8-47a4-b008-d45b8b367116',
     'a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
+    (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = 'bb343b05-2da8-47a4-b008-d45b8b367116' LIMIT 1),
+    (SELECT pb.causal_id FROM project_branches pb WHERE pb.id = 'a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d' LIMIT 1),
     'd32f4ddf-2423-4f10-a4de-465939951354');
 
 INSERT INTO contribution_status_events (

@@ -190,7 +190,7 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
     branchById = do
       ucmBranchId <- hoistMaybe mayBranchId
       branchId <- lift $ parseParam @BranchId "branchId" ucmBranchId
-      MaybeT $ PG.runTransaction $ Q.branchById branchId
+      MaybeT $ PG.runTransaction $ Q.branchById Q.ExcludeDeleted branchId
     importCausalToCallerCodebase :: AuthZ.AuthZReceipt -> UserId -> UserId -> CausalId -> WebApp ()
     importCausalToCallerCodebase authZReceipt fromUserId destinationUserId causalId = do
       void . UnliftIO.forkIO . Metrics.recordBackgroundImportDuration . UnliftIO.handleAny errHandler . void . UnliftIO.timeout backgroundImportTimeout $ do
@@ -339,7 +339,7 @@ setProjectBranchHead :: UserId -> ProjectId -> BranchId -> (Maybe CausalHash) ->
 setProjectBranchHead callerUserId projectId branchId mayOldCausalHash newCausalHash = toResponse do
   lift $ addRequestTag "branch-id" (IDs.toText branchId)
   (Project {ownerUserId}, branch@Branch {contributorId}) <- pgT do
-    branch <- (Q.branchById branchId) `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Branch not found")
+    branch <- (Q.branchById Q.ExcludeDeleted branchId) `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Branch not found")
     project <- (Q.projectById projectId) `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Project not found")
     pure (project, branch)
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase ownerUserId contributorId
@@ -349,7 +349,7 @@ setProjectBranchHead callerUserId projectId branchId mayOldCausalHash newCausalH
   newCausalId <- lift (SyncQ.ensureCausalIsFlushed codebase newCausalHash) `whenNothingM` throwError (UCMProjects.SetProjectBranchHeadResponseMissingCausalHash (causalHashToHash32 newCausalHash))
   pgT $ do
     -- Refetch the branch now that we're ready to update so we know its in the same transaction.
-    Branch {causal = currentCausalId} <- Q.branchById branchId `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Branch not found")
+    Branch {causal = currentCausalId} <- Q.branchById Q.ExcludeDeleted branchId `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Branch not found")
     currentCausalHash <- CausalQ.expectCausalHashesByIdsOf id currentCausalId
     mayOldCausal <- Codebase.codebaseMToTransaction codebase $ do
       for mayOldCausalHash \oldCausalHash -> (oldCausalHash,) <$> Codebase.expectCausalIdByHash oldCausalHash
@@ -406,7 +406,7 @@ getBestNameLookupBase projectId mayMergeTargetBranchId = runMaybeT do
     hoistMaybe = MaybeT . pure
     mergeTargetCausalHash = do
       mergeTargetBranchId <- hoistMaybe mayMergeTargetBranchId
-      mergeTargetBranch <- MaybeT . PG.runTransaction $ Q.branchById mergeTargetBranchId
+      mergeTargetBranch <- MaybeT . PG.runTransaction $ Q.branchById Q.ExcludeDeleted mergeTargetBranchId
       pure $ Branch.causal mergeTargetBranch
     defaultBranchCausalHash = do
       mainBranch <- MaybeT $ PG.runTransaction $ Q.branchByProjectIdAndShortHand projectId defaultBranchShorthand

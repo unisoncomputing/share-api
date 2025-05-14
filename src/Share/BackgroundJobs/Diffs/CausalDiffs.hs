@@ -1,27 +1,24 @@
-module Share.BackgroundJobs.Diffs.ContributionDiffs (worker) where
+module Share.BackgroundJobs.Diffs.CausalDiffs (worker) where
 
 import Control.Lens
-import Control.Monad.Except
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Diffs.Queries qualified as DQ
+import Share.BackgroundJobs.Diffs.Types (CausalDiffInfo (..))
 import Share.BackgroundJobs.Errors (reportError)
-import Share.BackgroundJobs.Monad (Background, withTag)
+import Share.BackgroundJobs.Monad (Background, withTags)
 import Share.BackgroundJobs.Workers (newWorker)
-import Share.Branch (branchCausals_)
 import Share.Codebase qualified as Codebase
-import Share.Contribution (Contribution (..))
 import Share.Env qualified as Env
-import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Metrics qualified as Metrics
 import Share.Postgres qualified as PG
+import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.Notifications qualified as Notif
-import Share.Postgres.Queries qualified as Q
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
-import Share.Web.Errors (EntityMissing (..), ErrorID (..))
+import Share.Web.Errors (EntityMissing (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import System.Clock qualified as Clock
 
@@ -39,8 +36,8 @@ worker scope = do
       makeRuntime codebase = do
         runtime <- Codebase.codebaseRuntimeTransaction unisonRuntime codebase
         pure (badUnliftCodebaseRuntime runtime)
-  newWorker scope "diffs:contributions" $ forever do
-    Notif.waitOnChannel Notif.ContributionDiffChannel (maxPollingIntervalSeconds * 1000000)
+  newWorker scope "causal-diffs" $ forever do
+    Notif.waitOnChannel Notif.CausalDiffChannel (maxPollingIntervalSeconds * 1000000)
     processDiffs authZReceipt makeRuntime
 
 -- Process diffs until we run out of them. We claim a diff in a transaction and compute the diff in the same
@@ -52,20 +49,26 @@ processDiffs authZReceipt makeRuntime = do
       loop = do
         result <-
           PG.runTransactionMode PG.RepeatableRead PG.ReadWrite do
-            DQ.claimContributionToDiff >>= \case
+            DQ.claimCausalDiff >>= \case
               Nothing -> pure Nothing
-              Just contributionId -> do
+              Just causalDiffInfo -> do
                 startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
-                result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId)
-                pure (Just (contributionId, startTime, result))
-        whenJust result \(contributionId, startTime, result) -> do
-          withTag "contribution-id" (IDs.toText contributionId) do
+                result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt makeRuntime causalDiffInfo)
+                pure (Just (causalDiffInfo, startTime, result))
+        whenJust result \(CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}, startTime, result) -> do
+          let tags =
+                [ ("from-causal-id", IDs.toText fromCausalId),
+                  ("to-causal-id", IDs.toText toCausalId),
+                  ("from-codebase-owner", IDs.toText fromCodebaseOwner),
+                  ("to-codebase-owner", IDs.toText toCodebaseOwner)
+                ]
+          withTags tags do
             case result of
               Left err -> reportError err
               Right didWork -> do
                 when didWork do
-                  liftIO (Metrics.recordContributionDiffDuration startTime)
-                  Logging.textLog "Computed contribution diff"
+                  liftIO (Metrics.recordCausalDiffDuration startTime)
+                  Logging.textLog "Computed causal diff"
                     & Logging.withSeverity Logging.Info
                     & Logging.logMsg
           loop
@@ -76,27 +79,21 @@ processDiffs authZReceipt makeRuntime = do
 maybeComputeAndStoreCausalDiff ::
   AuthZ.AuthZReceipt ->
   (Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)) ->
-  ContributionId ->
+  CausalDiffInfo ->
   PG.Transaction EntityMissing Bool
-maybeComputeAndStoreCausalDiff authZReceipt makeRuntime contributionId = do
-  Contribution {bestCommonAncestorCausalId, sourceBranchId = newBranchId, targetBranchId = oldBranchId, projectId} <-
-    ContributionsQ.contributionById contributionId
-  project <- Q.projectById projectId `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-  newBranch <- Q.branchById newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
-  oldBranch <- Q.branchById oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
-  let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
-  let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-  let oldCausal = oldBranch ^. branchCausals_
-  let newCausal = newBranch ^. branchCausals_
-  ContributionsQ.existsPrecomputedNamespaceDiff (oldCodebase, oldCausal) (newCodebase, newCausal) >>= \case
+maybeComputeAndStoreCausalDiff authZReceipt makeRuntime (CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}) = do
+  bestCommonAncestorCausalId <- CausalQ.bestCommonAncestor fromCausalId toCausalId
+  let fromCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForUserCodebase fromCodebaseOwner
+  let toCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForUserCodebase toCodebaseOwner
+  ContributionsQ.existsPrecomputedNamespaceDiff (fromCodebase, fromCausalId) (toCodebase, toCausalId) >>= \case
     True -> pure False
     False -> do
-      oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
-      newRuntime <- PG.transactionUnsafeIO (makeRuntime newCodebase)
+      fromRuntime <- PG.transactionUnsafeIO (makeRuntime fromCodebase)
+      toRuntime <- PG.transactionUnsafeIO (makeRuntime toCodebase)
       _ <-
         Diffs.computeAndStoreCausalDiff
           authZReceipt
-          (oldCodebase, oldRuntime, oldCausal)
-          (newCodebase, newRuntime, newCausal)
+          (fromCodebase, fromRuntime, fromCausalId)
+          (toCodebase, toRuntime, toCausalId)
           bestCommonAncestorCausalId
       pure True

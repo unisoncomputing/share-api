@@ -430,23 +430,29 @@ branchByProjectIdAndShortHand projectId BranchShortHand {contributorHandle, bran
               AND deleted_at IS NULL
       |]
 
-branchById :: BranchId -> PG.Transaction e (Maybe (Branch CausalId))
-branchById branchId = do
+data DeletionFilter = IncludeDeleted | ExcludeDeleted
+  deriving (Eq, Show)
+
+branchById :: DeletionFilter -> BranchId -> PG.Transaction e (Maybe (Branch CausalId))
+branchById deletionFilter branchId = do
+  let includeDeleted = case deletionFilter of
+        IncludeDeleted -> True
+        ExcludeDeleted -> False
   PG.query1Row
     [PG.sql|
         SELECT
-          id,
-          project_id,
-          name,
-          contributor_id,
-          causal_id,
-          merge_target_branch_id,
-          created_at,
-          updated_at,
-          creator_id
-        FROM project_branches
-        WHERE id = #{branchId}
-              AND deleted_at IS NULL
+          pb.id,
+          pb.project_id,
+          pb.name,
+          pb.contributor_id,
+          pb.causal_id,
+          pb.merge_target_branch_id,
+          pb.created_at,
+          pb.updated_at,
+          pb.creator_id
+        FROM project_branches pb
+        WHERE pb.id = #{branchId}
+              AND (#{includeDeleted} OR pb.deleted_at IS NULL)
       |]
 
 branchByProjectBranchShortHand :: ProjectBranchShortHand -> PG.Transaction e (Maybe (Branch CausalId))
