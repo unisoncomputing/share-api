@@ -265,14 +265,16 @@ contributionDiffEndpoint ::
 contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber = do
   ( project@Project {projectId},
     Contribution {contributionId},
-    oldBranch@Branch {causal = oldBranchCausalId, branchId = oldBranchId},
-    newBranch@Branch {causal = newBranchCausalId, branchId = newBranchId}
+    oldBranch@Branch {branchId = oldBranchId},
+    newBranch@Branch {branchId = newBranchId},
+    oldCausalId,
+    newCausalId
     ) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-    contribution@Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId} <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
+    contribution@Contribution {sourceBranchId = newBranchId, targetBranchId = oldBranchId, sourceCausalId = newCausalId, targetCausalId = oldCausalId} <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     newBranch <- Q.branchById Q.IncludeDeleted newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
     oldBranch <- Q.branchById Q.IncludeDeleted oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
-    pure (project, contribution, oldBranch, newBranch)
+    pure (project, contribution, oldBranch, newBranch, oldCausalId, newCausalId)
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
@@ -281,22 +283,22 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
     lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
 
-  let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldBranchCausalId]
+  let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newCausalId, Caching.causalIdCacheKey oldCausalId]
   Caching.conditionallyCachedResponse authZReceipt "contribution-diff" cacheKeys do
-    (oldBranchCausalHash, newBranchCausalHash, maybeNamespaceDiff) <-
+    (oldCausalHash, newCausalHash, maybeNamespaceDiff) <-
       PG.runTransaction do
         PG.pipelined do
           (,,)
-            <$> CausalQ.expectCausalHashesByIdsOf id oldBranchCausalId
-            <*> CausalQ.expectCausalHashesByIdsOf id newBranchCausalId
-            <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldBranchCausalId) (newCodebase, newBranchCausalId)
+            <$> CausalQ.expectCausalHashesByIdsOf id oldCausalId
+            <*> CausalQ.expectCausalHashesByIdsOf id newCausalId
+            <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId)
     let response =
           ShareNamespaceDiffResponse
             { project = projectShorthand,
               newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-              newRefHash = Just $ PrefixedHash newBranchCausalHash,
+              newRefHash = Just $ PrefixedHash newCausalHash,
               oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
-              oldRefHash = Just $ PrefixedHash oldBranchCausalHash,
+              oldRefHash = Just $ PrefixedHash oldCausalHash,
               diff =
                 case maybeNamespaceDiff of
                   Just diff -> ShareNamespaceDiffStatus'Done (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
