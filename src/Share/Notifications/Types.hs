@@ -135,16 +135,18 @@ instance PG.EncodeValue NotificationFilter where
 data ProjectBranchData = ProjectBranchData
   { projectId :: ProjectId,
     branchId :: BranchId,
-    branchContributorUserId :: Maybe UserId
+    branchContributorUserId :: Maybe UserId,
+    public :: Bool
   }
   deriving stock (Eq, Show)
 
 instance Aeson.ToJSON ProjectBranchData where
-  toJSON ProjectBranchData {projectId, branchId, branchContributorUserId} =
+  toJSON ProjectBranchData {projectId, branchId, branchContributorUserId, public} =
     Aeson.object
       [ "projectId" .= projectId,
         "branchId" .= branchId,
-        "branchContributorUserId" .= branchContributorUserId
+        "branchContributorUserId" .= branchContributorUserId,
+        "public" .= public
       ]
 
 instance Aeson.FromJSON ProjectBranchData where
@@ -152,25 +154,28 @@ instance Aeson.FromJSON ProjectBranchData where
     projectId <- o .: "projectId"
     branchId <- o .: "branchId"
     branchContributorUserId <- o .: "branchContributorUserId"
-    pure ProjectBranchData {projectId, branchId, branchContributorUserId}
+    public <- o .: "public"
+    pure ProjectBranchData {projectId, branchId, branchContributorUserId, public}
 
 data ProjectContributionData = ProjectContributionData
   { projectId :: ProjectId,
     contributionId :: ContributionId,
     fromBranchId :: BranchId,
     toBranchId :: BranchId,
-    contributorUserId :: UserId
+    contributorUserId :: UserId,
+    public :: Bool
   }
   deriving stock (Eq, Show)
 
 instance Aeson.ToJSON ProjectContributionData where
-  toJSON ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId} =
+  toJSON ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId, public} =
     Aeson.object
       [ "projectId" .= projectId,
         "contributionId" .= contributionId,
         "fromBranchId" .= fromBranchId,
         "toBranchId" .= toBranchId,
-        "contributorUserId" .= contributorUserId
+        "contributorUserId" .= contributorUserId,
+        "public" .= public
       ]
 
 instance Aeson.FromJSON ProjectContributionData where
@@ -180,7 +185,8 @@ instance Aeson.FromJSON ProjectContributionData where
     fromBranchId <- o .: "fromBranchId"
     toBranchId <- o .: "toBranchId"
     contributorUserId <- o .: "contributorUserId"
-    pure ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}
+    public <- o .: "public"
+    pure ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId, public}
 
 -- The bare-bones Notification Event Data that's actually stored in the database.
 -- It holds unhydrated IDs.

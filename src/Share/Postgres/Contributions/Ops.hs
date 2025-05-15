@@ -55,21 +55,23 @@ createContribution authorId projectId title description status sourceBranchId ta
         RETURNING contributions.id, contributions.contribution_number
       |]
   ContribQ.insertContributionStatusChangeEvent contributionId authorId Nothing status
+  (projectResourceId, projectOwnerUserId, projectPrivate) <-
+    PG.queryExpect1Row
+      [PG.sql|
+    SELECT p.resource_id, p.owner_user_id, p.private
+    FROM projects p
+    WHERE p.id = #{projectId}
+    |]
+
   let contributionEventData =
         ProjectContributionData
           { projectId,
             contributionId,
             fromBranchId = sourceBranchId,
             toBranchId = targetBranchId,
-            contributorUserId = authorId
+            contributorUserId = authorId,
+            public = not projectPrivate
           }
-  (projectResourceId, projectOwnerUserId) <-
-    PG.queryExpect1Row
-      [PG.sql|
-    SELECT p.resource_id, p.owner_user_id FROM projects p
-    WHERE p.id = #{projectId}
-    |]
-
   let notifEvent =
         NotificationEvent
           { eventId = (),
