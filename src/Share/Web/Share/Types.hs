@@ -150,7 +150,7 @@ instance ToJSON SearchResult where
       Aeson.object
         [ "projectRef" .= shorthand,
           "summary" .= summary,
-          "tag" .= ("Project" :: Text),
+          "tag" .= ("project" :: Text),
           "visibility" .= visibility
         ]
 
@@ -176,6 +176,7 @@ instance ToJSON UserAccountInfo where
             "userId" .= userId,
             "isSuperadmin" .= isSuperadmin,
             "organizationMemberships" .= organizationMemberships,
+            "completedTours" .= completedTours,
             "primaryEmail" .= primaryEmail
           ]
       UnifiedOrg (OrgDisplayInfo {orgId, isCommercial, user = UserDisplayInfo {handle, name, avatarUrl, userId}}) ->
@@ -189,6 +190,7 @@ instance ToJSON UserAccountInfo where
                   "userId" .= userId
                 ],
             "isCommercial" .= isCommercial,
+            "organizationMemberships" .= organizationMemberships,
             "orgId" .= orgId
           ]
 
