@@ -1,38 +1,46 @@
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 -- | This module provides the background worker for sending notification webhooks.
 module Share.BackgroundJobs.Webhooks.Worker (worker) where
 
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Control.Monad.Except (runExceptT)
+import Control.Monad.Trans.Except (except)
 import Crypto.JWT (JWTError)
 import Data.Aeson (FromJSON (..), ToJSON (..))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types ((.=))
 import Data.ByteString.Lazy.Char8 qualified as BL
+import Data.List.Extra qualified as List
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (UTCTime)
+import Data.Time.Clock.POSIX qualified as POSIX
 import Ki.Unlifted qualified as Ki
 import Network.HTTP.Client qualified as HTTPClient
 import Network.HTTP.Types qualified as HTTP
+import Network.URI (URI)
+import Network.URI qualified as URI
 import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Webhooks.Queries qualified as WQ
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Env qualified as Env
-import Share.IDs (NotificationEventId, NotificationWebhookId)
+import Share.IDs
+import Share.IDs qualified as IDs
 import Share.JWT (JWTParam (..))
 import Share.JWT qualified as JWT
 import Share.Metrics qualified as Metrics
 import Share.Notifications.Queries qualified as NQ
-import Share.Notifications.Types (HydratedEventPayload, NotificationEvent (..), NotificationTopic, eventData_, eventUserInfo_, hydratedEventTopic)
+import Share.Notifications.Types
 import Share.Notifications.Webhooks.Secrets (WebhookConfig (..), WebhookSecretError)
 import Share.Notifications.Webhooks.Secrets qualified as Webhooks
 import Share.Postgres qualified as PG
 import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Share.Utils.URI (URIParam (..))
+import Share.Utils.URI (URIParam (..), uriToText)
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
@@ -188,6 +196,7 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
         Left jwtErr -> throwError $ JWTError event.eventId webhookId jwtErr
         Right jwt -> pure jwt
     let payloadWithJWT = payload {jwt = JWTParam payloadJWT}
+    except $ buildWebhookRequest webhookId uri event
     let reqResult =
           HTTPClient.requestFromURI uri <&> \req ->
             req
@@ -204,6 +213,106 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
       httpStatus@(HTTP.Status status _)
         | status >= 400 -> throwError $ ReceiverError event.eventId webhookId httpStatus $ HTTPClient.responseBody resp
         | otherwise -> pure ()
+
+buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> Either WebhookSendFailure HTTPClient.Request
+buildWebhookRequest webhookId uri event = do
+  if
+    | isSlackWebhook uri -> buildSlackWebhookRequest uri
+    | isDiscordWebhook uri ->
+        let nonSlackPath =
+              List.stripSuffix "/slack" (URI.uriPath uri)
+                & fromMaybe ((URI.uriPath uri))
+            slackifiedDiscordWebhookURI = uri {URI.uriPath = nonSlackPath <> "/slack"}
+         in buildSlackWebhookRequest slackifiedDiscordWebhookURI
+    | otherwise -> buildDefaultPayload
+  where
+    isSlackWebhook :: URI -> Bool
+    isSlackWebhook uri =
+      case URI.uriRegName <$> URI.uriAuthority uri of
+        Nothing -> False
+        Just regName -> List.isPrefixOf "hooks.slack.com" regName
+
+    isDiscordWebhook :: URI -> Bool
+    isDiscordWebhook uri =
+      case (URI.uriRegName <$> URI.uriAuthority uri, URI.uriPath uri) of
+        (Just regName, path) | List.isPrefixOf path "api/webhooks" -> Text.isPrefixOf "discord.com" (Text.pack regName)
+        _ -> False
+
+    buildDefaultPayload :: Either WebhookSendFailure HTTPClient.Request
+    buildDefaultPayload =
+      HTTPClient.requestFromURI uri
+        & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
+        <&> \req ->
+          req
+            { HTTPClient.method = "POST",
+              HTTPClient.responseTimeout = webhookTimeout,
+              HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
+              HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode event.eventData
+            }
+
+    mkSlackAttachment :: Maybe URI -> Text -> Text -> Text -> UTCTime -> Aeson.Value
+    mkSlackAttachment mainURI author title msg timestamp =
+      let epochSeconds :: Int64
+          epochSeconds = round (POSIX.utcTimeToPOSIXSeconds timestamp)
+          t :: Text -> Text
+          t x = x
+       in Aeson.object $
+            [ "mrkdwn_in" Aeson..= [t "text"],
+              "color" .= t "#36a64f",
+              -- "pretext" .= "Optional pre-text that appears above the attachment block",
+              "author_name" .= author,
+              -- "author_link" .= "http://flickr.com/bobby/",
+              -- "author_icon" .= "https://placeimg.com/16/16/people",
+              "title" .= title,
+              "text" .= msg,
+              -- "thumb_url" .= "http://placekitten.com/g/200/200",
+              -- "footer" .= "footer",
+              -- "footer_icon" .= "https://platform.slack-edge.com/img/default_application_icon.png",
+              "ts" .= epochSeconds
+            ]
+              <> (mainURI & foldMap \uri -> ["title_link" .= uriToText uri])
+    buildSlackWebhookRequest :: URI -> Either WebhookSendFailure HTTPClient.Request
+    buildSlackWebhookRequest uri =
+      let slackPayload = case event.eventData of
+            HydratedProjectBranchUpdatedPayload (ProjectBranchUpdatedPayload {projectInfo, branchInfo}) ->
+              let pbShorthand = (projectBranchShortHandFromParts projectInfo.projectShortHand branchInfo.branchShortHand)
+                  title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
+                  msg = "Branch " <> IDs.toText pbShorthand <> " was just updated."
+                  author = "someone"
+               in Aeson.object
+                    [ "text" Aeson..= msg,
+                      "attachments"
+                        Aeson..= [ mkSlackAttachment Nothing author title msg event.eventOccurredAt
+                                 ]
+                    ]
+            HydratedProjectContributionCreatedPayload (ProjectContributionCreatedPayload {projectInfo, mergeSourceBranch, mergeTargetBranch, contributionId, author, title, description, status}) ->
+              Aeson.object []
+       in -- Text.lines [
+          -- "New contribution submitted to " <> projectInfo.projectName,
+          -- "",
+          -- "**" <> title <> "\""
+          --            ]
+          --   <> " - "
+          --   <> mergeSourceBranch.branchName
+          --   <> " -> "
+          --   <> mergeTargetBranch.branchName
+          --   <> " ("
+          --   <> Text.pack (show contributionId)
+          --   <> ") by "
+          --   <> author.userName
+          --   <> ": "
+          --   <> title
+
+          HTTPClient.requestFromURI uri
+            & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
+            <&> ( \req ->
+                    req
+                      { HTTPClient.method = "POST",
+                        HTTPClient.responseTimeout = webhookTimeout,
+                        HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
+                        HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode slackPayload
+                      }
+                )
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->

@@ -297,12 +297,12 @@ hydrateEventData :: forall m. (QueryA m) => NotificationEventData -> m HydratedE
 hydrateEventData = \case
   ProjectBranchUpdatedData
     (ProjectBranchData {projectId, branchId}) -> do
-      ProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
+      HydratedProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
   ProjectContributionCreatedData
     (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
-      ProjectContributionCreatedPayload <$> hydrateContributionInfo contributionId projectId fromBranchId toBranchId contributorUserId
+      HydratedProjectContributionCreatedPayload <$> hydrateContributionInfo contributionId projectId fromBranchId toBranchId contributorUserId
   where
-    hydrateContributionInfo :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionPayload
+    hydrateContributionInfo :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionCreatedPayload
     hydrateContributionInfo contributionId projectId fromBranchId toBranchId authorUserId = do
       author <- UsersQ.userDisplayInfoOf id authorUserId
       projectInfo <- hydrateProjectPayload projectId
@@ -310,7 +310,7 @@ hydrateEventData = \case
       mergeSourceBranch <- hydrateBranchPayload toBranchId
       contribution <- ContributionQ.contributionById contributionId
       pure $
-        ProjectContributionPayload
+        ProjectContributionCreatedPayload
           { projectInfo,
             mergeSourceBranch,
             mergeTargetBranch,
@@ -324,7 +324,7 @@ hydrateEventData = \case
     hydrateProjectBranchPayload projectId branchId = do
       branchInfo <- hydrateBranchPayload branchId
       projectInfo <- hydrateProjectPayload projectId
-      pure $ ProjectBranchPayload {projectInfo, branchInfo}
+      pure $ ProjectBranchUpdatedPayload {projectInfo, branchInfo}
     hydrateBranchPayload :: BranchId -> m BranchPayload
     hydrateBranchPayload branchId = do
       queryExpect1Row
