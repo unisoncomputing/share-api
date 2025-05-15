@@ -162,3 +162,8 @@ WITH namespaces(handle, slug, name, namespace_hash_id, private) AS (
 ) :: bigint, 0 :: bigint) as num
   FROM namespaces
     |]
+
+numCausalDiffQueueEntries :: PG.Transaction e Int64
+numCausalDiffQueueEntries =
+  PG.queryExpect1Col
+    [PG.sql| SELECT COUNT(*) FROM causal_diff_queue |]

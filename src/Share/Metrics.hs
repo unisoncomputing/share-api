@@ -42,7 +42,7 @@ deployment :: Text
 deployment = tShow Deployment.deployment
 
 metricUpdateInterval :: Time.NominalDiffTime
-metricUpdateInterval = 10 * 60 -- 10 mins
+metricUpdateInterval = 5 * 60 -- 5 mins
 
 -- | Low resolution metrics that are updated rarely.
 data SlowChangingMetrics = SlowChangingMetrics
@@ -63,7 +63,8 @@ data SlowChangingMetrics = SlowChangingMetrics
     -- Number of total public or private definitions on /main branch of all Share projects
     numTotalPublicOrPrivateDefinitions :: Int64,
     usersWithContributions :: Int64,
-    usersWithTickets :: Int64
+    usersWithTickets :: Int64,
+    causalDiffQueueEntriesCount :: Int64
   }
 
 -- | Serves the app's prometheus metrics at `/metrics`
@@ -77,7 +78,7 @@ serveMetricsMiddleware env = do
     refreshGauges getMetrics
     Prom.prometheus prometheusSettings app req handleResponse
   where
-    runPG = PG.runSessionWithPool (Env.pgConnectionPool env) . PG.readTransaction
+    runPG = PG.runSessionWithPool (Env.pgConnectionPool env) . PG.transaction PG.ReadCommitted PG.Read
     prometheusSettings =
       Prom.def
         { Prom.prometheusEndPoint = ["metrics"],
@@ -311,6 +312,7 @@ queryMetrics now = do
   numTotalPublicDefinitions <- Q.numTotalPublicDefinitions
   usersWithContributions <- Q.usersInteractedWithContributions
   usersWithTickets <- Q.usersInteractedWithTickets
+  causalDiffQueueEntriesCount <- Q.numCausalDiffQueueEntries
   pure SlowChangingMetrics {..}
 
 -- | Since some time-based metrics will change due to the passage of time rather than any
@@ -338,6 +340,8 @@ refreshGauges getMetrics = do
 
   Prom.withLabel numUsersWithContributions (deployment, service) \gauge -> Prom.setGauge gauge (fromIntegral usersWithContributions)
   Prom.withLabel numUsersWithTickets (deployment, service) \gauge -> Prom.setGauge gauge (fromIntegral usersWithTickets)
+
+  Prom.withLabel numCausalDiffQueueEntries (deployment, service) \gauge -> Prom.setGauge gauge (fromIntegral causalDiffQueueEntriesCount)
 
 {-# NOINLINE numUniqueAccountsWithAPushInLastWeek #-}
 numUniqueAccountsWithAPushInLastWeek :: Prom.Vector Prom.Label2 Prom.Gauge
@@ -422,6 +426,18 @@ webhookSendingDurationSeconds =
       Prom.Info
         "webhook_sending_duration_seconds"
         "The time it took to send a notification webhook"
+
+{-# NOINLINE numCausalDiffQueueEntries #-}
+numCausalDiffQueueEntries :: Prom.Vector Prom.Label2 Prom.Gauge
+numCausalDiffQueueEntries =
+  Prom.unsafeRegister $
+    Prom.vector ("deployment", "service") $
+      Prom.gauge info
+  where
+    info =
+      Prom.Info
+        "causal_diff_queue_entries_count"
+        "The number of causal diffs in the queue."
 
 timeActionIntoHistogram :: (Prom.Label l, MonadUnliftIO m) => (Prom.Vector l Prom.Histogram) -> l -> m c -> m c
 timeActionIntoHistogram histogram l m = do
