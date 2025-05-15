@@ -48,8 +48,7 @@ import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
-import Share.Web.Share.Orgs.Queries qualified as OrgQ
-import Share.Web.Share.Orgs.Types (Org (..))
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UserLike (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
 import Unison.Codebase.Path qualified as Path
@@ -292,12 +291,11 @@ getUserProfileEndpoint callerUserId userHandle = do
     User {user_id} <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
     displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
     UserProfile {bio, website, location, twitterHandle, pronouns} <- UsersQ.userProfileById user_id `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
-    (kind, permissions) <-
-      OrgQ.orgByUserId user_id >>= \case
-        Just (Org {orgId}) -> do
-          permissionsWithinOrg <- AuthZQ.permissionsForOrg callerUserId orgId
-          pure (OrgKind, permissionsWithinOrg)
-        Nothing -> pure (UserKind, mempty)
+    permissions <- case displayInfo of
+      UnifiedOrg (OrgDisplayInfo {orgId}) -> do
+        permissionsWithinOrg <- AuthZQ.permissionsForOrg callerUserId orgId
+        pure permissionsWithinOrg
+      UnifiedUser _ -> pure mempty
     pure $
       DescribeUserProfile
         { bio = bio,
@@ -305,7 +303,6 @@ getUserProfileEndpoint callerUserId userHandle = do
           location = location,
           twitterHandle = twitterHandle,
           pronouns = pronouns,
-          kind,
           permissions,
           displayInfo = displayInfo
         }

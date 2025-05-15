@@ -7,14 +7,12 @@ import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Web.Share.DisplayInfo.Types
 import Share.Web.Share.Orgs.Queries qualified as OrgsQ
-import Share.Web.Share.Teams.Queries qualified as TeamsQ
 
 userLikeDisplayInfoOf :: Traversal s t UserLikeIds UnifiedDisplayInfo -> s -> Transaction e t
 userLikeDisplayInfoOf trav s = do
   s & unsafePartsOf trav \userLikeIds -> do
     withUsers <- userLikeIds & UsersQ.userDisplayInfoOf (traversed . unifiedUser_)
-    withTeams <- withUsers & TeamsQ.teamDisplayInfoOf (traversed . unifiedTeam_)
-    withOrgs <- withTeams & OrgsQ.orgDisplayInfoOf (traversed . unifiedOrg_)
+    withOrgs <- withUsers & OrgsQ.orgDisplayInfoOf (traversed . unifiedOrg_)
     pure withOrgs
 
 unifiedDisplayInfoForUserOf :: Traversal s t UserId UnifiedDisplayInfo -> s -> Transaction e t

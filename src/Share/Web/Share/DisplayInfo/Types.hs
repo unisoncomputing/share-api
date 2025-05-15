@@ -5,12 +5,12 @@ module Share.Web.Share.DisplayInfo.Types
   ( UserDisplayInfo (..),
     OrgDisplayInfo (..),
     TeamDisplayInfo (..),
+    UserOrOrgDisplayInfo,
     UserLike (..),
     UnifiedDisplayInfo,
     UserLikeIds,
     unifiedUser_,
     unifiedOrg_,
-    unifiedTeam_,
   )
 where
 
@@ -25,49 +25,40 @@ import Share.Utils.URI (URIParam (..))
 
 -- | A single unified type for anywhere the frontend may need to display a user-like
 -- thing; whether org, team, or user.
-data UserLike user team org
-  = UnifiedUser user
-  | UnifiedOrg org
-  | UnifiedTeam team
+data UserLike user org
+  = UnifiedUser !user
+  | UnifiedOrg !org
   deriving (Show, Eq, Ord)
 
-instance (ToJSON user, ToJSON team, ToJSON org) => ToJSON (UserLike user team org) where
+instance (ToJSON user, ToJSON org) => ToJSON (UserLike user org) where
   toJSON = \case
     UnifiedUser u -> Aeson.object ["kind" Aeson..= ("user" :: Text), "info" Aeson..= u]
     UnifiedOrg o -> Aeson.object ["kind" Aeson..= ("org" :: Text), "info" Aeson..= o]
-    UnifiedTeam t -> Aeson.object ["kind" Aeson..= ("team" :: Text), "info" Aeson..= t]
 
-instance (FromJSON user, FromJSON team, FromJSON org) => FromJSON (UserLike user team org) where
+instance (FromJSON user, FromJSON org) => FromJSON (UserLike user org) where
   parseJSON =
     Aeson.withObject "UserLike" $ \o -> do
       kind <- o Aeson..: "kind"
       case kind of
         ("user" :: Text) -> UnifiedUser <$> o Aeson..: "info"
         ("org" :: Text) -> UnifiedOrg <$> o Aeson..: "info"
-        ("team" :: Text) -> UnifiedTeam <$> o Aeson..: "info"
         _ -> fail $ "Unknown UserLike kind: " <> show kind
 
-type UnifiedDisplayInfo = UserLike UserDisplayInfo TeamDisplayInfo OrgDisplayInfo
+type UnifiedDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
 
-type UserLikeIds = UserLike UserId TeamId OrgId
+type UserOrOrgDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
 
-unifiedUser_ :: Traversal (UserLike user team org) (UserLike user' team org) user user'
+type UserLikeIds = UserLike UserId OrgId
+
+unifiedUser_ :: Traversal (UserLike user org) (UserLike user' org) user user'
 unifiedUser_ f = \case
   (UnifiedUser u) -> UnifiedUser <$> f u
   (UnifiedOrg o) -> pure $ UnifiedOrg o
-  (UnifiedTeam t) -> pure $ UnifiedTeam t
 
-unifiedOrg_ :: Traversal (UserLike user team org) (UserLike user team org') org org'
+unifiedOrg_ :: Traversal (UserLike user org) (UserLike user org') org org'
 unifiedOrg_ f = \case
   (UnifiedUser u) -> pure $ UnifiedUser u
   (UnifiedOrg o) -> UnifiedOrg <$> f o
-  (UnifiedTeam t) -> pure $ UnifiedTeam t
-
-unifiedTeam_ :: Traversal (UserLike user team org) (UserLike user team' org) team team'
-unifiedTeam_ f = \case
-  (UnifiedUser u) -> pure $ UnifiedUser u
-  (UnifiedOrg o) -> pure $ UnifiedOrg o
-  (UnifiedTeam t) -> UnifiedTeam <$> f t
 
 -- | Common type for displaying a user.
 data UserDisplayInfo = UserDisplayInfo

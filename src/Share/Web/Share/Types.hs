@@ -14,7 +14,7 @@ import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
 import Share.Web.Authorization.Types (RolePermission)
-import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UnifiedDisplayInfo, UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UnifiedDisplayInfo, UserDisplayInfo (..), UserLike (..), UserOrOrgDisplayInfo)
 import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
@@ -55,24 +55,43 @@ data DescribeUserProfile = DescribeUserProfile
     location :: Maybe Text,
     twitterHandle :: Maybe Text,
     pronouns :: Maybe Text,
-    kind :: UserKind,
     permissions :: Set RolePermission,
-    displayInfo :: UnifiedDisplayInfo
+    displayInfo :: UserOrOrgDisplayInfo
   }
   deriving (Show)
 
 instance ToJSON DescribeUserProfile where
-  toJSON (DescribeUserProfile bio website location twitterHandle pronouns kind permissions displayInfo) =
-    Aeson.object
-      [ "bio" .= bio,
-        "website" .= website,
-        "location" .= location,
-        "twitterHandle" .= twitterHandle,
-        "pronouns" .= pronouns,
-        "kind" .= kind,
-        "permissions" Aeson..= permissions,
-        "displayInfo" .= displayInfo
-      ]
+  toJSON (DescribeUserProfile {bio, website, location, twitterHandle, pronouns, permissions, displayInfo}) =
+    case displayInfo of
+      UnifiedUser (UserDisplayInfo {handle, name, avatarUrl, userId}) ->
+        Aeson.object
+          [ "kind" .= ("user" :: Text),
+            "avatarUrl" .= avatarUrl,
+            "handle" .= handle,
+            "name" .= name,
+            "userId" .= userId,
+            "pronouns" .= pronouns,
+            "twitterHandle" .= twitterHandle,
+            "bio" .= bio,
+            "website" .= website,
+            "location" .= location
+          ]
+      UnifiedOrg (OrgDisplayInfo {orgId, isCommercial, user = UserDisplayInfo {handle, name, avatarUrl, userId}}) ->
+        Aeson.object
+          [ "kind" .= ("org" :: Text),
+            "user"
+              .= Aeson.object
+                [ "avatarUrl" .= avatarUrl,
+                  "handle" .= handle,
+                  "name" .= name,
+                  "userId" .= userId,
+                  "website" .= website,
+                  "twitterHandle" .= twitterHandle
+                ],
+            "isCommercial" .= isCommercial,
+            "permissions" .= permissions,
+            "orgId" .= orgId
+          ]
 
 data ReadmeResponse = ReadmeResponse
   { readMe :: Maybe Doc
@@ -101,25 +120,32 @@ data SearchResult
   = SearchResultUserLike UnifiedDisplayInfo
   | -- | shorthand summary visibility
     SearchResultProject ProjectShortHand (Maybe Text) ProjectVisibility
-  | SearchResultOrg OrgDisplayInfo
   deriving (Show)
 
 instance ToJSON SearchResult where
   toJSON = \case
     SearchResultUserLike userLike ->
-      Aeson.object
-        [ "displayInfo" .= userLike,
-          "tag" .= ("UserLike" :: Text)
-        ]
-    SearchResultOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl, userId}, orgId}) ->
-      Aeson.object
-        [ "handle" .= fromId @UserHandle @Text handle,
-          "name" .= name,
-          "avatarUrl" .= avatarUrl,
-          "userId" .= userId,
-          "orgId" .= orgId,
-          "tag" .= ("Org" :: Text)
-        ]
+      case userLike of
+        UnifiedUser (UserDisplayInfo {handle, name, avatarUrl, userId}) ->
+          Aeson.object
+            [ "tag" .= ("user" :: Text),
+              "avatarUrl" .= avatarUrl,
+              "handle" .= handle,
+              "name" .= name,
+              "userId" .= userId
+            ]
+        UnifiedOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl, userId}, orgId}) ->
+          Aeson.object
+            [ "tag" .= ("org" :: Text),
+              "orgId" .= orgId,
+              "user"
+                .= Aeson.object
+                  [ "avatarUrl" .= avatarUrl,
+                    "handle" .= handle,
+                    "name" .= name,
+                    "userId" .= userId
+                  ]
+            ]
     SearchResultProject shorthand summary visibility ->
       Aeson.object
         [ "projectRef" .= shorthand,
@@ -134,19 +160,37 @@ data UserAccountInfo = UserAccountInfo
     completedTours :: [TourId],
     organizationMemberships :: [UserHandle],
     isSuperadmin :: Bool,
-    displayInfo :: UnifiedDisplayInfo
+    displayInfo :: UserOrOrgDisplayInfo
   }
   deriving (Show)
 
 instance ToJSON UserAccountInfo where
   toJSON UserAccountInfo {..} =
-    Aeson.object
-      [ "primaryEmail" .= primaryEmail,
-        "completedTours" .= completedTours,
-        "organizationMemberships" .= organizationMemberships,
-        "isSuperadmin" .= isSuperadmin,
-        "displayInfo" .= displayInfo
-      ]
+    case displayInfo of
+      UnifiedUser (UserDisplayInfo {handle, name, avatarUrl, userId}) ->
+        Aeson.object
+          [ "kind" .= ("user" :: Text),
+            "avatarUrl" .= avatarUrl,
+            "handle" .= handle,
+            "name" .= name,
+            "userId" .= userId,
+            "isSuperadmin" .= isSuperadmin,
+            "organizationMemberships" .= organizationMemberships,
+            "primaryEmail" .= primaryEmail
+          ]
+      UnifiedOrg (OrgDisplayInfo {orgId, isCommercial, user = UserDisplayInfo {handle, name, avatarUrl, userId}}) ->
+        Aeson.object
+          [ "kind" .= ("org" :: Text),
+            "user"
+              .= Aeson.object
+                [ "avatarUrl" .= avatarUrl,
+                  "handle" .= handle,
+                  "name" .= name,
+                  "userId" .= userId
+                ],
+            "isCommercial" .= isCommercial,
+            "orgId" .= orgId
+          ]
 
 type PathSegment = Text
 

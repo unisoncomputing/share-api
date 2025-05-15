@@ -275,7 +275,7 @@ findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarU
     Nothing -> do
       New <$> createFromGithubUser authZReceipt ghu primaryEmail userHandle
 
-searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(UserLike UserId team OrgId)]
+searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(UserLike UserId OrgId)]
 searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
   let q = likeEscape prefix <> "%"
   PG.queryListRows @(UserId, Maybe OrgId)
