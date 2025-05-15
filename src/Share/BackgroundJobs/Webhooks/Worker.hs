@@ -44,6 +44,7 @@ import Share.Utils.URI (URIParam (..), uriToText)
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types qualified as DisplayInfo
 import UnliftIO qualified
 
 data WebhookSendFailure
@@ -273,37 +274,31 @@ buildWebhookRequest webhookId uri event = do
               <> (mainURI & foldMap \uri -> ["title_link" .= uriToText uri])
     buildSlackWebhookRequest :: URI -> Either WebhookSendFailure HTTPClient.Request
     buildSlackWebhookRequest uri =
-      let slackPayload = case event.eventData of
+      let actorName = event.eventActor ^. DisplayInfo.name_
+          actorHandle = "(" <> IDs.toText (event.eventActor ^. DisplayInfo.handle_) <> ")"
+          actorAuthor = maybe "" (<> " ") actorName <> actorHandle
+          slackPayload = case event.eventData of
             HydratedProjectBranchUpdatedPayload (ProjectBranchUpdatedPayload {projectInfo, branchInfo}) ->
               let pbShorthand = (projectBranchShortHandFromParts projectInfo.projectShortHand branchInfo.branchShortHand)
                   title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
                   msg = "Branch " <> IDs.toText pbShorthand <> " was just updated."
-                  author = "someone"
                in Aeson.object
                     [ "text" Aeson..= msg,
                       "attachments"
-                        Aeson..= [ mkSlackAttachment Nothing author title msg event.eventOccurredAt
+                        Aeson..= [ mkSlackAttachment Nothing actorAuthor title msg event.eventOccurredAt
                                  ]
                     ]
-            HydratedProjectContributionCreatedPayload (ProjectContributionCreatedPayload {projectInfo, mergeSourceBranch, mergeTargetBranch, contributionId, author, title, description, status}) ->
-              Aeson.object []
-       in -- Text.lines [
-          -- "New contribution submitted to " <> projectInfo.projectName,
-          -- "",
-          -- "**" <> title <> "\""
-          --            ]
-          --   <> " - "
-          --   <> mergeSourceBranch.branchName
-          --   <> " -> "
-          --   <> mergeTargetBranch.branchName
-          --   <> " ("
-          --   <> Text.pack (show contributionId)
-          --   <> ") by "
-          --   <> author.userName
-          --   <> ": "
-          --   <> title
-
-          HTTPClient.requestFromURI uri
+            HydratedProjectContributionCreatedPayload (ProjectContributionCreatedPayload {projectInfo, mergeSourceBranch, title = contributionTitle, description}) ->
+              let pbShorthand = (projectBranchShortHandFromParts projectInfo.projectShortHand mergeSourceBranch.branchShortHand)
+                  title = "New Contribution in " <> IDs.toText pbShorthand
+                  msg = contributionTitle <> maybe "" (<> " — ") description
+               in Aeson.object
+                    [ "text" Aeson..= msg,
+                      "attachments"
+                        Aeson..= [ mkSlackAttachment Nothing actorAuthor title msg event.eventOccurredAt
+                                 ]
+                    ]
+       in HTTPClient.requestFromURI uri
             & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
             <&> ( \req ->
                     req

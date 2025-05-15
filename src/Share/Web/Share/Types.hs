@@ -14,7 +14,7 @@ import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
 import Share.Utils.URI
 import Share.Web.Authorization.Types (RolePermission)
-import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UnifiedDisplayInfo, UserDisplayInfo (..), UserLike (..), UserOrOrgDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UnifiedDisplayInfo, UserDisplayInfo (..), UserLike (..))
 import Unison.Name (Name)
 import Unison.Server.Doc (Doc)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary (..), TypeSummary (..))
@@ -56,7 +56,7 @@ data DescribeUserProfile = DescribeUserProfile
     twitterHandle :: Maybe Text,
     pronouns :: Maybe Text,
     permissions :: Set RolePermission,
-    displayInfo :: UserOrOrgDisplayInfo
+    displayInfo :: UnifiedDisplayInfo
   }
   deriving (Show)
 
@@ -160,7 +160,7 @@ data UserAccountInfo = UserAccountInfo
     completedTours :: [TourId],
     organizationMemberships :: [UserHandle],
     isSuperadmin :: Bool,
-    displayInfo :: UserOrOrgDisplayInfo
+    displayInfo :: UnifiedDisplayInfo
   }
   deriving (Show)
 

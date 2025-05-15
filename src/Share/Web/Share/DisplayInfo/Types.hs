@@ -1,16 +1,21 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 -- Standard ways of displaying core Share concepts.
 --
 -- This was consolidated to this module mostly to avoid circular imports.
+{-# LANGUAGE RecordWildCards #-}
+
 module Share.Web.Share.DisplayInfo.Types
   ( UserDisplayInfo (..),
     OrgDisplayInfo (..),
     TeamDisplayInfo (..),
-    UserOrOrgDisplayInfo,
     UserLike (..),
     UnifiedDisplayInfo,
     UserLikeIds,
     unifiedUser_,
     unifiedOrg_,
+    handle_,
+    name_,
   )
 where
 
@@ -18,6 +23,7 @@ import Control.Lens
 import Data.Aeson (ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON)
+import Data.Generics.Product
 import Network.URI (URI)
 import Share.IDs
 import Share.Prelude
@@ -44,9 +50,21 @@ instance (FromJSON user, FromJSON org) => FromJSON (UserLike user org) where
         ("org" :: Text) -> UnifiedOrg <$> o Aeson..: "info"
         _ -> fail $ "Unknown UserLike kind: " <> show kind
 
-type UnifiedDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
+handle_ :: Lens UnifiedDisplayInfo UnifiedDisplayInfo UserHandle UserHandle
+handle_ f = \case
+  UnifiedUser userDisplayInfo -> do
+    UnifiedUser <$> (userDisplayInfo & field @"handle" %%~ f)
+  UnifiedOrg orgDisplayInfo -> do
+    UnifiedOrg <$> (orgDisplayInfo & field @"user" . field @"handle" %%~ f)
 
-type UserOrOrgDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
+name_ :: Lens UnifiedDisplayInfo UnifiedDisplayInfo (Maybe Text) (Maybe Text)
+name_ f = \case
+  UnifiedUser userDisplayInfo -> do
+    UnifiedUser <$> (userDisplayInfo & field @"name" %%~ f)
+  UnifiedOrg orgDisplayInfo -> do
+    UnifiedOrg <$> (orgDisplayInfo & field @"user" . field @"name" %%~ f)
+
+type UnifiedDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
 
 type UserLikeIds = UserLike UserId OrgId
 
@@ -67,7 +85,7 @@ data UserDisplayInfo = UserDisplayInfo
     avatarUrl :: Maybe URI,
     userId :: UserId
   }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
 
 instance ToJSON UserDisplayInfo where
   toJSON UserDisplayInfo {handle, name, avatarUrl, userId} =
@@ -93,7 +111,7 @@ data OrgDisplayInfo = OrgDisplayInfo
     orgId :: OrgId,
     isCommercial :: Bool
   }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
 
 instance ToJSON OrgDisplayInfo where
   toJSON OrgDisplayInfo {user, orgId, isCommercial} =
