@@ -183,6 +183,8 @@ library
       Share.Web.UCM.SyncV2.Impl
       Share.Web.UCM.SyncV2.Queries
       Share.Web.UCM.SyncV2.Types
+      Share.Web.UI.Links
+      Share.Web.UI.Links.Notifications
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
       Unison.Server.Share.DefinitionSummary

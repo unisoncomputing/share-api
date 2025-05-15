@@ -58,6 +58,7 @@ import Share.Web.Authentication.AccessToken qualified as AccessToken
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.OAuth.Clients (validateOAuthClientForTokenExchange, validateOAuthClientRedirectURI)
+import Share.Web.UI.Links qualified as Links
 import Web.Cookie as Cookie (SetCookie (..))
 
 data AuthError = HandleAlreadyTaken UserHandle URI
@@ -97,7 +98,7 @@ authorizationEndpoint ResponseTypeCode oauthClientId redirectURI scopes state pk
     Just {} -> do
       -- We're already logged in, no need to go through Github, we can redirect directly to
       -- the redirect receiver.
-      redirectReceiverUri <- sharePathQ ["oauth", "redirect"] (Map.fromList [])
+      redirectReceiverUri <- Links.oauthRedirect
       redirectTo redirectReceiverUri
         & setPendingSessionCookie cookieSettings (pendingId pSesh)
         & pure
@@ -200,7 +201,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       mayReturnToURI <- runMaybeT do
         uri <- hoistMaybe unvalidatedReturnToURI
         -- Ignore any non-unison redirections.
-        guardM . lift $ isTrustedURI uri
+        guardM . lift $ Links.isTrustedURI uri
         pure uri
       landingPageURI <- whenNothing mayReturnToURI $ mkLoginLandingPageURI newOrPreExistingUser
       aud <- shareAud
@@ -212,7 +213,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
           pure . clearPendingSessionCookie cookieSettings $ setAuthHeaders response
     Session.OAuthRequest authRequest@AuthenticationRequest {clientId, redirectURI} -> do
       OAuthClientConfig {audience = URIParam aud} <- validateOAuthClientRedirectURI clientId redirectURI
-      landingPageURI <- mkUCMLoginSuccessLandingPageURI
+      landingPageURI <- Links.ucmConnected
       let AuthenticationRequest {redirectURI = URI.URIParam redirectURI, state = clientOAuthState, scopes = _scopes} = authRequest
       (session, code) <- Redis.liftRedis $ Redis.createOAuth2Code iss (Set.singleton aud) uid authRequest
       let redirectURIWithParams = addParamsToRedirectURI redirectURI landingPageURI clientOAuthState code
@@ -259,7 +260,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
           Right handle -> pure handle
       PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail userHandle) >>= \case
         Left (UserQ.UserHandleTaken _) -> do
-          handleTakenUri <- (shareUIPathQ ["finish-signup"] (Map.fromList [("state", "handle-taken"), ("conflictingHandle", IDs.toText userHandle)]))
+          handleTakenUri <- Links.handleTakenRedirect userHandle
           respondError $ HandleAlreadyTaken userHandle handleTakenUri
         Left (UserQ.InvalidUserHandle err handle) -> do
           Logging.logErrorText ("Invalid user handle: " <> handle <> " " <> err)
@@ -267,10 +268,8 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
         Right u -> pure u
 
     mkLoginLandingPageURI :: UserQ.NewOrPreExisting User -> WebApp URI
-    mkLoginLandingPageURI (UserQ.New {}) = shareUIPathQ [] (Map.singleton "event" "new-user-log-in")
-    mkLoginLandingPageURI (UserQ.PreExisting {}) = shareUIPathQ [] (Map.singleton "event" "log-in")
-    mkUCMLoginSuccessLandingPageURI :: WebApp URI
-    mkUCMLoginSuccessLandingPageURI = shareUIPath ["ucm-connected"]
+    mkLoginLandingPageURI (UserQ.New {}) = Links.homePage (Just Links.NewUserLogIn)
+    mkLoginLandingPageURI (UserQ.PreExisting {}) = Links.homePage (Just Links.LogIn)
     ensurePendingSession :: PendingSessionId -> WebApp PendingSession
     ensurePendingSession psid = do
       pending <- Redis.liftRedis $ Redis.getPendingSession psid
@@ -323,11 +322,7 @@ loginWithGithub psid = do
   where
     skipGithubLoginURL :: OAuth2State -> WebApp URI
     skipGithubLoginURL oauth2State = do
-      sharePathQ ["oauth", "redirect"] $
-        Map.fromList
-          [ ("code", "code"),
-            ("state", toQueryParam oauth2State)
-          ]
+      Links.oauthRedirectWithCodeAndState "code" oauth2State
 
 -- | Log out the user by telling the browser to clear the session cookies.
 -- Note that this doesn't (yet) invalidate the session itself, it just removes its cookie from the
@@ -335,7 +330,7 @@ loginWithGithub psid = do
 logoutEndpoint :: ServerT OAuth.LogoutEndpoint WebApp
 logoutEndpoint = do
   Env.Env {cookieSettings, sessionCookieKey} <- ask
-  uri <- shareUIPathQ [] (Map.singleton "event" "log-out")
+  uri <- Links.homePage (Just Links.LogOut)
   pure $ clearPendingSessionCookie cookieSettings . clearSessionCookie cookieSettings sessionCookieKey $ redirectTo uri
 
 setPendingSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> PendingSessionId -> orig -> new

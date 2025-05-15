@@ -64,6 +64,8 @@ import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
+import Share.Web.UI.Links (ShareUIError)
+import Share.Web.UI.Links qualified as Links
 import Unison.Server.Backend qualified as Backend
 import Unison.Server.Errors qualified as Backend
 import Unison.Sync.Types qualified as Sync
@@ -300,28 +302,9 @@ instance ToServerError Backend.BackendError where
 
 -- | Redirect the user to the Share UI and show an error message.
 errorRedirect :: ShareUIError -> WebApp a
-errorRedirect = \case
-  shareUIError -> do
-    errURI <- shareUIPathQ ["error"] (Map.fromList [("appError", shareUIErrorToUIText shareUIError)])
-    respondError $ ErrorRedirect (shareUIErrorToUIText shareUIError) errURI
-
--- | Various Error types that the Share UI knows how to interpret
-data ShareUIError
-  = UnspecifiedError
-  | AccountCreationGitHubPermissionsRejected
-  | AccountCreationInvalidHandle Text {- the invalid handle -}
-  deriving (Show)
-
--- | Convert ShareUIError to the Text that the UI expects
-shareUIErrorToUIText :: ShareUIError -> Text
-shareUIErrorToUIText e =
-  case e of
-    UnspecifiedError ->
-      "UnspecifiedError"
-    AccountCreationGitHubPermissionsRejected {} ->
-      "AccountCreationGitHubPermissionsRejected"
-    AccountCreationInvalidHandle {} ->
-      "AccountCreationInvalidHandle"
+errorRedirect shareUIError = do
+  errURI <- Links.errorRedirectLink shareUIError
+  respondError $ ErrorRedirect (Links.shareUIErrorToUIText shareUIError) errURI
 
 data Unimplemented = Unimplemented
   deriving (Eq, Show)
