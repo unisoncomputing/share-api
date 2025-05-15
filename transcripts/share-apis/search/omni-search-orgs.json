@@ -13,7 +13,7 @@
     {
       "projectRef": "@unison/privateorgproject",
       "summary": "Private Unison Project",
-      "tag": "Project",
+      "tag": "project",
       "visibility": "private"
     }
   ],

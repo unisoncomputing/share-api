@@ -10,7 +10,7 @@
     {
       "projectRef": "@test/publictestproject",
       "summary": "test project summary",
-      "tag": "Project",
+      "tag": "project",
       "visibility": "public"
     }
   ],
