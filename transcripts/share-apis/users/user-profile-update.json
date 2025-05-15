@@ -1,20 +1,14 @@
 {
   "body": {
+    "avatarUrl": "http://updated.com",
     "bio": "Updated bio",
-    "displayInfo": {
-      "info": {
-        "avatarUrl": "http://updated.com",
-        "handle": "transcripts",
-        "name": "Updated Transcripts",
-        "userId": "U-<UUID>"
-      },
-      "kind": "user"
-    },
+    "handle": "transcripts",
     "kind": "user",
     "location": "Updated location",
-    "permissions": [],
+    "name": "Updated Transcripts",
     "pronouns": "updated/pronouns",
     "twitterHandle": "updated-twitter",
+    "userId": "U-<UUID>",
     "website": "http://updated-website.com"
   },
   "status": [

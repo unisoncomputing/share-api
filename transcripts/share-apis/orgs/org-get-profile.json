@@ -1,21 +1,8 @@
 {
   "body": {
-    "bio": null,
-    "displayInfo": {
-      "info": {
-        "isCommercial": true,
-        "orgId": "ORG-<UUID>",
-        "user": {
-          "avatarUrl": "https://example.com/anvil.png",
-          "handle": "acme",
-          "name": "ACME",
-          "userId": "U-<UUID>"
-        }
-      },
-      "kind": "org"
-    },
+    "isCommercial": true,
     "kind": "org",
-    "location": null,
+    "orgId": "ORG-<UUID>",
     "permissions": [
       "project:view",
       "project:manage",
@@ -39,9 +26,14 @@
       "notification_delivery_method:view",
       "notification_delivery_method:manage"
     ],
-    "pronouns": null,
-    "twitterHandle": null,
-    "website": null
+    "user": {
+      "avatarUrl": "https://example.com/anvil.png",
+      "handle": "acme",
+      "name": "ACME",
+      "twitterHandle": null,
+      "userId": "U-<UUID>",
+      "website": null
+    }
   },
   "status": [
     {

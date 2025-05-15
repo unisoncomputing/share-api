@@ -1,20 +1,14 @@
 {
   "body": {
+    "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
     "bio": "A transcript!",
-    "displayInfo": {
-      "info": {
-        "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
-        "handle": "transcripts",
-        "name": "Transcript User",
-        "userId": "U-<UUID>"
-      },
-      "kind": "user"
-    },
+    "handle": "transcripts",
     "kind": "user",
     "location": "Unison Share",
-    "permissions": [],
+    "name": "Transcript User",
     "pronouns": "they/them",
     "twitterHandle": "@unisonTranscript",
+    "userId": "U-<UUID>",
     "website": "https://unison-lang.org"
   },
   "status": [

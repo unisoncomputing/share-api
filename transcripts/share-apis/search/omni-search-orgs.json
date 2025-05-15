@@ -1,20 +1,14 @@
 {
   "body": [
     {
-      "displayInfo": {
-        "info": {
-          "isCommercial": false,
-          "orgId": "ORG-<UUID>",
-          "user": {
-            "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
-            "handle": "unison",
-            "name": "Unison Org",
-            "userId": "U-<UUID>"
-          }
-        },
-        "kind": "org"
-      },
-      "tag": "UserLike"
+      "orgId": "ORG-<UUID>",
+      "tag": "org",
+      "user": {
+        "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+        "handle": "unison",
+        "name": "Unison Org",
+        "userId": "U-<UUID>"
+      }
     },
     {
       "projectRef": "@unison/privateorgproject",
