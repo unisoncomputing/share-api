@@ -1,0 +1,18 @@
+{
+  "body": {
+    "payload": {
+      "branch-head": "<JWT>",
+      "branch-id": "B-<UUID>",
+      "branch-name": "newbranch",
+      "project-id": "P-<UUID>",
+      "project-name": "@test/publictestproject",
+      "squashed-branch-head": null
+    },
+    "type": "success"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

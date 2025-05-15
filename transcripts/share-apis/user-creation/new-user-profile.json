@@ -4,6 +4,7 @@
     "completedTours": [],
     "handle": "localgithubuser",
     "isSuperadmin": false,
+    "kind": "user",
     "name": "Local Github User",
     "organizationMemberships": [],
     "primaryEmail": "local@example.com",

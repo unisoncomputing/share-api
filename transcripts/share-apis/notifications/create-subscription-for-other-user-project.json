@@ -5,6 +5,7 @@
       "id": "NS-<UUID>",
       "scope": "U-<UUID>",
       "topic": [
+        "project:branch:updated",
         "project:contribution:created"
       ]
     }

@@ -9,7 +9,7 @@ import Share.IDs
 import Share.Ticket
 import Share.Utils.API
 import Share.Web.Share.Comments.API qualified as Comments
-import Share.Web.Share.DisplayInfo (UserDisplayInfo (..))
+import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..))
 import Share.Web.Share.Tickets.Types
 
 type TicketsByUserAPI = ListTicketsByUserEndpoint

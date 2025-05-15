@@ -6,9 +6,9 @@
     "kind": "user",
     "location": "Unison Share",
     "name": "Transcript User",
-    "permissions": [],
     "pronouns": "they/them",
     "twitterHandle": "@unisonTranscript",
+    "userId": "U-<UUID>",
     "website": "https://unison-lang.org"
   },
   "status": [

@@ -1,13 +1,20 @@
 -- Standard ways of displaying core Share concepts.
 --
 -- This was consolidated to this module mostly to avoid circular imports.
-module Share.Web.Share.DisplayInfo
+module Share.Web.Share.DisplayInfo.Types
   ( UserDisplayInfo (..),
     OrgDisplayInfo (..),
     TeamDisplayInfo (..),
+    UserOrOrgDisplayInfo,
+    UserLike (..),
+    UnifiedDisplayInfo,
+    UserLikeIds,
+    unifiedUser_,
+    unifiedOrg_,
   )
 where
 
+import Control.Lens
 import Data.Aeson (ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (FromJSON)
@@ -15,6 +22,43 @@ import Network.URI (URI)
 import Share.IDs
 import Share.Prelude
 import Share.Utils.URI (URIParam (..))
+
+-- | A single unified type for anywhere the frontend may need to display a user-like
+-- thing; whether org, team, or user.
+data UserLike user org
+  = UnifiedUser !user
+  | UnifiedOrg !org
+  deriving (Show, Eq, Ord)
+
+instance (ToJSON user, ToJSON org) => ToJSON (UserLike user org) where
+  toJSON = \case
+    UnifiedUser u -> Aeson.object ["kind" Aeson..= ("user" :: Text), "info" Aeson..= u]
+    UnifiedOrg o -> Aeson.object ["kind" Aeson..= ("org" :: Text), "info" Aeson..= o]
+
+instance (FromJSON user, FromJSON org) => FromJSON (UserLike user org) where
+  parseJSON =
+    Aeson.withObject "UserLike" $ \o -> do
+      kind <- o Aeson..: "kind"
+      case kind of
+        ("user" :: Text) -> UnifiedUser <$> o Aeson..: "info"
+        ("org" :: Text) -> UnifiedOrg <$> o Aeson..: "info"
+        _ -> fail $ "Unknown UserLike kind: " <> show kind
+
+type UnifiedDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
+
+type UserOrOrgDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
+
+type UserLikeIds = UserLike UserId OrgId
+
+unifiedUser_ :: Traversal (UserLike user org) (UserLike user' org) user user'
+unifiedUser_ f = \case
+  (UnifiedUser u) -> UnifiedUser <$> f u
+  (UnifiedOrg o) -> pure $ UnifiedOrg o
+
+unifiedOrg_ :: Traversal (UserLike user org) (UserLike user org') org org'
+unifiedOrg_ f = \case
+  (UnifiedUser u) -> pure $ UnifiedUser u
+  (UnifiedOrg o) -> UnifiedOrg <$> f o
 
 -- | Common type for displaying a user.
 data UserDisplayInfo = UserDisplayInfo

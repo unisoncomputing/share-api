@@ -6,9 +6,9 @@
     "kind": "user",
     "location": "Updated location",
     "name": "Updated Transcripts",
-    "permissions": [],
     "pronouns": "updated/pronouns",
     "twitterHandle": "updated-twitter",
+    "userId": "U-<UUID>",
     "website": "http://updated-website.com"
   },
   "status": [

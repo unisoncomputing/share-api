@@ -4,6 +4,7 @@
     "completedTours": [],
     "handle": "transcripts",
     "isSuperadmin": false,
+    "kind": "user",
     "name": "Transcript User",
     "organizationMemberships": [
       "unison"

@@ -3,19 +3,45 @@
     "notifications": [
       {
         "event": {
-          "data": {
-            "data": {
-              "contributionId": "C-<UUID>",
-              "contributorUserId": "U-<UUID>",
-              "fromBranchId": "B-<UUID>",
-              "projectId": "P-<UUID>",
-              "toBranchId": "B-<UUID>"
+          "actor": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
             },
-            "topic": "project:contribution:created"
+            "kind": "user"
+          },
+          "data": {
+            "kind": "projectBranchUpdated",
+            "payload": {
+              "branch": {
+                "branchContributorHandle": null,
+                "branchContributorUserId": null,
+                "branchId": "B-<UUID>",
+                "branchName": "newbranch",
+                "branchShortHand": "newbranch"
+              },
+              "project": {
+                "projectId": "P-<UUID>",
+                "projectOwnerHandle": "test",
+                "projectOwnerUserId": "U-<UUID>",
+                "projectShortHand": "@test/publictestproject",
+                "projectSlug": "publictestproject"
+              }
+            }
           },
           "id": "EVENT-<UUID>",
           "occurredAt": "<TIMESTAMP>",
-          "scope": "U-<UUID>"
+          "scope": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          }
         },
         "id": "NOT-<UUID>",
         "status": "read"
