@@ -198,26 +198,15 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
         Left jwtErr -> throwError $ JWTError event.eventId webhookId jwtErr
         Right jwt -> pure jwt
     let payloadWithJWT = payload {jwt = JWTParam payloadJWT}
-    ExceptT $ buildWebhookRequest webhookId uri event
-    let reqResult =
-          HTTPClient.requestFromURI uri <&> \req ->
-            req
-              { HTTPClient.method = "POST",
-                HTTPClient.responseTimeout = webhookTimeout,
-                HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
-                HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode $ payloadWithJWT
-              }
-    req <- case reqResult of
-      Left parseErr -> throwError $ InvalidRequest event.eventId webhookId parseErr
-      Right req -> pure req
+    req <- ExceptT $ buildWebhookRequest webhookId uri event payloadWithJWT
     resp <- liftIO $ HTTPClient.httpLbs req proxiedHTTPManager
     case HTTPClient.responseStatus resp of
       httpStatus@(HTTP.Status status _)
         | status >= 400 -> throwError $ ReceiverError event.eventId webhookId httpStatus $ HTTPClient.responseBody resp
         | otherwise -> pure ()
 
-buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> AppM reqCtx (Either WebhookSendFailure HTTPClient.Request)
-buildWebhookRequest webhookId uri event = do
+buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> AppM reqCtx (Either WebhookSendFailure HTTPClient.Request)
+buildWebhookRequest webhookId uri event defaultPayload = do
   if
     | isSlackWebhook uri -> buildSlackWebhookRequest uri
     | isDiscordWebhook uri ->
@@ -249,7 +238,7 @@ buildWebhookRequest webhookId uri event = do
             { HTTPClient.method = "POST",
               HTTPClient.responseTimeout = webhookTimeout,
               HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
-              HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode event.eventData
+              HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode defaultPayload
             }
 
     mkSlackAttachment :: Maybe URI -> Text -> Text -> Text -> UTCTime -> Aeson.Value
