@@ -5,8 +5,7 @@
 module Share.BackgroundJobs.Webhooks.Worker (worker) where
 
 import Control.Lens hiding ((.=))
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Trans.Except (except)
+import Control.Monad.Except (ExceptT (..), runExceptT)
 import Crypto.JWT (JWTError)
 import Data.Aeson (FromJSON (..), ToJSON (..))
 import Data.Aeson qualified as Aeson
@@ -22,6 +21,7 @@ import Network.HTTP.Client qualified as HTTPClient
 import Network.HTTP.Types qualified as HTTP
 import Network.URI (URI)
 import Network.URI qualified as URI
+import Share.App (AppM)
 import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Webhooks.Queries qualified as WQ
@@ -45,6 +45,7 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 import Share.Web.Share.DisplayInfo.Types qualified as DisplayInfo
+import Share.Web.UI.Links qualified as Links
 import UnliftIO qualified
 
 data WebhookSendFailure
@@ -197,7 +198,7 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
         Left jwtErr -> throwError $ JWTError event.eventId webhookId jwtErr
         Right jwt -> pure jwt
     let payloadWithJWT = payload {jwt = JWTParam payloadJWT}
-    except $ buildWebhookRequest webhookId uri event
+    ExceptT $ buildWebhookRequest webhookId uri event
     let reqResult =
           HTTPClient.requestFromURI uri <&> \req ->
             req
@@ -215,7 +216,7 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
         | status >= 400 -> throwError $ ReceiverError event.eventId webhookId httpStatus $ HTTPClient.responseBody resp
         | otherwise -> pure ()
 
-buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> Either WebhookSendFailure HTTPClient.Request
+buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> AppM reqCtx (Either WebhookSendFailure HTTPClient.Request)
 buildWebhookRequest webhookId uri event = do
   if
     | isSlackWebhook uri -> buildSlackWebhookRequest uri
@@ -225,7 +226,7 @@ buildWebhookRequest webhookId uri event = do
                 & fromMaybe ((URI.uriPath uri))
             slackifiedDiscordWebhookURI = uri {URI.uriPath = nonSlackPath <> "/slack"}
          in buildSlackWebhookRequest slackifiedDiscordWebhookURI
-    | otherwise -> buildDefaultPayload
+    | otherwise -> pure $ buildDefaultPayload
   where
     isSlackWebhook :: URI -> Bool
     isSlackWebhook uri =
@@ -272,42 +273,47 @@ buildWebhookRequest webhookId uri event = do
               "ts" .= epochSeconds
             ]
               <> (mainURI & foldMap \uri -> ["title_link" .= uriToText uri])
-    buildSlackWebhookRequest :: URI -> Either WebhookSendFailure HTTPClient.Request
-    buildSlackWebhookRequest uri =
+    buildSlackWebhookRequest :: URI -> AppM reqCtx (Either WebhookSendFailure HTTPClient.Request)
+    buildSlackWebhookRequest uri = do
       let actorName = event.eventActor ^. DisplayInfo.name_
           actorHandle = "(" <> IDs.toText (event.eventActor ^. DisplayInfo.handle_) <> ")"
           actorAuthor = maybe "" (<> " ") actorName <> actorHandle
-          slackPayload = case event.eventData of
-            HydratedProjectBranchUpdatedPayload payload ->
-              let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
-                  title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
-                  msg = "Branch " <> IDs.toText pbShorthand <> " was just updated."
-               in Aeson.object
-                    [ "text" Aeson..= msg,
-                      "attachments"
-                        Aeson..= [ mkSlackAttachment Nothing actorAuthor title msg event.eventOccurredAt
-                                 ]
-                    ]
-            HydratedProjectContributionCreatedPayload payload ->
-              let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
-                  title = "New Contribution in " <> IDs.toText pbShorthand
-                  msg = payload.contributionInfo.contributionTitle <> maybe "" (<> " — ") payload.contributionInfo.contributionDescription
-               in Aeson.object
-                    [ "text" Aeson..= msg,
-                      "attachments"
-                        Aeson..= [ mkSlackAttachment Nothing actorAuthor title msg event.eventOccurredAt
-                                 ]
-                    ]
-       in HTTPClient.requestFromURI uri
-            & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
-            <&> ( \req ->
-                    req
-                      { HTTPClient.method = "POST",
-                        HTTPClient.responseTimeout = webhookTimeout,
-                        HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
-                        HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode slackPayload
-                      }
-                )
+      slackPayload <- case event.eventData of
+        HydratedProjectBranchUpdatedPayload payload -> do
+          let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
+              title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
+              msg = "Branch " <> IDs.toText pbShorthand <> " was just updated."
+          link <- Links.notificationLink event.eventData
+          pure $
+            Aeson.object
+              [ "text" Aeson..= msg,
+                "attachments"
+                  Aeson..= [ mkSlackAttachment (Just link) actorAuthor title msg event.eventOccurredAt
+                           ]
+              ]
+        HydratedProjectContributionCreatedPayload payload -> do
+          let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
+              title = "New Contribution in " <> IDs.toText pbShorthand
+              msg = payload.contributionInfo.contributionTitle <> maybe "" (<> " — ") payload.contributionInfo.contributionDescription
+          link <- Links.notificationLink event.eventData
+          pure $
+            Aeson.object
+              [ "text" Aeson..= msg,
+                "attachments"
+                  Aeson..= [ mkSlackAttachment (Just link) actorAuthor title msg event.eventOccurredAt
+                           ]
+              ]
+      pure $
+        HTTPClient.requestFromURI uri
+          & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
+          <&> ( \req ->
+                  req
+                    { HTTPClient.method = "POST",
+                      HTTPClient.responseTimeout = webhookTimeout,
+                      HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
+                      HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode slackPayload
+                    }
+              )
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->
