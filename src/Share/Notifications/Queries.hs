@@ -222,12 +222,12 @@ deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-createWebhookDeliveryMethod :: UserId -> Transaction e NotificationWebhookId
-createWebhookDeliveryMethod userId = do
+createWebhookDeliveryMethod :: UserId -> Text -> Transaction e NotificationWebhookId
+createWebhookDeliveryMethod userId name = do
   queryExpect1Col
     [sql|
-          INSERT INTO notification_webhooks (subscriber_user_id)
-          VALUES (#{userId})
+          INSERT INTO notification_webhooks (subscriber_user_id, name)
+          VALUES (#{userId}, #{name})
           RETURNING id
         |]
 

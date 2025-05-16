@@ -289,13 +289,15 @@ type CreateWebhookEndpoint =
 
 data CreateWebhookRequest
   = CreateWebhookRequest
-  { url :: URIParam
+  { url :: URIParam,
+    name :: Text
   }
 
 instance FromJSON CreateWebhookRequest where
   parseJSON = withObject "CreateWebhookRequest" $ \o -> do
     url <- o .: "url"
-    pure CreateWebhookRequest {url}
+    name <- o .: "name"
+    pure CreateWebhookRequest {url, name}
 
 data CreateWebhookResponse
   = CreateWebhookResponse
