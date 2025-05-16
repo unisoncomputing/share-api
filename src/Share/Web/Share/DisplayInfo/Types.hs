@@ -16,6 +16,7 @@ module Share.Web.Share.DisplayInfo.Types
     unifiedOrg_,
     handle_,
     name_,
+    avatarUrl_,
   )
 where
 
@@ -63,6 +64,13 @@ name_ f = \case
     UnifiedUser <$> (userDisplayInfo & field @"name" %%~ f)
   UnifiedOrg orgDisplayInfo -> do
     UnifiedOrg <$> (orgDisplayInfo & field @"user" . field @"name" %%~ f)
+
+avatarUrl_ :: Lens UnifiedDisplayInfo UnifiedDisplayInfo (Maybe URI) (Maybe URI)
+avatarUrl_ f = \case
+  UnifiedUser userDisplayInfo -> do
+    UnifiedUser <$> (userDisplayInfo & field @"avatarUrl" %%~ f)
+  UnifiedOrg orgDisplayInfo -> do
+    UnifiedOrg <$> (orgDisplayInfo & field @"user" . field @"avatarUrl" %%~ f)
 
 type UnifiedDisplayInfo = UserLike UserDisplayInfo OrgDisplayInfo
 

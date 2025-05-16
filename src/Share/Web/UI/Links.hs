@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Share.Web.UI.Links
   ( oauthRedirect,
     oauthRedirectWithCodeAndState,
@@ -12,6 +14,9 @@ module Share.Web.UI.Links
     notificationLink,
     projectBranchBrowseLink,
     contributionLink,
+    unisonLogoImage,
+
+    -- * Utilities
     isTrustedURI,
     errorRedirectLink,
     errorRedirect,
@@ -24,6 +29,7 @@ where
 import Control.Monad.Reader
 import Data.Map qualified as Map
 import Network.URI
+import Network.URI qualified as URI
 import Servant (ToHttpApiData (..))
 import Share.App
 import Share.Env qualified as Env
@@ -92,13 +98,13 @@ projectBranchBrowseLink (ProjectBranchShortHand {userHandle, projectSlug, contri
   let branchPath = case contributorHandle of
         Just contributor -> [IDs.toText contributor, IDs.toText branchName]
         Nothing -> [IDs.toText branchName]
-      path = [IDs.toText userHandle, IDs.toText projectSlug, "code"] <> branchPath <> ["latest"]
+      path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "code"] <> branchPath <> ["latest"]
   shareUIPath path
 
 -- E.g. https://share.unison-lang.org/@unison/base/contributions/100
 contributionLink :: ProjectShortHand -> ContributionNumber -> AppM reqCtx URI
 contributionLink (ProjectShortHand {userHandle, projectSlug}) contributionNumber = do
-  let path = [IDs.toText userHandle, IDs.toText projectSlug, "contributions", IDs.toText contributionNumber]
+  let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "contributions", IDs.toText contributionNumber]
   shareUIPath path
 
 -- | Where the user should go when clicking on a notification
@@ -108,6 +114,11 @@ notificationLink = \case
     projectBranchBrowseLink payload.branchInfo.projectBranchShortHand
   HydratedProjectContributionCreatedPayload payload ->
     contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
+
+unisonLogoImage :: URI
+unisonLogoImage =
+  URI.parseURI "https://share.unison-lang.org/static/unison-logo-circle.png"
+    & fromMaybe (error "unisonLogoImage: invalid URI")
 
 ----------- Utilities -----------
 

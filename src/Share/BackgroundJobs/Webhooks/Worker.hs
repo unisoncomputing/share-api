@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
@@ -241,8 +242,8 @@ buildWebhookRequest webhookId uri event defaultPayload = do
               HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode defaultPayload
             }
 
-    mkSlackAttachment :: Maybe URI -> Text -> Text -> Text -> UTCTime -> Aeson.Value
-    mkSlackAttachment mainURI author title msg timestamp =
+    mkSlackAttachment :: Text -> URI -> Text -> URI -> Maybe URI -> Text -> Text -> UTCTime -> Aeson.Value
+    mkSlackAttachment preText mainURI authorName authorLink authorAvatarUrl title msg timestamp =
       let epochSeconds :: Int64
           epochSeconds = round (POSIX.utcTimeToPOSIXSeconds timestamp)
           t :: Text -> Text
@@ -250,46 +251,50 @@ buildWebhookRequest webhookId uri event defaultPayload = do
        in Aeson.object $
             [ "mrkdwn_in" Aeson..= [t "text"],
               "color" .= t "#36a64f",
-              -- "pretext" .= "Optional pre-text that appears above the attachment block",
-              "author_name" .= author,
-              -- "author_link" .= "http://flickr.com/bobby/",
-              -- "author_icon" .= "https://placeimg.com/16/16/people",
+              "pretext" .= preText,
+              "author_name" .= authorName,
+              "author_link" .= uriToText authorLink,
               "title" .= title,
+              "title_link" .= uriToText mainURI,
               "text" .= msg,
-              -- "thumb_url" .= "http://placekitten.com/g/200/200",
+              "thumb_url" .= uriToText Links.unisonLogoImage,
               -- "footer" .= "footer",
               -- "footer_icon" .= "https://platform.slack-edge.com/img/default_application_icon.png",
               "ts" .= epochSeconds
             ]
-              <> (mainURI & foldMap \uri -> ["title_link" .= uriToText uri])
+              <> (authorAvatarUrl & foldMap \uri -> ["author_icon" .= uriToText uri])
     buildSlackWebhookRequest :: URI -> AppM reqCtx (Either WebhookSendFailure HTTPClient.Request)
     buildSlackWebhookRequest uri = do
       let actorName = event.eventActor ^. DisplayInfo.name_
-          actorHandle = "(" <> IDs.toText (event.eventActor ^. DisplayInfo.handle_) <> ")"
+          actorHandle = "(" <> IDs.toText (PrefixedID @"@" $ event.eventActor ^. DisplayInfo.handle_) <> ")"
           actorAuthor = maybe "" (<> " ") actorName <> actorHandle
+          actorAvatarUrl = event.eventActor ^. DisplayInfo.avatarUrl_
+      actorLink <- Links.userProfilePage (event.eventActor ^. DisplayInfo.handle_)
       slackPayload <- case event.eventData of
         HydratedProjectBranchUpdatedPayload payload -> do
           let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
               title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
-              msg = "Branch " <> IDs.toText pbShorthand <> " was just updated."
+              msg = ""
+              preText = title
           link <- Links.notificationLink event.eventData
           pure $
             Aeson.object
-              [ "text" Aeson..= msg,
+              [ "text" Aeson..= title,
                 "attachments"
-                  Aeson..= [ mkSlackAttachment (Just link) actorAuthor title msg event.eventOccurredAt
+                  Aeson..= [ mkSlackAttachment preText link actorAuthor actorLink actorAvatarUrl title msg event.eventOccurredAt
                            ]
               ]
         HydratedProjectContributionCreatedPayload payload -> do
           let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
-              title = "New Contribution in " <> IDs.toText pbShorthand
-              msg = payload.contributionInfo.contributionTitle <> maybe "" (<> " — ") payload.contributionInfo.contributionDescription
+              title = payload.contributionInfo.contributionTitle
+              msg = fromMaybe "" payload.contributionInfo.contributionDescription
+              preText = "New Contribution in " <> IDs.toText pbShorthand
           link <- Links.notificationLink event.eventData
           pure $
             Aeson.object
-              [ "text" Aeson..= msg,
+              [ "text" Aeson..= preText,
                 "attachments"
-                  Aeson..= [ mkSlackAttachment (Just link) actorAuthor title msg event.eventOccurredAt
+                  Aeson..= [ mkSlackAttachment preText link actorAuthor actorLink actorAvatarUrl title msg event.eventOccurredAt
                            ]
               ]
       pure $
