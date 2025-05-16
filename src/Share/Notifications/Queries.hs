@@ -300,32 +300,38 @@ hydrateEventData = \case
       HydratedProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
   ProjectContributionCreatedData
     (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
-      HydratedProjectContributionCreatedPayload <$> hydrateContributionInfo contributionId projectId fromBranchId toBranchId contributorUserId
+      HydratedProjectContributionCreatedPayload <$> hydrateContributionCreatedPayload contributionId projectId fromBranchId toBranchId contributorUserId
   where
-    hydrateContributionInfo :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionCreatedPayload
-    hydrateContributionInfo contributionId projectId fromBranchId toBranchId authorUserId = do
-      author <- UsersQ.userDisplayInfoOf id authorUserId
+    hydrateContributionCreatedPayload :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionCreatedPayload
+    hydrateContributionCreatedPayload contributionId projectId fromBranchId toBranchId authorUserId = do
       projectInfo <- hydrateProjectPayload projectId
-      mergeTargetBranch <- hydrateBranchPayload fromBranchId
-      mergeSourceBranch <- hydrateBranchPayload toBranchId
+      contributionInfo <- hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId
+      pure $ ProjectContributionCreatedPayload {projectInfo, contributionInfo = contributionInfo projectInfo}
+    hydrateContributionInfo :: ContributionId -> BranchId -> BranchId -> UserId -> m (ProjectPayload -> ContributionPayload)
+    hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId = do
+      author <- UsersQ.userDisplayInfoOf id authorUserId
+      targetBranch <- hydrateBranchPayload fromBranchId
+      sourceBranch <- hydrateBranchPayload toBranchId
       contribution <- ContributionQ.contributionById contributionId
-      pure $
-        ProjectContributionCreatedPayload
-          { projectInfo,
-            mergeSourceBranch,
-            mergeTargetBranch,
-            author,
-            title = contribution.title,
-            description = contribution.description,
-            contributionId,
-            status = contribution.status,
-            number = contribution.number
+      pure $ \projectInfo ->
+        ContributionPayload
+          { contributionId,
+            contributionNumber = contribution.number,
+            contributionTitle = contribution.title,
+            contributionDescription = contribution.description,
+            contributionStatus = contribution.status,
+            contributionAuthor = author,
+            contributionSourceBranch = sourceBranch projectInfo,
+            contributionTargetBranch = targetBranch projectInfo
           }
     hydrateProjectBranchPayload projectId branchId = do
-      branchInfo <- hydrateBranchPayload branchId
       projectInfo <- hydrateProjectPayload projectId
-      pure $ ProjectBranchUpdatedPayload {projectInfo, branchInfo}
-    hydrateBranchPayload :: BranchId -> m BranchPayload
+      branchInfo <- hydrateBranchPayload branchId
+      pure $ ProjectBranchUpdatedPayload {projectInfo, branchInfo = branchInfo projectInfo}
+    hydrateBranchPayload ::
+      BranchId ->
+      -- We return a func so we can convince GHC this whole thing is Applicative
+      m (ProjectPayload -> BranchPayload)
     hydrateBranchPayload branchId = do
       queryExpect1Row
         [sql|
@@ -337,12 +343,15 @@ hydrateEventData = \case
         <&> \( branchName,
                branchContributorUserId,
                branchContributorHandle
-               ) ->
+               )
+             projectInfo ->
             let branchShortHand = BranchShortHand {contributorHandle = branchContributorHandle, branchName}
+                projectBranchShortHand = ProjectBranchShortHand {userHandle = projectInfo.projectOwnerHandle, projectSlug = projectInfo.projectSlug, contributorHandle = branchContributorHandle, branchName}
              in BranchPayload
                   { branchId,
                     branchName,
                     branchShortHand,
+                    projectBranchShortHand,
                     branchContributorUserId,
                     branchContributorHandle
                   }

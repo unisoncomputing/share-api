@@ -26,8 +26,6 @@ module Share.Web.Errors
     missingParameter,
     or404,
     or403,
-    errorRedirect,
-    ShareUIError (..),
     SomeServerError (..),
     someServerError,
     withCallstack,
@@ -64,8 +62,6 @@ import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
-import Share.Web.UI.Links (ShareUIError)
-import Share.Web.UI.Links qualified as Links
 import Unison.Server.Backend qualified as Backend
 import Unison.Server.Errors qualified as Backend
 import Unison.Sync.Types qualified as Sync
@@ -299,12 +295,6 @@ instance ToServerError Backend.BackendError where
           Backend.ExpectedNameLookup {} -> "backend:missing-name-lookup"
           Backend.ProjectBranchNameNotFound {} -> "backend:project-branch-name-not-found"
      in (ErrorID errID, Backend.backendError err)
-
--- | Redirect the user to the Share UI and show an error message.
-errorRedirect :: ShareUIError -> WebApp a
-errorRedirect shareUIError = do
-  errURI <- Links.errorRedirectLink shareUIError
-  respondError $ ErrorRedirect (Links.shareUIErrorToUIText shareUIError) errURI
 
 data Unimplemented = Unimplemented
   deriving (Eq, Show)

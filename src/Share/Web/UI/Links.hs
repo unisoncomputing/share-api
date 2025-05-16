@@ -9,8 +9,12 @@ module Share.Web.UI.Links
     homePage,
     ucmConnected,
     userProfilePage,
+    notificationLink,
+    projectBranchBrowseLink,
+    contributionLink,
     isTrustedURI,
     errorRedirectLink,
+    errorRedirect,
     ShareUIError (..),
     shareUIErrorToUIText,
     UIEvents (..),
@@ -25,9 +29,12 @@ import Share.App
 import Share.Env qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
+import Share.Notifications.Types
 import Share.OAuth.Types (OAuth2State)
 import Share.Prelude
 import Share.Utils.URI (setPathAndQueryParams)
+import Share.Web.App (WebApp)
+import Share.Web.Errors (ErrorRedirect (..), respondError)
 
 oauthRedirect :: AppM reqCtx URI
 oauthRedirect = sharePath ["oauth", "redirect"]
@@ -78,6 +85,29 @@ homePage mayEvent = do
         NewUserLogIn -> Map.singleton "event" "new-user-log-in"
         LogIn -> Map.singleton "event" "log-in"
         LogOut -> Map.singleton "event" "log-out"
+
+-- E.g. https://share.unison-lang.org/@unison/base/code/@ceedubs/each-first/latest
+projectBranchBrowseLink :: ProjectBranchShortHand -> AppM reqCtx URI
+projectBranchBrowseLink (ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}) = do
+  let branchPath = case contributorHandle of
+        Just contributor -> [IDs.toText contributor, IDs.toText branchName]
+        Nothing -> [IDs.toText branchName]
+      path = [IDs.toText userHandle, IDs.toText projectSlug, "code"] <> branchPath <> ["latest"]
+  shareUIPath path
+
+-- E.g. https://share.unison-lang.org/@unison/base/contributions/100
+contributionLink :: ProjectShortHand -> ContributionNumber -> AppM reqCtx URI
+contributionLink (ProjectShortHand {userHandle, projectSlug}) contributionNumber = do
+  let path = [IDs.toText userHandle, IDs.toText projectSlug, "contributions", IDs.toText contributionNumber]
+  shareUIPath path
+
+-- | Where the user should go when clicking on a notification
+notificationLink :: HydratedEventPayload -> AppM reqCtx URI
+notificationLink = \case
+  HydratedProjectBranchUpdatedPayload payload ->
+    projectBranchBrowseLink payload.branchInfo.projectBranchShortHand
+  HydratedProjectContributionCreatedPayload payload ->
+    contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
 
 ----------- Utilities -----------
 
@@ -133,3 +163,9 @@ shareUIErrorToUIText e =
 
 errorRedirectLink :: ShareUIError -> AppM reqCtx URI
 errorRedirectLink shareUIError = shareUIPathQ ["error"] (Map.fromList [("appError", shareUIErrorToUIText shareUIError)])
+
+-- | Redirect the user to the Share UI and show an error message.
+errorRedirect :: ShareUIError -> WebApp a
+errorRedirect shareUIError = do
+  errURI <- errorRedirectLink shareUIError
+  respondError $ ErrorRedirect (shareUIErrorToUIText shareUIError) errURI

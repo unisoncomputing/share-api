@@ -153,10 +153,10 @@ redirectReceiverEndpoint _mayGithubCode _mayStatePSID (Just errorType) mayErrorD
     -- The user didn't grant us the permissions we need for their github account.
     "access_denied" -> do
       Logging.logUserFaultText "User rejected required authentication permissions on identity provider"
-      errorRedirect AccountCreationGitHubPermissionsRejected
+      Links.errorRedirect Links.AccountCreationGitHubPermissionsRejected
     otherErrType -> do
       Logging.logErrorText ("Github authentication error: " <> otherErrType <> " " <> fold mayErrorDescription)
-      errorRedirect UnspecifiedError
+      Links.errorRedirect Links.UnspecifiedError
 redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayErrorDescription mayCookiePSID existingAuthSession = do
   cookiePSID <- case cookieVal mayCookiePSID of
     Nothing -> respondError $ MissingOrExpiredPendingSession
@@ -256,7 +256,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       userHandle <- case mayPreferredHandle of
         Just handle -> pure handle
         Nothing -> case IDs.fromText @UserHandle (Text.toLower githubHandle) of
-          Left _err -> errorRedirect $ AccountCreationInvalidHandle (Text.toLower githubHandle)
+          Left _err -> Links.errorRedirect $ Links.AccountCreationInvalidHandle (Text.toLower githubHandle)
           Right handle -> pure handle
       PG.tryRunTransaction (UserQ.findOrCreateGithubUser AuthZ.userCreationOverride ghUser ghEmail userHandle) >>= \case
         Left (UserQ.UserHandleTaken _) -> do
@@ -264,7 +264,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
           respondError $ HandleAlreadyTaken userHandle handleTakenUri
         Left (UserQ.InvalidUserHandle err handle) -> do
           Logging.logErrorText ("Invalid user handle: " <> handle <> " " <> err)
-          errorRedirect $ AccountCreationInvalidHandle handle
+          Links.errorRedirect $ Links.AccountCreationInvalidHandle handle
         Right u -> pure u
 
     mkLoginLandingPageURI :: UserQ.NewOrPreExisting User -> WebApp URI

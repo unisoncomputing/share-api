@@ -278,8 +278,8 @@ buildWebhookRequest webhookId uri event = do
           actorHandle = "(" <> IDs.toText (event.eventActor ^. DisplayInfo.handle_) <> ")"
           actorAuthor = maybe "" (<> " ") actorName <> actorHandle
           slackPayload = case event.eventData of
-            HydratedProjectBranchUpdatedPayload (ProjectBranchUpdatedPayload {projectInfo, branchInfo}) ->
-              let pbShorthand = (projectBranchShortHandFromParts projectInfo.projectShortHand branchInfo.branchShortHand)
+            HydratedProjectBranchUpdatedPayload payload ->
+              let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
                   title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
                   msg = "Branch " <> IDs.toText pbShorthand <> " was just updated."
                in Aeson.object
@@ -288,10 +288,10 @@ buildWebhookRequest webhookId uri event = do
                         Aeson..= [ mkSlackAttachment Nothing actorAuthor title msg event.eventOccurredAt
                                  ]
                     ]
-            HydratedProjectContributionCreatedPayload (ProjectContributionCreatedPayload {projectInfo, mergeSourceBranch, title = contributionTitle, description}) ->
-              let pbShorthand = (projectBranchShortHandFromParts projectInfo.projectShortHand mergeSourceBranch.branchShortHand)
+            HydratedProjectContributionCreatedPayload payload ->
+              let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
                   title = "New Contribution in " <> IDs.toText pbShorthand
-                  msg = contributionTitle <> maybe "" (<> " — ") description
+                  msg = payload.contributionInfo.contributionTitle <> maybe "" (<> " — ") payload.contributionInfo.contributionDescription
                in Aeson.object
                     [ "text" Aeson..= msg,
                       "attachments"
