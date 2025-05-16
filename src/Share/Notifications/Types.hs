@@ -115,7 +115,7 @@ instance PG.DecodeValue NotificationStatus where
     "archived" -> Just Archived
     _ -> Nothing
 
-newtype NotificationFilter = NotificationFilter (Map Text Text)
+newtype NotificationFilter = NotificationFilter (Map Text Aeson.Value)
   deriving (Eq, Show)
   deriving newtype (Aeson.ToJSON, Aeson.FromJSON)
 
