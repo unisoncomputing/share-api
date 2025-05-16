@@ -140,10 +140,10 @@ removeSubscriptionDeliveryMethodsEndpoint userHandle subscriptionId callerUserId
   pure ()
 
 createWebhookEndpoint :: UserHandle -> UserId -> API.CreateWebhookRequest -> WebApp API.CreateWebhookResponse
-createWebhookEndpoint userHandle callerUserId API.CreateWebhookRequest {url} = do
+createWebhookEndpoint userHandle callerUserId API.CreateWebhookRequest {url, name = webhookName} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkDeliveryMethodsManage callerUserId notificationUserId
-  webhookId <- NotifOps.createWebhookDeliveryMethod notificationUserId url
+  webhookId <- NotifOps.createWebhookDeliveryMethod notificationUserId url webhookName
   pure $ API.CreateWebhookResponse {webhookId}
 
 deleteWebhookEndpoint :: UserHandle -> UserId -> NotificationWebhookId -> WebApp ()
