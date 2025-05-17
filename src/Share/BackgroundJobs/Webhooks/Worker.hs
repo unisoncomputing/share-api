@@ -17,6 +17,8 @@ import Data.List.Extra qualified as List
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (UTCTime)
+import Data.Time qualified as Time
+import Data.Time.Clock.POSIX qualified as POSIX
 import Ki.Unlifted qualified as Ki
 import Network.HTTP.Client qualified as HTTPClient
 import Network.HTTP.Types qualified as HTTP
@@ -237,7 +239,7 @@ instance ToJSON (MessageContent 'Slack) where
                    "author_link" .= uriToText authorLink,
                    "author_icon" .= fmap uriToText authorAvatarUrl,
                    "thumb_url" .= fmap uriToText thumbnailUrl,
-                   "ts" .= timestamp,
+                   "ts" .= (round (POSIX.utcTimeToPOSIXSeconds timestamp) :: Int64),
                    "color" .= ("#36a64f" :: Text)
                  ]
              ]
@@ -255,7 +257,7 @@ instance ToJSON (MessageContent 'Discord) where
                    "url" .= uriToText mainLink,
                    "description" .= content,
                    "author" .= Aeson.object ["name" .= authorName, "url" .= uriToText authorLink, "icon_url" .= fmap uriToText authorAvatarUrl],
-                   "timestamp" .= timestamp,
+                   "timestamp" .= (Just $ Text.pack $ Time.formatTime Time.defaultTimeLocale "%FT%T%QZ" timestamp),
                    "thumbnail" .= fmap (\url -> Aeson.object ["url" .= uriToText url]) thumbnailUrl
                  ]
              ]
