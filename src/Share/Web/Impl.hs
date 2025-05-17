@@ -7,7 +7,6 @@ import Data.Set qualified as Set
 import Servant
 import Share.App
 import Share.Env qualified as Env
-import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
 import Share.OAuth.Session
 import Share.OAuth.Types (ResponseType (ResponseTypeCode))
@@ -29,14 +28,15 @@ import Share.Web.Types
 import Share.Web.UCM.Projects.Impl qualified as UCMProjects
 import Share.Web.UCM.Sync.Impl qualified as Sync
 import Share.Web.UCM.SyncV2.Impl qualified as SyncV2
+import Share.Web.UI.Links qualified as Links
 
 discoveryEndpoint :: WebApp DiscoveryDocument
 discoveryEndpoint = do
   issuer <- URIParam <$> shareIssuer
-  authorizationE <- URIParam <$> sharePath ["oauth", "authorize"]
-  tokenE <- URIParam <$> sharePath ["oauth", "token"]
-  userInfoE <- URIParam <$> sharePath ["user-info"]
-  jwksURI <- URIParam <$> sharePath [".well-known", "jwks.json"]
+  authorizationE <- URIParam <$> Links.oauthAuthorize
+  tokenE <- URIParam <$> Links.oauthToken
+  userInfoE <- URIParam <$> Links.openIDUserInfo
+  jwksURI <- URIParam <$> Links.jwksURI
   let responseTypesSupported = Set.singleton ResponseTypeCode
   pure $ DiscoveryDocument {..}
 
@@ -50,7 +50,7 @@ userInfoEndpoint :: Maybe Session -> WebApp UserInfo
 userInfoEndpoint sess = do
   userId <- AuthN.requireAuthenticatedUser sess
   User {user_name, avatar_url, user_email, handle, user_id} <- PGO.expectUserById userId
-  profileUrl <- shareUIPath ["@" <> IDs.toText handle]
+  profileUrl <- Links.userProfilePage handle
   pure $
     UserInfo
       { handle = handle,

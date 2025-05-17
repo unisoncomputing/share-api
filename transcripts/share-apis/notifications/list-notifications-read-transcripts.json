@@ -20,7 +20,8 @@
                 "branchContributorUserId": null,
                 "branchId": "B-<UUID>",
                 "branchName": "newbranch",
-                "branchShortHand": "newbranch"
+                "branchShortHand": "newbranch",
+                "projectBranchShortHand": "@test/publictestproject/newbranch"
               },
               "project": {
                 "projectId": "P-<UUID>",

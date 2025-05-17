@@ -12,11 +12,6 @@ module Share.Web.App
     addServerTag,
     getTags,
     shouldUseCaching,
-    sharePath,
-    sharePathQ,
-    shareUIPath,
-    shareUIPathQ,
-    isTrustedURI,
   )
 where
 
@@ -31,7 +26,6 @@ import Share.Env qualified as Env
 import Share.IDs (RequestId, UserId)
 import Share.Prelude
 import Share.Utils.Logging
-import Share.Utils.URI (setPathAndQueryParams)
 import UnliftIO.STM
 
 type WebApp = AppM RequestCtx
@@ -122,35 +116,3 @@ localRequestCtx f = local \env -> env {ctx = f (ctx env)}
 shouldUseCaching :: (MonadReader (Env RequestCtx) m) => m Bool
 shouldUseCaching =
   asks (useCaching . ctx)
-
--- | Construct a full URI to a path within share, with provided query params.
-sharePathQ :: [Text] -> Map Text Text -> AppM reqCtx URI
-sharePathQ pathSegments queryParams = do
-  uri <- asks Env.apiOrigin
-  pure . setPathAndQueryParams pathSegments queryParams $ uri
-
--- | Construct a full URI to a path within share.
-sharePath :: [Text] -> AppM reqCtx URI
-sharePath path = sharePathQ path mempty
-
--- | Check if a URI is a the Share UI, the Cloud UI, the main website, or the
--- Cloud website. This is useful for preventing attackers from generating
--- arbitrary redirections in things like login redirects.
-isTrustedURI :: URI -> AppM reqCtx Bool
-isTrustedURI uri = do
-  shareUiURI <- asks Env.shareUiOrigin
-  websiteURI <- asks Env.websiteOrigin
-  cloudUiURI <- asks Env.cloudUiOrigin
-  cloudWebsiteURI <- asks Env.cloudWebsiteOrigin
-  let requestedAuthority = uriAuthority uri
-  let trustedURIs = [shareUiURI, websiteURI, cloudUiURI, cloudWebsiteURI]
-  pure $ any (\uri -> uriAuthority uri == requestedAuthority) trustedURIs
-
--- | Construct a full URI to a path within the share UI, with the provided query params.
-shareUIPathQ :: [Text] -> Map Text Text -> AppM reqCtx URI
-shareUIPathQ pathSegments queryParams = do
-  shareUiURI <- asks Env.shareUiOrigin
-  pure . setPathAndQueryParams pathSegments queryParams $ shareUiURI
-
-shareUIPath :: [Text] -> AppM reqCtx URI
-shareUIPath pathSegments = shareUIPathQ pathSegments mempty

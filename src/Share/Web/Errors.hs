@@ -26,8 +26,6 @@ module Share.Web.Errors
     missingParameter,
     or404,
     or403,
-    errorRedirect,
-    ShareUIError (..),
     SomeServerError (..),
     someServerError,
     withCallstack,
@@ -297,31 +295,6 @@ instance ToServerError Backend.BackendError where
           Backend.ExpectedNameLookup {} -> "backend:missing-name-lookup"
           Backend.ProjectBranchNameNotFound {} -> "backend:project-branch-name-not-found"
      in (ErrorID errID, Backend.backendError err)
-
--- | Redirect the user to the Share UI and show an error message.
-errorRedirect :: ShareUIError -> WebApp a
-errorRedirect = \case
-  shareUIError -> do
-    errURI <- shareUIPathQ ["error"] (Map.fromList [("appError", shareUIErrorToUIText shareUIError)])
-    respondError $ ErrorRedirect (shareUIErrorToUIText shareUIError) errURI
-
--- | Various Error types that the Share UI knows how to interpret
-data ShareUIError
-  = UnspecifiedError
-  | AccountCreationGitHubPermissionsRejected
-  | AccountCreationInvalidHandle Text {- the invalid handle -}
-  deriving (Show)
-
--- | Convert ShareUIError to the Text that the UI expects
-shareUIErrorToUIText :: ShareUIError -> Text
-shareUIErrorToUIText e =
-  case e of
-    UnspecifiedError ->
-      "UnspecifiedError"
-    AccountCreationGitHubPermissionsRejected {} ->
-      "AccountCreationGitHubPermissionsRejected"
-    AccountCreationInvalidHandle {} ->
-      "AccountCreationInvalidHandle"
 
 data Unimplemented = Unimplemented
   deriving (Eq, Show)

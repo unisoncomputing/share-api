@@ -592,10 +592,10 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
 
     recordNotificationEvent :: BranchId -> PG.Transaction e ()
     recordNotificationEvent branchId = do
-      (projectId, projectResourceId, projectOwnerUserId, branchContributorUserId) <-
+      (projectId, projectResourceId, projectOwnerUserId, branchContributorUserId, private) <-
         PG.queryExpect1Row
           [PG.sql|
-        SELECT p.id, p.resource_id, p.owner_user_id, pb.contributor_id
+        SELECT p.id, p.resource_id, p.owner_user_id, pb.contributor_id, p.private
           FROM project_branches pb
           JOIN projects p ON p.id = pb.project_id
         WHERE pb.id = #{branchId}
@@ -604,7 +604,8 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
             ProjectBranchData
               { projectId,
                 branchId,
-                branchContributorUserId
+                branchContributorUserId,
+                public = not private
               }
       let notifEvent =
             NotificationEvent
@@ -697,10 +698,10 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
         WHERE id = #{branchId}
       |]
     recordNotificationEvent = do
-      (projectId, projectResourceId, projectOwnerUserId, branchContributorUserId) <-
+      (projectId, projectResourceId, projectOwnerUserId, branchContributorUserId, private) <-
         PG.queryExpect1Row
           [PG.sql|
-        SELECT p.id, p.resource_id, p.owner_user_id, pb.contributor_id
+        SELECT p.id, p.resource_id, p.owner_user_id, pb.contributor_id, p.private
           FROM project_branches pb
           JOIN projects p ON p.id = pb.project_id
         WHERE pb.id = #{branchId}
@@ -709,7 +710,8 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
             ProjectBranchData
               { projectId,
                 branchId,
-                branchContributorUserId
+                branchContributorUserId,
+                public = not private
               }
       let notifEvent =
             NotificationEvent
