@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
@@ -16,13 +17,11 @@ import Data.List.Extra qualified as List
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (UTCTime)
-import Data.Time.Clock.POSIX qualified as POSIX
 import Ki.Unlifted qualified as Ki
 import Network.HTTP.Client qualified as HTTPClient
 import Network.HTTP.Types qualified as HTTP
 import Network.URI (URI)
 import Network.URI qualified as URI
-import Share.App (AppM)
 import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Webhooks.Queries qualified as WQ
@@ -206,16 +205,67 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
         | status >= 400 -> throwError $ ReceiverError event.eventId webhookId httpStatus $ HTTPClient.responseBody resp
         | otherwise -> pure ()
 
-buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> AppM reqCtx (Either WebhookSendFailure HTTPClient.Request)
+data ChatProvider
+  = Slack
+  | Discord
+  deriving stock (Show, Eq)
+
+-- A type to unify slack and discord message types
+data MessageContent (provider :: ChatProvider) = MessageContent
+  { -- | The content of the primary message.
+    content :: Text,
+    title :: Text,
+    mainLink :: URI,
+    authorName :: Text,
+    authorLink :: URI,
+    authorAvatarUrl :: Maybe URI,
+    thumbnailUrl :: Maybe URI,
+    timestamp :: UTCTime
+  }
+  deriving stock (Show, Eq)
+
+instance ToJSON (MessageContent 'Slack) where
+  toJSON MessageContent {content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
+    Aeson.object
+      [ "text" .= content,
+        "attachments"
+          .= [ Aeson.object
+                 [ "title" .= title,
+                   "title_link" .= uriToText mainLink,
+                   "text" .= content,
+                   "author_name" .= authorName,
+                   "author_link" .= uriToText authorLink,
+                   "author_icon" .= fmap uriToText authorAvatarUrl,
+                   "thumb_url" .= fmap uriToText thumbnailUrl,
+                   "ts" .= timestamp,
+                   "color" .= ("#36a64f" :: Text)
+                 ]
+             ]
+      ]
+
+instance ToJSON (MessageContent 'Discord) where
+  toJSON MessageContent {content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
+    Aeson.object
+      [ "username" .= ("Share Notification" :: Text),
+        "avatar_url" .= Links.unisonLogoImage,
+        "content" .= content,
+        "embeds"
+          .= [ Aeson.object
+                 [ "title" .= title,
+                   "url" .= uriToText mainLink,
+                   "description" .= content,
+                   "author" .= Aeson.object ["name" .= authorName, "url" .= uriToText authorLink, "icon_url" .= fmap uriToText authorAvatarUrl],
+                   "timestamp" .= timestamp,
+                   "thumbnail" .= fmap (\url -> Aeson.object ["url" .= uriToText url]) thumbnailUrl
+                 ]
+             ]
+      ]
+
+buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> Background (Either WebhookSendFailure HTTPClient.Request)
 buildWebhookRequest webhookId uri event defaultPayload = do
   if
-    | isSlackWebhook uri -> buildSlackWebhookRequest uri
-    | isDiscordWebhook uri ->
-        let nonSlackPath =
-              List.stripSuffix "/slack" (URI.uriPath uri)
-                & fromMaybe ((URI.uriPath uri))
-            slackifiedDiscordWebhookURI = uri {URI.uriPath = nonSlackPath <> "/slack"}
-         in buildSlackWebhookRequest slackifiedDiscordWebhookURI
+    | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
+    | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
     | otherwise -> pure $ buildDefaultPayload
   where
     isSlackWebhook :: URI -> Bool
@@ -242,61 +292,46 @@ buildWebhookRequest webhookId uri event defaultPayload = do
               HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode defaultPayload
             }
 
-    mkSlackAttachment :: Text -> URI -> Text -> URI -> Maybe URI -> Text -> Text -> UTCTime -> Aeson.Value
-    mkSlackAttachment preText mainURI authorName authorLink authorAvatarUrl title msg timestamp =
-      let epochSeconds :: Int64
-          epochSeconds = round (POSIX.utcTimeToPOSIXSeconds timestamp)
-          t :: Text -> Text
-          t x = x
-       in Aeson.object $
-            [ "mrkdwn_in" Aeson..= [t "text"],
-              "color" .= t "#36a64f",
-              "pretext" .= preText,
-              "author_name" .= authorName,
-              "author_link" .= uriToText authorLink,
-              "title" .= title,
-              "title_link" .= uriToText mainURI,
-              "text" .= msg,
-              "thumb_url" .= uriToText Links.unisonLogoImage,
-              -- "footer" .= "footer",
-              -- "footer_icon" .= "https://platform.slack-edge.com/img/default_application_icon.png",
-              "ts" .= epochSeconds
-            ]
-              <> (authorAvatarUrl & foldMap \uri -> ["author_icon" .= uriToText uri])
-    buildSlackWebhookRequest :: URI -> AppM reqCtx (Either WebhookSendFailure HTTPClient.Request)
-    buildSlackWebhookRequest uri = do
+    buildChatAppPayload :: forall provider. (ToJSON (MessageContent provider)) => Proxy provider -> URI -> Background (Either WebhookSendFailure HTTPClient.Request)
+    buildChatAppPayload _ uri = do
       let actorName = event.eventActor ^. DisplayInfo.name_
           actorHandle = "(" <> IDs.toText (PrefixedID @"@" $ event.eventActor ^. DisplayInfo.handle_) <> ")"
           actorAuthor = maybe "" (<> " ") actorName <> actorHandle
           actorAvatarUrl = event.eventActor ^. DisplayInfo.avatarUrl_
       actorLink <- Links.userProfilePage (event.eventActor ^. DisplayInfo.handle_)
-      slackPayload <- case event.eventData of
+      messageContent :: MessageContent provider <- case event.eventData of
         HydratedProjectBranchUpdatedPayload payload -> do
           let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
               title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
-              msg = ""
               preText = title
           link <- Links.notificationLink event.eventData
           pure $
-            Aeson.object
-              [ "text" Aeson..= title,
-                "attachments"
-                  Aeson..= [ mkSlackAttachment preText link actorAuthor actorLink actorAvatarUrl title msg event.eventOccurredAt
-                           ]
-              ]
+            MessageContent
+              { content = preText,
+                title = title,
+                mainLink = link,
+                authorName = actorAuthor,
+                authorLink = actorLink,
+                authorAvatarUrl = actorAvatarUrl,
+                thumbnailUrl = Nothing,
+                timestamp = event.eventOccurredAt
+              }
         HydratedProjectContributionCreatedPayload payload -> do
           let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
               title = payload.contributionInfo.contributionTitle
-              msg = fromMaybe "" payload.contributionInfo.contributionDescription
               preText = "New Contribution in " <> IDs.toText pbShorthand
           link <- Links.notificationLink event.eventData
           pure $
-            Aeson.object
-              [ "text" Aeson..= preText,
-                "attachments"
-                  Aeson..= [ mkSlackAttachment preText link actorAuthor actorLink actorAvatarUrl title msg event.eventOccurredAt
-                           ]
-              ]
+            MessageContent
+              { content = preText,
+                title = title,
+                mainLink = link,
+                authorName = actorAuthor,
+                authorLink = actorLink,
+                authorAvatarUrl = actorAvatarUrl,
+                thumbnailUrl = Nothing,
+                timestamp = event.eventOccurredAt
+              }
       pure $
         HTTPClient.requestFromURI uri
           & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
@@ -305,7 +340,7 @@ buildWebhookRequest webhookId uri event defaultPayload = do
                     { HTTPClient.method = "POST",
                       HTTPClient.responseTimeout = webhookTimeout,
                       HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
-                      HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode slackPayload
+                      HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode messageContent
                     }
               )
 
