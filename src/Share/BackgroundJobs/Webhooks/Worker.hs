@@ -278,8 +278,10 @@ buildWebhookRequest webhookId uri event defaultPayload = do
 
     isDiscordWebhook :: URI -> Bool
     isDiscordWebhook uri =
-      case (URI.uriRegName <$> URI.uriAuthority uri, URI.uriPath uri) of
-        (Just regName, path) -> Text.isPrefixOf "discord.com" (Text.pack regName) && List.isPrefixOf path "/api/webhooks"
+      case (URI.uriRegName <$> URI.uriAuthority uri) of
+        Just regName ->
+          Text.isPrefixOf "discord.com" (Text.pack regName)
+            && Text.isPrefixOf "/api/webhooks" (Text.pack $ URI.uriPath uri)
         _ -> False
 
     buildDefaultPayload :: Either WebhookSendFailure HTTPClient.Request
