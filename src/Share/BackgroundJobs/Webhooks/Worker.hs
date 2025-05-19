@@ -236,7 +236,7 @@ instance ToJSON (MessageContent 'Slack) where
       [ "text" .= preText,
         "attachments"
           .= [ Aeson.object
-                 [ "title" .= title,
+                 [ "title" .= cutOffText 250 title,
                    "title_link" .= uriToText mainLink,
                    "text" .= content,
                    "author_name" .= authorName,
@@ -254,13 +254,13 @@ instance ToJSON (MessageContent 'Discord) where
     Aeson.object
       [ "username" .= ("Share Notifications" :: Text),
         "avatar_url" .= Links.unisonLogoImage,
-        "content" .= preText,
+        "content" .= cutOffText 1950 preText,
         "embeds"
           .= [ Aeson.object
-                 [ "title" .= title,
+                 [ "title" .= cutOffText 250 title,
                    "url" .= uriToText mainLink,
-                   "description" .= content,
-                   "author" .= Aeson.object ["name" .= authorName, "url" .= uriToText authorLink, "icon_url" .= fmap uriToText authorAvatarUrl],
+                   "description" .= cutOffText 4000 content,
+                   "author" .= Aeson.object ["name" .= cutOffText 250 authorName, "url" .= uriToText authorLink, "icon_url" .= fmap uriToText authorAvatarUrl],
                    "timestamp" .= (Just $ Text.pack $ Time.formatTime Time.defaultTimeLocale "%FT%T%QZ" timestamp),
                    "thumbnail" .= fmap (\url -> Aeson.object ["url" .= uriToText url]) thumbnailUrl
                  ]
@@ -270,9 +270,9 @@ instance ToJSON (MessageContent 'Discord) where
 buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> Background (Either WebhookSendFailure HTTPClient.Request)
 buildWebhookRequest webhookId uri event defaultPayload = do
   if
-      | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
-      | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
-      | otherwise -> pure $ buildDefaultPayload
+    | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
+    | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
+    | otherwise -> pure $ buildDefaultPayload
   where
     isSlackWebhook :: URI -> Bool
     isSlackWebhook uri =
@@ -354,6 +354,13 @@ buildWebhookRequest webhookId uri event defaultPayload = do
                       HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode messageContent
                     }
               )
+
+-- | Nicely cut off text so that it doesn't exceed the max length
+cutOffText :: Int -> Text -> Text
+cutOffText maxLength text =
+  if Text.length text > maxLength
+    then Text.take (maxLength - 3) text <> "..."
+    else text
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->
