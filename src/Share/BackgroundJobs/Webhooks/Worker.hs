@@ -270,9 +270,9 @@ instance ToJSON (MessageContent 'Discord) where
 buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> Background (Either WebhookSendFailure HTTPClient.Request)
 buildWebhookRequest webhookId uri event defaultPayload = do
   if
-    | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
-    | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
-    | otherwise -> pure $ buildDefaultPayload
+      | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
+      | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
+      | otherwise -> pure $ buildDefaultPayload
   where
     isSlackWebhook :: URI -> Bool
     isSlackWebhook uri =
