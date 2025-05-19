@@ -1,41 +1,53 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 -- | This module provides the background worker for sending notification webhooks.
 module Share.BackgroundJobs.Webhooks.Worker (worker) where
 
-import Control.Lens
-import Control.Monad.Except (runExceptT)
+import Control.Lens hiding ((.=))
+import Control.Monad.Except (ExceptT (..), runExceptT)
 import Crypto.JWT (JWTError)
 import Data.Aeson (FromJSON (..), ToJSON (..))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types ((.=))
 import Data.ByteString.Lazy.Char8 qualified as BL
+import Data.List.Extra qualified as List
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (UTCTime)
+import Data.Time qualified as Time
+import Data.Time.Clock.POSIX qualified as POSIX
 import Ki.Unlifted qualified as Ki
 import Network.HTTP.Client qualified as HTTPClient
 import Network.HTTP.Types qualified as HTTP
+import Network.URI (URI)
+import Network.URI qualified as URI
 import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Webhooks.Queries qualified as WQ
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Env qualified as Env
-import Share.IDs (NotificationEventId, NotificationWebhookId)
+import Share.IDs
+import Share.IDs qualified as IDs
 import Share.JWT (JWTParam (..))
 import Share.JWT qualified as JWT
 import Share.Metrics qualified as Metrics
 import Share.Notifications.Queries qualified as NQ
-import Share.Notifications.Types (HydratedEventPayload, NotificationEvent (..), NotificationTopic, eventData_, eventUserInfo_, hydratedEventTopic)
+import Share.Notifications.Types
 import Share.Notifications.Webhooks.Secrets (WebhookConfig (..), WebhookSecretError)
 import Share.Notifications.Webhooks.Secrets qualified as Webhooks
 import Share.Postgres qualified as PG
 import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Share.Utils.URI (URIParam (..))
+import Share.Utils.URI (URIParam (..), uriToText)
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types qualified as DisplayInfo
+import Share.Web.UI.Links qualified as Links
 import UnliftIO qualified
 
 data WebhookSendFailure
@@ -188,22 +200,167 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
         Left jwtErr -> throwError $ JWTError event.eventId webhookId jwtErr
         Right jwt -> pure jwt
     let payloadWithJWT = payload {jwt = JWTParam payloadJWT}
-    let reqResult =
-          HTTPClient.requestFromURI uri <&> \req ->
-            req
-              { HTTPClient.method = "POST",
-                HTTPClient.responseTimeout = webhookTimeout,
-                HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
-                HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode $ payloadWithJWT
-              }
-    req <- case reqResult of
-      Left parseErr -> throwError $ InvalidRequest event.eventId webhookId parseErr
-      Right req -> pure req
+    req <- ExceptT $ buildWebhookRequest webhookId uri event payloadWithJWT
     resp <- liftIO $ HTTPClient.httpLbs req proxiedHTTPManager
     case HTTPClient.responseStatus resp of
       httpStatus@(HTTP.Status status _)
         | status >= 400 -> throwError $ ReceiverError event.eventId webhookId httpStatus $ HTTPClient.responseBody resp
         | otherwise -> pure ()
+
+data ChatProvider
+  = Slack
+  | Discord
+  deriving stock (Show, Eq)
+
+-- A type to unify slack and discord message types
+data MessageContent (provider :: ChatProvider) = MessageContent
+  { -- Text of the bot message
+    preText :: Text,
+    -- Title of the attachment
+    title :: Text,
+    -- Text of the attachment
+    content :: Text,
+    -- Title link
+    mainLink :: URI,
+    authorName :: Text,
+    authorLink :: URI,
+    authorAvatarUrl :: Maybe URI,
+    thumbnailUrl :: Maybe URI,
+    timestamp :: UTCTime
+  }
+  deriving stock (Show, Eq)
+
+instance ToJSON (MessageContent 'Slack) where
+  toJSON MessageContent {preText, content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
+    Aeson.object
+      [ "text" .= preText,
+        "attachments"
+          .= [ Aeson.object
+                 [ "title" .= cutOffText 250 title,
+                   "title_link" .= uriToText mainLink,
+                   "text" .= content,
+                   "author_name" .= authorName,
+                   "author_link" .= uriToText authorLink,
+                   "author_icon" .= fmap uriToText authorAvatarUrl,
+                   "thumb_url" .= fmap uriToText thumbnailUrl,
+                   "ts" .= (round (POSIX.utcTimeToPOSIXSeconds timestamp) :: Int64),
+                   "color" .= ("#36a64f" :: Text)
+                 ]
+             ]
+      ]
+
+instance ToJSON (MessageContent 'Discord) where
+  toJSON MessageContent {preText, content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
+    Aeson.object
+      [ "username" .= ("Share Notifications" :: Text),
+        "avatar_url" .= Links.unisonLogoImage,
+        "content" .= cutOffText 1950 preText,
+        "embeds"
+          .= [ Aeson.object
+                 [ "title" .= cutOffText 250 title,
+                   "url" .= uriToText mainLink,
+                   "description" .= cutOffText 4000 content,
+                   "author" .= Aeson.object ["name" .= cutOffText 250 authorName, "url" .= uriToText authorLink, "icon_url" .= fmap uriToText authorAvatarUrl],
+                   "timestamp" .= (Just $ Text.pack $ Time.formatTime Time.defaultTimeLocale "%FT%T%QZ" timestamp),
+                   "thumbnail" .= fmap (\url -> Aeson.object ["url" .= uriToText url]) thumbnailUrl
+                 ]
+             ]
+      ]
+
+buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> Background (Either WebhookSendFailure HTTPClient.Request)
+buildWebhookRequest webhookId uri event defaultPayload = do
+  if
+    | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
+    | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
+    | otherwise -> pure $ buildDefaultPayload
+  where
+    isSlackWebhook :: URI -> Bool
+    isSlackWebhook uri =
+      case URI.uriRegName <$> URI.uriAuthority uri of
+        Nothing -> False
+        Just regName -> List.isPrefixOf "hooks.slack.com" regName
+
+    isDiscordWebhook :: URI -> Bool
+    isDiscordWebhook uri =
+      case (URI.uriRegName <$> URI.uriAuthority uri) of
+        Just regName ->
+          Text.isPrefixOf "discord.com" (Text.pack regName)
+            && Text.isPrefixOf "/api/webhooks" (Text.pack $ URI.uriPath uri)
+        _ -> False
+
+    buildDefaultPayload :: Either WebhookSendFailure HTTPClient.Request
+    buildDefaultPayload =
+      HTTPClient.requestFromURI uri
+        & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
+        <&> \req ->
+          req
+            { HTTPClient.method = "POST",
+              HTTPClient.responseTimeout = webhookTimeout,
+              HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
+              HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode defaultPayload
+            }
+
+    buildChatAppPayload :: forall provider. (ToJSON (MessageContent provider)) => Proxy provider -> URI -> Background (Either WebhookSendFailure HTTPClient.Request)
+    buildChatAppPayload _ uri = do
+      let actorName = event.eventActor ^. DisplayInfo.name_
+          actorHandle = "(" <> IDs.toText (PrefixedID @"@" $ event.eventActor ^. DisplayInfo.handle_) <> ")"
+          actorAuthor = maybe "" (<> " ") actorName <> actorHandle
+          actorAvatarUrl = event.eventActor ^. DisplayInfo.avatarUrl_
+      actorLink <- Links.userProfilePage (event.eventActor ^. DisplayInfo.handle_)
+      messageContent :: MessageContent provider <- case event.eventData of
+        HydratedProjectBranchUpdatedPayload payload -> do
+          let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
+              title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
+              preText = title
+          link <- Links.notificationLink event.eventData
+          pure $
+            MessageContent
+              { preText = preText,
+                content = "Branch updated",
+                title = title,
+                mainLink = link,
+                authorName = actorAuthor,
+                authorLink = actorLink,
+                authorAvatarUrl = actorAvatarUrl,
+                thumbnailUrl = Nothing,
+                timestamp = event.eventOccurredAt
+              }
+        HydratedProjectContributionCreatedPayload payload -> do
+          let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
+              title = payload.contributionInfo.contributionTitle
+              description = fromMaybe "" $ payload.contributionInfo.contributionDescription
+              preText = "New Contribution in " <> IDs.toText pbShorthand
+          link <- Links.notificationLink event.eventData
+          pure $
+            MessageContent
+              { preText = preText,
+                content = description,
+                title = title,
+                mainLink = link,
+                authorName = actorAuthor,
+                authorLink = actorLink,
+                authorAvatarUrl = actorAvatarUrl,
+                thumbnailUrl = Nothing,
+                timestamp = event.eventOccurredAt
+              }
+      pure $
+        HTTPClient.requestFromURI uri
+          & mapLeft (\e -> InvalidRequest event.eventId webhookId e)
+          <&> ( \req ->
+                  req
+                    { HTTPClient.method = "POST",
+                      HTTPClient.responseTimeout = webhookTimeout,
+                      HTTPClient.requestHeaders = [(HTTP.hContentType, "application/json")],
+                      HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode messageContent
+                    }
+              )
+
+-- | Nicely cut off text so that it doesn't exceed the max length
+cutOffText :: Int -> Text -> Text
+cutOffText maxLength text =
+  if Text.length text > maxLength
+    then Text.take (maxLength - 3) text <> "..."
+    else text
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->

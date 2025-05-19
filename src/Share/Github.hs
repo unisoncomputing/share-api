@@ -22,6 +22,7 @@ import Share.Utils.Show
 import Share.Utils.URI (URIParam (URIParam))
 import Share.Web.App
 import Share.Web.Errors
+import Share.Web.UI.Links qualified as Links
 
 data GithubError
   = GithubClientError ClientError
@@ -210,7 +211,7 @@ githubOauthApi = Proxy
 githubAuthenticationURI :: OAuth2State -> WebApp URI
 githubAuthenticationURI oauth2State = do
   oauthClientId <- asks Env.githubClientID
-  redirectUri <- sharePath ["oauth", "redirect"]
+  redirectUri <- Links.oauthRedirect
   let ghAuth = Just (URIAuth "" "github.com" "")
       ghLink = linkURI (uri oauthClientId redirectUri)
    in return $

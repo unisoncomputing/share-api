@@ -31,11 +31,11 @@ listNotificationDeliveryMethods userId maySubscriptionId = do
 
   pure $ (EmailDeliveryMethod <$> emailDeliveryMethods) <> (WebhookDeliveryMethod <$> webhookDeliveryMethods)
 
-createWebhookDeliveryMethod :: UserId -> URIParam -> WebApp NotificationWebhookId
-createWebhookDeliveryMethod userId uriParam = do
+createWebhookDeliveryMethod :: UserId -> URIParam -> Text -> WebApp NotificationWebhookId
+createWebhookDeliveryMethod userId uriParam webhookName = do
   -- Note that we can't be completely transactional between postgres and vault here.
   webhookId <- PG.runTransaction do
-    NotifQ.createWebhookDeliveryMethod userId
+    NotifQ.createWebhookDeliveryMethod userId webhookName
   let webhookConfig = WebhookConfig {uri = uriParam}
   WebhookSecrets.putWebhookConfig webhookId webhookConfig
   pure webhookId

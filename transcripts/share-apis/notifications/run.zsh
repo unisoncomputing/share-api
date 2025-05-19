@@ -18,11 +18,13 @@ subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-projec
 }" )
 
 webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"${echo_server}/good-webhook\"
+  \"url\": \"${echo_server}/good-webhook\",
+  \"name\": \"Good Webhook\"
 }" )
 
 failing_webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"${echo_server}/invalid?x-set-response-status-code=500\"
+  \"url\": \"${echo_server}/invalid?x-set-response-status-code=500\",
+  \"name\": \"Bad Webhook\"
 }" )
 
 fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/subscriptions/${subscription_id}/delivery-methods/add" "{

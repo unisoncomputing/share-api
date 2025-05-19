@@ -46,6 +46,7 @@ module Share.IDs
     NotificationSubscriptionId (..),
     Email (..),
     projectBranchShortHandToBranchShortHand,
+    projectBranchShortHandFromParts,
     JTI (..),
     CategoryName (..),
     CategoryID (..),
@@ -472,6 +473,10 @@ data ProjectBranchShortHand = ProjectBranchShortHand
 projectBranchShortHandToBranchShortHand :: ProjectBranchShortHand -> BranchShortHand
 projectBranchShortHandToBranchShortHand ProjectBranchShortHand {contributorHandle, branchName} =
   BranchShortHand {contributorHandle, branchName}
+
+projectBranchShortHandFromParts :: ProjectShortHand -> BranchShortHand -> ProjectBranchShortHand
+projectBranchShortHandFromParts ProjectShortHand {userHandle, projectSlug} BranchShortHand {contributorHandle, branchName} =
+  ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
 
 -- | A fully specified branch identifier of the form '@user/project/@contributor/branch' or
 --
