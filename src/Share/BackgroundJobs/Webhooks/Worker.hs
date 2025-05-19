@@ -214,9 +214,13 @@ data ChatProvider
 
 -- A type to unify slack and discord message types
 data MessageContent (provider :: ChatProvider) = MessageContent
-  { -- | The content of the primary message.
-    content :: Text,
+  { -- Text of the bot message
+    preText :: Text,
+    -- Title of the attachment
     title :: Text,
+    -- Text of the attachment
+    content :: Text,
+    -- Title link
     mainLink :: URI,
     authorName :: Text,
     authorLink :: URI,
@@ -227,9 +231,9 @@ data MessageContent (provider :: ChatProvider) = MessageContent
   deriving stock (Show, Eq)
 
 instance ToJSON (MessageContent 'Slack) where
-  toJSON MessageContent {content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
+  toJSON MessageContent {preText, content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
     Aeson.object
-      [ "text" .= content,
+      [ "text" .= preText,
         "attachments"
           .= [ Aeson.object
                  [ "title" .= title,
@@ -246,11 +250,11 @@ instance ToJSON (MessageContent 'Slack) where
       ]
 
 instance ToJSON (MessageContent 'Discord) where
-  toJSON MessageContent {content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
+  toJSON MessageContent {preText, content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
     Aeson.object
       [ "username" .= ("Share Notification" :: Text),
         "avatar_url" .= Links.unisonLogoImage,
-        "content" .= content,
+        "content" .= preText,
         "embeds"
           .= [ Aeson.object
                  [ "title" .= title,
@@ -266,9 +270,9 @@ instance ToJSON (MessageContent 'Discord) where
 buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> Background (Either WebhookSendFailure HTTPClient.Request)
 buildWebhookRequest webhookId uri event defaultPayload = do
   if
-      | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
-      | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
-      | otherwise -> pure $ buildDefaultPayload
+    | isSlackWebhook uri -> buildChatAppPayload (Proxy @Slack) uri
+    | isDiscordWebhook uri -> buildChatAppPayload (Proxy @Discord) uri
+    | otherwise -> pure $ buildDefaultPayload
   where
     isSlackWebhook :: URI -> Bool
     isSlackWebhook uri =
@@ -311,7 +315,8 @@ buildWebhookRequest webhookId uri event defaultPayload = do
           link <- Links.notificationLink event.eventData
           pure $
             MessageContent
-              { content = preText,
+              { preText = preText,
+                content = "Branch updated",
                 title = title,
                 mainLink = link,
                 authorName = actorAuthor,
@@ -323,11 +328,13 @@ buildWebhookRequest webhookId uri event defaultPayload = do
         HydratedProjectContributionCreatedPayload payload -> do
           let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
               title = payload.contributionInfo.contributionTitle
+              description = fromMaybe "" $ payload.contributionInfo.contributionDescription
               preText = "New Contribution in " <> IDs.toText pbShorthand
           link <- Links.notificationLink event.eventData
           pure $
             MessageContent
-              { content = preText,
+              { preText = preText,
+                content = description,
                 title = title,
                 mainLink = link,
                 authorName = actorAuthor,
