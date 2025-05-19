@@ -252,7 +252,7 @@ instance ToJSON (MessageContent 'Slack) where
 instance ToJSON (MessageContent 'Discord) where
   toJSON MessageContent {preText, content, title, mainLink, authorName, authorLink, authorAvatarUrl, thumbnailUrl, timestamp} =
     Aeson.object
-      [ "username" .= ("Share Notification" :: Text),
+      [ "username" .= ("Share Notifications" :: Text),
         "avatar_url" .= Links.unisonLogoImage,
         "content" .= preText,
         "embeds"
