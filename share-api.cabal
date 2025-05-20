@@ -41,6 +41,7 @@ library
       Share.BackgroundJobs.Webhooks.Worker
       Share.BackgroundJobs.Workers
       Share.Branch
+      Share.ChatApps
       Share.Codebase
       Share.Codebase.Types
       Share.Contribution
@@ -225,6 +226,7 @@ library
       QuasiQuotes
       ImportQualifiedPost
       OverloadedRecordDot
+      NumericUnderscores
   ghc-options: -Wall -Werror -Wname-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -Wincomplete-uni-patterns -Widentities -Wredundant-constraints -Wpartial-fields -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
   build-depends:
       Diff
@@ -375,6 +377,7 @@ executable share-api
       QuasiQuotes
       ImportQualifiedPost
       OverloadedRecordDot
+      NumericUnderscores
   ghc-options: -Wall -Werror -Wname-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -Wincomplete-uni-patterns -Widentities -Wredundant-constraints -Wpartial-fields -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields -threaded -rtsopts "-with-rtsopts=-N -A32m -qn2 -T"
   build-depends:
       Diff

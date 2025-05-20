@@ -1,7 +1,10 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Share.Web.Support.Impl where
 
+import Servant
+import Share.ChatApps
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres.Ops qualified as PGO
@@ -11,11 +14,17 @@ import Share.Web.App
 import Share.Web.Support.API qualified as Support
 import Share.Web.Support.Types
 import Share.Web.Support.Zendesk qualified as Zendesk
-import Servant
 
 createTicketEndpoint :: Session -> SupportTicketRequest -> WebApp NoContent
-createTicketEndpoint (Session {sessionUserId}) (SupportTicketRequest {..}) = do
+createTicketEndpoint (Session {sessionUserId}) (SupportTicketRequest {subject, body, priority}) = do
   User {user_name, user_email, handle} <- PGO.expectUserById sessionUserId
+  let message :: MessageContent 'Slack
+      message =
+        MessageContent
+          { preText = "New Support Ticket",
+            title = subject,
+            content = body
+          }
   let zendeskTicket =
         Zendesk.ZendeskTicket
           { subject = subject,
