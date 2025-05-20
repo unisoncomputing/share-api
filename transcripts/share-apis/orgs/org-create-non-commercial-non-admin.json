@@ -1,0 +1,17 @@
+{
+  "body": {
+    "isCommercial": false,
+    "orgId": "ORG-<UUID>",
+    "user": {
+      "avatarUrl": "https://example.com/staples.png",
+      "handle": "orgco",
+      "name": "OrgCo",
+      "userId": "U-<UUID>"
+    }
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

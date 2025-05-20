@@ -10,13 +10,23 @@ new_member="$(create_user newuser)"
 # Org creation workflow
 
 # Should fail
-fetch "$unauthorized_user" POST org-create-unauthorized '/orgs' '{
+fetch "$unauthorized_user" POST org-create-unauthorized-commercial '/orgs' '{
   "name": "ACME",
   "handle": "acme",
   "avatarUrl": "https://example.com/anvil.png",
   "owner": "unauthorized",
   "email": "wile.e.coyote@example.com",
   "isCommercial": true
+}'
+
+# Should succeed, regular users can create non-commercial orgs
+fetch "$unauthorized_user" POST org-create-non-commercial-non-admin '/orgs' '{
+  "name": "OrgCo",
+  "handle": "orgco",
+  "avatarUrl": "https://example.com/staples.png",
+  "owner": "unauthorized",
+  "email": "orgco@example.com",
+  "isCommercial": false
 }'
 
 # Admin can create an org and assign any owner.
