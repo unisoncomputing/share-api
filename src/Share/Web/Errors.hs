@@ -18,6 +18,7 @@ module Share.Web.Errors
     MissingExpectedEntity (..),
     Unimplemented (..),
     BadRequest (..),
+    Forbidden (..),
     InvalidParam (..),
     NotAuthorized (..),
     ErrorID (..),
@@ -313,6 +314,15 @@ instance ToServerError BadRequest where
 
 instance Loggable BadRequest where
   toLog (BadRequest msg) = withSeverity UserFault . textLog $ msg
+
+data Forbidden = Forbidden Text
+  deriving (Eq, Show)
+
+instance ToServerError Forbidden where
+  toServerError (Forbidden msg) = (ErrorID "forbidden", err403 {errBody = BL.fromStrict . Text.encodeUtf8 $ msg})
+
+instance Loggable Forbidden where
+  toLog (Forbidden msg) = withSeverity UserFault . textLog $ msg
 
 data InvalidParam = InvalidParam {paramName :: Text, param :: Text, parseError :: Text}
 
