@@ -103,7 +103,7 @@ worker scope = do
       toIO <- UnliftIO.askRunInIO
       -- Need to unlift so we can use this in transactions
       let tryWebhookIO eventData webhookId = toIO $ tryWebhook eventData webhookId
-      mayResult <- Metrics.recordWebhookSendingDuration $ PG.runTransaction $ runMaybeT $ do
+      mayResult <- Metrics.recordWebhookSendingDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ runMaybeT $ do
         webhookInfo@(eventId, webhookId) <- MaybeT WQ.getUnsentWebhook
         mayErr <- lift $ attemptWebhookSend authZReceipt tryWebhookIO eventId webhookId
         pure (mayErr, webhookInfo)
