@@ -667,6 +667,10 @@ assertUserHasProjectPermission rolePermission mayReqUserId projId = do
   guardM $ PG.runTransaction $ do
     Q.userHasProjectPermission mayReqUserId projId rolePermission
 
+assertUserIsSuperadmin :: UserId -> MaybeT WebApp ()
+assertUserIsSuperadmin userId = do
+  guardM . lift . PG.runTransaction $ Q.isSuperadmin userId
+
 maybePermissionFailure :: WrapperPermissions -> MaybeT WebApp a -> WebApp (Either AuthZFailure a)
 maybePermissionFailure perm m = do
   runMaybeT m >>= \case
@@ -687,9 +691,11 @@ checkUserIsOrgMember reqUserId orgUserId = do
     PG.runTransaction $
       Q.isOrgMember reqUserId orgUserId
 
-checkCreateOrg :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
-checkCreateOrg reqUserId ownerUserId = maybePermissionFailure (OrgPermission (OrgCreate ownerUserId)) $ do
-  guardM . PG.runTransaction $ Q.isSuperadmin reqUserId
+checkCreateOrg :: UserId -> UserId -> Bool -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkCreateOrg reqUserId ownerUserId isCommercial = maybePermissionFailure (OrgPermission (OrgCreate ownerUserId)) $ do
+  if isCommercial
+    then assertUserIsSuperadmin reqUserId
+    else assertUserIsSuperadmin reqUserId <|> assertUsersEqual reqUserId ownerUserId
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 checkReadOrgRolesList :: UserId -> OrgId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
