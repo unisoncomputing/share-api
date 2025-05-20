@@ -38,6 +38,8 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (InternalServerError (..), respondError)
 import Share.Web.Errors qualified as Errors
 import Share.Web.Share.Contributions.MergeDetection qualified as MergeDetection
+import Share.Web.Share.Orgs.Queries qualified as OrgQ
+import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.Sync.Impl qualified as SyncQ
 import Unison.Server.Orphans ()
@@ -87,10 +89,14 @@ getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) mayUcmProjectId mayUcm
 createProjectEndpoint :: Maybe Session -> UCMProjects.CreateProjectRequest -> WebApp UCMProjects.CreateProjectResponse
 createProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) (UCMProjects.CreateProjectRequest {projectName}) = toResponse do
   ProjectShortHand {userHandle, projectSlug} <- lift $ parseParam @ProjectShortHand "projectName" projectName
-  User {user_id = targetUserId} <- pgT do
-    UserQ.userByHandle userHandle `orThrow` UCMProjects.CreateProjectResponseNotFound (UCMProjects.NotFound "User not found")
+  (User {user_id = targetUserId}, mayOrg) <- pgT do
+    user@(User {user_id}) <- UserQ.userByHandle userHandle `orThrow` UCMProjects.CreateProjectResponseNotFound (UCMProjects.NotFound "User not found")
+    mayOrg <- OrgQ.orgByUserId user_id
+    pure (user, mayOrg)
   AuthZ.checkProjectCreate callerUserId targetUserId `ifUnauthorized` UCMProjects.CreateProjectResponseUnauthorized
-  let visibility = ProjectPrivate
+  let visibility = case mayOrg of
+        Nothing -> ProjectPrivate
+        Just (Org {isCommercial}) -> if isCommercial then ProjectPrivate else ProjectPublic
   let summary = Nothing
   let tags = mempty
   projectId <- lift $ PGO.createProject targetUserId projectSlug summary tags visibility
