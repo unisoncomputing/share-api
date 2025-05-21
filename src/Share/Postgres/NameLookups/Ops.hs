@@ -123,18 +123,20 @@ fuzzySearchDefinitions ::
   -- | Will return at most n terms and n types; i.e. max number of results is 2n
   Int ->
   NonEmpty Text ->
+  Text ->
   m ([(Q.FuzzySearchScore, NameLookups.NamedRef (Referent, Maybe ConstructorType))], [(Q.FuzzySearchScore, NamedRef Reference)])
-fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHashId, relativePerspective, nameLookupReceipt} limit querySegments = do
+fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHashId, relativePerspective, nameLookupReceipt} limit querySegments lastQuerySegment = do
   pgTermNames <-
-    Q.fuzzySearchTerms nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments
+    Q.fuzzySearchTerms nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
       <&> fmap \termName ->
         termName
           & second (stripPrefixFromNamedRef relativePerspective)
   pgTypeNames <-
-    Q.fuzzySearchTypes nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments
+    Q.fuzzySearchTypes nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
       <&> fmap \typeName ->
         typeName
           & second (stripPrefixFromNamedRef relativePerspective)
+
   termNames <- pgTermNames & (traversed . _2 . traversed . _1) %%~ CV.referentPGTo2
   typeNames <- pgTypeNames & (traversed . _2 . traversed) %%~ CV.referencePGTo2
   pure (termNames, typeNames)

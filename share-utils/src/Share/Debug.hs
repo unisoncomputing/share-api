@@ -4,6 +4,7 @@
 
 module Share.Debug
   ( debug,
+    debugOther,
     debugM,
     whenDebug,
     debugLog,
@@ -59,6 +60,14 @@ debug :: (Show a) => DebugFlag -> String -> a -> a
 debug flag msg a =
   if shouldDebug flag
     then (trace (msg <> ":\n" <> into @String (pShow a)) a)
+    else a
+
+-- | Use for trace-style selective debugging.
+-- Like 'debug' but allows debugging something other than the result.
+debugOther :: (Show x) => DebugFlag -> String -> x -> a -> a
+debugOther flag msg x a =
+  if shouldDebug flag
+    then (trace (msg <> ":\n" <> into @String (pShow x)) a)
     else a
 
 -- | Use for selective debug logging in monadic contexts.
