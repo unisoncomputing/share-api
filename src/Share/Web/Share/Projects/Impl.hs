@@ -31,7 +31,7 @@ import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Prelude
-import Share.Project (Project (..))
+import Share.Project (Project (..), ProjectVisibility (ProjectPrivate))
 import Share.Release qualified as Release
 import Share.User (User (..))
 import Share.Utils.API ((:++) (..))
@@ -48,6 +48,8 @@ import Share.Web.Share.Branches.Impl (branchesServer, getProjectBranchReadmeEndp
 import Share.Web.Share.Contributions.Impl (contributionsByProjectServer)
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import Share.Web.Share.Diffs.Types (ShareNamespaceDiffResponse (..), ShareNamespaceDiffStatus (..), ShareTermDiffResponse (..), ShareTypeDiffResponse (..))
+import Share.Web.Share.Orgs.Queries qualified as OrgQ
+import Share.Web.Share.Orgs.Types (Org (..))
 import Share.Web.Share.Projects.API qualified as API
 import Share.Web.Share.Projects.Types
 import Share.Web.Share.Releases.Impl (getProjectReleaseReadmeEndpoint, releasesServer)
@@ -320,6 +322,13 @@ updateProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectS
   addRequestTag "project-id" (IDs.toText projectId)
   AuthZ.permissionGuard $ AuthZ.checkProjectUpdate callerUserId projectId
   let UpdateProjectRequest {summary, tags, visibility} = req
+  when (visibility == Just ProjectPrivate) $ do
+    mayOrg <- PG.runTransaction (OrgQ.orgByUserHandle userHandle)
+    case mayOrg of
+      Just Org {isCommercial = False} -> do
+        respondError $ Forbidden "Please upgrade to a commercial org to enable private projects."
+      _ -> pure ()
+
   success <- PG.runTransaction $ Q.updateProject projectId summary tags visibility
   when (not success) $ respondError (EntityMissing (ErrorID "missing-project") "Project could not be found")
   pure ()

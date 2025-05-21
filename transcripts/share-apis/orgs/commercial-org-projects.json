@@ -1,0 +1,24 @@
+{
+  "body": [
+    {
+      "createdAt": "<TIMESTAMP>",
+      "isFaved": false,
+      "numFavs": 0,
+      "owner": {
+        "handle": "@acme",
+        "name": "ACME",
+        "type": "organization"
+      },
+      "slug": "proj",
+      "summary": null,
+      "tags": [],
+      "updatedAt": "<TIMESTAMP>",
+      "visibility": "private"
+    }
+  ],
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

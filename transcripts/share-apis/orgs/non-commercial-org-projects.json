@@ -1,0 +1,24 @@
+{
+  "body": [
+    {
+      "createdAt": "<TIMESTAMP>",
+      "isFaved": false,
+      "numFavs": 0,
+      "owner": {
+        "handle": "@noncom",
+        "name": "Noncom",
+        "type": "organization"
+      },
+      "slug": "proj",
+      "summary": null,
+      "tags": [],
+      "updatedAt": "<TIMESTAMP>",
+      "visibility": "public"
+    }
+  ],
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

@@ -16,11 +16,19 @@ fetch "$unauthorized_user" POST org-create-unauthorized '/orgs' '{
   "avatarUrl": "https://example.com/anvil.png",
   "owner": "unauthorized",
   "email": "wile.e.coyote@example.com",
-  "isCommercial": false
+  "isCommercial": true
 }'
 
 # Admin can create an org and assign any owner.
-fetch "$admin_user" POST org-create-by-admin '/orgs' '{
+fetch "$admin_user" POST org-create-by-admin-non-commercial '/orgs' '{
+  "name": "Noncom",
+  "handle": "noncom",
+  "avatarUrl": "https://example.com/peace.png",
+  "owner": "transcripts",
+  "isCommercial": false
+}'
+
+fetch "$admin_user" POST org-create-by-admin-commercial '/orgs' '{
   "name": "ACME",
   "handle": "acme",
   "avatarUrl": "https://example.com/anvil.png",
@@ -74,3 +82,18 @@ fetch "$transcripts_user" DELETE org-remove-members '/orgs/acme/members' '{
 }'
 
 fetch "$transcripts_user" GET org-get-members-after-removing '/orgs/acme/members'
+
+# Create projects in each org.
+transcript_ucm transcript create-org-projects.md
+
+# Get projects for each org
+# Commercial projects should be private by default
+fetch "$transcripts_user" GET commercial-org-projects '/users/acme/projects'
+
+# Non-commercial projects must be public by default
+fetch "$transcripts_user" GET non-commercial-org-projects '/users/noncom/projects'
+
+# Updating a non-commercial org's project to private should fail
+fetch "$transcripts_user" PATCH non-com-project-privatization '/users/noncom/projects/proj' '{
+    "visibility": "private"
+}'
