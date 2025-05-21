@@ -36,7 +36,6 @@ import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType, Referent)
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
-import Unison.Debug qualified as Debug
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment.Internal (NameSegment (..))
@@ -109,7 +108,6 @@ relocateToNameRoot perspective query rootBh = do
             & Path.fromList
         Nothing -> mempty
   let fullPath = perspective <> nameLocation
-  Debug.debugM Debug.Server "relocateToNameRoot fullPath" fullPath
   namesPerspective@NamesPerspective {relativePerspective} <- namesPerspectiveForRootAndPath rootBh (PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ fullPath)
   let reprefixName name = Name.fromReverseSegments $ (NonEmpty.head $ Name.reverseSegments name) NonEmpty.:| (reverse $ coerce relativePerspective)
   pure (namesPerspective, reprefixName <$> query)
@@ -123,18 +121,20 @@ fuzzySearchDefinitions ::
   -- | Will return at most n terms and n types; i.e. max number of results is 2n
   Int ->
   NonEmpty Text ->
+  Text ->
   m ([(Q.FuzzySearchScore, NameLookups.NamedRef (Referent, Maybe ConstructorType))], [(Q.FuzzySearchScore, NamedRef Reference)])
-fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHashId, relativePerspective, nameLookupReceipt} limit querySegments = do
+fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHashId, relativePerspective, nameLookupReceipt} limit querySegments lastQuerySegment = do
   pgTermNames <-
-    Q.fuzzySearchTerms nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments
+    Q.fuzzySearchTerms nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
       <&> fmap \termName ->
         termName
           & second (stripPrefixFromNamedRef relativePerspective)
   pgTypeNames <-
-    Q.fuzzySearchTypes nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments
+    Q.fuzzySearchTypes nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
       <&> fmap \typeName ->
         typeName
           & second (stripPrefixFromNamedRef relativePerspective)
+
   termNames <- pgTermNames & (traversed . _2 . traversed . _1) %%~ CV.referentPGTo2
   typeNames <- pgTypeNames & (traversed . _2 . traversed) %%~ CV.referencePGTo2
   pure (termNames, typeNames)

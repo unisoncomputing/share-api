@@ -25,7 +25,6 @@ where
 
 import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
-import Data.List.NonEmpty qualified as NEL
 import Data.Text qualified as Text
 import Share.Postgres
 import Share.Postgres qualified as PG
@@ -307,13 +306,35 @@ listNameLookupMounts !_nameLookupReceipt rootBranchHashId =
          in (mountPath, mountedRootBranchHashId)
 
 -- | Larger is better.
-type FuzzySearchScore = (Bool, Bool, Int64, Int64)
+data FuzzySearchScore
+  = FuzzySearchScore
+  { exactLastSegmentMatch :: Bool,
+    lastSegmentInfixMatch :: Bool,
+    lastSegmentMatchPos :: Int64,
+    inverseNameLength :: Int64
+  }
+  deriving (Show, Eq)
+
+instance Ord FuzzySearchScore where
+  compare (FuzzySearchScore exact1 infix1 pos1 len1) (FuzzySearchScore exact2 infix2 pos2 len2) =
+    exact1 `compare` exact2
+      <> infix1 `compare` infix2
+      <> pos1 `compare` pos2
+      <> len1 `compare` len2
+
+instance DecodeRow FuzzySearchScore where
+  decodeRow =
+    FuzzySearchScore
+      <$> PG.decodeField
+      <*> PG.decodeField
+      <*> PG.decodeField
+      <*> PG.decodeField
 
 -- | Searches for all names within the given name lookup which contain the provided list of segments
 -- in order.
 -- Search is case insensitive.
-fuzzySearchTerms :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
-fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace querySegments = do
+fuzzySearchTerms :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
+fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
   fmap unRow
     <$> PG.queryListRows
       [PG.sql|
@@ -322,7 +343,7 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
       FROM (
         SELECT reversed_name, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index, referent_constructor_type, last_name_segment,
               (last_name_segment = #{lastSearchTerm}) AS exact_last_segment_match,
-              (#{lastSearchTerm} ILIKE like_escape('%' || last_name_segment) || '%') AS last_segment_infix_match,
+              (last_name_segment ILIKE ('%' || like_escape(#{lastSearchTerm}) || '%')) AS last_segment_infix_match,
               (-POSITION(#{lastSearchTerm} IN last_name_segment)) AS last_segment_match_pos,
               (-length(reversed_name)) AS inverse_name_length
           FROM scoped_term_name_lookup
@@ -335,14 +356,13 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
       -- Exact last-segment matches first, then last-segment infix matches sorting prefix
       -- matches first, then prefer shorter names.
       ORDER BY (last_name_segment = #{lastSearchTerm},
-               (#{lastSearchTerm} ILIKE like_escape('%' || last_name_segment) || '%'),
+               (#{lastSearchTerm} ILIKE ('%' || like_escape(last_name_segment) || '%')),
                (-POSITION(#{lastSearchTerm} IN last_name_segment)),
                (-length(reversed_name))
                ) DESC
       LIMIT #{limit}
             |]
   where
-    lastSearchTerm = NEL.last querySegments
     namespacePrefix = toNamespacePrefix namespace
     -- Union in the dependencies if required.
     dependenciesSql =
@@ -350,7 +370,7 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
       UNION ALL
         SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index, referent_constructor_type, last_name_segment,
              (last_name_segment = #{lastSearchTerm}) AS exact_last_segment_match,
-             (#{lastSearchTerm} ILIKE like_escape('%' || last_name_segment) || '%') AS last_segment_infix_match,
+             (last_name_segment ILIKE ('%' || like_escape(#{lastSearchTerm}) || '%')) AS last_segment_infix_match,
              (-POSITION(#{lastSearchTerm} IN last_name_segment)) AS last_segment_match_pos,
              (-length(reversed_name)) AS inverse_name_length
         FROM name_lookup_mounts mount
@@ -372,8 +392,8 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
 -- in order.
 --
 -- Search is case insensitive.
-fuzzySearchTypes :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> m [(FuzzySearchScore, NamedRef PGReference)]
-fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace querySegments = do
+fuzzySearchTypes :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef PGReference)]
+fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
   fmap unRow
     <$> PG.queryListRows
       [PG.sql|
@@ -383,7 +403,7 @@ fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace qu
       FROM (
         SELECT reversed_name, reference_builtin, reference_component_hash_id, reference_component_index, last_name_segment,
              (last_name_segment = #{lastSearchTerm}) AS exact_last_segment_match,
-             (#{lastSearchTerm} ILIKE like_escape('%' || last_name_segment) || '%') AS last_segment_infix_match,
+             (last_name_segment ILIKE ('%' || like_escape(#{lastSearchTerm}) || '%')) AS last_segment_infix_match,
              (-POSITION(#{lastSearchTerm} IN last_name_segment)) AS last_segment_match_pos,
              (-length(reversed_name)) AS inverse_name_length
         FROM scoped_type_name_lookup
@@ -396,14 +416,13 @@ fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace qu
       -- Exact last-segment matches first, then last-segment prefix matches, then prefer
       -- shorter names.
       ORDER BY (last_name_segment = #{lastSearchTerm},
-               (#{lastSearchTerm} ILIKE like_escape('%' || last_name_segment) || '%'),
+               (#{lastSearchTerm} ILIKE ('%' || like_escape(last_name_segment) || '%')),
                (-POSITION(#{lastSearchTerm} IN last_name_segment)),
                (-length(reversed_name))
                ) DESC
       LIMIT #{limit}
           |]
   where
-    lastSearchTerm = NEL.last querySegments
     unRow :: (NamedRef PGReference PG.:. FuzzySearchScore) -> (FuzzySearchScore, NamedRef PGReference)
     unRow (namedRef PG.:. score) = (score, namedRef)
     namespacePrefix = toNamespacePrefix namespace
@@ -413,7 +432,7 @@ fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace qu
       UNION ALL
         SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name, reference_builtin, reference_component_hash_id, reference_component_index, last_name_segment,
              (last_name_segment = #{lastSearchTerm}) AS exact_last_segment_match,
-             (#{lastSearchTerm} ILIKE like_escape('%' || last_name_segment) || '%') AS last_segment_infix_match,
+             (last_name_segment ILIKE ('%' || like_escape('%' || #{lastSearchTerm}) || '%')) AS last_segment_infix_match,
              (-POSITION(#{lastSearchTerm} IN last_name_segment)) AS last_segment_match_pos,
              (-length(reversed_name)) AS inverse_name_length
         FROM name_lookup_mounts mount

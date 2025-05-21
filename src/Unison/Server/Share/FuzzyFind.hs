@@ -18,6 +18,7 @@ import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Ord qualified as Ord
 import Data.Text qualified as Text
+import Safe (lastMay)
 import Servant
   ( QueryParam,
     (:>),
@@ -37,9 +38,11 @@ import Unison.Codebase.Editor.DisplayObject
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.ShortCausalHash qualified as SCH
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
+import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.Server.Backend (termEntryLabeledDependencies, typeEntryLabeledDependencies)
+import Unison.Server.Backend qualified as UBackend
 import Unison.Server.Syntax (SyntaxText)
 import Unison.Server.Types
   ( APIGet,
@@ -48,9 +51,8 @@ import Unison.Server.Types
     NamedTerm,
     NamedType,
     UnisonName,
-    mayDefaultWidth,
   )
-import Unison.Symbol (Symbol)
+import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty (Width)
 
 type FuzzyFindAPI =
@@ -122,16 +124,18 @@ serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit type
   -- Include dependencies if they were explicitly requested OR if we're running a search
   -- from a scratch root
   let includeDependencies = isScratchRootSearch || searchDependencies
-  (dbTermMatches, dbTypeMatches) <- case NonEmpty.nonEmpty preparedQuery of
+  let (querySegments, mayLastQuerySegment) = prepareQuery (Text.unpack query)
+  (dbTermMatches, dbTypeMatches) <- case (NonEmpty.nonEmpty querySegments, mayLastQuerySegment) of
     -- Just return no results if the query is empty
-    Nothing -> empty
-    Just preparedQuery -> do
-      (terms, types) <- NameLookupOps.fuzzySearchDefinitions includeDependencies namesPerspective limit preparedQuery
+    (Nothing, _) -> empty
+    (_, Nothing) -> empty
+    (Just preparedQuery, Just lastSegment) -> do
+      (terms, types) <- NameLookupOps.fuzzySearchDefinitions includeDependencies namesPerspective limit preparedQuery lastSegment
       pure (terms, types)
   let prepareMatch :: NamedRef Backend.FoundRef -> (PathSegments, Alignment, UnisonName, [Backend.FoundRef])
       prepareMatch name@(NamedRef {reversedSegments}) =
         let renderedName = NameLookups.reversedNameToNamespaceText reversedSegments
-            segments = computeMatchSegments preparedQuery name
+            segments = computeMatchSegments querySegments name
             alignment =
               Alignment
                 { -- We used to return a score, but now we just sort all the results server-side.
@@ -168,7 +172,6 @@ serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit type
           & fmap snd
   (join <$> traverse (lift . loadEntry includeDependencies bhId namesPerspective) alignments)
   where
-    preparedQuery = prepareQuery (Text.unpack query)
     limit = fromMaybe 10 mayLimit
     loadEntry :: Bool -> BranchHashId -> NameLookups.NamesPerspective -> (PathSegments, Alignment, Text, [Backend.FoundRef]) -> CodebaseM e [(Alignment, FoundResult)]
     loadEntry includeDependencies bhId searchPerspective (pathToMatch, a, n, refs) = do
@@ -194,17 +197,19 @@ serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit type
       pped <- PPED.ppedForReferences namesPerspective allLabeledDependencies
       let ppe = PPED.suffixifiedPPE pped
       for entries \case
-        Left (r, termEntry) ->
+        Left (_r, termEntry) ->
           pure
             ( a,
               FoundTermResult
                 . FoundTerm
-                  (Backend.bestNameForTerm @Symbol ppe (mayDefaultWidth typeWidth) r)
+                  -- Use the name from the search here rather than the pretty printer best-name
+                  (Name.toText $ HQ'.toName $ UBackend.termEntryHQName termEntry)
                 $ Backend.termEntryToNamedTerm ppe typeWidth termEntry
             )
         Right (r, typeEntry) -> do
           let namedType = Backend.typeEntryToNamedType typeEntry
-          let typeName = Backend.bestNameForType @Symbol ppe (mayDefaultWidth typeWidth) r
+          -- Use the name from the search here rather than the pretty printer best-name
+          let typeName = (Name.toText $ HQ'.toName $ UBackend.typeEntryHQName typeEntry)
           typeHeader <- Backend.typeDeclHeader ppe r
           let ft = FoundType typeName typeHeader namedType
           pure (a, FoundTypeResult ft)
@@ -296,39 +301,42 @@ computeMatchSegments query (NamedRef {reversedSegments}) =
 -- names.
 --
 -- >>> prepareQuery "foo bar baz"
--- ["foo","bar","baz"]
+-- (["foo","bar","baz"],Just "baz")
 --
 -- Split camel-case style words into segments.
 -- >>> prepareQuery "fMap"
--- ["f","Map"]
+-- (["f","Map"],Just "fMap")
 --
 -- Collapse multiple spaces
 -- >>> prepareQuery "foo barBaz    boom"
--- ["foo","bar","Baz","boom"]
+-- (["foo","bar","Baz","boom"],Just "boom")
 --
 -- Split namespaces into segments with a required dot in between.
 -- >>> prepareQuery "List.map"
--- ["List",".","map"]
+-- (["List",".","map"],Just "map")
 --
 -- Shouldn't get multiple splits for capitalized letters
 -- >>> prepareQuery "List.Map"
--- ["List",".","Map"]
-prepareQuery :: String -> [Text]
-prepareQuery query = do
-  word <- words query
-  xs <-
-    word
-      & List.foldl'
-        ( \acc next -> case next of
-            c
-              | Char.isUpper c -> [c] : acc
-              | Char.isSpace c -> "" : acc
-              | c == '.' -> "" : "." : acc
-              | otherwise -> case acc of
-                  [] -> [[c]]
-                  (last : rest) -> (last ++ [c]) : rest
-        )
-        []
-      & reverse
-      & filter (not . null)
-  pure $ Text.pack xs
+-- (["List",".","Map"],Just "Map")
+prepareQuery :: String -> ([Text], Maybe Text)
+prepareQuery query = (querySegments, lastSegment)
+  where
+    lastSegment = lastMay (Text.words (Text.pack query) >>= Text.splitOn ".")
+    querySegments = do
+      word <- words query
+      xs <-
+        word
+          & List.foldl'
+            ( \acc next -> case next of
+                c
+                  | Char.isUpper c -> [c] : acc
+                  | Char.isSpace c -> "" : acc
+                  | c == '.' -> "" : "." : acc
+                  | otherwise -> case acc of
+                      [] -> [[c]]
+                      (last : rest) -> (last ++ [c]) : rest
+            )
+            []
+          & reverse
+          & filter (not . null)
+      pure $ (Text.pack xs)
