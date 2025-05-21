@@ -301,15 +301,19 @@ computeMatchSegments query (NamedRef {reversedSegments}) =
 -- names.
 --
 -- >>> prepareQuery "foo bar baz"
+-- (["foo","bar","baz"],Just "baz")
 --
 -- Split camel-case style words into segments.
 -- >>> prepareQuery "fMap"
+-- (["f","Map"],Just "fMap")
 --
 -- Collapse multiple spaces
 -- >>> prepareQuery "foo barBaz    boom"
+-- (["foo","bar","Baz","boom"],Just "boom")
 --
 -- Split namespaces into segments with a required dot in between.
 -- >>> prepareQuery "List.map"
+-- (["List",".","map"],Just "map")
 --
 -- Shouldn't get multiple splits for capitalized letters
 -- >>> prepareQuery "List.Map"
