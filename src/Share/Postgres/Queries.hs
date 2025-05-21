@@ -170,12 +170,15 @@ searchProjects caller userIdFilter (Query query) limit = do
     SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
       FROM to_tsquery('english', #{queryToken}) AS tokenquery, projects AS p
         JOIN users AS owner ON p.owner_user_id = owner.id
-      WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE (like_escape(#{query}) || '%'))
+      WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
       AND (NOT p.private OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
       AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
       ORDER BY
         p.slug = #{query} DESC,
-        p.slug ILIKE (% || like_escape(#{query}) || '%') DESC,
+        -- Prefer prefix matches
+        p.slug ILIKE (like_escape(#{query}) || '%') DESC,
+        -- Otherwise infix matches
+        p.slug ILIKE ('%' || like_escape(#{query}) || '%') DESC,
         -- Prefer projects in the unison org
         COALESCE(FALSE, p.owner_user_id = (SELECT unison.id FROM users unison WHERE unison.handle = 'unison'))  DESC,
         -- Prefer projects in the catalog

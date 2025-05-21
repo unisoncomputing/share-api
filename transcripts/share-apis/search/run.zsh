@@ -93,3 +93,5 @@ fetch "$transcripts_user" GET 'omni-search-orgs' '/search?query=%40uni'
 
 # Omni search should find regular users
 fetch "$transcripts_user" GET 'omni-search-users' '/search?query=%40tes'
+# Omni search should find projects by infix
+fetch "$transcripts_user" GET 'omni-search-projects' '/search?query=%40ear'
