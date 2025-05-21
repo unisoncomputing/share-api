@@ -179,6 +179,10 @@ searchProjects caller userIdFilter (Query query) limit = do
         p.slug ILIKE (like_escape(#{query}) || '%') DESC,
         -- Otherwise infix matches
         p.slug ILIKE ('%' || like_escape(#{query}) || '%') DESC,
+        -- Prefer the caller's projects
+        COALESCE(FALSE, p.owner_user_id = #{caller}) DESC,
+        -- If a user has access to a private project, it's likely relevant
+        p.private DESC,
         -- Prefer projects in the unison org
         COALESCE(FALSE, p.owner_user_id = (SELECT unison.id FROM users unison WHERE unison.handle = 'unison'))  DESC,
         -- Prefer projects in the catalog
