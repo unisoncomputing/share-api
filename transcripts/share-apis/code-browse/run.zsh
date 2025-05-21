@@ -19,6 +19,6 @@ fetch "$transcripts_user" GET codebase-definition-by-hash-constructor "/users/tr
 fetch "$transcripts_user" GET codebase-find "/users/transcripts/projects/code-browse/branches/main/find?query=oranges.tw"
 fetch "$transcripts_user" GET codebase-namespace-by-name "/users/transcripts/projects/code-browse/branches/main/namespaces/by-name/names"
 fetch "$transcripts_user" GET codebase-namespace-by-name-root "/users/transcripts/projects/code-browse/branches/main/namespaces/by-name/"
-fetch "$transcripts_user" GET search "/search?query=te"
+fetch "$transcripts_user" GET search "/search?query=tes"
 fetch "$transcripts_user" GET account "/account"
 fetch "$transcripts_user" GET user-info "/user-info"
