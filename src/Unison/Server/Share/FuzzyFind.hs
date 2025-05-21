@@ -38,9 +38,11 @@ import Unison.Codebase.Editor.DisplayObject
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.ShortCausalHash qualified as SCH
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
+import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.Server.Backend (termEntryLabeledDependencies, typeEntryLabeledDependencies)
+import Unison.Server.Backend qualified as UBackend
 import Unison.Server.Syntax (SyntaxText)
 import Unison.Server.Types
   ( APIGet,
@@ -49,9 +51,8 @@ import Unison.Server.Types
     NamedTerm,
     NamedType,
     UnisonName,
-    mayDefaultWidth,
   )
-import Unison.Symbol (Symbol)
+import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty (Width)
 
 type FuzzyFindAPI =
@@ -196,17 +197,19 @@ serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit type
       pped <- PPED.ppedForReferences namesPerspective allLabeledDependencies
       let ppe = PPED.suffixifiedPPE pped
       for entries \case
-        Left (r, termEntry) ->
+        Left (_r, termEntry) ->
           pure
             ( a,
               FoundTermResult
                 . FoundTerm
-                  (Backend.bestNameForTerm @Symbol ppe (mayDefaultWidth typeWidth) r)
+                  -- Use the name from the search here rather than the pretty printer best-name
+                  (Name.toText $ HQ'.toName $ UBackend.termEntryHQName termEntry)
                 $ Backend.termEntryToNamedTerm ppe typeWidth termEntry
             )
         Right (r, typeEntry) -> do
           let namedType = Backend.typeEntryToNamedType typeEntry
-          let typeName = Backend.bestNameForType @Symbol ppe (mayDefaultWidth typeWidth) r
+          -- Use the name from the search here rather than the pretty printer best-name
+          let typeName = (Name.toText $ HQ'.toName $ UBackend.typeEntryHQName typeEntry)
           typeHeader <- Backend.typeDeclHeader ppe r
           let ft = FoundType typeName typeHeader namedType
           pure (a, FoundTypeResult ft)
