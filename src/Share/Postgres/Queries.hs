@@ -173,7 +173,16 @@ searchProjects caller userIdFilter (Query query) limit = do
       WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE (like_escape(#{query}) || '%'))
       AND (NOT p.private OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
       AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
-      ORDER BY ts_rank_cd(p.project_text_document, tokenquery) DESC, p.slug ASC
+      ORDER BY
+        p.slug = #{query} DESC,
+        p.slug ILIKE (% || like_escape(#{query}) || '%') DESC,
+        -- Prefer projects in the unison org
+        COALESCE(FALSE, p.owner_user_id = (SELECT unison.id FROM users unison WHERE unison.handle = 'unison'))  DESC,
+        -- Prefer projects in the catalog
+        EXISTS(SELECT FROM project_categories pc WHERE pc.project_id = p.id) DESC,
+        ts_rank_cd(p.project_text_document, tokenquery) DESC,
+        -- Lastly sort by name, just so results are deterministic
+        p.slug ASC
       LIMIT #{limit}
       |]
   pure (results <&> \(project PG.:. PG.Only handle) -> (project, handle))
