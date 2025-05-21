@@ -36,7 +36,6 @@ import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType, Referent)
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
-import Unison.Debug qualified as Debug
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment.Internal (NameSegment (..))
@@ -109,7 +108,6 @@ relocateToNameRoot perspective query rootBh = do
             & Path.fromList
         Nothing -> mempty
   let fullPath = perspective <> nameLocation
-  Debug.debugM Debug.Server "relocateToNameRoot fullPath" fullPath
   namesPerspective@NamesPerspective {relativePerspective} <- namesPerspectiveForRootAndPath rootBh (PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ fullPath)
   let reprefixName name = Name.fromReverseSegments $ (NonEmpty.head $ Name.reverseSegments name) NonEmpty.:| (reverse $ coerce relativePerspective)
   pure (namesPerspective, reprefixName <$> query)
