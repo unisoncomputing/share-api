@@ -1,6 +1,5 @@
 {
   "body": {
-    "cursor": "<CURSOR>",
     "items": [
       {
         "actor": {
@@ -48,7 +47,9 @@
         "revision": 0,
         "timestamp": "<TIMESTAMP>"
       }
-    ]
+    ],
+    "nextCursor": "<CURSOR>",
+    "prevCursor": null
   },
   "status": [
     {
