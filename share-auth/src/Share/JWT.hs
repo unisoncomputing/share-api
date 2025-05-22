@@ -87,12 +87,10 @@ defaultJWTSettings ::
   --
   -- E.g. https://api.unison.cloud
   Set URI ->
-  -- | The token issuer.
-  --
-  -- E.g. https://api.unison-lang.org
-  URI ->
+  -- | Valid issuers when validating tokens
+  Set URI ->
   Either CryptoError JWTSettings
-defaultJWTSettings signingKey legacyKey oldValidKeys acceptedAudiences issuer = do
+defaultJWTSettings signingKey legacyKey oldValidKeys acceptedAudiences acceptedIssuers = do
   sjwk@(_, signingJWK) <- keyDescToJWK signingKey
   verificationJWKs <- (sjwk :) <$> traverse keyDescToJWK (Set.toList oldValidKeys)
   let byKeyId = Map.fromList verificationJWKs
@@ -101,10 +99,8 @@ defaultJWTSettings signingKey legacyKey oldValidKeys acceptedAudiences issuer = 
     JWTSettings
       { signingJWK,
         validationKeys = KeyMap {byKeyId, legacyKey},
-        audienceMatches = \s ->
-          (review JWT.stringOrUri s) `Set.member` (Set.map (show @URI) acceptedAudiences),
         acceptedAudiences,
-        issuer
+        acceptedIssuers
       }
 
 -- | Converts a 'KeyDescription' to a 'JWK' and a 'KeyThumbprint'.
@@ -164,7 +160,7 @@ signJWTWithJWK jwk v = runExceptT $ do
 --
 -- Any other checks should be performed on the returned claims.
 verifyJWT :: forall claims m. (AsJWTClaims claims, MonadIO m) => JWTSettings -> JWT.SignedJWT -> m (Either JWT.JWTError claims)
-verifyJWT JWTSettings {validationKeys, issuer, acceptedAudiences} signedJWT = runExceptT do
+verifyJWT JWTSettings {validationKeys, acceptedAudiences, acceptedIssuers} signedJWT = runExceptT do
   jwtClaimsMap <- ExceptT . liftIO . runExceptT $ JWT.verifyJWT validators validationKeys signedJWT
   case fromClaims jwtClaimsMap of
     Left err -> throwError $ JWT.JWTClaimsSetDecodeError (Text.unpack err)
@@ -175,9 +171,14 @@ verifyJWT JWTSettings {validationKeys, issuer, acceptedAudiences} signedJWT = ru
       -- Annoyingly StringOrURI doesn't have an ord instance.
       Set.toList acceptedAudiences
         & map (review CryptoJWT.uri)
+    issuers :: [CryptoJWT.StringOrURI]
+    issuers =
+      -- Annoyingly StringOrURI doesn't have an ord instance.
+      Set.toList acceptedIssuers
+        & map (review CryptoJWT.uri)
     validators =
       CryptoJWT.defaultJWTValidationSettings (`elem` auds)
-        & CryptoJWT.issuerPredicate .~ (== review CryptoJWT.uri issuer)
+        & CryptoJWT.issuerPredicate .~ (`elem` issuers)
         & CryptoJWT.validationSettings
           .~ ( CryptoJWT.defaultValidationSettings
                  -- Limiting the algorithms to ones we use helps limit algorithm substitution attacks.

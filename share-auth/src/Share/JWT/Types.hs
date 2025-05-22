@@ -135,12 +135,10 @@ data JWTSettings = JWTSettings
     signingJWK :: Jose.JWK,
     -- | Keys used to validate JWT.
     validationKeys :: KeyMap,
-    -- | An @aud@ predicate. The @aud@ is a string or URI that identifies the
-    -- intended recipient of the JWT.
-    audienceMatches :: JWT.StringOrURI -> Bool,
     -- | The set of audiences the app accepts tokens for.
     acceptedAudiences :: Set URI,
-    issuer :: URI
+    -- | The set of issuers the app accepts tokens from.
+    acceptedIssuers :: Set URI
   }
   deriving (Show) via Censored JWTSettings
 

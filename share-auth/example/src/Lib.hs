@@ -78,7 +78,7 @@ main = do
   redisConn <- R.checkedConnect R.defaultConnectInfo
   putStrLn "booting up"
 
-  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) rotatedKeys acceptedAudiences issuer of
+  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) rotatedKeys acceptedAudiences acceptedIssuers of
     Left cryptoError -> throwIO cryptoError
     Right jwtS -> do
       pure jwtS
@@ -138,3 +138,4 @@ main = do
     serviceAudience = api
     acceptedAudiences = Set.singleton serviceAudience
     issuer = unsafeURI "http://localhost:5424"
+    acceptedIssuers = Set.singleton issuer
