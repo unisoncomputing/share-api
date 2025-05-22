@@ -87,10 +87,10 @@ listTicketsByProjectEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) handle pr
       User.user_id <$> UserQ.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     pure (project, authorFilterID)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketListByProject mayCallerUserId projectId
-  (nextCursor, tickets) <- PG.runTransaction do
+  tickets <- PG.runTransaction do
     TicketsQ.listTicketsByProjectId projectId limit cursor authorUserId statusFilter
-      >>= UserQ.userDisplayInfoOf (_2 . traversed . traversed)
-  pure $ Paged {items = tickets, cursor = nextCursor}
+      >>= UserQ.userDisplayInfoOf (traversed . traversed)
+  pure tickets
   where
     limit = fromMaybe 20 mayLimit
     projectShorthand = IDs.ProjectShortHand {userHandle = handle, projectSlug}
@@ -164,13 +164,14 @@ getTicketTimelineEndpoint ::
 getTicketTimelineEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug ticketNumber mayCursor mayLimit = do
   (projectId, shareTicketTimeline, nextCursor) <- PG.runTransactionOrRespondError $ do
     Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "project:missing") "Project not found")
-    (nextCursor, shareTicketTimeline) <- TicketsQ.getPagedShareTicketTimelineByProjectIdAndNumber projectId ticketNumber (unCursor <$> mayCursor) limit
+    (nextCursor, shareTicketTimeline) <- TicketsQ.getPagedShareTicketTimelineByProjectIdAndNumber projectId ticketNumber (location <$> mayCursor) limit
     shareTicketsTimelineWithUserInfo <-
       shareTicketTimeline
         & UserQ.userDisplayInfoOf (traverse . traverse)
     pure (projectId, shareTicketsTimelineWithUserInfo, nextCursor)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketRead mayCallerUserId projectId
-  pure $ Paged {items = shareTicketTimeline, cursor = Cursor <$> nextCursor}
+  -- We don't currently support backwards pagination on timelines.
+  pure $ Paged {items = shareTicketTimeline, nextCursor = Cursor <$> nextCursor <*> pure Next, prevCursor = Nothing}
   where
     limit = fromMaybe 20 mayLimit
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
@@ -183,12 +184,12 @@ listTicketsByUserEndpoint ::
   Maybe TicketStatus ->
   WebApp (Paged ListTicketsCursor (ShareTicket UserDisplayInfo))
 listTicketsByUserEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle mayCursor mayLimit statusFilter = do
-  (tickets, nextCursor) <- PG.runTransactionOrRespondError $ do
+  tickets <- PG.runTransactionOrRespondError $ do
     user <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
-    (nextCursor, tickets) <-
+    tickets <-
       TicketsQ.listTicketsByUserId mayCallerUserId (User.user_id user) limit mayCursor statusFilter
-        >>= UserQ.userDisplayInfoOf (_2 . traversed . traversed)
-    pure (tickets, nextCursor)
-  pure $ Paged {items = tickets, cursor = nextCursor}
+        >>= UserQ.userDisplayInfoOf (traversed . traversed)
+    pure tickets
+  pure tickets
   where
     limit = fromMaybe 20 mayLimit

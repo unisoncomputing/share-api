@@ -772,7 +772,8 @@ listBranchesByProject limit mayCursor mayBranchNamePrefix mayContributorQuery ki
         Just (Query branchNamePrefix) -> [PG.sql| AND starts_with(b.name, #{branchNamePrefix}) |]
   let cursorFilter = case mayCursor of
         Nothing -> mempty
-        Just (Cursor (beforeTime, branchId)) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId})|]
+        Just (Cursor (beforeTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId})|]
+        Just (Cursor (afterTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId})|]
   let sql =
         intercalateMap
           "\n"
@@ -873,7 +874,8 @@ listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserI
         Just (Query branchNamePrefix) -> [PG.sql| AND starts_with(b.name, #{branchNamePrefix}) |]
   let cursorFilter = case mayCursor of
         Nothing -> mempty
-        Just (Cursor (beforeTime, branchId)) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId}) |]
+        Just (Cursor (beforeTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId}) |]
+        Just (Cursor (afterTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId}) |]
   let projectFilter = case mayProjectId of
         Nothing -> mempty
         Just projId -> [PG.sql| AND b.project_id = #{projId} |]
@@ -1128,8 +1130,10 @@ listReleasesByProject limit mayCursor mayVersionPrefix status projectId = do
              in numericalFilters
   let cursorFilter = case mayCursor of
         Nothing -> mempty
-        Just (Cursor (major, minor, patch, releaseId)) ->
+        Just (Cursor (major, minor, patch, releaseId) Previous) ->
           [PG.sql| AND (release.major_version, release.minor_version, release.patch_version, release.id) < (#{major}, #{minor}, #{patch}, #{releaseId}) |]
+        Just (Cursor (major, minor, patch, releaseId) Next) ->
+          [PG.sql| AND (release.major_version, release.minor_version, release.patch_version, release.id) >= (#{major}, #{minor}, #{patch}, #{releaseId}) |]
   let (sql) =
         intercalateMap
           "\n"
