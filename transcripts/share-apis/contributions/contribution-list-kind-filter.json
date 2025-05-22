@@ -1,6 +1,5 @@
 {
   "body": {
-    "cursor": "<CURSOR>",
     "items": [
       {
         "author": {
@@ -21,7 +20,9 @@
         "title": "My contribution",
         "updatedAt": "<TIMESTAMP>"
       }
-    ]
+    ],
+    "nextCursor": "<CURSOR>",
+    "prevCursor": "<CURSOR>"
   },
   "status": [
     {

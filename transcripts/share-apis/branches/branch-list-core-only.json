@@ -1,6 +1,5 @@
 {
   "body": {
-    "cursor": null,
     "items": [
       {
         "branchRef": "feature",
@@ -42,7 +41,9 @@
         },
         "updatedAt": "<TIMESTAMP>"
       }
-    ]
+    ],
+    "nextCursor": "<CURSOR>",
+    "prevCursor": "<CURSOR>"
   },
   "status": [
     {
