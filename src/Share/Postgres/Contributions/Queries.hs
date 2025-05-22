@@ -28,7 +28,7 @@ import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Time (UTCTime)
-import Safe (lastMay)
+import Safe (headMay, lastMay)
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
@@ -112,7 +112,7 @@ listContributionsByProjectId ::
   Maybe UserId ->
   Maybe ContributionStatus ->
   Maybe ContributionKindFilter ->
-  PG.Transaction e (Maybe (Cursor ListContributionsCursor), [ShareContribution UserId])
+  PG.Transaction e (Paged ListContributionsCursor (ShareContribution UserId))
 listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter mayKindFilter = do
   let kindFilter = case mayKindFilter of
         Nothing -> "true"
@@ -122,11 +122,15 @@ listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFi
           OnlyContributorContributions -> [PG.sql| source_branch.contributor_id IS NOT NULL |]
   let cursorFilter = case mayCursor of
         Nothing -> "true"
-        Just (Cursor (beforeTime, contributionId)) ->
+        Just (Cursor (beforeTime, contributionId) Next) ->
           [PG.sql|
           (contribution.updated_at, contribution.id) < (#{beforeTime}, #{contributionId})
           |]
-  addCursor
+        Just (Cursor (afterTime, contributionId) Previous) ->
+          [PG.sql|
+          (contribution.updated_at, contribution.id) > (#{afterTime}, #{contributionId})
+          |]
+  paged
     <$> PG.queryListRows @(ShareContribution UserId)
       [PG.sql|
         SELECT
@@ -162,12 +166,15 @@ listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFi
         LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareContribution UserId] -> (Maybe (Cursor ListContributionsCursor), [ShareContribution UserId])
-    addCursor xs =
-      ( lastMay xs <&> \(ShareContribution {updatedAt, contributionId}) ->
-          Cursor (updatedAt, contributionId),
-        xs
-      )
+    paged :: [ShareContribution UserId] -> Paged ListContributionsCursor (ShareContribution UserId)
+    paged items =
+      let prevCursor = headMay items <&> \(ShareContribution {updatedAt, contributionId}) -> Cursor (updatedAt, contributionId) Previous
+          nextCursor = lastMay items <&> \(ShareContribution {updatedAt, contributionId}) -> Cursor (updatedAt, contributionId) Next
+       in Paged
+            { items,
+              prevCursor,
+              nextCursor
+            }
 
 contributionById :: (PG.QueryA m) => ContributionId -> m Contribution
 contributionById contributionId = do
@@ -268,7 +275,7 @@ listContributionsByUserId ::
   Maybe (Cursor (UTCTime, ContributionId)) ->
   Maybe ContributionStatus ->
   Maybe ContributionKindFilter ->
-  PG.Transaction e (Maybe (Cursor (UTCTime, ContributionId)), [ShareContribution UserId])
+  PG.Transaction e (Paged (UTCTime, ContributionId) (ShareContribution UserId))
 listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter mayKindFilter = do
   let kindFilter = case mayKindFilter of
         Nothing -> "true"
@@ -278,11 +285,15 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
           OnlyContributorContributions -> [PG.sql| source_branch.contributor_id IS NOT NULL |]
   let cursorFilter = case mayCursor of
         Nothing -> "true"
-        Just (Cursor (beforeTime, contributionId)) ->
+        Just (Cursor (beforeTime, contributionId) Next) ->
           [PG.sql|
           (contribution.updated_at, contribution.id) < (#{beforeTime}, #{contributionId})
           |]
-  addCursor
+        Just (Cursor (afterTime, contributionId) Previous) ->
+          [PG.sql|
+          (contribution.updated_at, contribution.id) > (#{afterTime}, #{contributionId})
+          |]
+  paged
     <$> PG.queryListRows @(ShareContribution UserId)
       [PG.sql|
       SELECT
@@ -313,12 +324,15 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
       LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareContribution UserId] -> (Maybe (Cursor ListContributionsCursor), [ShareContribution UserId])
-    addCursor xs =
-      ( lastMay xs <&> \(ShareContribution {updatedAt, contributionId}) ->
-          Cursor (updatedAt, contributionId),
-        xs
-      )
+    paged :: [ShareContribution UserId] -> (Paged ListContributionsCursor (ShareContribution UserId))
+    paged items =
+      let prevCursor = headMay items <&> \(ShareContribution {updatedAt, contributionId}) -> Cursor (updatedAt, contributionId) Previous
+          nextCursor = lastMay items <&> \(ShareContribution {updatedAt, contributionId}) -> Cursor (updatedAt, contributionId) Next
+       in Paged
+            { items,
+              prevCursor,
+              nextCursor
+            }
 
 -- | Note: Doesn't perform auth checks, the assumption is that if you already have access to
 -- the branchId you have access to all associated contributions.

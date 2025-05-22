@@ -17,6 +17,8 @@ module Share.Utils.API
     Limit (..),
     (:++) (..),
     AtKey (..),
+    CursorDirection (..),
+    pagedOn,
   )
 where
 
@@ -35,6 +37,7 @@ import Data.Text.Lazy.Encoding qualified as TL
 import Data.Typeable (typeRep)
 import GHC.TypeLits (Symbol)
 import GHC.TypeLits qualified as TypeLits
+import Safe (headMay, lastMay)
 import Servant
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -159,7 +162,7 @@ applySetUpdate existing = \case
      in Foldable.foldl' go existing (Map.toList updates)
   SetReplacement new -> new
 
-data CursorDirection = Before | After
+data CursorDirection = Previous | Next
   deriving (Eq, Ord, Show)
 
 -- | A cursor for a pageable endpoint.
@@ -170,40 +173,40 @@ data Cursor a = Cursor {location :: a, direction :: CursorDirection}
   deriving stock (Eq, Ord, Show)
 
 -- |
--- >>> toUrlPiece (Cursor (1 :: Int, "hello" :: String) After)
--- "a.WzEsImhlbGxvIl0"
+-- >>> toUrlPiece (Cursor (1 :: Int, "hello" :: String) Next)
+-- "n.WzEsImhlbGxvIl0"
 --
--- >>> parseUrlPiece (toUrlPiece (Cursor (1 :: Int, "hello" :: String) After)) :: Either Text (Cursor (Int, String))
--- Right (Cursor {location = (1,"hello"), direction = After})
+-- >>> parseUrlPiece (toUrlPiece (Cursor (1 :: Int, "hello" :: String) Next)) :: Either Text (Cursor (Int, String))
+-- Right (Cursor {location = (1,"hello"), direction = Next})
 instance (ToJSON a) => ToHttpApiData (Cursor a) where
   toUrlPiece (Cursor {location, direction}) =
     let loc = TL.decodeUtf8 . Base64URL.encodeUnpadded . Aeson.encode $ location
         dir :: TL.Text
         dir = case direction of
-          Before -> "b"
-          After -> "a"
+          Previous -> "p"
+          Next -> "n"
      in toUrlPiece $ dir <> "." <> loc
 
 instance (FromJSON a) => FromHttpApiData (Cursor a) where
   parseUrlPiece txt = do
     let (dirTxt, locTxt) = second (Text.drop 1) $ Text.breakOn "." txt
     dir <- case dirTxt of
-      "b" -> pure Before
-      "a" -> pure After
+      "p" -> pure Previous
+      "n" -> pure Next
       _ -> Left $ "Invalid or missing cursor direction: " <> dirTxt
     jsonBytes <- mapLeft Text.pack . Base64URL.decodeUnpadded . TL.encodeUtf8 . TL.fromStrict $ locTxt
     loc <- mapLeft Text.pack (Aeson.eitherDecode jsonBytes)
     pure $ Cursor loc dir
 
 -- |
--- >>> toJSON (Cursor (1 :: Int, "hello" :: String) After)
--- String "a.WzEsImhlbGxvIl0"
+-- >>> toJSON (Cursor (1 :: Int, "hello" :: String) Next)
+-- String "n.WzEsImhlbGxvIl0"
 --
--- >>> toJSON (Cursor (1 :: Int, "hello" :: String) Before)
--- String "b.WzEsImhlbGxvIl0"
+-- >>> toJSON (Cursor (1 :: Int, "hello" :: String) Previous)
+-- String "p.WzEsImhlbGxvIl0"
 --
--- >>> decode (encode (Cursor (1 :: Int, "hello" :: String) After)) :: Maybe (Cursor (Int, String))
--- Just (Cursor {location = (1,"hello"), direction = After})
+-- >>> decode (encode (Cursor (1 :: Int, "hello" :: String) Next)) :: Maybe (Cursor (Int, String))
+-- Just (Cursor {location = (1,"hello"), direction = Next})
 instance (ToJSON a) => ToJSON (Cursor a) where
   toJSON = toJSON . toUrlPiece
 
@@ -216,7 +219,7 @@ data Paged cursor a = Paged
     prevCursor :: Maybe (Cursor cursor),
     nextCursor :: Maybe (Cursor cursor)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Functor, Foldable, Traversable)
 
 instance (ToJSON a, ToJSON cursor) => ToJSON (Paged cursor a) where
   toJSON (Paged {items, prevCursor, nextCursor}) =
@@ -295,3 +298,13 @@ instance (FromJSON a, TypeLits.KnownSymbol key) => FromJSON (AtKey key a) where
   parseJSON = withObject "AtKey" $ \obj -> do
     (innerVal :: a) <- (obj .: String.fromString (TypeLits.symbolVal (Proxy @key)))
     pure $ AtKey innerVal
+
+pagedOn :: (a -> cursor) -> [a] -> Paged cursor a
+pagedOn f items =
+  let prevCursor = do
+        first <- headMay items
+        pure $ Cursor (f first) Previous
+      nextCursor = do
+        last <- lastMay items
+        pure $ Cursor (f last) Next
+   in Paged items prevCursor nextCursor

@@ -12,7 +12,6 @@ where
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
-import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
 import Servant
 import Share.Codebase qualified as Codebase
@@ -376,17 +375,16 @@ listReleasesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
         ( \release ->
             API.releaseToAPIRelease projectShortHand release
         )
-  pure $ Paged {items = shareReleases, cursor = nextCursor releases}
+  releases
+    & pagedOn
+      ( \release ->
+          let Release {version = ReleaseVersion {major, minor, patch}, releaseId} = release
+           in (major, minor, patch, releaseId)
+      )
+    & \p ->
+      p {items = shareReleases}
+        & pure
   where
-    nextCursor :: [Release causal userId] -> Maybe (Cursor ListReleasesCursor)
-    nextCursor releases = case releases of
-      [] -> Nothing
-      releases@(x : xs)
-        | length releases < fromIntegral (getLimit limit) -> Nothing
-        | otherwise ->
-            let Release {version = ReleaseVersion {major, minor, patch}, releaseId} = NonEmpty.last (x :| xs)
-             in Just $ Cursor (major, minor, patch, releaseId)
-
     limit = fromMaybe defaultLimit mayLimit
     defaultLimit = Limit 20
     defaultStatusFilter = AllReleases
