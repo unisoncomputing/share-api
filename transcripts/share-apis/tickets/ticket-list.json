@@ -1,6 +1,5 @@
 {
   "body": {
-    "cursor": "<CURSOR>",
     "items": [
       {
         "author": {
@@ -53,7 +52,9 @@
         "title": "Completed Request",
         "updatedAt": "<TIMESTAMP>"
       }
-    ]
+    ],
+    "nextCursor": "<CURSOR>",
+    "prevCursor": "<CURSOR>"
   },
   "status": [
     {
