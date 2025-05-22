@@ -159,33 +159,51 @@ applySetUpdate existing = \case
      in Foldable.foldl' go existing (Map.toList updates)
   SetReplacement new -> new
 
+data CursorDirection = Before | After
+  deriving (Eq, Ord, Show)
+
 -- | A cursor for a pageable endpoint.
 -- This is rendered to an opaque base64URL string and included in paged responses,
 -- if provided back to the endpoint it will be used to determine the starting
 -- point of the next page.
-newtype Cursor a = Cursor {unCursor :: a}
+data Cursor a = Cursor {location :: a, direction :: CursorDirection}
   deriving stock (Eq, Ord, Show)
 
 -- |
--- >>> toUrlPiece (Cursor (1 :: Int, "hello" :: String))
--- "WzEsImhlbGxvIl0"
+-- >>> toUrlPiece (Cursor (1 :: Int, "hello" :: String) After)
+-- "a.WzEsImhlbGxvIl0"
 --
--- >>> parseUrlPiece (toUrlPiece (Cursor (1 :: Int, "hello" :: String))) :: Either Text (Cursor (Int, String))
--- Right (Cursor (1,"hello"))
+-- >>> parseUrlPiece (toUrlPiece (Cursor (1 :: Int, "hello" :: String) After)) :: Either Text (Cursor (Int, String))
+-- Right (Cursor {location = (1,"hello"), direction = After})
 instance (ToJSON a) => ToHttpApiData (Cursor a) where
-  toUrlPiece (Cursor a) = toUrlPiece . TL.decodeUtf8 . Base64URL.encodeUnpadded . Aeson.encode $ a
+  toUrlPiece (Cursor {location, direction}) =
+    let loc = TL.decodeUtf8 . Base64URL.encodeUnpadded . Aeson.encode $ location
+        dir :: TL.Text
+        dir = case direction of
+          Before -> "b"
+          After -> "a"
+     in toUrlPiece $ dir <> "." <> loc
 
 instance (FromJSON a) => FromHttpApiData (Cursor a) where
   parseUrlPiece txt = do
-    jsonBytes <- mapLeft Text.pack . Base64URL.decodeUnpadded . TL.encodeUtf8 . TL.fromStrict $ txt
-    Cursor <$> mapLeft Text.pack (Aeson.eitherDecode jsonBytes)
+    let (dirTxt, locTxt) = second (Text.drop 1) $ Text.breakOn "." txt
+    dir <- case dirTxt of
+      "b" -> pure Before
+      "a" -> pure After
+      _ -> Left $ "Invalid or missing cursor direction: " <> dirTxt
+    jsonBytes <- mapLeft Text.pack . Base64URL.decodeUnpadded . TL.encodeUtf8 . TL.fromStrict $ locTxt
+    loc <- mapLeft Text.pack (Aeson.eitherDecode jsonBytes)
+    pure $ Cursor loc dir
 
 -- |
--- >>> toJSON (Cursor (1 :: Int, "hello" :: String))
--- String "WzEsImhlbGxvIl0"
+-- >>> toJSON (Cursor (1 :: Int, "hello" :: String) After)
+-- String "a.WzEsImhlbGxvIl0"
 --
--- >>> decode (encode (Cursor (1 :: Int, "hello" :: String))) :: Maybe (Cursor (Int, String))
--- Just (Cursor (1,"hello"))
+-- >>> toJSON (Cursor (1 :: Int, "hello" :: String) Before)
+-- String "b.WzEsImhlbGxvIl0"
+--
+-- >>> decode (encode (Cursor (1 :: Int, "hello" :: String) After)) :: Maybe (Cursor (Int, String))
+-- Just (Cursor {location = (1,"hello"), direction = After})
 instance (ToJSON a) => ToJSON (Cursor a) where
   toJSON = toJSON . toUrlPiece
 
@@ -195,15 +213,17 @@ instance (FromJSON a) => FromJSON (Cursor a) where
 
 data Paged cursor a = Paged
   { items :: [a],
-    cursor :: Maybe (Cursor cursor)
+    prevCursor :: Maybe (Cursor cursor),
+    nextCursor :: Maybe (Cursor cursor)
   }
   deriving stock (Eq, Show)
 
 instance (ToJSON a, ToJSON cursor) => ToJSON (Paged cursor a) where
-  toJSON (Paged items cursor) =
+  toJSON (Paged {items, prevCursor, nextCursor}) =
     object
       [ "items" .= items,
-        "cursor" .= cursor
+        "prevCursor" .= prevCursor,
+        "nextCursor" .= nextCursor
       ]
 
 -- | The maximum page size for pageable endpoints

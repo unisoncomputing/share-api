@@ -415,7 +415,7 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
                   let branchShortHand = BranchShortHand {branchName, contributorHandle}
                    in API.branchToShareBranch branchShortHand branch shareProject contributions
               )
-  pure $ Paged {items = shareBranches, cursor = nextCursor (toListOf (folded . _1) branches)}
+  pure $ Paged {items = shareBranches, nextCursor = nextCursor (toListOf (folded . _1) branches), prevCursor = mayCursor}
   where
     nextCursor branches = case branches of
       [] -> Nothing
@@ -499,7 +499,7 @@ listBranchesByUserEndpoint (AuthN.MaybeAuthedUserID callerUserId) contributorHan
                       shareProject = projectToAPI projectOwnerHandle project
                    in API.branchToShareBranch branchShortHand branch shareProject contributions
               )
-  pure $ Paged {items = shareBranches, cursor = nextCursor branches}
+  pure $ Paged {items = shareBranches, nextCursor = nextCursor branches, prevCursor = mayCursor}
   where
     defaultLimit = Limit 20
     limit = fromMaybe defaultLimit mayLimit
