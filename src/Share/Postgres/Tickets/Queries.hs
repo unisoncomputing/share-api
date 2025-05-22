@@ -20,7 +20,7 @@ where
 import Control.Lens
 import Data.List qualified as List
 import Data.Time (UTCTime)
-import Safe (lastMay)
+import Safe (headMay, lastMay)
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -121,15 +121,19 @@ listTicketsByProjectId ::
   Maybe (Cursor ListTicketsCursor) ->
   Maybe UserId ->
   Maybe TicketStatus ->
-  PG.Transaction e (Maybe (Cursor ListTicketsCursor), [(ShareTicket UserId)])
+  PG.Transaction e (Paged ListTicketsCursor (ShareTicket UserId))
 listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter = do
   let cursorFilter = case mayCursor of
         Nothing -> "true"
-        Just (Cursor (beforeTime, ticketId)) ->
+        Just (Cursor (beforeTime, ticketId) Next) ->
           [PG.sql|
           (ticket.updated_at, ticket.id) < (#{beforeTime}, #{ticketId})
           |]
-  addCursor
+        Just (Cursor (afterTime, ticketId) Previous) ->
+          [PG.sql|
+          (ticket.updated_at, ticket.id) > (#{afterTime}, #{ticketId})
+          |]
+  paged
     <$> PG.queryListRows @(ShareTicket UserId)
       [PG.sql|
         SELECT
@@ -156,12 +160,11 @@ listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter =
         LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareTicket UserId] -> (Maybe (Cursor ListTicketsCursor), [ShareTicket UserId])
-    addCursor xs =
-      ( lastMay xs <&> \(ShareTicket {updatedAt, ticketId}) ->
-          Cursor (updatedAt, ticketId),
-        xs
-      )
+    paged :: [ShareTicket UserId] -> (Paged ListTicketsCursor (ShareTicket UserId))
+    paged items =
+      let prevCursor = headMay items <&> \ShareTicket {updatedAt, ticketId} -> Cursor (updatedAt, ticketId) Previous
+          nextCursor = lastMay items <&> \(ShareTicket {updatedAt, ticketId}) -> Cursor (updatedAt, ticketId) Next
+       in Paged {items, prevCursor, nextCursor}
 
 ticketById :: TicketId -> PG.Transaction e (Maybe Ticket)
 ticketById ticketId = do
@@ -286,15 +289,19 @@ listTicketsByUserId ::
   Limit ->
   Maybe (Cursor (UTCTime, TicketId)) ->
   Maybe TicketStatus ->
-  PG.Transaction e (Maybe (Cursor (UTCTime, TicketId)), [ShareTicket UserId])
+  PG.Transaction e (Paged (UTCTime, TicketId) (ShareTicket UserId))
 listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
   let cursorFilter = case mayCursor of
         Nothing -> "true"
-        Just (Cursor (beforeTime, ticketId)) ->
+        Just (Cursor (beforeTime, ticketId) Next) ->
           [PG.sql|
           (ticket.updated_at, ticket.id) < (#{beforeTime}, #{ticketId})
           |]
-  addCursor
+        Just (Cursor (afterTime, ticketId) Previous) ->
+          [PG.sql|
+          (ticket.updated_at, ticket.id) > (#{afterTime}, #{ticketId})
+          |]
+  paged
     <$> PG.queryListRows @(ShareTicket UserId)
       [PG.sql|
       SELECT
@@ -326,12 +333,15 @@ listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
       LIMIT #{limit}
       |]
   where
-    addCursor :: [ShareTicket UserId] -> (Maybe (Cursor ListTicketsCursor), [ShareTicket UserId])
-    addCursor xs =
-      ( lastMay xs <&> \(ShareTicket {updatedAt, ticketId}) ->
-          Cursor (updatedAt, ticketId),
-        xs
-      )
+    paged :: [ShareTicket UserId] -> (Paged ListTicketsCursor (ShareTicket UserId))
+    paged items =
+      let prevCursor = headMay items <&> \ShareTicket {updatedAt, ticketId} -> Cursor (updatedAt, ticketId) Previous
+          nextCursor = lastMay items <&> \(ShareTicket {updatedAt, ticketId}) -> Cursor (updatedAt, ticketId) Next
+       in Paged
+            { items,
+              prevCursor,
+              nextCursor
+            }
 
 getPagedShareTicketTimelineByProjectIdAndNumber ::
   ProjectId ->
