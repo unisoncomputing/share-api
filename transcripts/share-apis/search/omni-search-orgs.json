@@ -1,6 +1,7 @@
 {
   "body": [
     {
+      "isCommercial": false,
       "orgId": "ORG-<UUID>",
       "tag": "org",
       "user": {
