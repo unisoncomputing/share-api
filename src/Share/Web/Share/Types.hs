@@ -134,10 +134,11 @@ instance ToJSON SearchResult where
               "name" .= name,
               "userId" .= userId
             ]
-        UnifiedOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl, userId}, orgId}) ->
+        UnifiedOrg (OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl, userId}, orgId, isCommercial}) ->
           Aeson.object
             [ "tag" .= ("org" :: Text),
               "orgId" .= orgId,
+              "isCommercial" .= isCommercial,
               "user"
                 .= Aeson.object
                   [ "avatarUrl" .= avatarUrl,
