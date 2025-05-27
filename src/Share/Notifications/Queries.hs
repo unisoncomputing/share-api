@@ -72,7 +72,7 @@ listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFil
         JOIN notification_events event ON hub.event_id = event.id
       WHERE hub.user_id = #{notificationUserId}
             AND (#{statusFilterList} IS NULL OR hub.status = ANY(#{statusFilterList}::notification_status[]))
-            (^{cursorFilter})
+            ^{cursorFilter}
       ORDER BY hub.created_at DESC
       LIMIT #{limit}
     |]

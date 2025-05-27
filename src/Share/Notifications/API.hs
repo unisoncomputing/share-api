@@ -9,7 +9,6 @@ module Share.Notifications.API
     SubscriptionRoutes (..),
     EmailRoutes (..),
     WebhookRoutes (..),
-    GetHubEntriesResponse (..),
     GetHubEntriesCursor,
     StatusFilter (..),
     UpdateHubEntriesRequest (..),
@@ -218,15 +217,7 @@ type GetHubEntriesEndpoint =
     :> QueryParam "limit" Int
     :> QueryParam "cursor" (Cursor GetHubEntriesCursor)
     :> QueryParam "status" StatusFilter
-    :> Get '[JSON] GetHubEntriesResponse
-
-data GetHubEntriesResponse = GetHubEntriesResponse
-  { notifications :: Paged GetHubEntriesCursor (NotificationHubEntry UnifiedDisplayInfo HydratedEvent)
-  }
-
-instance ToJSON GetHubEntriesResponse where
-  toJSON GetHubEntriesResponse {notifications} =
-    object ["notifications" .= notifications]
+    :> Get '[JSON] (Paged GetHubEntriesCursor (NotificationHubEntry UnifiedDisplayInfo HydratedEvent))
 
 type UpdateHubEntriesEndpoint =
   AuthenticatedUserId
