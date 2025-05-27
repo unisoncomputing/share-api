@@ -14,6 +14,7 @@
           },
           "data": {
             "kind": "projectBranchUpdated",
+            "link": "http://<HOST>:1234/@test/publictestproject/code/newbranch/latest",
             "payload": {
               "branch": {
                 "branchContributorHandle": null,
@@ -60,6 +61,7 @@
           },
           "data": {
             "kind": "projectContributionCreated",
+            "link": "http://<HOST>:1234/@test/publictestproject/contributions/3",
             "payload": {
               "contribution": {
                 "author": {

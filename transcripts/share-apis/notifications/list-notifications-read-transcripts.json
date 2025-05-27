@@ -14,6 +14,7 @@
           },
           "data": {
             "kind": "projectBranchUpdated",
+            "link": "http://<HOST>:1234/@test/publictestproject/code/newbranch/latest",
             "payload": {
               "branch": {
                 "branchContributorHandle": null,
