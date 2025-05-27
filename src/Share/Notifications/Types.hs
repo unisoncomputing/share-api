@@ -18,6 +18,7 @@ module Share.Notifications.Types
     NotificationEmailDeliveryConfig (..),
     NotificationWebhookConfig (..),
     HydratedEventPayload (..),
+    HydratedEvent (..),
     BranchPayload (..),
     ProjectPayload (..),
     ContributionPayload (..),
@@ -527,27 +528,32 @@ instance FromJSON ProjectContributionCreatedPayload where
     contributionInfo <- o .: "contribution"
     pure ProjectContributionCreatedPayload {projectInfo, contributionInfo}
 
+data HydratedEvent = HydratedEvent
+  { hydratedEventPayload :: HydratedEventPayload,
+    hydratedEventLink :: URI
+  }
+  deriving stock (Show, Eq)
+
+instance ToJSON HydratedEvent where
+  toJSON he@(HydratedEvent {hydratedEventPayload, hydratedEventLink}) =
+    let kind :: Text = case hydratedEventTopic he of
+          ProjectBranchUpdated -> "projectBranchUpdated"
+          ProjectContributionCreated -> "projectContributionCreated"
+        payload = case hydratedEventPayload of
+          HydratedProjectBranchUpdatedPayload p -> Aeson.toJSON p
+          HydratedProjectContributionCreatedPayload p -> Aeson.toJSON p
+     in Aeson.object
+          [ "payload" .= payload,
+            "link" .= URIParam hydratedEventLink,
+            "kind" .= kind
+          ]
+
 data HydratedEventPayload
   = HydratedProjectBranchUpdatedPayload ProjectBranchUpdatedPayload
   | HydratedProjectContributionCreatedPayload ProjectContributionCreatedPayload
   deriving stock (Show, Eq)
 
-hydratedEventTopic :: HydratedEventPayload -> NotificationTopic
-hydratedEventTopic = \case
+hydratedEventTopic :: HydratedEvent -> NotificationTopic
+hydratedEventTopic (HydratedEvent {hydratedEventPayload}) = case hydratedEventPayload of
   HydratedProjectBranchUpdatedPayload _ -> ProjectBranchUpdated
   HydratedProjectContributionCreatedPayload _ -> ProjectContributionCreated
-
-instance ToJSON HydratedEventPayload where
-  toJSON = \case
-    (HydratedProjectBranchUpdatedPayload payload) ->
-      Aeson.object ["kind" .= ("projectBranchUpdated" :: Text), "payload" .= payload]
-    (HydratedProjectContributionCreatedPayload payload) ->
-      Aeson.object ["kind" .= ("projectContributionCreated" :: Text), "payload" .= payload]
-
-instance FromJSON HydratedEventPayload where
-  parseJSON = Aeson.withObject "HydratedEventPayload" \o -> do
-    kind <- o .: "kind"
-    case kind of
-      "projectBranchUpdated" -> HydratedProjectBranchUpdatedPayload <$> o .: "payload"
-      "projectContributionCreated" -> HydratedProjectContributionCreatedPayload <$> o .: "payload"
-      _ -> fail $ "Unknown event kind: " <> Text.unpack kind

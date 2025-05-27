@@ -3,6 +3,7 @@ module Share.Notifications.Ops
     createWebhookDeliveryMethod,
     updateWebhookDeliveryMethod,
     deleteWebhookDeliveryMethod,
+    hydrateEvent,
   )
 where
 
@@ -16,6 +17,7 @@ import Share.Prelude
 import Share.Utils.URI (URIParam (..))
 import Share.Web.App (WebApp)
 import Share.Web.Errors (respondError)
+import Share.Web.UI.Links qualified as Links
 
 listNotificationDeliveryMethods :: UserId -> Maybe NotificationSubscriptionId -> WebApp [NotificationDeliveryMethod]
 listNotificationDeliveryMethods userId maySubscriptionId = do
@@ -75,3 +77,8 @@ deleteWebhookDeliveryMethod notificationUser webhookDeliveryMethodId = do
       Right _ -> do
         PG.runTransaction $ do
           NotifQ.deleteWebhookDeliveryMethod notificationUser webhookDeliveryMethodId
+
+hydrateEvent :: HydratedEventPayload -> WebApp HydratedEvent
+hydrateEvent hydratedEventPayload = do
+  hydratedEventLink <- Links.notificationLink hydratedEventPayload
+  pure $ HydratedEvent {hydratedEventPayload, hydratedEventLink}
