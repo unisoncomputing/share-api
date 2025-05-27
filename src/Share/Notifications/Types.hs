@@ -390,24 +390,27 @@ instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) wher
 data NotificationHubEntry userInfo eventPayload = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,
     hubEntryEvent :: NotificationEvent NotificationEventId userInfo UTCTime eventPayload,
-    hubEntryStatus :: NotificationStatus
+    hubEntryStatus :: NotificationStatus,
+    hubEntryCreatedAt :: UTCTime
   }
   deriving stock (Functor, Foldable, Traversable)
 
 instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (NotificationHubEntry userInfo eventPayload) where
-  toJSON NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus} =
+  toJSON NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus, hubEntryCreatedAt} =
     Aeson.object
       [ "id" Aeson..= hubEntryId,
         "event" Aeson..= hubEntryEvent,
-        "status" Aeson..= hubEntryStatus
+        "status" Aeson..= hubEntryStatus,
+        "createdAt" Aeson..= hubEntryCreatedAt
       ]
 
 instance Hasql.DecodeRow (NotificationHubEntry UserId NotificationEventData) where
   decodeRow = do
     hubEntryId <- PG.decodeField
     hubEntryStatus <- PG.decodeField
+    hubEntryCreatedAt <- PG.decodeField
     hubEntryEvent <- PG.decodeRow
-    pure $ NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus}
+    pure $ NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus, hubEntryCreatedAt}
 
 hubEntryUserInfo_ :: Traversal (NotificationHubEntry userInfo eventPayload) (NotificationHubEntry userInfo' eventPayload) userInfo userInfo'
 hubEntryUserInfo_ f (NotificationHubEntry {hubEntryEvent, ..}) = do
