@@ -5,12 +5,16 @@ import Data.Time
 import Servant
 import Servant.Server.Generic (AsServerT)
 import Share.IDs
+import Share.Notifications.API (GetHubEntriesCursor)
 import Share.Notifications.API qualified as API
 import Share.Notifications.Ops qualified as NotifOps
 import Share.Notifications.Queries qualified as NotificationQ
+import Share.Notifications.Types
 import Share.Postgres qualified as PG
 import Share.Postgres.Ops qualified as UserQ
+import Share.Prelude
 import Share.User (User (..))
+import Share.Utils.API (Cursor, pagedOn)
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 
@@ -77,14 +81,18 @@ server userHandle =
       subscriptionsRoutes = subscriptionsRoutes userHandle
     }
 
-getHubEntriesEndpoint :: UserHandle -> UserId -> Maybe Int -> Maybe UTCTime -> Maybe API.StatusFilter -> WebApp API.GetHubEntriesResponse
-getHubEntriesEndpoint userHandle callerUserId limit afterTime mayStatusFilter = do
+getHubEntriesEndpoint :: UserHandle -> UserId -> Maybe Int -> Maybe (Cursor GetHubEntriesCursor) -> Maybe API.StatusFilter -> WebApp API.GetHubEntriesResponse
+getHubEntriesEndpoint userHandle callerUserId limit mayCursor mayStatusFilter = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkNotificationsGet callerUserId notificationUserId
   notifications <- PG.runTransaction do
     notifs <- NotificationQ.listNotificationHubEntryPayloads notificationUserId limit afterTime (API.getStatusFilter <$> mayStatusFilter)
     forOf (traversed . traversed) notifs NotifOps.hydrateEvent
-  pure $ API.GetHubEntriesResponse {notifications}
+  paged <-
+    notifications
+      & pagedOn (\(NotificationHubEntry {hubEntryId, hubEntryCreatedAt}) -> (hubEntryCreatedAt, hubEntryId))
+      & pure
+  pure $ API.GetHubEntriesResponse {notifications = paged}
 
 updateHubEntriesEndpoint :: UserHandle -> UserId -> API.UpdateHubEntriesRequest -> WebApp ()
 updateHubEntriesEndpoint userHandle callerUserId API.UpdateHubEntriesRequest {notificationStatus, notificationIds} = do
