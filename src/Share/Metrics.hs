@@ -78,7 +78,7 @@ serveMetricsMiddleware env = do
     refreshGauges getMetrics
     Prom.prometheus prometheusSettings app req handleResponse
   where
-    runPG = PG.runSessionWithPool (Env.pgConnectionPool env) . PG.transaction PG.ReadCommitted PG.Read
+    runPG = PG.runSessionWithEnv env . PG.transaction PG.ReadCommitted PG.Read
     prometheusSettings =
       Prom.def
         { Prom.prometheusEndPoint = ["metrics"],

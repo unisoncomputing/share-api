@@ -12,7 +12,7 @@ module Share.Postgres
     Transaction,
     Pipeline,
     T,
-    Session,
+    Session (..),
     Mode (..),
     IsolationLevel (..),
     Interp.EncodeValue (..),
@@ -40,8 +40,8 @@ module Share.Postgres
     runSession,
     tryRunSession,
     runSessionOrRespondError,
-    runSessionWithPool,
-    tryRunSessionWithPool,
+    runSessionWithEnv,
+    tryRunSessionWithEnv,
     unliftSession,
     defaultIsolationLevel,
     pipelined,
@@ -112,8 +112,8 @@ data TransactionError e
   | Err e
 
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
-newtype Transaction e a = Transaction {unTransaction :: Hasql.Session (Either (TransactionError e) a)}
-  deriving (Functor, Applicative, Monad) via (ExceptT (TransactionError e) Hasql.Session)
+newtype Transaction e a = Transaction {unTransaction :: ReaderT (Env.Env ()) Hasql.Session (Either (TransactionError e) a)}
+  deriving (Functor, Applicative, Monad, MonadReader (Env.Env ())) via (ReaderT (Env.Env ()) (ExceptT (TransactionError e) Hasql.Session))
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err
@@ -129,7 +129,7 @@ newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (
 
 -- | Run a pipeline in a transaction
 pipelined :: Pipeline e a -> Transaction e a
-pipelined p = Transaction (Hasql.pipeline (unPipeline p))
+pipelined p = Transaction (lift $ Hasql.pipeline (unPipeline p))
 
 -- | Like fmap, but the provided function can throw a recoverable error by returning 'Left'.
 pEitherMap :: (a -> Either e b) -> Pipeline e a -> Pipeline e b
@@ -151,7 +151,8 @@ pFor_ f p = pipelined $ for_ f p
 type T = Transaction Void
 
 -- | A session that may fail with an error 'e'
-type Session e = ExceptT (TransactionError e) Hasql.Session
+newtype Session e a = Session {_unSession :: ReaderT (Env.Env ()) (ExceptT (TransactionError e) Hasql.Session) a}
+  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env ()), MonadIO, MonadError (TransactionError e))
 
 data PostgresError
   = PostgresError (Pool.UsageError)
@@ -185,10 +186,10 @@ data IsolationLevel
 
 -- | Run a transaction in a session
 transaction :: forall e a. IsolationLevel -> Mode -> Transaction e a -> Session e a
-transaction isoLevel mode (Transaction t) = do
-  let loop :: Session.Session (Either (TransactionError e) a)
+transaction isoLevel mode (Transaction t) = Session do
+  let loop :: ReaderT (Env.Env ()) Session.Session (Either (TransactionError e) a)
       loop = do
-        beginTransaction isoLevel mode
+        lift $ beginTransaction isoLevel mode
         res <- catchError (Just <$> mayCommit t) \case
           Session.QueryError
             _
@@ -202,25 +203,25 @@ transaction isoLevel mode (Transaction t) = do
           err -> do
             -- Try rolling back, but this will most likely fail since the connection has
             -- already failed. If this fails we just rethrow the original exception.
-            catchError rollbackSession (const $ throwError err)
+            lift $ catchError rollbackSession (const $ throwError err)
             -- It's very important to rethrow all QueryErrors so Hasql can remove the
             -- connection from the pool.
             throwError err
         case res of
           Nothing -> do
-            rollbackSession
+            lift $ rollbackSession
             loop
           Just res -> pure res
-  ExceptT loop
+  mapReaderT ExceptT loop
   where
-    mayCommit :: Hasql.Session (Either (TransactionError e) a) -> Hasql.Session (Either (TransactionError e) a)
+    mayCommit :: ReaderT (Env.Env ()) Hasql.Session (Either (TransactionError e) a) -> ReaderT (Env.Env ()) Hasql.Session (Either (TransactionError e) a)
     mayCommit m =
       m >>= \case
         Left err -> do
-          rollbackSession
+          lift rollbackSession
           pure (Left err)
         Right a -> do
-          commit
+          lift commit
           pure (Right a)
 
 beginTransaction :: IsolationLevel -> Mode -> Hasql.Session ()
@@ -250,7 +251,7 @@ rollback e = Transaction do
 
 transactionStatement :: a -> Hasql.Statement a b -> Transaction e b
 transactionStatement v stmt = Transaction do
-  Right <$> Session.statement v stmt
+  Right <$> lift (Session.statement v stmt)
 
 -- | Run a read-only transaction within a session
 readTransaction :: Transaction e a -> Session e a
@@ -305,23 +306,23 @@ runSession t = either absurd id <$> tryRunSession t
 -- | Run a session in the App monad, returning an Either error.
 tryRunSession :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => Session e a -> m (Either e a)
 tryRunSession s = do
-  pool <- asks Env.pgConnectionPool
-  liftIO $ tryRunSessionWithPool pool s
+  env <- ask
+  liftIO $ tryRunSessionWithEnv env s
 
 -- | Unlift a session to run in IO.
 unliftSession :: Session e a -> AppM x (IO (Either e a))
 unliftSession s = do
-  pool <- asks Env.pgConnectionPool
-  pure $ tryRunSessionWithPool pool s
+  env <- ask
+  pure $ tryRunSessionWithEnv env s
 
--- | Manually run an unfailing session using a connection pool.
-runSessionWithPool :: (HasCallStack) => Pool.Pool -> Session Void a -> IO a
-runSessionWithPool pool s = either absurd id <$> tryRunSessionWithPool pool s
+-- | Manually run an unfailing session using the connection pool from the provided env.
+runSessionWithEnv :: (HasCallStack) => Env.Env any -> Session Void a -> IO a
+runSessionWithEnv env s = either absurd id <$> tryRunSessionWithEnv env s
 
--- | Manually run a session using a connection pool, returning an Either error.
-tryRunSessionWithPool :: (HasCallStack) => Pool.Pool -> Session e a -> IO (Either e a)
-tryRunSessionWithPool pool s = do
-  liftIO (Pool.use pool (runExceptT s)) >>= \case
+-- | Manually run a session, using the connection pool from the provided env, returning an Either error.
+tryRunSessionWithEnv :: (HasCallStack) => Env.Env any -> Session e a -> IO (Either e a)
+tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool}) (Session s) = do
+  liftIO (Pool.use pool (runExceptT $ runReaderT s (void env))) >>= \case
     Left err -> throwIO . someServerError $ PostgresError err
     Right (Left (Unrecoverable e)) -> throwIO e
     Right (Left (Err e)) -> pure (Left e)
@@ -365,14 +366,14 @@ instance QueryM (Transaction e) where
   transactionUnsafeIO io = Transaction (Right <$> liftIO io)
 
 instance QueryA (Session e) where
-  statement q s = do
-    lift $ Session.statement q s
+  statement q s =
+    Session . lift . lift $ Session.statement q s
 
   unrecoverableError e = do
     throwError (Unrecoverable (someServerError e))
 
 instance QueryM (Session e) where
-  transactionUnsafeIO io = lift $ liftIO io
+  transactionUnsafeIO io = Session . lift . lift $ liftIO io
 
 instance QueryA (Pipeline e) where
   statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
