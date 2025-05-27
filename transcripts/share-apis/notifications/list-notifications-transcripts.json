@@ -1,7 +1,8 @@
 {
   "body": {
-    "notifications": [
+    "items": [
       {
+        "createdAt": "<TIMESTAMP>",
         "event": {
           "actor": {
             "info": {
@@ -49,6 +50,7 @@
         "status": "unread"
       },
       {
+        "createdAt": "<TIMESTAMP>",
         "event": {
           "actor": {
             "info": {
@@ -116,7 +118,9 @@
         "id": "NOT-<UUID>",
         "status": "unread"
       }
-    ]
+    ],
+    "nextCursor": "<CURSOR>",
+    "prevCursor": "<CURSOR>"
   },
   "status": [
     {
