@@ -72,6 +72,7 @@ withEnv action = do
   shareUiOrigin <- fromEnv "SHARE_SHARE_UI_ORIGIN" (pure . maybeToEither "Invalid SHARE_SHARE_UI_ORIGIN" . parseURI)
   websiteOrigin <- fromEnv "SHARE_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_HOMEPAGE_ORIGIN" . parseURI)
   cloudUiOrigin <- fromEnv "SHARE_CLOUD_UI_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_UI_ORIGIN" . parseURI)
+  supportTicketWebhookURI <- maybeEnv "SHARE_SUPPORT_TICKET_WEBHOOK_URI" (pure . maybeToEither "Invalid SHARE_SUPPORT_TICKET_WEBHOOK_URI" . parseURI)
   maxParallelismPerDownloadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" . readMaybe)
   maxParallelismPerUploadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" . readMaybe)
   cloudWebsiteOrigin <- fromEnv "SHARE_CLOUD_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_HOMEPAGE_ORIGIN" . parseURI)
@@ -161,6 +162,16 @@ withEnv action = do
     parseBaseUrl str = do
       u <- ServantClient.parseBaseUrl str
       pure $ Right u
+
+-- | Parse an environment variable, but only if it exists.
+maybeEnv :: String -> (String -> IO (Either String a)) -> IO (Maybe a)
+maybeEnv var parser = do
+  val <- lookupEnv var
+  case val of
+    Nothing -> pure Nothing
+    Just val' -> parser val' >>= \case
+      Right a -> pure (Just a)
+      Left err -> putStrLn ("Error with " <> var <> ": " <> err) >> exitWith (ExitFailure 1)
 
 fromEnv :: String -> (String -> IO (Either String a)) -> IO a
 fromEnv var from = do

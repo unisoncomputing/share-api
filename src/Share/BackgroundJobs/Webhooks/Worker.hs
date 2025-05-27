@@ -260,7 +260,7 @@ buildWebhookRequest webhookId uri event defaultPayload = do
                 mainLink = Just link,
                 author =
                   Author
-                    { authorName = actorAuthor,
+                    { authorName = Just actorAuthor,
                       authorLink = Just actorLink,
                       authorAvatarUrl = actorAvatarUrl
                     },
@@ -281,7 +281,7 @@ buildWebhookRequest webhookId uri event defaultPayload = do
                 mainLink = Just link,
                 author =
                   Author
-                    { authorName = actorAuthor,
+                    { authorName = Just actorAuthor,
                       authorLink = Just actorLink,
                       authorAvatarUrl = actorAvatarUrl
                     },

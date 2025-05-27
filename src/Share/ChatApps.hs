@@ -8,6 +8,7 @@ module Share.ChatApps
     Author (..),
     sendMessage,
     shareAuthor,
+    authorFromUserId,
   )
 where
 

@@ -32,6 +32,7 @@ data Env ctx = Env
     websiteOrigin :: URI, -- E.g. "https://www.unison-lang.org"
     cloudUiOrigin :: URI, -- E.g. "https://app.unison.cloud"
     cloudWebsiteOrigin :: URI, -- E.g. "https://www.unison.cloud"
+    supportTicketWebhookURI :: Maybe URI,
     vaultClientEnv :: S.ClientEnv,
     userSecretsVaultMount :: Vault.SecretMount,
     shareVaultToken :: Vault.VaultToken,
