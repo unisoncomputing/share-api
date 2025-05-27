@@ -25,7 +25,6 @@ import Share.Web.Authentication (cookieSessionTTL)
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool
 import Network.URI (parseURI)
-import Servant.API qualified as Servant
 import Servant.Client qualified as ServantClient
 import System.Environment (lookupEnv)
 import System.Exit
@@ -57,9 +56,6 @@ withEnv action = do
   githubClientSecret <- fromEnv "SHARE_GITHUB_CLIENT_SECRET" (pure . Right . Text.pack)
   hs256Key <- fromEnv "SHARE_HMAC_KEY" (pure . Right . BS.pack)
   edDSAKey <- fromEnv "SHARE_EDDSA_KEY" (pure . Right . BS.pack)
-  zendeskAPIUser <- fromEnv "SHARE_ZENDESK_API_USER" (pure . Right . BS.pack)
-  zendeskAPIToken <- fromEnv "SHARE_ZENDESK_API_TOKEN" (pure . Right . BS.pack)
-  let zendeskAuth = Servant.BasicAuthData zendeskAPIUser zendeskAPIToken
   commitHash <- fromEnv "SHARE_COMMIT" (pure . Right . Text.pack)
   minLogSeverity <-
     lookupEnv "SHARE_LOG_LEVEL" >>= \case

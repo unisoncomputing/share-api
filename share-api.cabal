@@ -174,7 +174,6 @@ library
       Share.Web.Support.API
       Share.Web.Support.Impl
       Share.Web.Support.Types
-      Share.Web.Support.Zendesk
       Share.Web.Types
       Share.Web.UCM.Projects.Impl
       Share.Web.UCM.Sync.HashJWT

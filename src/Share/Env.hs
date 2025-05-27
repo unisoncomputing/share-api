@@ -8,7 +8,6 @@ import Database.Redis qualified as R
 import Hasql.Pool qualified as Hasql
 import Network.HTTP.Client qualified as HTTPClient
 import Network.URI (URI)
-import Servant qualified as S
 import Servant.Client qualified as S
 import Share.JWT qualified as JWT
 import Share.Prelude
@@ -49,7 +48,6 @@ data Env ctx = Env
     cookieSettings :: Cookies.CookieSettings,
     sessionCookieKey :: Text,
     sandboxedRuntime :: Runtime Symbol,
-    zendeskAuth :: S.BasicAuthData,
     sentryService :: SentryService,
     -- The commit hash of the currently running version of Share
     commitHash :: Text,
