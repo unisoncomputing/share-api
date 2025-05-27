@@ -93,7 +93,7 @@ homePage mayEvent = do
         LogOut -> Map.singleton "event" "log-out"
 
 -- E.g. https://share.unison-lang.org/@unison/base/code/@ceedubs/each-first/latest
-projectBranchBrowseLink :: ProjectBranchShortHand -> AppM reqCtx URI
+projectBranchBrowseLink :: (MonadReader (Env.Env ctx) m) => ProjectBranchShortHand -> m URI
 projectBranchBrowseLink (ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}) = do
   let branchPath = case contributorHandle of
         Just contributor -> [IDs.toText contributor, IDs.toText branchName]
@@ -102,13 +102,13 @@ projectBranchBrowseLink (ProjectBranchShortHand {userHandle, projectSlug, contri
   shareUIPath path
 
 -- E.g. https://share.unison-lang.org/@unison/base/contributions/100
-contributionLink :: ProjectShortHand -> ContributionNumber -> AppM reqCtx URI
+contributionLink :: (MonadReader (Env.Env ctx) m) => ProjectShortHand -> ContributionNumber -> m URI
 contributionLink (ProjectShortHand {userHandle, projectSlug}) contributionNumber = do
   let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "contributions", IDs.toText contributionNumber]
   shareUIPath path
 
 -- | Where the user should go when clicking on a notification
-notificationLink :: HydratedEventPayload -> AppM reqCtx URI
+notificationLink :: (MonadReader (Env.Env ctx) m) => HydratedEventPayload -> m URI
 notificationLink = \case
   HydratedProjectBranchUpdatedPayload payload ->
     projectBranchBrowseLink payload.branchInfo.projectBranchShortHand
@@ -123,19 +123,19 @@ unisonLogoImage =
 ----------- Utilities -----------
 
 -- | Construct a full URI to a path within share, with provided query params.
-sharePathQ :: [Text] -> Map Text Text -> AppM reqCtx URI
+sharePathQ :: (MonadReader (Env.Env ctx) m) => [Text] -> Map Text Text -> m URI
 sharePathQ pathSegments queryParams = do
   uri <- asks Env.apiOrigin
   pure . setPathAndQueryParams pathSegments queryParams $ uri
 
 -- | Construct a full URI to a path within share.
-sharePath :: [Text] -> AppM reqCtx URI
+sharePath :: (MonadReader (Env.Env ctx) m) => [Text] -> m URI
 sharePath path = sharePathQ path mempty
 
 -- | Check if a URI is a the Share UI, the Cloud UI, the main website, or the
 -- Cloud website. This is useful for preventing attackers from generating
 -- arbitrary redirections in things like login redirects.
-isTrustedURI :: URI -> AppM reqCtx Bool
+isTrustedURI :: (MonadReader (Env.Env ctx) m) => URI -> m Bool
 isTrustedURI uri = do
   shareUiURI <- asks Env.shareUiOrigin
   websiteURI <- asks Env.websiteOrigin
@@ -146,12 +146,12 @@ isTrustedURI uri = do
   pure $ any (\uri -> uriAuthority uri == requestedAuthority) trustedURIs
 
 -- | Construct a full URI to a path within the share UI, with the provided query params.
-shareUIPathQ :: [Text] -> Map Text Text -> AppM reqCtx URI
+shareUIPathQ :: (MonadReader (Env.Env ctx) m) => [Text] -> Map Text Text -> m URI
 shareUIPathQ pathSegments queryParams = do
   shareUiURI <- asks Env.shareUiOrigin
   pure . setPathAndQueryParams pathSegments queryParams $ shareUiURI
 
-shareUIPath :: [Text] -> AppM reqCtx URI
+shareUIPath :: (MonadReader (Env.Env ctx) m) => [Text] -> m URI
 shareUIPath pathSegments = shareUIPathQ pathSegments mempty
 
 -- | Various Error types that the Share UI knows how to interpret
@@ -172,7 +172,7 @@ shareUIErrorToUIText e =
     AccountCreationInvalidHandle {} ->
       "AccountCreationInvalidHandle"
 
-errorRedirectLink :: ShareUIError -> AppM reqCtx URI
+errorRedirectLink :: (MonadReader (Env.Env ctx) m) => ShareUIError -> m URI
 errorRedirectLink shareUIError = shareUIPathQ ["error"] (Map.fromList [("appError", shareUIErrorToUIText shareUIError)])
 
 -- | Redirect the user to the Share UI and show an error message.

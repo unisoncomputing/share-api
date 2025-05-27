@@ -78,7 +78,7 @@ deleteWebhookDeliveryMethod notificationUser webhookDeliveryMethodId = do
         PG.runTransaction $ do
           NotifQ.deleteWebhookDeliveryMethod notificationUser webhookDeliveryMethodId
 
-hydrateEvent :: HydratedEventPayload -> WebApp HydratedEvent
+hydrateEvent :: HydratedEventPayload -> PG.Transaction e HydratedEvent
 hydrateEvent hydratedEventPayload = do
   hydratedEventLink <- Links.notificationLink hydratedEventPayload
   pure $ HydratedEvent {hydratedEventPayload, hydratedEventLink}

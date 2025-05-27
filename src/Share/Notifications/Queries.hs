@@ -70,8 +70,8 @@ listNotificationHubEntryPayloads notificationUserId mayLimit afterTime statusFil
       ORDER BY hub.created_at DESC
       LIMIT #{limit}
     |]
-  hydratedPayloads <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventData
-  hydrated & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
+  hydratedPayloads <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventPayload
+  hydratedPayloads & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
 
 updateNotificationHubEntries :: (QueryA m) => NESet NotificationHubEntryId -> NotificationStatus -> m ()
 updateNotificationHubEntries hubEntryIds status = do

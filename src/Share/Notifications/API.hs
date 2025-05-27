@@ -39,7 +39,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (DeliveryMethodId, HydratedEventPayload, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
+import Share.Notifications.Types (DeliveryMethodId, HydratedEvent, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.URI (URIParam)
@@ -213,7 +213,7 @@ type GetHubEntriesEndpoint =
     :> Get '[JSON] GetHubEntriesResponse
 
 data GetHubEntriesResponse = GetHubEntriesResponse
-  { notifications :: [NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload]
+  { notifications :: [NotificationHubEntry UnifiedDisplayInfo HydratedEvent]
   }
 
 instance ToJSON GetHubEntriesResponse where

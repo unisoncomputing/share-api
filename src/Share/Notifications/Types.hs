@@ -548,6 +548,16 @@ instance ToJSON HydratedEvent where
             "kind" .= kind
           ]
 
+instance FromJSON HydratedEvent where
+  parseJSON = Aeson.withObject "HydratedEvent" \o -> do
+    kind <- o .: "kind"
+    hydratedEventLink <- o .: "link"
+    hydratedEventPayload <- case kind of
+      "projectBranchUpdated" -> HydratedProjectBranchUpdatedPayload <$> o .: "payload"
+      "projectContributionCreated" -> HydratedProjectContributionCreatedPayload <$> o .: "payload"
+      _ -> fail $ "Unknown event kind: " <> Text.unpack kind
+    pure HydratedEvent {hydratedEventPayload, hydratedEventLink}
+
 data HydratedEventPayload
   = HydratedProjectBranchUpdatedPayload ProjectBranchUpdatedPayload
   | HydratedProjectContributionCreatedPayload ProjectContributionCreatedPayload

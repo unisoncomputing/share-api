@@ -33,6 +33,7 @@ import Share.IDs qualified as IDs
 import Share.JWT (JWTParam (..))
 import Share.JWT qualified as JWT
 import Share.Metrics qualified as Metrics
+import Share.Notifications.Ops qualified as NotOps
 import Share.Notifications.Queries qualified as NQ
 import Share.Notifications.Types
 import Share.Notifications.Webhooks.Secrets (WebhookConfig (..), WebhookSecretError)
@@ -247,7 +248,7 @@ buildWebhookRequest webhookId uri event defaultPayload = do
           actorAvatarUrl = event.eventActor ^. DisplayInfo.avatarUrl_
       actorLink <- Links.userProfilePage (event.eventActor ^. DisplayInfo.handle_)
       let mainLink = Just event.eventData.hydratedEventLink
-      messageContent :: ChatApps.MessageContent provider <- case event.eventData.payload of
+      messageContent :: ChatApps.MessageContent provider <- case event.eventData.hydratedEventPayload of
         HydratedProjectBranchUpdatedPayload payload -> do
           let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
               title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
@@ -307,7 +308,8 @@ attemptWebhookSend ::
   PG.Transaction e (Maybe WebhookSendFailure)
 attemptWebhookSend _authZReceipt tryWebhookIO eventId webhookId = do
   event <- NQ.expectEvent eventId
-  hydratedEvent <- forOf eventData_ event NQ.hydrateEventPayload
+  hydratedEventPayload <- forOf eventData_ event NQ.hydrateEventPayload
+  hydratedEvent <- for hydratedEventPayload NotOps.hydrateEvent
   populatedEvent <- hydratedEvent & DisplayInfoQ.unifiedDisplayInfoForUserOf eventUserInfo_
   PG.transactionUnsafeIO (tryWebhookIO populatedEvent webhookId) >>= \case
     Just err -> do
