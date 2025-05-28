@@ -56,6 +56,7 @@ import Share.Postgres.Serialization qualified as S
 import Share.Postgres.Sync.Conversions qualified as Cv
 import Share.Prelude
 import Share.Utils.Postgres (OrdBy, ordered)
+import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors (MissingExpectedEntity (MissingExpectedEntity))
 import U.Codebase.Branch hiding (NamespaceStats, nonEmptyChildren)
 import U.Codebase.Branch qualified as V2 hiding (NamespaceStats)
@@ -936,33 +937,20 @@ importAccessibleCausals causalHashes = do
               JOIN causals ON causal_hashes.hash = causals.hash
               -- Ignore any causals that the codebase owner already has.
               WHERE NOT EXISTS (SELECT FROM causal_ownership co WHERE co.causal_id = causals.id AND co.user_id = #{codebaseOwnerUserId})
-            ), all_accessible_projects(owner, project_id) AS (
-              (SELECT private_project.owner_user_id AS owner, private_project.project_id
-                FROM accessible_private_projects private_project
-                  WHERE private_project.user_id = #{codebaseOwnerUserId}
-              ) UNION ALL
-              (SELECT public_project.owner_user_id AS owner, public_project.id AS project_id
-                FROM projects public_project
-                  WHERE NOT public_project.private
-              )
             ), copyable_causals(causal_id, causal_hash, project_owner, created_at) AS (
-                 SELECT cti.causal_id AS causal_id, cti.hash, project.owner, release.created_at
+                 SELECT cti.causal_id AS causal_id, cti.hash, project.owner_user_id, release.created_at
                    FROM causals_to_import cti
                      JOIN project_releases release ON release.squashed_causal_id = cti.causal_id
-                     JOIN all_accessible_projects project ON project.project_id = release.project_id
-                     -- This extra guarantee is required by the codebase migration from sqlite
-                     -- to PG, but doesn't hurt to keep around.
-                     JOIN causal_ownership ownership ON ownership.causal_id = cti.causal_id
-                     WHERE ownership.user_id = project.owner
+                     JOIN projects project ON project.id = release.project_id
+                   -- The caller must have permission to the view the project containing the causal
+                   WHERE user_has_project_permission(#{codebaseOwnerUserId}, release.project_id, #{ProjectView})
                UNION ALL
-                 SELECT cti.causal_id AS causal_id, cti.hash, project.owner, branch.created_at
+                 SELECT cti.causal_id AS causal_id, cti.hash, project.owner_user_id, branch.created_at
                    FROM causals_to_import cti
                      JOIN project_branches branch ON branch.causal_id = cti.causal_id
-                     JOIN all_accessible_projects project ON project.project_id = branch.project_id
-                     -- This extra guarantee is required by the codebase migration from sqlite
-                     -- to PG, but doesn't hurt to keep around.
-                     JOIN causal_ownership ownership ON ownership.causal_id = cti.causal_id
-                     WHERE ownership.user_id = project.owner
+                     JOIN projects project ON project.id = branch.project_id
+                   -- The caller must have permission to the view the project containing the causal
+                   WHERE user_has_project_permission(#{codebaseOwnerUserId}, branch.project_id, #{ProjectView})
             )
             -- Get only the first release (by created at) for each causal
             SELECT DISTINCT ON (copyable.causal_id) copyable.causal_id, copyable.project_owner

@@ -26,6 +26,7 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Ticket (Ticket (..), TicketStatus)
 import Share.Utils.API
+import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Tickets.API
@@ -313,13 +314,7 @@ listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
         JOIN projects AS project ON project.id = ticket.project_id
       WHERE
         ticket.author_id = #{userId}
-        AND NOT project.private
-          OR EXISTS (
-            SELECT FROM accessible_private_projects ap
-            WHERE
-              ap.user_id = #{callerUserId}
-              AND ap.project_id = project.id
-          )
+        AND user_has_project_permission(#{callerUserId}, project.id, #{ProjectView})
         AND (#{mayStatusFilter} IS NULL OR ticket.status = #{mayStatusFilter}::ticket_status)
         AND ^{cursorFilter}
       ORDER BY ticket.updated_at DESC, ticket.id DESC

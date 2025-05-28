@@ -37,6 +37,7 @@ import Share.Postgres.Comments.Queries (commentsByTicketOrContribution)
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.API
+import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors
 import Share.Web.Share.Contributions.API (ContributionTimelineCursor, ListContributionsCursor)
 import Share.Web.Share.Contributions.Types
@@ -304,13 +305,7 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
         JOIN projects AS project ON project.id = contribution.project_id
       WHERE
         contribution.author_id = #{userId}
-        AND NOT project.private
-          OR EXISTS (
-            SELECT FROM accessible_private_projects ap
-            WHERE
-              ap.user_id = #{callerUserId}
-              AND ap.project_id = project.id
-          )
+        AND user_has_project_permission(#{callerUserId}, project.id, #{ProjectView})
         AND (#{mayStatusFilter} IS NULL OR contribution.status = #{mayStatusFilter})
         AND ^{cursorFilter}
         AND ^{kindFilter}

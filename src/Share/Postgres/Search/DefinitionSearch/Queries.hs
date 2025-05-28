@@ -31,6 +31,7 @@ import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
 import Share.Utils.API (Limit, Query (Query))
 import Share.Utils.Logging qualified as Logging
+import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors qualified as Errors
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
@@ -289,7 +290,8 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
         WHERE
           -- Find names which contain the query
           doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
-        AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
+
+        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
           ^{filters}
       ) SELECT r.name, r.tag FROM results r
         -- Docs and tests to the bottom, then
@@ -359,7 +361,7 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         WHERE
           -- match on search tokens using GIN index.
           tsquery(#{tsQueryText}) @@ doc.search_tokens
-        AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
+        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
         AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
           ^{filters}
           ^{namesFilter}
@@ -397,7 +399,7 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
         WHERE
           -- We may wish to adjust the similarity threshold before the query.
           #{query} <% doc.name
-        AND (NOT p.private OR (#{mayCaller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects pp WHERE pp.user_id = #{mayCaller} AND pp.project_id = p.id)))
+        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
           ^{filters}
         -- Score matches by:
         -- - projects in the catalog
