@@ -93,8 +93,6 @@ services:
       - VAULT_HOST=http://vault:8200/v1
       - VAULT_TOKEN=sekrit
       - USER_SECRETS_VAULT_MOUNT=secret # A default mount in dev vault
-      - SHARE_ZENDESK_API_USER=invaliduser@example.com
-      - SHARE_ZENDESK_API_TOKEN=bad-password
       - SHARE_GITHUB_CLIENTID=invalid
       - SHARE_GITHUB_CLIENT_SECRET=invalid
 

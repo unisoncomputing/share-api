@@ -25,7 +25,6 @@ import Share.Web.Authentication (cookieSessionTTL)
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool
 import Network.URI (parseURI)
-import Servant.API qualified as Servant
 import Servant.Client qualified as ServantClient
 import System.Environment (lookupEnv)
 import System.Exit
@@ -57,9 +56,6 @@ withEnv action = do
   githubClientSecret <- fromEnv "SHARE_GITHUB_CLIENT_SECRET" (pure . Right . Text.pack)
   hs256Key <- fromEnv "SHARE_HMAC_KEY" (pure . Right . BS.pack)
   edDSAKey <- fromEnv "SHARE_EDDSA_KEY" (pure . Right . BS.pack)
-  zendeskAPIUser <- fromEnv "SHARE_ZENDESK_API_USER" (pure . Right . BS.pack)
-  zendeskAPIToken <- fromEnv "SHARE_ZENDESK_API_TOKEN" (pure . Right . BS.pack)
-  let zendeskAuth = Servant.BasicAuthData zendeskAPIUser zendeskAPIToken
   commitHash <- fromEnv "SHARE_COMMIT" (pure . Right . Text.pack)
   minLogSeverity <-
     lookupEnv "SHARE_LOG_LEVEL" >>= \case
@@ -72,6 +68,7 @@ withEnv action = do
   shareUiOrigin <- fromEnv "SHARE_SHARE_UI_ORIGIN" (pure . maybeToEither "Invalid SHARE_SHARE_UI_ORIGIN" . parseURI)
   websiteOrigin <- fromEnv "SHARE_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_HOMEPAGE_ORIGIN" . parseURI)
   cloudUiOrigin <- fromEnv "SHARE_CLOUD_UI_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_UI_ORIGIN" . parseURI)
+  supportTicketWebhookURI <- maybeEnv "SHARE_SUPPORT_TICKET_WEBHOOK_URI" (pure . maybeToEither "Invalid SHARE_SUPPORT_TICKET_WEBHOOK_URI" . parseURI)
   maxParallelismPerDownloadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" . readMaybe)
   maxParallelismPerUploadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" . readMaybe)
   cloudWebsiteOrigin <- fromEnv "SHARE_CLOUD_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_HOMEPAGE_ORIGIN" . parseURI)
@@ -161,6 +158,16 @@ withEnv action = do
     parseBaseUrl str = do
       u <- ServantClient.parseBaseUrl str
       pure $ Right u
+
+-- | Parse an environment variable, but only if it exists.
+maybeEnv :: String -> (String -> IO (Either String a)) -> IO (Maybe a)
+maybeEnv var parser = do
+  val <- lookupEnv var
+  case val of
+    Nothing -> pure Nothing
+    Just val' -> parser val' >>= \case
+      Right a -> pure (Just a)
+      Left err -> putStrLn ("Error with " <> var <> ": " <> err) >> exitWith (ExitFailure 1)
 
 fromEnv :: String -> (String -> IO (Either String a)) -> IO a
 fromEnv var from = do
