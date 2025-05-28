@@ -218,7 +218,7 @@ jobs:
       - name: Cache Docker images.
         uses: ScribeMD/docker-cache@fb28c93772363301b8d0a6072ce850224b73f74e # v0.5.0
         with:
-          key: docker-${{ runner.os }} }}
+          key: docker-${{ runner.os }}-${{ hashFiles('docker/docker-compose.yml') }}
 
       - name: Load image from last step
         run: |
