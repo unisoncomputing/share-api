@@ -33,6 +33,7 @@ import Share.Ticket (TicketStatus)
 import Share.Ticket qualified as Ticket
 import Share.User
 import Share.Utils.API
+import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
 import Share.Web.Share.Branches.Types (BranchKindFilter (..))
 import Share.Web.Share.Projects.Types (ContributionStats (..), DownloadStats (..), FavData, ProjectOwner, TicketStats (..))
@@ -150,7 +151,7 @@ searchProjects caller (Just userId) (Query "") limit = do
       FROM projects p
         JOIN users owner ON p.owner_user_id = owner.id
       WHERE p.owner_user_id = #{userId}
-        AND ((NOT p.private) OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
+        AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
       ORDER BY p.created_at DESC
       LIMIT #{limit}
       |]
@@ -171,8 +172,8 @@ searchProjects caller userIdFilter (Query query) limit = do
       FROM to_tsquery('english', #{queryToken}) AS tokenquery, projects AS p
         JOIN users AS owner ON p.owner_user_id = owner.id
       WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
-      AND (NOT p.private OR (#{caller} IS NOT NULL AND EXISTS (SELECT FROM accessible_private_projects WHERE user_id = #{caller} AND project_id = p.id)))
       AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
+      AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
       ORDER BY
         p.slug = #{query} DESC,
         -- Prefer prefix matches
@@ -278,12 +279,7 @@ listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
         FROM projects p
           JOIN users owner ON owner.id = p.owner_user_id
         WHERE p.owner_user_id = #{projectOwnerUserId}
-          AND (EXISTS (SELECT FROM accessible_private_projects accessible
-                      WHERE accessible.user_id = #{callerUserId}
-                        AND accessible.project_id = p.id
-                     )
-                OR NOT p.private
-              )
+          AND user_has_project_permission(#{callerUserId}, p.id, #{ProjectView})
         ORDER BY p.created_at DESC
       |]
   where
@@ -881,23 +877,6 @@ listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserI
   let projectFilter = case mayProjectId of
         Nothing -> mempty
         Just projId -> [PG.sql| AND b.project_id = #{projId} |]
-  let callerFilter = case mayCallerUserId of
-        Just callerUserId ->
-          -- See any projects that are public or that the caller has access to.
-          ( [PG.sql| AND (
-                NOT project.private
-                OR EXISTS (
-                  SELECT FROM accessible_private_projects ap
-                  WHERE
-                    ap.user_id = #{callerUserId}
-                    AND ap.project_id = project.id
-                  )
-                )
-          |]
-          )
-        Nothing ->
-          -- No caller auth means they only see public projects
-          [PG.sql| AND NOT project.private |]
   let sql =
         intercalateMap
           "\n"
@@ -930,11 +909,11 @@ listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserI
         WHERE
           b.deleted_at IS NULL
           AND b.contributor_id = #{contributorUserId}
+          AND user_has_project_permission(#{mayCallerUserId}, b.project_id, #{ProjectView})
           |],
             branchNameFilter,
             cursorFilter,
             projectFilter,
-            callerFilter,
             [PG.sql|
         ORDER BY b.updated_at DESC, b.id DESC
         LIMIT #{limit}
