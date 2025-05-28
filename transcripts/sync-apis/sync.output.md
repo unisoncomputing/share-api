@@ -48,7 +48,7 @@ Push and pull it back.
 ``` ucm
 proj/main> push @transcripts/proj/main
 
-  Uploaded 364 entities.
+  Uploaded 372 entities.
 
   I just created @transcripts/proj on http://localhost:5424
 
@@ -74,7 +74,7 @@ proj/pulled> ls .
   4. B/       (2 terms)
   5. a        ('Nat)
   6. b        ('Nat)
-  7. builtin/ (476 terms, 76 types)
+  7. builtin/ (483 terms, 78 types)
   8. xs       (['{g} Nat])
   9. ys       ([Nat])
 ```
@@ -149,8 +149,6 @@ Pull to trigger local merge
 
 ``` ucm :error
 proj/diverge> pull @transcripts/proj/main
-
-  Merging...
 
   I couldn't automatically merge remote @transcripts/proj/main
   into proj/diverge. However, I've added the definitions that
