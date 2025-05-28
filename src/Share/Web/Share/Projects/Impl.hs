@@ -344,16 +344,17 @@ getProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp GetPr
 getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug = do
   projectId <- PG.runTransaction (Q.projectIDFromHandleAndSlug userHandle projectSlug) `or404` (EntityMissing (ErrorID "project:missing") "Project not found")
   addRequestTag "project-id" (IDs.toText projectId)
-  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats, permissionsForProject) <- PG.runTransactionOrRespondError do
+  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats, permissionsForProject, isPremiumProjectInfo) <- PG.runTransactionOrRespondError do
     projectWithMeta <- (Q.projectByIdWithMetadata callerUserId projectId) `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     releaseDownloads <- Q.releaseDownloadStatsForProject projectId
     contributionStats <- Q.contributionStatsForProject projectId
     ticketStats <- Q.ticketStatsForProject projectId
     permissionsForProject <- PermissionsInfo <$> AuthZQ.permissionsForProject callerUserId projectId
-    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats, permissionsForProject)
+    isPremiumProjectInfo <- IsPremiumProject <$> ProjectsQ.isPremiumProject projectId
+    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats, permissionsForProject, isPremiumProjectInfo)
   let releaseDownloadStats = ReleaseDownloadStats {releaseDownloads}
   AuthZ.permissionGuard $ AuthZ.checkProjectGet callerUserId projectId
-  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats :++ permissionsForProject)
+  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats :++ permissionsForProject :++ isPremiumProjectInfo)
 
 favProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> FavProjectRequest -> WebApp NoContent
 favProjectEndpoint sess userHandle projectSlug (FavProjectRequest {isFaved}) = do

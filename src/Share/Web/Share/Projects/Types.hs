@@ -5,7 +5,28 @@
 
 -- | A module for the types used in the external API.
 -- Breaking changes to these require alternations to the share frontend.
-module Share.Web.Share.Projects.Types where
+module Share.Web.Share.Projects.Types
+  ( ProjectOwner (..),
+    projectToAPI,
+    APIProject (..),
+    CreateProjectRequest (..),
+    CreateProjectResponse (..),
+    GetProjectResponse,
+    ListProjectsResponse (..),
+    UpdateProjectRequest (..),
+    UpdateProjectResponse (..),
+    FavProjectRequest (..),
+    FavData (..),
+    CatalogCategory (..),
+    DownloadStats (..),
+    ReleaseDownloadStats (..),
+    ContributionStats (..),
+    TicketStats (..),
+    IsPremiumProject (..),
+    APIProjectBranchAndReleaseDetails (..),
+    PermissionsInfo (..),
+  )
+where
 
 import Data.Aeson
 import Data.Aeson qualified as Aeson
@@ -17,7 +38,7 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
-import Share.Web.Authorization.Types (PermissionsInfo)
+import Share.Web.Authorization.Types (PermissionsInfo (PermissionsInfo))
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
 projectToAPI projectOwner Project {slug, visibility, createdAt, updatedAt, summary, tags} =
@@ -196,6 +217,12 @@ instance PG.DecodeRow TicketStats where
     numClosedTickets <- fromIntegral @Int64 <$> PG.decodeField
     pure $ TicketStats {..}
 
+newtype IsPremiumProject = IsPremiumProject
+  { isPremiumProject :: Bool
+  }
+  deriving (Show)
+  deriving (ToJSON) via (AtKey "isPremiumProject" Bool)
+
 type GetProjectResponse =
   APIProject
     :++ FavData
@@ -204,6 +231,7 @@ type GetProjectResponse =
     :++ ContributionStats
     :++ TicketStats
     :++ PermissionsInfo
+    :++ IsPremiumProject
 
 data ListProjectsResponse = ListProjectsResponse
   { projects :: [APIProject :++ FavData]
