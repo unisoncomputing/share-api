@@ -15,6 +15,11 @@ fetch "$unauthorized_user" PATCH non-maintainer-private-project-update '/users/t
     "summary": "update"
 }'
 
+
+# Before adding permissions Project viewer should NOT see the private project in the owner's project list and search
+fetch "$read_user" GET read-maintainer-project-list-before '/users/test/projects'
+fetch "$read_user" GET read-maintainer-project-search-before '/search?query=%40private'
+
 fetch "$test_user" POST add-roles '/users/test/projects/privatetestproject/roles' "
 {
     \"role_assignments\": 
@@ -54,6 +59,10 @@ fetch "$test_user" POST owner-ticket-create '/users/test/projects/privatetestpro
 
 # Project viewer can view the project
 fetch "$read_user" GET read-maintainer-project-view '/users/test/projects/privatetestproject'
+
+# Project viewer should see the private project in the owner's project list and search
+fetch "$read_user" GET read-maintainer-project-list-after '/users/test/projects'
+fetch "$read_user" GET read-maintainer-project-search-after '/search?query=%40private'
 
 # Contributor user should be able to create tickets
 fetch "$contributor_user" POST contributor-maintainer-ticket-create '/users/test/projects/privatetestproject/tickets' '{
