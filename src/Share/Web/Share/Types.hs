@@ -9,6 +9,7 @@ import Data.Aeson qualified as Aeson
 import Share.BackgroundJobs.Search.DefinitionSync.Types (TermOrTypeTag)
 import Share.BackgroundJobs.Search.DefinitionSync.Types qualified as DefSync
 import Share.IDs
+import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (ProjectVisibility)
 import Share.Utils.API (NullableUpdate, parseNullableUpdate)
@@ -155,12 +156,32 @@ instance ToJSON SearchResult where
           "visibility" .= visibility
         ]
 
+-- | Cloud/Unison Subscription plan tier
+data PlanTier = Free | Starter | Pro
+  deriving (Show, Eq, Ord)
+
+instance ToJSON PlanTier where
+  toJSON = \case
+    Free -> "Free"
+    Starter -> "Starter"
+    Pro -> "Pro"
+
+instance PG.DecodeValue PlanTier where
+  decodeValue =
+    PG.decodeValue @Text
+      <&> \case
+        "Free" -> Free
+        "Starter" -> Starter
+        "Pro" -> Pro
+        _ -> Free
+
 data UserAccountInfo = UserAccountInfo
   { primaryEmail :: Maybe Email,
     -- List of tours which the user has completed.
     completedTours :: [TourId],
     organizationMemberships :: [UserHandle],
     isSuperadmin :: Bool,
+    planTier :: PlanTier,
     displayInfo :: UnifiedDisplayInfo
   }
   deriving (Show)
@@ -178,7 +199,8 @@ instance ToJSON UserAccountInfo where
             "isSuperadmin" .= isSuperadmin,
             "organizationMemberships" .= organizationMemberships,
             "completedTours" .= completedTours,
-            "primaryEmail" .= primaryEmail
+            "primaryEmail" .= primaryEmail,
+            "planTier" .= planTier
           ]
       UnifiedOrg (OrgDisplayInfo {orgId, isCommercial, user = UserDisplayInfo {handle, name, avatarUrl, userId}}) ->
         Aeson.object
@@ -192,7 +214,8 @@ instance ToJSON UserAccountInfo where
                 ],
             "isCommercial" .= isCommercial,
             "organizationMemberships" .= organizationMemberships,
-            "orgId" .= orgId
+            "orgId" .= orgId,
+            "planTier" .= planTier
           ]
 
 type PathSegment = Text
