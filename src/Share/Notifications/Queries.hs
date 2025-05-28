@@ -1,7 +1,7 @@
 module Share.Notifications.Queries
   ( recordEvent,
     expectEvent,
-    listNotificationHubEntries,
+    listNotificationHubEntryPayloads,
     updateNotificationHubEntries,
     addSubscriptionDeliveryMethods,
     removeSubscriptionDeliveryMethods,
@@ -17,7 +17,7 @@ module Share.Notifications.Queries
     deleteNotificationSubscription,
     updateNotificationSubscription,
     getNotificationSubscription,
-    hydrateEventData,
+    hydrateEventPayload,
   )
 where
 
@@ -54,8 +54,8 @@ expectEvent eventId = do
       WHERE id = #{eventId}
     |]
 
-listNotificationHubEntries :: UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload]
-listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = do
+listNotificationHubEntryPayloads :: UserId -> Maybe Int -> Maybe UTCTime -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload]
+listNotificationHubEntryPayloads notificationUserId mayLimit afterTime statusFilter = do
   let limit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
   let statusFilterList = Foldable.toList <$> statusFilter
   dbNotifications <-
@@ -70,8 +70,8 @@ listNotificationHubEntries notificationUserId mayLimit afterTime statusFilter = 
       ORDER BY hub.created_at DESC
       LIMIT #{limit}
     |]
-  hydrated <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventData
-  hydrated & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
+  hydratedPayloads <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventPayload
+  hydratedPayloads & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
 
 updateNotificationHubEntries :: (QueryA m) => NESet NotificationHubEntryId -> NotificationStatus -> m ()
 updateNotificationHubEntries hubEntryIds status = do
@@ -293,8 +293,8 @@ getNotificationSubscription subscriberUserId subscriptionId = do
 -- (preferably pipelined).
 --
 -- If need be we can write a batch job in plpgsql to hydrate them all at once.
-hydrateEventData :: forall m. (QueryA m) => NotificationEventData -> m HydratedEventPayload
-hydrateEventData = \case
+hydrateEventPayload :: forall m. (QueryA m) => NotificationEventData -> m HydratedEventPayload
+hydrateEventPayload = \case
   ProjectBranchUpdatedData
     (ProjectBranchData {projectId, branchId}) -> do
       HydratedProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId

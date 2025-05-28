@@ -1,5 +1,6 @@
 module Share.Notifications.Impl (server) where
 
+import Control.Lens (forOf, traversed)
 import Data.Time
 import Servant
 import Servant.Server.Generic (AsServerT)
@@ -80,7 +81,9 @@ getHubEntriesEndpoint :: UserHandle -> UserId -> Maybe Int -> Maybe UTCTime -> M
 getHubEntriesEndpoint userHandle callerUserId limit afterTime mayStatusFilter = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkNotificationsGet callerUserId notificationUserId
-  notifications <- PG.runTransaction $ NotificationQ.listNotificationHubEntries notificationUserId limit afterTime (API.getStatusFilter <$> mayStatusFilter)
+  notifications <- PG.runTransaction do
+    notifs <- NotificationQ.listNotificationHubEntryPayloads notificationUserId limit afterTime (API.getStatusFilter <$> mayStatusFilter)
+    forOf (traversed . traversed) notifs NotifOps.hydrateEvent
   pure $ API.GetHubEntriesResponse {notifications}
 
 updateHubEntriesEndpoint :: UserHandle -> UserId -> API.UpdateHubEntriesRequest -> WebApp ()

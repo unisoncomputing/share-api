@@ -33,6 +33,7 @@ import Share.IDs qualified as IDs
 import Share.JWT (JWTParam (..))
 import Share.JWT qualified as JWT
 import Share.Metrics qualified as Metrics
+import Share.Notifications.Ops qualified as NotOps
 import Share.Notifications.Queries qualified as NQ
 import Share.Notifications.Types
 import Share.Notifications.Webhooks.Secrets (WebhookConfig (..), WebhookSecretError)
@@ -138,7 +139,7 @@ data WebhookEventPayload jwt = WebhookEventPayload
     -- | The topic of the notification event.
     topic :: NotificationTopic,
     -- | The data associated with the notification event.
-    data_ :: HydratedEventPayload,
+    data_ :: HydratedEvent,
     -- | A signed token containing all of the same data.
     jwt :: jwt
   }
@@ -175,7 +176,7 @@ instance FromJSON (WebhookEventPayload ()) where
       <*> pure ()
 
 tryWebhook ::
-  NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload ->
+  NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent ->
   NotificationWebhookId ->
   Background (Maybe WebhookSendFailure)
 tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $ InvalidRequest event.eventId webhookId someException) do
@@ -206,7 +207,7 @@ tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $
         | status >= 400 -> throwError $ ReceiverError event.eventId webhookId httpStatus $ HTTPClient.responseBody resp
         | otherwise -> pure ()
 
-buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> WebhookEventPayload JWTParam -> Background (Either WebhookSendFailure HTTPClient.Request)
+buildWebhookRequest :: NotificationWebhookId -> URI -> NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> WebhookEventPayload JWTParam -> Background (Either WebhookSendFailure HTTPClient.Request)
 buildWebhookRequest webhookId uri event defaultPayload = do
   if
     | isSlackWebhook uri -> buildChatAppPayload (Proxy @ChatApps.Slack) uri
@@ -246,18 +247,18 @@ buildWebhookRequest webhookId uri event defaultPayload = do
           actorAuthor = maybe "" (<> " ") actorName <> actorHandle
           actorAvatarUrl = event.eventActor ^. DisplayInfo.avatarUrl_
       actorLink <- Links.userProfilePage (event.eventActor ^. DisplayInfo.handle_)
-      messageContent :: ChatApps.MessageContent provider <- case event.eventData of
+      let mainLink = Just event.eventData.hydratedEventLink
+      messageContent :: ChatApps.MessageContent provider <- case event.eventData.hydratedEventPayload of
         HydratedProjectBranchUpdatedPayload payload -> do
           let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
               title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
               preText = title
-          link <- Links.notificationLink event.eventData
           pure $
             ChatApps.MessageContent
               { preText = preText,
                 content = "Branch updated",
                 title = title,
-                mainLink = Just link,
+                mainLink,
                 author =
                   Author
                     { authorName = Just actorAuthor,
@@ -272,13 +273,12 @@ buildWebhookRequest webhookId uri event defaultPayload = do
               title = payload.contributionInfo.contributionTitle
               description = fromMaybe "" $ payload.contributionInfo.contributionDescription
               preText = "New Contribution in " <> IDs.toText pbShorthand
-          link <- Links.notificationLink event.eventData
           pure $
             ChatApps.MessageContent
               { preText = preText,
                 content = description,
                 title = title,
-                mainLink = Just link,
+                mainLink,
                 author =
                   Author
                     { authorName = Just actorAuthor,
@@ -302,13 +302,14 @@ buildWebhookRequest webhookId uri event defaultPayload = do
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->
-  (NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEventPayload -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
+  (NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
   NotificationEventId ->
   NotificationWebhookId ->
   PG.Transaction e (Maybe WebhookSendFailure)
 attemptWebhookSend _authZReceipt tryWebhookIO eventId webhookId = do
   event <- NQ.expectEvent eventId
-  hydratedEvent <- forOf eventData_ event NQ.hydrateEventData
+  hydratedEventPayload <- forOf eventData_ event NQ.hydrateEventPayload
+  hydratedEvent <- for hydratedEventPayload NotOps.hydrateEvent
   populatedEvent <- hydratedEvent & DisplayInfoQ.unifiedDisplayInfoForUserOf eventUserInfo_
   PG.transactionUnsafeIO (tryWebhookIO populatedEvent webhookId) >>= \case
     Just err -> do

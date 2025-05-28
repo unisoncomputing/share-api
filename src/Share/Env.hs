@@ -59,3 +59,4 @@ data Env ctx = Env
     maxParallelismPerDownloadRequest :: Int,
     maxParallelismPerUploadRequest :: Int
   }
+  deriving (Functor)
