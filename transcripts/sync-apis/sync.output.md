@@ -66,7 +66,7 @@ proj/pulled> pull @transcripts/proj/main
 
   Successfully pulled into proj/pulled, which was empty.
 
-proj/pulled> ls
+proj/pulled> ls .
 
   1. A        (type)
   2. A/       (2 terms)

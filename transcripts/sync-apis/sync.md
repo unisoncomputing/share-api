@@ -31,7 +31,7 @@ Push and pull it back.
 proj/main> push @transcripts/proj/main
 proj/main> branch.create-empty pulled
 proj/pulled> pull @transcripts/proj/main
-proj/pulled> ls
+proj/pulled> ls .
 ```
 
 ```unison:hide
