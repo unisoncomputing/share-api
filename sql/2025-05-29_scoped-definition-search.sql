@@ -94,7 +94,7 @@ BEGIN
           JOIN projects p ON p.id = NEW.project_id
           WHERE c.id = NEW.causal_id
           ;
-        PERFORM pg_notify('definition_sync');
+        NOTIFY 'definition_sync';
     END IF;
     RETURN NEW;
 END;
@@ -116,7 +116,7 @@ BEGIN
       JOIN projects p ON p.id = NEW.project_id
       WHERE c.id = NEW.squashed_causal_id
       ;
-    PERFORM pg_notify('definition_sync');
+    NOTIFY 'definition_sync';
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
