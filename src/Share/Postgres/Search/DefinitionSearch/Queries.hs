@@ -28,7 +28,6 @@ import Share.BackgroundJobs.Search.DefinitionSync.Types
 import Share.IDs (ProjectId, ReleaseId, UserId)
 import Share.Postgres
 import Share.Postgres.IDs (BranchHashId)
-import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
 import Share.Utils.API (Limit, Query (Query))
 import Share.Utils.Logging qualified as Logging
@@ -55,15 +54,6 @@ instance Logging.Loggable DefinitionSearchError where
     FailedToDecodeMetadata v err ->
       Logging.textLog ("Failed to decode metadata: " <> tShow v <> " " <> err)
         & Logging.withSeverity Logging.Error
-
-submitRootToBeSynced :: (QueryM m) => Maybe ReleaseId -> BranchHashId -> UserId -> m ()
-submitRootToBeSynced mayReleaseId rootBranchHashId codebaseOwnerUserId = do
-  execute_
-    [sql|
-    INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, release_id, codebase_user_id)
-    VALUES ( #{rootBranchHashId}, #{mayReleaseId}, #{codebaseOwnerUserId})
-    |]
-  Notif.notifyChannel Notif.DefinitionSyncChannel
 
 -- | Claim the oldest unsynced root to be indexed.
 claimUnsynced :: Transaction e (Maybe (Maybe ReleaseId, BranchHashId, UserId))
