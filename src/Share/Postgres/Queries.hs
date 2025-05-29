@@ -22,6 +22,7 @@ import Share.Notifications.Types (NotificationEvent (..), NotificationEventData 
 import Share.OAuth.Types
 import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
+import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
@@ -41,7 +42,7 @@ import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (.
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-projectById :: ProjectId -> PG.Transaction e (Maybe Project)
+projectById :: (PG.QueryM m) => ProjectId -> m (Maybe Project)
 projectById projectId = do
   PG.query1Row
     [PG.sql|
@@ -50,7 +51,7 @@ projectById projectId = do
         WHERE p.id = #{projectId}
       |]
 
-expectProjectById :: ProjectId -> PG.Transaction e Project
+expectProjectById :: (PG.QueryM m) => ProjectId -> m Project
 expectProjectById projectId = do
   mayResult <- projectById projectId
   whenNothing mayResult $ unrecoverableError $ EntityMissing (ErrorID "project:missing") ("Project with id " <> IDs.toText projectId <> " not found")
@@ -669,7 +670,9 @@ createRelease !_nlReceipt projectId ReleaseVersion {major, minor, patch} squashe
           minor_version,
           patch_version
       |]
-  DDQ.submitReleaseToBeSynced releaseId
+  Project {ownerUserId} <- expectProjectById projectId
+  rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausalId
+  DDQ.submitRootToBeSynced (Just releaseId) rootBranchHashId ownerUserId
   pure release
 
 setBranchCausalHash ::
