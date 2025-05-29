@@ -449,7 +449,6 @@ searchDefinitionsEndpoint ::
   Maybe IDs.ReleaseVersion ->
   WebApp DefinitionSearchResults
 searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
-  Logging.logInfoText $ "definition-search-query: " <> query
   filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <- case Text.words query of
     [] -> pure $ []
@@ -465,7 +464,6 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
           Logging.logErrorText $ "Failed to parse query: " <> query
           pure $ []
         Right (searchTokens, mayArity) -> do
-          Logging.logInfoText $ "definition-search-tokens: " <> DSQ.searchTokensToTsQuery searchTokens
           PG.runTransactionMode PG.ReadCommitted PG.Read $
             DDQ.definitionTokenSearch callerUserId filter limit searchTokens mayArity
   results <-
