@@ -24,7 +24,6 @@ import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
-import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project
@@ -640,7 +639,7 @@ createRelease ::
   UserId ->
   m (Release CausalId UserId)
 createRelease !_nlReceipt projectId ReleaseVersion {major, minor, patch} squashedCausalId unsquashedCausalId creatorId = do
-  release@Release {releaseId} <-
+  release <-
     PG.queryExpect1Row
       [PG.sql|
         INSERT INTO project_releases(
