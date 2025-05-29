@@ -107,22 +107,27 @@ syncRoot ::
   AuthZ.AuthZReceipt ->
   (Maybe ReleaseId, BranchHashId, UserId) ->
   PG.Transaction e [DefnIndexingFailure]
-syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = fmap (fromMaybe []) . runMaybeT $ do
-  lift $ do
-    namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NL.PathSegments [])
-    let nlReceipt = NL.nameLookupReceipt namesPerspective
-    let codebaseLoc = Codebase.codebaseLocationForProjectRelease codebaseOwner
-    let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-    errs <- Codebase.codebaseMToTransaction codebase $ do
-      termsCursor <- lift $ NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
+syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
+  -- Only index it if it's not already indexed.
+  errs <-
+    (DDQ.isRootIndexed rootBranchHashId) >>= \case
+      False -> do
+        DDQ.markRootAsIndexed rootBranchHashId
+        namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NL.PathSegments [])
+        let nlReceipt = NL.nameLookupReceipt namesPerspective
+        let codebaseLoc = Codebase.codebaseLocationForProjectRelease codebaseOwner
+        let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+        Codebase.codebaseMToTransaction codebase $ do
+          termsCursor <- lift $ NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
 
-      termErrs <- syncTerms namesPerspective rootBranchHashId termsCursor
-      typesCursor <- lift $ NLOps.projectTypesWithinRoot nlReceipt rootBranchHashId
-      typeErrs <- syncTypes namesPerspective rootBranchHashId typesCursor
-      pure (termErrs <> typeErrs)
-    -- Copy relevant index rows into the global search index as well
-    mayReleaseId & foldMapM (syncRelease rootBranchHashId)
-    pure errs
+          termErrs <- syncTerms namesPerspective rootBranchHashId termsCursor
+          typesCursor <- lift $ NLOps.projectTypesWithinRoot nlReceipt rootBranchHashId
+          typeErrs <- syncTypes namesPerspective rootBranchHashId typesCursor
+          pure (termErrs <> typeErrs)
+      True -> pure mempty
+  -- Copy relevant index rows into the global search index as well
+  for mayReleaseId (syncRelease rootBranchHashId)
+  pure errs
 
 syncRelease :: BranchHashId -> ReleaseId -> PG.Transaction e ()
 syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do

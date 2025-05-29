@@ -93,8 +93,8 @@ BEGIN
           FROM causals c
           JOIN projects p ON p.id = NEW.project_id
           WHERE c.id = NEW.causal_id
-          ;
-        NOTIFY 'definition_sync';
+          ON CONFLICT DO NOTHING;
+        NOTIFY definition_sync;
     END IF;
     RETURN NEW;
 END;
@@ -114,9 +114,11 @@ BEGIN
               p.owner_user_id AS codebase_user_id
       FROM causals c
       JOIN projects p ON p.id = NEW.project_id
-      WHERE c.id = NEW.squashed_causal_id
-      ;
-    NOTIFY 'definition_sync';
+      WHERE c.id = NEW.squashed_causal_id 
+      ON CONFLICT DO NOTHING;
+      -- Log message to console
+    RAISE NOTICE 'Added scoped definition search queue entry for release % in project %', NEW.id, NEW.project_id;
+    NOTIFY definition_sync;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
