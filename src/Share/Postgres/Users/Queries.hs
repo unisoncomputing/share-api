@@ -24,6 +24,7 @@ module Share.Postgres.Users.Queries
     UserCreationError (..),
     allUsers,
     createUser,
+    userSubscriptionTier,
   )
 where
 
@@ -50,6 +51,7 @@ import Share.Utils.URI (URIParam (..))
 import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..), ToServerError (..))
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..), UserLike (..))
+import Share.Web.Share.Types (PlanTier (..))
 
 -- | Efficiently resolve User Display Info for UserIds within a structure.
 userDisplayInfoOf :: (PG.QueryA m) => Traversal s t UserId UserDisplayInfo -> s -> m t
@@ -340,3 +342,13 @@ allUsers = do
     [PG.sql|
         SELECT id FROM users
       |]
+
+userSubscriptionTier :: UserId -> PG.Transaction e PlanTier
+userSubscriptionTier userId =
+  fromMaybe Free <$> do
+    PG.query1Col
+      [PG.sql|
+      SELECT cs.tier_name FROM public.cloud_subscribers cs
+          WHERE cs.user_id = #{userId}
+            AND cs.is_active
+  |]

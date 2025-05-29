@@ -481,13 +481,15 @@ accountInfoEndpoint Session {sessionUserId} = do
     organizationMemberships <- Q.organizationMemberships user_id
     isSuperadmin <- AuthZQ.isSuperadmin user_id
     displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
+    planTier <- UserQ.userSubscriptionTier user_id
     pure $
       UserAccountInfo
         { primaryEmail = user_email,
           completedTours,
           organizationMemberships,
           isSuperadmin,
-          displayInfo
+          displayInfo,
+          planTier
         }
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent

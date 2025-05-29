@@ -3,6 +3,7 @@
     "createdAt": "<TIMESTAMP>",
     "defaultBranch": "main",
     "isFaved": false,
+    "isPremiumProject": true,
     "latestRelease": null,
     "numActiveContributions": 0,
     "numClosedContributions": 0,

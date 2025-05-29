@@ -9,6 +9,7 @@
     "organizationMemberships": [
       "unison"
     ],
+    "planTier": "Free",
     "primaryEmail": "transcripts@example.com",
     "userId": "U-<UUID>"
   },
