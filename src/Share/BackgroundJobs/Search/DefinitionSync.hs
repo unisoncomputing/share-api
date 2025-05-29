@@ -23,11 +23,10 @@ import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionD
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
-import Share.IDs (ProjectId, ReleaseId)
+import Share.IDs (ReleaseId, UserId)
 import Share.Metrics qualified as Metrics
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursors
-import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NL
@@ -38,7 +37,6 @@ import Share.Postgres.Releases.Queries qualified as ReleasesQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
-import Share.Project (Project (..))
 import Share.Release (Release (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
@@ -88,10 +86,10 @@ worker scope = do
     processReleases authZReceipt
   where
     processReleases authZReceipt = do
-      (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransaction $ do
-        mayReleaseId <- DDQ.claimUnsyncedRelease
-        mayErrs <- for mayReleaseId (syncRelease authZReceipt)
-        pure (mayErrs, mayReleaseId)
+      (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
+        mayUnsynced <- DDQ.claimUnsynced
+        mayErrs <- for mayUnsynced (syncRoot authZReceipt)
+        pure (mayErrs, mayUnsynced)
       case mayErrs of
         Just errs@(_ : _rrs) -> Logging.logErrorText $ "Definition sync errors: " <> Text.intercalate "," (tShow <$> errs)
         _ -> pure ()
@@ -105,41 +103,45 @@ worker scope = do
           processReleases authZReceipt
         Nothing -> pure ()
 
-syncRelease ::
+syncRoot ::
   AuthZ.AuthZReceipt ->
-  ReleaseId ->
+  (Maybe ReleaseId, BranchHashId, UserId) ->
   PG.Transaction e [DefnIndexingFailure]
-syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
-  Release {projectId, releaseId, squashedCausal, version} <- lift $ ReleasesQ.releaseById releaseId
+syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = fmap (fromMaybe []) . runMaybeT $ do
+  lift $ do
+    namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NL.PathSegments [])
+    let nlReceipt = NL.nameLookupReceipt namesPerspective
+    let codebaseLoc = Codebase.codebaseLocationForProjectRelease codebaseOwner
+    let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+    errs <- Codebase.codebaseMToTransaction codebase $ do
+      termsCursor <- lift $ NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
+
+      termErrs <- syncTerms namesPerspective rootBranchHashId termsCursor
+      typesCursor <- lift $ NLOps.projectTypesWithinRoot nlReceipt rootBranchHashId
+      typeErrs <- syncTypes namesPerspective rootBranchHashId typesCursor
+      pure (termErrs <> typeErrs)
+    -- Copy relevant index rows into the global search index as well
+    mayReleaseId & foldMapM (syncRelease rootBranchHashId)
+    pure errs
+
+syncRelease :: BranchHashId -> ReleaseId -> PG.Transaction e ()
+syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do
+  Release {projectId, releaseId, version} <- lift $ ReleasesQ.releaseById releaseId
   -- Wipe out any existing rows for this release. Normally there should be none, but this
   -- makes it easy to re-index later if we change how we tokenize things.
   latestVersion <- MaybeT $ RQ.latestReleaseVersionByProjectId projectId
   -- Only index the latest version of a release.
   guard $ version == latestVersion
   lift $ DDQ.cleanIndexForProject projectId
-  Project {ownerUserId} <- lift $ PG.expectProjectById projectId
-  lift $ do
-    bhId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausal
-    namesPerspective <- NLOps.namesPerspectiveForRootAndPath bhId (NL.PathSegments [])
-    let nlReceipt = NL.nameLookupReceipt namesPerspective
-    let codebaseLoc = Codebase.codebaseLocationForProjectRelease ownerUserId
-    let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-    Codebase.codebaseMToTransaction codebase $ do
-      termsCursor <- lift $ NLOps.projectTermsWithinRoot nlReceipt bhId
-
-      termErrs <- syncTerms namesPerspective bhId projectId releaseId termsCursor
-      typesCursor <- lift $ NLOps.projectTypesWithinRoot nlReceipt bhId
-      typeErrs <- syncTypes namesPerspective projectId releaseId typesCursor
-      pure (termErrs <> typeErrs)
+  -- Copy the indexed documents from the scoped index into the global index.
+  lift $ DDQ.copySearchDocumentsForRelease rootBranchHashId projectId releaseId
 
 syncTerms ::
   NL.NamesPerspective ->
   BranchHashId ->
-  ProjectId ->
-  ReleaseId ->
   Cursors.PGCursor (Name, Referent) ->
   CodebaseM e [DefnIndexingFailure]
-syncTerms namesPerspective bhId projectId releaseId termsCursor = do
+syncTerms namesPerspective rootBranchHashId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
     (errs, refDocs) <-
       PG.timeTransaction "Building terms" $
@@ -158,13 +160,12 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
                     & \case
                       (ns :| rest) -> ns :| take 1 rest
                     & Name.fromReverseSegments
-            termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) bhId Nothing Nothing
+            termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) rootBranchHashId Nothing Nothing
             let sh = Referent.toShortHash ref
             let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
             let dd =
                   DefinitionDocument
-                    { project = projectId,
-                      release = releaseId,
+                    { rootBranchHashId,
                       fqn,
                       hash = sh,
                       tokens = refTokens,
@@ -178,7 +179,7 @@ syncTerms namesPerspective bhId projectId releaseId termsCursor = do
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
     pped <- PG.timeTransaction "Build PPED" $ PPEPostgres.ppedForReferences namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
-    let namedDocs :: [DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash)]
+    let namedDocs :: [DefinitionDocument Name (Name, ShortHash)]
         namedDocs =
           refDocs
             & traversed . field @"tokens" %~ Set.mapMaybe \token -> do
@@ -312,11 +313,10 @@ typeSigTokens typ =
 
 syncTypes ::
   NL.NamesPerspective ->
-  ProjectId ->
-  ReleaseId ->
+  BranchHashId ->
   Cursors.PGCursor (Name, TypeReference) ->
   CodebaseM e [DefnIndexingFailure]
-syncTypes namesPerspective projectId releaseId typesCursor = do
+syncTypes namesPerspective rootBranchHashId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
     (errs, refDocs) <-
       types
@@ -336,8 +336,7 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
           let sh = Reference.toShortHash ref
           let dd =
                 DefinitionDocument
-                  { project = projectId,
-                    release = releaseId,
+                  { rootBranchHashId,
                     fqn,
                     hash = sh,
                     tokens = declTokens <> basicTokens,
@@ -350,7 +349,7 @@ syncTypes namesPerspective projectId releaseId typesCursor = do
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
     pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
-    let namedDocs :: [DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash)]
+    let namedDocs :: [DefinitionDocument Name (Name, ShortHash)]
         namedDocs =
           refDocs
             & traversed . field @"tokens" %~ Set.mapMaybe \token -> do
