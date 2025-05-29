@@ -9,6 +9,8 @@ module Share.Postgres.Search.DefinitionSearch.Queries
     defNameCompletionSearch,
     definitionTokenSearch,
     definitionNameSearch,
+    isRootIndexed,
+    markRootAsIndexed,
     DefnNameSearchFilter (..),
     -- Exported for logging/debugging
     searchTokensToTsQuery,
@@ -74,16 +76,37 @@ claimUnsynced = do
     RETURNING chosen.release_id, chosen.root_namespace_hash_id, chosen.codebase_user_id
     |]
 
+isRootIndexed :: BranchHashId -> Transaction e Bool
+isRootIndexed rootBranchHashId = do
+  queryExpect1Col
+    [sql|
+      SELECT EXISTS (
+        SELECT FROM indexed_definition_search_doc_roots
+        WHERE root_namespace_hash_id = #{rootBranchHashId}
+      )
+    |]
+
+markRootAsIndexed :: BranchHashId -> Transaction e ()
+markRootAsIndexed rootBranchHashId = do
+  execute_
+    [sql|
+      INSERT INTO indexed_definition_search_doc_roots(root_namespace_hash_id)
+        VALUES(#{rootBranchHashId})
+        ON CONFLICT DO NOTHING
+    |]
+  -- We don't return anything, so we can use `execute_` here.
+  pure ()
+
 -- | Save definition documents to be indexed for search.
 insertDefinitionDocuments :: [DefinitionDocument Name (Name, ShortHash)] -> Transaction e ()
 insertDefinitionDocuments docs = pipelined $ do
   let docsTable = docRow <$> docs
   execute_ $
     [sql|
-      WITH docs(project_id, release_id, name, token_text, arity, tag, metadata) AS (
+      WITH docs(root_namespace_hash_id, name, token_text, arity, tag, metadata) AS (
         SELECT * FROM ^{toTable docsTable}
-      ) INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, tag, metadata)
-        SELECT d.project_id, d.release_id, d.name, tsvector(d.token_text::text), d.arity, d.tag::definition_tag, d.metadata
+      ) INSERT INTO scoped_definition_search_docs (root_namespace_hash_id, name, search_tokens, arity, tag, metadata)
+        SELECT d.root_namespace_hash_id, d.name, tsvector(d.token_text::text), d.arity, d.tag::definition_tag, d.metadata
           FROM docs d
         ON CONFLICT DO NOTHING
       |]
@@ -119,15 +142,6 @@ copySearchDocumentsForRelease rootBranchHashId projectId releaseId = do
       SELECT #{projectId}, #{releaseId}, doc.name, doc.search_tokens, doc.arity, doc.tag::definition_tag, doc.metadata
       FROM scoped_definition_search_docs doc
       WHERE doc.root_namespace_hash_id = #{rootBranchHashId}
-    |]
-  -- Update the release id for the copied documents.
-  execute_
-    [sql|
-    UPDATE global_definition_search_docs
-    SET release_id = #{releaseId}
-    WHERE root_namespace_hash_id = #{rootBranchHashId}
-      AND project_id = #{projectId}
-      AND release_id IS NULL
     |]
 
 -- | Wipe out any rows for the given project, useful when re-indexing and we only want to
