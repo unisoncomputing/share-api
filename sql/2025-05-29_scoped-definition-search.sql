@@ -80,3 +80,49 @@ CREATE INDEX scoped_definition_search_docs_tokens ON scoped_definition_search_do
 
 -- Index for fuzzy-searching on the fully qualified name.
 CREATE INDEX scoped_definition_search_docs_name_trigram ON scoped_definition_search_docs USING GIST (name gist_trgm_ops);
+
+-- Insert into the queue to be synced using triggers on branches and releases
+CREATE OR REPLACE FUNCTION scoped_definition_search_queue_on_branch_change_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Check if this is an INSERT or if the 
+    IF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.causal_id IS DISTINCT FROM NEW.causal_id) THEN
+        INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, codebase_user_id)
+          SELECT c.namespace_hash_id AS root_namespace_hash_id,
+                 p.owner_user_id AS codebase_user_id
+          FROM causals c
+          JOIN projects p ON p.id = NEW.project_id
+          WHERE c.id = NEW.causal_id
+          ;
+        PERFORM pg_notify('definition_sync');
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER scoped_definition_search_queue_on_branch_change
+AFTER INSERT OR UPDATE ON project_branches
+FOR EACH ROW
+EXECUTE FUNCTION scoped_definition_search_queue_on_branch_change_trigger();
+
+CREATE OR REPLACE FUNCTION scoped_definition_search_queue_on_release_publish_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, release_id, codebase_user_id)
+      SELECT c.namespace_hash_id AS root_namespace_hash_id,
+              NEW.id AS release_id,
+              p.owner_user_id AS codebase_user_id
+      FROM causals c
+      JOIN projects p ON p.id = NEW.project_id
+      WHERE c.id = NEW.squashed_causal_id
+      ;
+    PERFORM pg_notify('definition_sync');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER scoped_definition_search_queue_on_release_publish
+AFTER INSERT ON project_releases
+FOR EACH ROW
+EXECUTE FUNCTION scoped_definition_search_queue_on_release_publish_trigger();
+
