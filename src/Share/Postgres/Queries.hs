@@ -21,7 +21,6 @@ import Share.Notifications.Types (BranchData (..), NotificationEvent (..), Notif
 import Share.OAuth.Types
 import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
-import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
@@ -42,7 +41,7 @@ import Share.Web.Share.Types
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-projectById :: (PG.QueryM m) => ProjectId -> m (Maybe Project)
+projectById :: ProjectId -> PG.Transaction e (Maybe Project)
 projectById projectId = do
   PG.query1Row
     [PG.sql|
@@ -51,7 +50,7 @@ projectById projectId = do
         WHERE p.id = #{projectId}
       |]
 
-expectProjectById :: (PG.QueryM m) => ProjectId -> m Project
+expectProjectById :: ProjectId -> PG.Transaction e Project
 expectProjectById projectId = do
   mayResult <- projectById projectId
   whenNothing mayResult $ unrecoverableError $ EntityMissing (ErrorID "project:missing") ("Project with id " <> IDs.toText projectId <> " not found")
