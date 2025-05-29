@@ -18,6 +18,7 @@ module Share.Notifications.Queries
     updateNotificationSubscription,
     getNotificationSubscription,
     hydrateEventPayload,
+    hasUnreadNotifications,
   )
 where
 
@@ -72,6 +73,18 @@ listNotificationHubEntryPayloads notificationUserId mayLimit afterTime statusFil
     |]
   hydratedPayloads <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventPayload
   hydratedPayloads & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
+
+hasUnreadNotifications :: UserId -> Transaction e Bool
+hasUnreadNotifications userId = do
+  queryExpect1Col
+    [sql|
+      SELECT EXISTS(
+        SELECT
+          FROM notification_hub_entries hub
+        WHERE hub.user_id = #{userId}
+              AND hub.status = #{Unread}::notification_status
+      )
+    |]
 
 updateNotificationHubEntries :: (QueryA m) => NESet NotificationHubEntryId -> NotificationStatus -> m ()
 updateNotificationHubEntries hubEntryIds status = do
