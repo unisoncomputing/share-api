@@ -49,7 +49,7 @@ createRelease !_nlReceipt projectId (releaseVersion@ReleaseVersion {major, minor
           minor_version,
           patch_version
       |]
-  DDQ.submitReleaseToBeSynced releaseId
+  rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausalId
   (projectData, projectResourceId, projectOwnerUserId) <- ProjectsQ.projectNotificationData projectId
   let releaseData =
         ReleaseData
@@ -66,4 +66,5 @@ createRelease !_nlReceipt projectId (releaseVersion@ReleaseVersion {major, minor
             eventActor = creatorId
           }
   NotifQ.recordEvent notifEvent
+  DDQ.submitRootToBeSynced (Just releaseId) rootBranchHashId projectOwnerUserId
   pure release
