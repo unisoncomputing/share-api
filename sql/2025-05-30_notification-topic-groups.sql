@@ -28,12 +28,12 @@ DECLARE
   the_subscription_id UUID;
   the_event_id UUID;
   the_subscriber UUID;
+  rows_affected INTEGER;
 BEGIN
   SELECT NEW.id INTO the_event_id;
   FOR the_subscription_id, the_subscriber IN
     (SELECT ns.id, ns.subscriber_user_id FROM notification_subscriptions ns
       WHERE ns.scope_user_id = NEW.scope_user_id
-        -- Check whether any subscription is subscribed to the topic directly or through a topic group.
         AND ( NEW.topic = ANY(ns.topics)
           OR EXISTS(
               SELECT FROM notification_topic_group_topics ntgt
@@ -42,7 +42,7 @@ BEGIN
              )
         )
         AND (ns.filter IS NULL OR NEW.data @> ns.filter)
-        AND 
+        AND
         -- A subscriber can be notified if the event is in their scope or if they have permission to the resource.
         -- The latter is usually a superset of the former, but the former is trivial to compute so it can help
         -- performance to include it.
@@ -64,11 +64,23 @@ BEGIN
       WHERE nbw.subscription_id = the_subscription_id
       ON CONFLICT DO NOTHING;
 
+      -- If there are any new webhooks to process, trigger workers via LISTEN/NOTIFY
+      GET DIAGNOSTICS rows_affected = ROW_COUNT;
+      IF rows_affected > 0 THEN
+        NOTIFY webhooks;
+      END IF;
+
     INSERT INTO notification_email_queue (event_id, email_id)
       SELECT the_event_id AS event_id, nbe.email_id
       FROM notification_by_email nbe
       WHERE nbe.subscription_id = the_subscription_id
       ON CONFLICT DO NOTHING;
+
+    -- If there are any new webhooks to process, trigger workers via LISTEN/NOTIFY
+    GET DIAGNOSTICS rows_affected = ROW_COUNT;
+    IF rows_affected > 0 THEN
+        NOTIFY emails;
+    END IF;
 
     -- Also add the notification to the hub.
     -- It's possible it was already added by another subscription for this user,
