@@ -23,6 +23,7 @@ import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Hasql
 import Servant (FromHttpApiData)
 import Servant.API (FromHttpApiData (..), ToHttpApiData (..))
+import Share.Postgres.IDs (BranchHashId)
 import Share.Prelude
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
@@ -153,9 +154,8 @@ data DefnSearchToken typeRef
   | TypeModToken DD.Modifier
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-data DefinitionDocument proj release name typeRef = DefinitionDocument
-  { project :: proj,
-    release :: release,
+data DefinitionDocument name typeRef = DefinitionDocument
+  { rootBranchHashId :: BranchHashId,
     fqn :: Name,
     hash :: ShortHash,
     -- For now we only index types by their final name segment, may need to revisit this
