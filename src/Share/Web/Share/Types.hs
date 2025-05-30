@@ -182,7 +182,8 @@ data UserAccountInfo = UserAccountInfo
     organizationMemberships :: [UserHandle],
     isSuperadmin :: Bool,
     planTier :: PlanTier,
-    displayInfo :: UnifiedDisplayInfo
+    displayInfo :: UnifiedDisplayInfo,
+    hasUnreadNotifications :: Bool
   }
   deriving (Show)
 
@@ -200,7 +201,8 @@ instance ToJSON UserAccountInfo where
             "organizationMemberships" .= organizationMemberships,
             "completedTours" .= completedTours,
             "primaryEmail" .= primaryEmail,
-            "planTier" .= planTier
+            "planTier" .= planTier,
+            "hasUnreadNotifications" .= hasUnreadNotifications
           ]
       UnifiedOrg (OrgDisplayInfo {orgId, isCommercial, user = UserDisplayInfo {handle, name, avatarUrl, userId}}) ->
         Aeson.object
@@ -215,7 +217,8 @@ instance ToJSON UserAccountInfo where
             "isCommercial" .= isCommercial,
             "organizationMemberships" .= organizationMemberships,
             "orgId" .= orgId,
-            "planTier" .= planTier
+            "planTier" .= planTier,
+            "hasUnreadNotifications" .= hasUnreadNotifications
           ]
 
 type PathSegment = Text

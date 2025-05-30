@@ -15,6 +15,7 @@ import Share.IDs (TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
 import Share.Notifications.Impl qualified as Notifications
+import Share.Notifications.Queries qualified as NotifQ
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
@@ -482,6 +483,7 @@ accountInfoEndpoint Session {sessionUserId} = do
     isSuperadmin <- AuthZQ.isSuperadmin user_id
     displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
     planTier <- UserQ.userSubscriptionTier user_id
+    hasUnreadNotifications <- NotifQ.hasUnreadNotifications user_id
     pure $
       UserAccountInfo
         { primaryEmail = user_email,
@@ -489,7 +491,8 @@ accountInfoEndpoint Session {sessionUserId} = do
           organizationMemberships,
           isSuperadmin,
           displayInfo,
-          planTier
+          planTier,
+          hasUnreadNotifications
         }
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent
