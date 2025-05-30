@@ -257,18 +257,18 @@ listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscripti
 listNotificationSubscriptions subscriberUserId = do
   queryListRows
     [sql|
-      SELECT ns.id, ns.scope_user_id, ns.topics, ns.filter
+      SELECT ns.id, ns.scope_user_id, ns.topics, ns.topic_groups, ns.filter
         FROM notification_subscriptions ns
       WHERE ns.subscriber_user_id = #{subscriberUserId}
       ORDER BY ns.created_at DESC
     |]
 
-createNotificationSubscription :: UserId -> UserId -> NESet NotificationTopic -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
-createNotificationSubscription subscriberUserId subscriptionScope subscriptionTopics subscriptionFilter = do
+createNotificationSubscription :: UserId -> UserId -> Set NotificationTopic -> Set NotificationTopicGroup -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
+createNotificationSubscription subscriberUserId subscriptionScope subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
   queryExpect1Col
     [sql|
-      INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, topics, filter)
-      VALUES (#{subscriberUserId}, #{subscriptionScope}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{subscriptionFilter})
+      INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, topics, topic_groups, filter)
+      VALUES (#{subscriberUserId}, #{subscriptionScope}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{Foldable.toList subscriptionTopicGroups}::notification_topic_group[], #{subscriptionFilter})
       RETURNING id
     |]
 
@@ -281,12 +281,13 @@ deleteNotificationSubscription subscriberUserId subscriptionId = do
         AND subscriber_user_id = #{subscriberUserId}
     |]
 
-updateNotificationSubscription :: UserId -> NotificationSubscriptionId -> Maybe (NESet NotificationTopic) -> Maybe SubscriptionFilter -> Transaction e ()
-updateNotificationSubscription subscriberUserId subscriptionId subscriptionTopics subscriptionFilter = do
+updateNotificationSubscription :: UserId -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> Transaction e ()
+updateNotificationSubscription subscriberUserId subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
   execute_
     [sql|
       UPDATE notification_subscriptions
       SET topics = COALESCE(#{Foldable.toList <$> subscriptionTopics}::notification_topic[], topics),
+          topic_groups = COALESCE(#{Foldable.toList <$> subscriptionTopicGroups}::notification_topic_group[], topic_groups),
           filter = COALESCE(#{subscriptionFilter}, filter)
       WHERE id = #{subscriptionId}
         AND subscriber_user_id = #{subscriberUserId}
@@ -296,7 +297,7 @@ getNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transacti
 getNotificationSubscription subscriberUserId subscriptionId = do
   queryExpect1Row
     [sql|
-      SELECT ns.id, ns.scope_user_id, ns.topics, ns.filter
+      SELECT ns.id, ns.scope_user_id, ns.topics, ns.topic_groups, ns.filter
         FROM notification_subscriptions ns
       WHERE ns.id = #{subscriptionId}
         AND ns.subscriber_user_id = #{subscriberUserId}

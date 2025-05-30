@@ -39,7 +39,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (DeliveryMethodId, HydratedEvent, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, SubscriptionFilter)
+import Share.Notifications.Types (DeliveryMethodId, HydratedEvent, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, NotificationTopicGroup, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.URI (URIParam)
@@ -131,7 +131,8 @@ type CreateSubscriptionEndpoint =
 data CreateSubscriptionRequest
   = CreateSubscriptionRequest
   { subscriptionScope :: UserHandle,
-    subscriptionTopics :: NESet NotificationTopic,
+    subscriptionTopics :: Set NotificationTopic,
+    subscriptionTopicGroups :: Set NotificationTopicGroup,
     subscriptionFilter :: Maybe SubscriptionFilter
   }
 
@@ -139,8 +140,9 @@ instance FromJSON CreateSubscriptionRequest where
   parseJSON = withObject "CreateSubscriptionRequest" $ \o -> do
     subscriptionScope <- o .: "scope"
     subscriptionTopics <- o .: "topics"
+    subscriptionTopicGroups <- o .: "topicGroups"
     subscriptionFilter <- o .:? "filter"
-    pure CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionFilter}
+    pure CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
 data CreateSubscriptionResponse
   = CreateSubscriptionResponse
@@ -164,15 +166,17 @@ type UpdateSubscriptionEndpoint =
 
 data UpdateSubscriptionRequest
   = UpdateSubscriptionRequest
-  { subscriptionTopics :: Maybe (NESet NotificationTopic),
+  { subscriptionTopics :: Maybe (Set NotificationTopic),
+    subscriptionTopicGroups :: Maybe (Set NotificationTopicGroup),
     subscriptionFilter :: Maybe SubscriptionFilter
   }
 
 instance FromJSON UpdateSubscriptionRequest where
   parseJSON = withObject "UpdateSubscriptionRequest" $ \o -> do
     subscriptionTopics <- o .:? "topics"
+    subscriptionTopicGroups <- o .:? "topicGroups"
     subscriptionFilter <- o .:? "filter"
-    pure UpdateSubscriptionRequest {subscriptionTopics, subscriptionFilter}
+    pure UpdateSubscriptionRequest {subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
 type GetDeliveryMethodsEndpoint =
   AuthenticatedUserId
