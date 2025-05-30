@@ -171,7 +171,7 @@ getSubscriptionsEndpoint userHandle callerUserId = do
   pure $ API.GetSubscriptionsResponse {subscriptions}
 
 createSubscriptionEndpoint :: UserHandle -> UserId -> API.CreateSubscriptionRequest -> WebApp API.CreateSubscriptionResponse
-createSubscriptionEndpoint subscriberHandle callerUserId API.CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionFilter} = do
+createSubscriptionEndpoint subscriberHandle callerUserId API.CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} = do
   User {user_id = subscriberUserId} <- UserQ.expectUserByHandle subscriberHandle
   User {user_id = scopeUserId} <- UserQ.expectUserByHandle subscriptionScope
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage callerUserId subscriberUserId
@@ -180,7 +180,7 @@ createSubscriptionEndpoint subscriberHandle callerUserId API.CreateSubscriptionR
   -- the resource of a given event for the permission associated to that topic via the
   -- 'topic_permission' SQL function.
   subscription <- PG.runTransaction $ do
-    subscriptionId <- NotificationQ.createNotificationSubscription subscriberUserId scopeUserId subscriptionTopics subscriptionFilter
+    subscriptionId <- NotificationQ.createNotificationSubscription subscriberUserId scopeUserId subscriptionTopics subscriptionTopicGroups subscriptionFilter
     NotificationQ.getNotificationSubscription subscriberUserId subscriptionId
   pure $ API.CreateSubscriptionResponse {subscription}
 
@@ -192,10 +192,10 @@ deleteSubscriptionEndpoint userHandle callerUserId subscriptionId = do
   pure ()
 
 updateSubscriptionEndpoint :: UserHandle -> UserId -> NotificationSubscriptionId -> API.UpdateSubscriptionRequest -> WebApp API.CreateSubscriptionResponse
-updateSubscriptionEndpoint userHandle callerUserId subscriptionId API.UpdateSubscriptionRequest {subscriptionTopics, subscriptionFilter} = do
+updateSubscriptionEndpoint userHandle callerUserId subscriptionId API.UpdateSubscriptionRequest {subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} = do
   User {user_id = notificationUserId} <- UserQ.expectUserByHandle userHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage callerUserId notificationUserId
   subscription <- PG.runTransaction $ do
-    NotificationQ.updateNotificationSubscription notificationUserId subscriptionId subscriptionTopics subscriptionFilter
+    NotificationQ.updateNotificationSubscription notificationUserId subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter
     NotificationQ.getNotificationSubscription notificationUserId subscriptionId
   pure $ API.CreateSubscriptionResponse {subscription}

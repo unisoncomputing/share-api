@@ -6,11 +6,13 @@ source "../../transcript_helpers.sh"
 
 publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject')
 
-# Subscribe to project:contribution:created notifications for the test user's publictestproject.
+# Subscribe to project-related notifications for the test user's publictestproject.
+# This subscription uses a topic group rather than a specific topic.
 subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' '.subscription.id' "{
   \"scope\": \"test\",
-  \"topics\": [
-    \"project:contribution:created\"
+  \"topics\": [],
+  \"topicGroups\": [
+    \"watch_project\"
   ],
   \"filter\": {
     \"projectId\": \"$publictestproject_id\"
@@ -37,7 +39,8 @@ fetch "$transcripts_user" POST create-subscription-for-other-user-project '/user
   \"scope\": \"test\",
   \"topics\": [
     \"project:contribution:created\", \"project:branch:updated\"
-  ]
+  ],
+  \"topicGroups\": []
 }"
 
 fetch "$test_user" POST create-email-delivery '/users/test/notifications/delivery-methods/emails' '{
