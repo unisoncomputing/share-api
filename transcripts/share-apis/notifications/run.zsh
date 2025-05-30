@@ -6,11 +6,12 @@ source "../../transcript_helpers.sh"
 
 publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject')
 
-# Subscribe to project:contribution:created notifications for the test user's publictestproject.
+# Subscribe to project-related notifications for the test user's publictestproject.
+# This subscription uses a topic group rather than a specific topic.
 subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' '.subscription.id' "{
   \"scope\": \"test\",
-  \"topics\": [
-    \"project:contribution:created\"
+  \"topicGroups\": [
+    \"watch_project\"
   ],
   \"filter\": {
     \"projectId\": \"$publictestproject_id\"
