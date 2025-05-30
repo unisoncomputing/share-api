@@ -5,7 +5,7 @@ CREATE TYPE notification_topic_group AS ENUM (
 -- Mapping for which topics are in each group.
 CREATE TABLE notification_topic_group_topics (
   topic_group notification_topic_group NOT NULL,
-  topic TEXT NOT NULL,
+  topic notification_topic NOT NULL,
   PRIMARY KEY (topic_group, topic)
 );
 
