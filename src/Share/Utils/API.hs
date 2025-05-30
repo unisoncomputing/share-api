@@ -17,6 +17,8 @@ module Share.Utils.API
     Limit (..),
     (:++) (..),
     AtKey (..),
+    CursorDirection (..),
+    pagedOn,
   )
 where
 
@@ -35,6 +37,7 @@ import Data.Text.Lazy.Encoding qualified as TL
 import Data.Typeable (typeRep)
 import GHC.TypeLits (Symbol)
 import GHC.TypeLits qualified as TypeLits
+import Safe (headMay, lastMay)
 import Servant
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -159,33 +162,51 @@ applySetUpdate existing = \case
      in Foldable.foldl' go existing (Map.toList updates)
   SetReplacement new -> new
 
+data CursorDirection = Previous | Next
+  deriving (Eq, Ord, Show)
+
 -- | A cursor for a pageable endpoint.
 -- This is rendered to an opaque base64URL string and included in paged responses,
 -- if provided back to the endpoint it will be used to determine the starting
 -- point of the next page.
-newtype Cursor a = Cursor {unCursor :: a}
+data Cursor a = Cursor {location :: a, direction :: CursorDirection}
   deriving stock (Eq, Ord, Show)
 
 -- |
--- >>> toUrlPiece (Cursor (1 :: Int, "hello" :: String))
--- "WzEsImhlbGxvIl0"
+-- >>> toUrlPiece (Cursor (1 :: Int, "hello" :: String) Next)
+-- "n.WzEsImhlbGxvIl0"
 --
--- >>> parseUrlPiece (toUrlPiece (Cursor (1 :: Int, "hello" :: String))) :: Either Text (Cursor (Int, String))
--- Right (Cursor (1,"hello"))
+-- >>> parseUrlPiece (toUrlPiece (Cursor (1 :: Int, "hello" :: String) Next)) :: Either Text (Cursor (Int, String))
+-- Right (Cursor {location = (1,"hello"), direction = Next})
 instance (ToJSON a) => ToHttpApiData (Cursor a) where
-  toUrlPiece (Cursor a) = toUrlPiece . TL.decodeUtf8 . Base64URL.encodeUnpadded . Aeson.encode $ a
+  toUrlPiece (Cursor {location, direction}) =
+    let loc = TL.decodeUtf8 . Base64URL.encodeUnpadded . Aeson.encode $ location
+        dir :: TL.Text
+        dir = case direction of
+          Previous -> "p"
+          Next -> "n"
+     in toUrlPiece $ dir <> "." <> loc
 
 instance (FromJSON a) => FromHttpApiData (Cursor a) where
   parseUrlPiece txt = do
-    jsonBytes <- mapLeft Text.pack . Base64URL.decodeUnpadded . TL.encodeUtf8 . TL.fromStrict $ txt
-    Cursor <$> mapLeft Text.pack (Aeson.eitherDecode jsonBytes)
+    let (dirTxt, locTxt) = second (Text.drop 1) $ Text.breakOn "." txt
+    dir <- case dirTxt of
+      "p" -> pure Previous
+      "n" -> pure Next
+      _ -> Left $ "Invalid or missing cursor direction: " <> dirTxt
+    jsonBytes <- mapLeft Text.pack . Base64URL.decodeUnpadded . TL.encodeUtf8 . TL.fromStrict $ locTxt
+    loc <- mapLeft Text.pack (Aeson.eitherDecode jsonBytes)
+    pure $ Cursor loc dir
 
 -- |
--- >>> toJSON (Cursor (1 :: Int, "hello" :: String))
--- String "WzEsImhlbGxvIl0"
+-- >>> toJSON (Cursor (1 :: Int, "hello" :: String) Next)
+-- String "n.WzEsImhlbGxvIl0"
 --
--- >>> decode (encode (Cursor (1 :: Int, "hello" :: String))) :: Maybe (Cursor (Int, String))
--- Just (Cursor (1,"hello"))
+-- >>> toJSON (Cursor (1 :: Int, "hello" :: String) Previous)
+-- String "p.WzEsImhlbGxvIl0"
+--
+-- >>> decode (encode (Cursor (1 :: Int, "hello" :: String) Next)) :: Maybe (Cursor (Int, String))
+-- Just (Cursor {location = (1,"hello"), direction = Next})
 instance (ToJSON a) => ToJSON (Cursor a) where
   toJSON = toJSON . toUrlPiece
 
@@ -195,15 +216,17 @@ instance (FromJSON a) => FromJSON (Cursor a) where
 
 data Paged cursor a = Paged
   { items :: [a],
-    cursor :: Maybe (Cursor cursor)
+    prevCursor :: Maybe (Cursor cursor),
+    nextCursor :: Maybe (Cursor cursor)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Functor, Foldable, Traversable)
 
 instance (ToJSON a, ToJSON cursor) => ToJSON (Paged cursor a) where
-  toJSON (Paged items cursor) =
+  toJSON (Paged {items, prevCursor, nextCursor}) =
     object
       [ "items" .= items,
-        "cursor" .= cursor
+        "prevCursor" .= prevCursor,
+        "nextCursor" .= nextCursor
       ]
 
 -- | The maximum page size for pageable endpoints
@@ -275,3 +298,13 @@ instance (FromJSON a, TypeLits.KnownSymbol key) => FromJSON (AtKey key a) where
   parseJSON = withObject "AtKey" $ \obj -> do
     (innerVal :: a) <- (obj .: String.fromString (TypeLits.symbolVal (Proxy @key)))
     pure $ AtKey innerVal
+
+pagedOn :: (a -> cursor) -> [a] -> Paged cursor a
+pagedOn f items =
+  let prevCursor = do
+        first <- headMay items
+        pure $ Cursor (f first) Previous
+      nextCursor = do
+        last <- lastMay items
+        pure $ Cursor (f last) Next
+   in Paged items prevCursor nextCursor

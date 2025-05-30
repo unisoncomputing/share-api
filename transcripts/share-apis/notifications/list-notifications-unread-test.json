@@ -1,6 +1,8 @@
 {
   "body": {
-    "notifications": []
+    "items": [],
+    "nextCursor": null,
+    "prevCursor": null
   },
   "status": [
     {
