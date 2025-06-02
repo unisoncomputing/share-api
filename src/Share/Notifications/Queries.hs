@@ -319,13 +319,20 @@ hydrateEventPayload = \case
       HydratedProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
   ProjectContributionCreatedData
     (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
-      HydratedProjectContributionCreatedPayload <$> hydrateContributionCreatedPayload contributionId projectId fromBranchId toBranchId contributorUserId
+      HydratedProjectContributionCreatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+  ProjectContributionUpdatedData
+    (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
+      HydratedProjectContributionUpdatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+  ProjectContributionCommentData
+    (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId})
+    (CommentData {commentId, commentContent, commentEditedAt, commentRevision}) ->
+      _
   where
-    hydrateContributionCreatedPayload :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionCreatedPayload
-    hydrateContributionCreatedPayload contributionId projectId fromBranchId toBranchId authorUserId = do
+    hydrateContributionPayload :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionPayload
+    hydrateContributionPayload contributionId projectId fromBranchId toBranchId authorUserId = do
       projectInfo <- hydrateProjectPayload projectId
       contributionInfo <- hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId
-      pure $ ProjectContributionCreatedPayload {projectInfo, contributionInfo = contributionInfo projectInfo}
+      pure $ ProjectContributionPayload {projectInfo, contributionInfo = contributionInfo projectInfo}
     hydrateContributionInfo :: ContributionId -> BranchId -> BranchId -> UserId -> m (ProjectPayload -> ContributionPayload)
     hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId = do
       author <- UsersQ.userDisplayInfoOf id authorUserId
@@ -395,3 +402,6 @@ hydrateEventPayload = \case
                     projectOwnerHandle,
                     projectOwnerUserId
                   }
+    hydrateCommentPayload :: CommentId -> m CommentPayload
+    hydrateCommentPayload commentId = do
+      _
