@@ -7,7 +7,7 @@ module Share.Postgres.Contributions.Ops (createContribution) where
 import Share.Contribution (ContributionStatus (..))
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
-import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectContributionData (..))
+import Share.Notifications.Types (ContributionData (..), NotificationEvent (..), NotificationEventData (..), ProjectData (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContribQ
 import Share.Prelude
@@ -63,21 +63,24 @@ createContribution authorId projectId title description status sourceBranchId ta
     WHERE p.id = #{projectId}
     |]
 
-  let contributionEventData =
-        ProjectContributionData
+  let projectData =
+        ProjectData
           { projectId,
-            contributionId,
+            public = not projectPrivate
+          }
+  let contributionData =
+        ContributionData
+          { contributionId,
             fromBranchId = sourceBranchId,
             toBranchId = targetBranchId,
-            contributorUserId = authorId,
-            public = not projectPrivate
+            contributorUserId = authorId
           }
   let notifEvent =
         NotificationEvent
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
-            eventData = ProjectContributionCreatedData contributionEventData,
+            eventData = ProjectContributionCreatedData projectData contributionData,
             eventScope = projectOwnerUserId,
             eventActor = authorId
           }

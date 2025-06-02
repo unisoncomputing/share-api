@@ -18,7 +18,7 @@ import Share.Contribution
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Notifications.Queries qualified as NotifQ
-import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectBranchData (..))
+import Share.Notifications.Types (BranchData (..), NotificationEvent (..), NotificationEventData (..), ProjectData (..))
 import Share.OAuth.Types
 import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
@@ -612,19 +612,22 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
           JOIN projects p ON p.id = pb.project_id
         WHERE pb.id = #{branchId}
         |]
-      let branchUpdateEventData =
-            ProjectBranchData
+      let projectData =
+            ProjectData
               { projectId,
-                branchId,
-                branchContributorUserId,
                 public = not private
+              }
+      let branchData =
+            BranchData
+              { branchId,
+                branchContributorUserId
               }
       let notifEvent =
             NotificationEvent
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
-                eventData = ProjectBranchUpdatedData branchUpdateEventData,
+                eventData = ProjectBranchUpdatedData projectData branchData,
                 eventScope = projectOwnerUserId,
                 eventActor = creatorId
               }
@@ -718,19 +721,22 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
           JOIN projects p ON p.id = pb.project_id
         WHERE pb.id = #{branchId}
         |]
-      let branchUpdateEventData =
-            ProjectBranchData
+      let projectData =
+            ProjectData
               { projectId,
-                branchId,
-                branchContributorUserId,
                 public = not private
+              }
+      let branchData =
+            BranchData
+              { branchId,
+                branchContributorUserId
               }
       let notifEvent =
             NotificationEvent
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
-                eventData = ProjectBranchUpdatedData branchUpdateEventData,
+                eventData = ProjectBranchUpdatedData projectData branchData,
                 eventScope = projectOwnerUserId,
                 eventActor = callerUserId
               }

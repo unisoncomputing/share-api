@@ -10,9 +10,10 @@ module Share.Notifications.Types
     PGNotificationEvent,
     NotificationSubscription (..),
     SubscriptionFilter (..),
-    ProjectBranchData (..),
-    ProjectContributionData (..),
-    ProjectTicketData (..),
+    ProjectData (..),
+    BranchData (..),
+    ContributionData (..),
+    TicketData (..),
     CommentData (..),
     NotificationHubEntry (..),
     NotificationStatus (..),
@@ -188,30 +189,24 @@ instance PG.EncodeValue NotificationFilter where
     HasqlEncoders.jsonb
       & contramap \(NotificationFilter obj) -> Aeson.toJSON obj
 
-data ProjectBranchData = ProjectBranchData
-  { projectId :: ProjectId,
-    branchId :: BranchId,
-    branchContributorUserId :: Maybe UserId,
-    public :: Bool
+data BranchData = BranchData
+  { branchId :: BranchId,
+    branchContributorUserId :: Maybe UserId
   }
   deriving stock (Eq, Show)
 
-instance Aeson.ToJSON ProjectBranchData where
-  toJSON ProjectBranchData {projectId, branchId, branchContributorUserId, public} =
+instance Aeson.ToJSON BranchData where
+  toJSON BranchData {branchId, branchContributorUserId} =
     Aeson.object
-      [ "projectId" .= projectId,
-        "branchId" .= branchId,
-        "branchContributorUserId" .= branchContributorUserId,
-        "public" .= public
+      [ "branchId" .= branchId,
+        "branchContributorUserId" .= branchContributorUserId
       ]
 
-instance Aeson.FromJSON ProjectBranchData where
+instance Aeson.FromJSON BranchData where
   parseJSON = Aeson.withObject "ProjectBranchData" \o -> do
-    projectId <- o .: "projectId"
     branchId <- o .: "branchId"
     branchContributorUserId <- o .: "branchContributorUserId"
-    public <- o .: "public"
-    pure ProjectBranchData {projectId, branchId, branchContributorUserId, public}
+    pure BranchData {branchId, branchContributorUserId}
 
 data CommentData = CommentData
   { commentId :: CommentId,
@@ -232,71 +227,79 @@ instance Aeson.FromJSON CommentData where
     commentAuthorUserId <- o .: "commentAuthorUserId"
     pure CommentData {commentId, commentAuthorUserId}
 
-data ProjectTicketData = ProjectTicketData
-  { projectId :: ProjectId,
-    ticketId :: TicketId,
-    ticketAuthorUserId :: UserId,
-    public :: Bool
+data TicketData = TicketData
+  { ticketId :: TicketId,
+    ticketAuthorUserId :: UserId
   }
   deriving stock (Eq, Show)
 
-instance Aeson.ToJSON ProjectTicketData where
-  toJSON ProjectTicketData {projectId, ticketId, ticketAuthorUserId} =
+instance Aeson.ToJSON TicketData where
+  toJSON TicketData {ticketId, ticketAuthorUserId} =
     Aeson.object
-      [ "projectId" .= projectId,
-        "ticketId" .= ticketId,
+      [ "ticketId" .= ticketId,
         "ticketAuthorUserId" .= ticketAuthorUserId
       ]
 
-instance Aeson.FromJSON ProjectTicketData where
+instance Aeson.FromJSON TicketData where
   parseJSON = Aeson.withObject "ProjectTicketData" \o -> do
-    projectId <- o .: "projectId"
     ticketId <- o .: "ticketId"
     ticketAuthorUserId <- o .: "ticketAuthorUserId"
-    public <- o .: "public"
-    pure ProjectTicketData {projectId, ticketId, ticketAuthorUserId, public}
+    pure TicketData {ticketId, ticketAuthorUserId}
 
-data ProjectContributionData = ProjectContributionData
+data ProjectData = ProjectData
   { projectId :: ProjectId,
-    contributionId :: ContributionId,
-    fromBranchId :: BranchId,
-    toBranchId :: BranchId,
-    contributorUserId :: UserId,
     public :: Bool
   }
   deriving stock (Eq, Show)
 
-instance Aeson.ToJSON ProjectContributionData where
-  toJSON ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId, public} =
+instance Aeson.ToJSON ProjectData where
+  toJSON ProjectData {projectId, public} =
     Aeson.object
       [ "projectId" .= projectId,
-        "contributionId" .= contributionId,
-        "fromBranchId" .= fromBranchId,
-        "toBranchId" .= toBranchId,
-        "contributorUserId" .= contributorUserId,
         "public" .= public
       ]
 
-instance Aeson.FromJSON ProjectContributionData where
-  parseJSON = Aeson.withObject "ProjectContributionData" \o -> do
+instance Aeson.FromJSON ProjectData where
+  parseJSON = Aeson.withObject "ProjectData" \o -> do
     projectId <- o .: "projectId"
+    public <- o .: "public"
+    pure ProjectData {projectId, public}
+
+data ContributionData = ContributionData
+  { contributionId :: ContributionId,
+    fromBranchId :: BranchId,
+    toBranchId :: BranchId,
+    contributorUserId :: UserId
+  }
+  deriving stock (Eq, Show)
+
+instance Aeson.ToJSON ContributionData where
+  toJSON ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId} =
+    Aeson.object
+      [ "contributionId" .= contributionId,
+        "fromBranchId" .= fromBranchId,
+        "toBranchId" .= toBranchId,
+        "contributorUserId" .= contributorUserId
+      ]
+
+instance Aeson.FromJSON ContributionData where
+  parseJSON = Aeson.withObject "ProjectContributionData" \o -> do
     contributionId <- o .: "contributionId"
     fromBranchId <- o .: "fromBranchId"
     toBranchId <- o .: "toBranchId"
     contributorUserId <- o .: "contributorUserId"
-    public <- o .: "public"
-    pure ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId, public}
+    pure ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}
 
 -- The bare-bones Notification Event Data that's actually stored in the database.
 -- It holds unhydrated IDs.
 data NotificationEventData
-  = ProjectBranchUpdatedData ProjectBranchData
-  | ProjectContributionCreatedData ProjectContributionData
-  | ProjectContributionUpdatedData ProjectContributionData
-  | ProjectContributionCommentData ProjectContributionData CommentData
-  | ProjectTicketCreatedData ProjectTicketData
-  | ProjectTicketUpdatedData ProjectTicketData
-  | ProjectTicketCommentData ProjectTicketData CommentData
+  = ProjectBranchUpdatedData ProjectData BranchData
+  | ProjectContributionCreatedData ProjectData ContributionData
+  | ProjectContributionUpdatedData ProjectData ContributionData
+  | ProjectContributionCommentData ProjectData ContributionData CommentData
+  | ProjectTicketCreatedData ProjectData TicketData
+  | ProjectTicketUpdatedData ProjectData TicketData
+  | ProjectTicketCommentData ProjectData TicketData CommentData
   deriving stock (Eq, Show)
 
 instance Aeson.ToJSON NotificationEventData where
@@ -308,42 +311,52 @@ instance Aeson.ToJSON NotificationEventData where
     where
       topic = eventTopic ned
       body = case ned of
-        ProjectBranchUpdatedData d -> Aeson.toJSON d
-        ProjectContributionCreatedData d -> Aeson.toJSON d
-        ProjectContributionUpdatedData contr -> Aeson.toJSON contr
-        ProjectContributionCommentData contr comm -> Aeson.toJSON (contr :++ comm)
-        ProjectTicketCreatedData ticket -> Aeson.toJSON ticket
-        ProjectTicketUpdatedData ticket -> Aeson.toJSON ticket
-        ProjectTicketCommentData ticket comm -> Aeson.toJSON (ticket :++ comm)
+        ProjectBranchUpdatedData project branch -> Aeson.toJSON (project :++ branch)
+        ProjectContributionCreatedData project c -> Aeson.toJSON (project :++ c)
+        ProjectContributionUpdatedData project contr -> Aeson.toJSON (project :++ contr)
+        ProjectContributionCommentData project contr comm -> Aeson.toJSON (project :++ contr :++ comm)
+        ProjectTicketCreatedData project ticket -> Aeson.toJSON (project :++ ticket)
+        ProjectTicketUpdatedData project ticket -> Aeson.toJSON (project :++ ticket)
+        ProjectTicketCommentData project ticket comm -> Aeson.toJSON (project :++ ticket :++ comm)
 
 instance PG.EncodeValue NotificationEventData where
   encodeValue =
     HasqlEncoders.jsonb
       & contramap \case
-        ProjectBranchUpdatedData d -> Aeson.toJSON d
-        ProjectContributionCreatedData d -> Aeson.toJSON d
-        ProjectContributionUpdatedData contr -> Aeson.toJSON contr
-        ProjectContributionCommentData contr comm -> Aeson.toJSON (contr :++ comm)
-        ProjectTicketCreatedData ticket -> Aeson.toJSON ticket
-        ProjectTicketUpdatedData ticket -> Aeson.toJSON ticket
-        ProjectTicketCommentData ticket comm -> Aeson.toJSON (ticket :++ comm)
+        ProjectBranchUpdatedData project branch -> Aeson.toJSON (project :++ branch)
+        ProjectContributionCreatedData project contr -> Aeson.toJSON (project :++ contr)
+        ProjectContributionUpdatedData project contr -> Aeson.toJSON (project :++ contr)
+        ProjectContributionCommentData project contr comm -> Aeson.toJSON (project :++ contr :++ comm)
+        ProjectTicketCreatedData project ticket -> Aeson.toJSON (project :++ ticket)
+        ProjectTicketUpdatedData project ticket -> Aeson.toJSON (project :++ ticket)
+        ProjectTicketCommentData project ticket comm -> Aeson.toJSON (project :++ ticket :++ comm)
 
 instance Hasql.DecodeRow NotificationEventData where
   decodeRow = do
     topic <- PG.decodeField
     Hasql.Jsonb jsonData <- PG.decodeField
     case topic of
-      ProjectBranchUpdated -> ProjectBranchUpdatedData <$> parseJsonData jsonData
-      ProjectContributionCreated -> ProjectContributionCreatedData <$> parseJsonData jsonData
-      ProjectContributionUpdated -> ProjectContributionUpdatedData <$> parseJsonData jsonData
+      ProjectBranchUpdated -> do
+        (project :++ branch) <- parseJsonData jsonData
+        pure $ ProjectBranchUpdatedData project branch
+      ProjectContributionCreated -> do
+        (project :++ contr) <- parseJsonData jsonData
+        pure $ ProjectContributionCreatedData project contr
+      ProjectContributionUpdated -> do
+        (project :++ contr) <- parseJsonData jsonData
+        pure $ ProjectContributionUpdatedData project contr
       ProjectContributionComment -> do
-        (contr :++ comm) <- parseJsonData jsonData
-        pure $ ProjectContributionCommentData contr comm
-      ProjectTicketCreated -> ProjectTicketCreatedData <$> parseJsonData jsonData
-      ProjectTicketUpdated -> ProjectTicketUpdatedData <$> parseJsonData jsonData
+        (project :++ contr :++ comm) <- parseJsonData jsonData
+        pure $ ProjectContributionCommentData project contr comm
+      ProjectTicketCreated -> do
+        (project :++ ticket) <- parseJsonData jsonData
+        pure $ ProjectTicketCreatedData project ticket
+      ProjectTicketUpdated -> do
+        (project :++ ticket) <- parseJsonData jsonData
+        pure $ ProjectTicketUpdatedData project ticket
       ProjectTicketComment -> do
-        (ticket :++ comm) <- parseJsonData jsonData
-        pure $ ProjectTicketCommentData ticket comm
+        (project :++ ticket :++ comm) <- parseJsonData jsonData
+        pure $ ProjectTicketCommentData project ticket comm
     where
       parseJsonData v = case Aeson.fromJSON v of
         Aeson.Error e -> fail e

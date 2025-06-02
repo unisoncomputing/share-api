@@ -2,7 +2,7 @@ module Share.Postgres.Tickets.Ops (createTicket) where
 
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
-import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectTicketData (..))
+import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectData (..), TicketData (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Tickets.Queries qualified as TicketQ
 import Share.Prelude
@@ -49,19 +49,22 @@ createTicket authorId projectId title description status = do
     WHERE p.id = #{projectId}
     |]
 
-  let ticketEventData =
-        ProjectTicketData
+  let projectData =
+        ProjectData
           { projectId,
-            ticketId,
-            ticketAuthorUserId = authorId,
             public = not projectPrivate
+          }
+  let ticketData =
+        TicketData
+          { ticketId,
+            ticketAuthorUserId = authorId
           }
   let notifEvent =
         NotificationEvent
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
-            eventData = ProjectTicketCreatedData ticketEventData,
+            eventData = ProjectTicketCreatedData projectData ticketData,
             eventScope = projectOwnerUserId,
             eventActor = authorId
           }

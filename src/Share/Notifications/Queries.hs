@@ -317,28 +317,35 @@ getNotificationSubscription subscriberUserId subscriptionId = do
 hydrateEventPayload :: forall m. (QueryA m) => NotificationEventData -> m HydratedEventPayload
 hydrateEventPayload = \case
   ProjectBranchUpdatedData
-    (ProjectBranchData {projectId, branchId}) -> do
+    (ProjectData {projectId})
+    (BranchData {branchId}) -> do
       HydratedProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
   ProjectContributionCreatedData
-    (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
+    (ProjectData {projectId})
+    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
       HydratedProjectContributionCreatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
   ProjectContributionUpdatedData
-    (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
+    (ProjectData {projectId})
+    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
       HydratedProjectContributionUpdatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
   ProjectContributionCommentData
-    (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId})
+    (ProjectData {projectId})
+    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId})
     (CommentData {commentId, commentAuthorUserId}) -> do
       HydratedProjectContributionCommentPayload
         <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
         <*> hydrateCommentPayload commentId commentAuthorUserId
   ProjectTicketCreatedData
-    (ProjectTicketData {projectId, ticketId, ticketAuthorUserId}) -> do
+    (ProjectData {projectId})
+    (TicketData {ticketId, ticketAuthorUserId}) -> do
       HydratedProjectTicketCreatedPayload <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
   ProjectTicketUpdatedData
-    (ProjectTicketData {projectId, ticketId, ticketAuthorUserId}) -> do
+    (ProjectData {projectId})
+    (TicketData {ticketId, ticketAuthorUserId}) -> do
       HydratedProjectTicketUpdatedPayload <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
   ProjectTicketCommentData
-    (ProjectTicketData {projectId, ticketId, ticketAuthorUserId})
+    (ProjectData {projectId})
+    (TicketData {ticketId, ticketAuthorUserId})
     (CommentData {commentId, commentAuthorUserId}) -> do
       HydratedProjectTicketCommentPayload
         <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
