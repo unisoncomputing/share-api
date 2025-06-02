@@ -36,37 +36,6 @@ getComment commentId = do
       LIMIT 1
     |]
 
-createComment ::
-  UserId ->
-  Either ContributionId TicketId ->
-  Text ->
-  PG.Transaction e (Comment UserId)
-createComment authorId thingId content = do
-  let (contributionId, ticketId) = case thingId of
-        Left contributionId -> (Just contributionId, Nothing)
-        Right ticketId -> (Nothing, Just ticketId)
-  (commentId, timestamp) <-
-    PG.queryExpect1Row @(CommentId, UTCTime)
-      [PG.sql|
-        INSERT INTO comments(contribution_id, ticket_id, author_id)
-          VALUES (#{contributionId}, #{ticketId}, #{authorId})
-          RETURNING id, created_at
-      |]
-  PG.execute_
-    [PG.sql|
-      INSERT INTO comment_revisions(comment_id, revision_number, author_id, content, created_at)
-        VALUES (#{commentId}, 0, #{authorId}, #{content}, #{timestamp})
-  |]
-  pure $
-    Comment
-      { commentId,
-        actor = authorId,
-        timestamp,
-        editedAt = Nothing,
-        content,
-        revision = 0
-      }
-
 data UpdateCommentResult user
   = UpdateCommentNotFound
   | UpdateCommentSuccess (Comment user)
