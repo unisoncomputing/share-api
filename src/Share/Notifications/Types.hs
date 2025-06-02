@@ -214,18 +214,23 @@ instance Aeson.FromJSON ProjectBranchData where
     pure ProjectBranchData {projectId, branchId, branchContributorUserId, public}
 
 data CommentData = CommentData
-  { commentAuthorUserId :: UserId
+  { commentId :: CommentId,
+    commentAuthorUserId :: UserId
   }
   deriving stock (Eq, Show)
 
 instance Aeson.ToJSON CommentData where
-  toJSON CommentData {commentAuthorUserId} =
-    Aeson.object ["commentAuthorUserId" .= commentAuthorUserId]
+  toJSON CommentData {commentAuthorUserId, commentId} =
+    Aeson.object
+      [ "commentId" .= commentId,
+        "commentAuthorUserId" .= commentAuthorUserId
+      ]
 
 instance Aeson.FromJSON CommentData where
   parseJSON = Aeson.withObject "CommentData" \o -> do
+    commentId <- o .: "commentId"
     commentAuthorUserId <- o .: "commentAuthorUserId"
-    pure CommentData {commentAuthorUserId}
+    pure CommentData {commentId, commentAuthorUserId}
 
 data ProjectTicketData = ProjectTicketData
   { projectId :: ProjectId,

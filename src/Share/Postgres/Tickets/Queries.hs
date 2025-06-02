@@ -167,9 +167,9 @@ listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter =
           nextCursor = lastMay items <&> \(ShareTicket {updatedAt, ticketId}) -> Cursor (updatedAt, ticketId) Next
        in Paged {items, prevCursor, nextCursor}
 
-ticketById :: TicketId -> PG.Transaction e (Maybe Ticket)
+ticketById :: (PG.QueryA m) => TicketId -> m Ticket
 ticketById ticketId = do
-  PG.query1Row
+  PG.queryExpect1Row
     [PG.sql|
         SELECT
           ticket.id,
@@ -185,19 +185,17 @@ ticketById ticketId = do
         WHERE ticket.id = #{ticketId}
       |]
 
-updateTicket :: UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> PG.Transaction e Bool
+updateTicket :: UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> PG.Transaction e ()
 updateTicket callerUserId ticketId newTitle newDescription newStatus = do
-  isJust <$> runMaybeT do
-    Ticket {..} <- MaybeT $ ticketById ticketId
-    let updatedTitle = fromMaybe title newTitle
-    let updatedDescription = fromNullableUpdate description newDescription
-    let updatedStatus = fromMaybe status newStatus
-    -- Add a status change event
-    when (isJust newStatus && newStatus /= Just status) do
-      lift $ insertTicketStatusChangeEvent ticketId callerUserId (Just status) updatedStatus
-    lift $
-      PG.execute_
-        [PG.sql|
+  Ticket {..} <- ticketById ticketId
+  let updatedTitle = fromMaybe title newTitle
+  let updatedDescription = fromNullableUpdate description newDescription
+  let updatedStatus = fromMaybe status newStatus
+  -- Add a status change event
+  when (isJust newStatus && newStatus /= Just status) do
+    insertTicketStatusChangeEvent ticketId callerUserId (Just status) updatedStatus
+  PG.execute_
+    [PG.sql|
         UPDATE tickets
         SET
           title = #{updatedTitle},
