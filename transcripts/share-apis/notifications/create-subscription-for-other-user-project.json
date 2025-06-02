@@ -4,7 +4,8 @@
       "filter": null,
       "id": "NS-<UUID>",
       "scope": "U-<UUID>",
-      "topic": [
+      "topicGroups": [],
+      "topics": [
         "project:branch:updated",
         "project:contribution:created"
       ]

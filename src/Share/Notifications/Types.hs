@@ -2,6 +2,7 @@
 
 module Share.Notifications.Types
   ( NotificationTopic (..),
+    NotificationTopicGroup (..),
     NotificationFilter (..),
     NotificationEventData (..),
     NotificationEvent (..),
@@ -76,6 +77,28 @@ instance Aeson.FromJSON NotificationTopic where
     "project:branch:updated" -> pure ProjectBranchUpdated
     "project:contribution:created" -> pure ProjectContributionCreated
     s -> fail $ "Invalid notification topic: " <> Text.unpack s
+
+data NotificationTopicGroup
+  = WatchProject
+  deriving (Eq, Show, Ord)
+
+instance PG.EncodeValue NotificationTopicGroup where
+  encodeValue = HasqlEncoders.enum \case
+    WatchProject -> "watch_project"
+
+instance PG.DecodeValue NotificationTopicGroup where
+  decodeValue = HasqlDecoders.enum \case
+    "watch_project" -> Just WatchProject
+    _ -> Nothing
+
+instance Aeson.ToJSON NotificationTopicGroup where
+  toJSON = \case
+    WatchProject -> "watch_project"
+
+instance Aeson.FromJSON NotificationTopicGroup where
+  parseJSON = Aeson.withText "NotificationTopicGroup" \case
+    "watch_project" -> pure WatchProject
+    s -> fail $ "Invalid notification topic group: " <> Text.unpack s
 
 data NotificationStatus
   = Unread
@@ -340,7 +363,8 @@ instance Aeson.ToJSON NotificationDeliveryMethod where
 data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
     subscriptionScope :: UserId,
-    subscriptionTopic :: Set NotificationTopic,
+    subscriptionTopics :: Set NotificationTopic,
+    subscriptionTopicGroups :: Set NotificationTopicGroup,
     subscriptionFilter :: Maybe NotificationFilter
   }
 
@@ -348,16 +372,18 @@ instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) wher
   decodeRow = do
     subscriptionId <- PG.decodeField
     subscriptionScope <- PG.decodeField
-    subscriptionTopic <- Set.fromList <$> PG.decodeField
+    subscriptionTopics <- Set.fromList <$> PG.decodeField
+    subscriptionTopicGroups <- Set.fromList <$> PG.decodeField
     subscriptionFilter <- PG.decodeField
-    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopic, subscriptionFilter}
+    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
-  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopic, subscriptionFilter} =
+  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
     Aeson.object
       [ "id" Aeson..= subscriptionId,
         "scope" Aeson..= subscriptionScope,
-        "topic" Aeson..= subscriptionTopic,
+        "topics" Aeson..= subscriptionTopics,
+        "topicGroups" Aeson..= subscriptionTopicGroups,
         "filter" Aeson..= subscriptionFilter
       ]
 
