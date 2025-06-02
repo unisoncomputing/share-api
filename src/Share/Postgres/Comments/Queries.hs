@@ -1,6 +1,5 @@
 module Share.Postgres.Comments.Queries
   ( getComment,
-    createComment,
     updateComment,
     deleteComment,
     UpdateCommentResult (..),

@@ -1,11 +1,16 @@
 module Share.Postgres.Comments.Ops (createComment) where
 
-import Data.List qualified as List
 import Data.Time (UTCTime)
+import Share.Contribution (Contribution (..))
 import Share.IDs
-import Share.Notifications.Types (CommentData (..))
+import Share.Notifications.Queries qualified as NotifsQ
+import Share.Notifications.Types (CommentData (..), ContributionData (..), NotificationEvent (..), NotificationEventData (..), TicketData (..))
 import Share.Postgres qualified as PG
+import Share.Postgres.Contributions.Queries qualified as ContributionQ
+import Share.Postgres.Projects.Queries qualified as ProjectQ
+import Share.Postgres.Tickets.Queries qualified as TicketQ
 import Share.Prelude
+import Share.Ticket (Ticket (..))
 import Share.Web.Share.Comments
 
 createComment ::
@@ -30,25 +35,38 @@ createComment authorId thingId content = do
         VALUES (#{commentId}, 0, #{authorId}, #{content}, #{timestamp})
   |]
 
-  (projectResourceId, projectOwnerUserId, projectPrivate) <-
-    PG.queryExpect1Row
-      [PG.sql|
-    SELECT p.resource_id, p.owner_user_id, p.private
-    FROM projects p
-    WHERE p.id = #{projectId}
-    |]
-  let commentEventData =
+  let commentData =
         CommentData
           { commentId,
             commentAuthorUserId = authorId
           }
-  let projectData = _
+  (event, projectResourceId, projectOwnerUserId) <- case thingId of
+    Left contributionId -> do
+      Contribution {projectId, sourceBranchId, targetBranchId, author} <- ContributionQ.contributionById contributionId
+      (projectData, projectResourceId, projectOwnerUserId) <- ProjectQ.projectNotificationData projectId
+      let contributionData =
+            ContributionData
+              { contributionId,
+                fromBranchId = sourceBranchId,
+                toBranchId = targetBranchId,
+                contributorUserId = author
+              }
+      pure (ProjectContributionCommentData projectData contributionData commentData, projectResourceId, projectOwnerUserId)
+    Right ticketId -> do
+      Ticket {projectId, author} <- TicketQ.ticketById ticketId
+      (projectData, projectResourceId, projectOwnerUserId) <- ProjectQ.projectNotificationData projectId
+      let ticketData =
+            TicketData
+              { ticketId,
+                ticketAuthorUserId = author
+              }
+      pure (ProjectTicketCommentData projectData ticketData commentData, projectResourceId, projectOwnerUserId)
   let notifEvent =
         NotificationEvent
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
-            eventData = ProjectTicketCreatedData ticketEventData,
+            eventData = event,
             eventScope = projectOwnerUserId,
             eventActor = authorId
           }
