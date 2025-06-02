@@ -3,8 +3,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Share.Postgres.Tickets.Queries
-  ( createTicket,
-    ticketByProjectIdAndNumber,
+  ( ticketByProjectIdAndNumber,
     shareTicketByProjectIdAndNumber,
     listTicketsByProjectId,
     ticketById,
@@ -31,40 +30,6 @@ import Share.Web.Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Tickets.API
 import Share.Web.Share.Tickets.Types
-
-createTicket ::
-  -- | Author
-  UserId ->
-  ProjectId ->
-  -- | Title
-  Text ->
-  -- | Description
-  Maybe Text ->
-  TicketStatus ->
-  PG.Transaction e (TicketId, TicketNumber)
-createTicket authorId projectId title description status = do
-  (ticketId, number) <-
-    PG.queryExpect1Row
-      [PG.sql|
-        WITH new_ticket_number AS (
-            SELECT (COALESCE(MAX(ticket_number), 0) + 1) AS new
-            FROM tickets ticket
-            WHERE ticket.project_id = #{projectId}
-        )
-        INSERT INTO tickets(
-          author_id,
-          project_id,
-          title,
-          description,
-          status,
-          ticket_number
-        )
-        SELECT #{authorId}, #{projectId}, #{title}, #{description}, #{status}::ticket_status, new_ticket_number.new
-          FROM new_ticket_number
-        RETURNING tickets.id, tickets.ticket_number
-      |]
-  insertTicketStatusChangeEvent ticketId authorId Nothing status
-  pure (ticketId, number)
 
 ticketByProjectIdAndNumber ::
   ProjectId ->

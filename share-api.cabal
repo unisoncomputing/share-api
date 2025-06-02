@@ -93,6 +93,7 @@ library
       Share.Postgres.Sync.Conversions
       Share.Postgres.Sync.Queries
       Share.Postgres.Sync.Types
+      Share.Postgres.Tickets.Ops
       Share.Postgres.Tickets.Queries
       Share.Postgres.Users.Queries
       Share.Prelude

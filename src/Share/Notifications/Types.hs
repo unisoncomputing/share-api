@@ -235,7 +235,8 @@ instance Aeson.FromJSON CommentData where
 data ProjectTicketData = ProjectTicketData
   { projectId :: ProjectId,
     ticketId :: TicketId,
-    ticketAuthorUserId :: UserId
+    ticketAuthorUserId :: UserId,
+    public :: Bool
   }
   deriving stock (Eq, Show)
 
@@ -252,7 +253,8 @@ instance Aeson.FromJSON ProjectTicketData where
     projectId <- o .: "projectId"
     ticketId <- o .: "ticketId"
     ticketAuthorUserId <- o .: "ticketAuthorUserId"
-    pure ProjectTicketData {projectId, ticketId, ticketAuthorUserId}
+    public <- o .: "public"
+    pure ProjectTicketData {projectId, ticketId, ticketAuthorUserId, public}
 
 data ProjectContributionData = ProjectContributionData
   { projectId :: ProjectId,
