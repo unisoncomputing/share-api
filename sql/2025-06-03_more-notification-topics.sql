@@ -4,6 +4,15 @@ ALTER TYPE notification_topic ADD VALUE 'project:ticket:updated';
 ALTER TYPE notification_topic ADD VALUE 'project:contribution:comment';
 ALTER TYPE notification_topic ADD VALUE 'project:ticket:comment';
 
+INSERT INTO notification_topic_group_topics (topic_group, topic)
+VALUES
+  ('watch_project', 'project:contribution:updated'),
+  ('watch_project', 'project:ticket:created'),
+  ('watch_project', 'project:ticket:updated'),
+  ('watch_project', 'project:contribution:comment'),
+  ('watch_project', 'project:ticket:comment')
+;
+
 
 -- Returns the permission a user must have for an event's resource in order to be notified.
 CREATE OR REPLACE FUNCTION topic_permission(topic notification_topic)
