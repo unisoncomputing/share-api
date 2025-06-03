@@ -2,13 +2,15 @@
 
 -- | This module contains queries for the definition search index.
 module Share.Postgres.Search.DefinitionSearch.Queries
-  ( submitReleaseToBeSynced,
-    claimUnsyncedRelease,
+  ( claimUnsynced,
     insertDefinitionDocuments,
+    copySearchDocumentsForRelease,
     cleanIndexForProject,
     defNameCompletionSearch,
     definitionTokenSearch,
     definitionNameSearch,
+    isRootIndexed,
+    markRootAsIndexed,
     DefnNameSearchFilter (..),
     -- Exported for logging/debugging
     searchTokensToTsQuery,
@@ -27,7 +29,7 @@ import Servant.Server (err500)
 import Share.BackgroundJobs.Search.DefinitionSync.Types
 import Share.IDs (ProjectId, ReleaseId, UserId)
 import Share.Postgres
-import Share.Postgres.Notifications qualified as Notif
+import Share.Postgres.IDs (BranchHashId)
 import Share.Prelude
 import Share.Utils.API (Limit, Query (Query))
 import Share.Utils.Logging qualified as Logging
@@ -55,50 +57,62 @@ instance Logging.Loggable DefinitionSearchError where
       Logging.textLog ("Failed to decode metadata: " <> tShow v <> " " <> err)
         & Logging.withSeverity Logging.Error
 
-submitReleaseToBeSynced :: (QueryM m) => ReleaseId -> m ()
-submitReleaseToBeSynced releaseId = do
-  execute_
+-- | Claim the oldest unsynced root to be indexed.
+claimUnsynced :: Transaction e (Maybe (Maybe ReleaseId, BranchHashId, UserId))
+claimUnsynced = do
+  query1Row
     [sql|
-    INSERT INTO global_definition_search_release_queue (release_id)
-    VALUES (#{releaseId})
-    |]
-  Notif.notifyChannel Notif.DefinitionSyncChannel
-
--- | Claim the oldest unsynced release to be indexed.
-claimUnsyncedRelease :: Transaction e (Maybe ReleaseId)
-claimUnsyncedRelease = do
-  query1Col
-    [sql|
-    WITH chosen_release(release_id) AS (
-      SELECT q.release_id
-      FROM global_definition_search_release_queue q
+    WITH chosen(root_namespace_hash_id, codebase_user_id, release_id) AS (
+      SELECT q.root_namespace_hash_id, q.codebase_user_id, q.release_id
+      FROM scoped_definition_search_queue q
       ORDER BY q.created_at ASC
       LIMIT 1
       -- Skip any that are being synced by other workers.
       FOR UPDATE SKIP LOCKED
     )
-    DELETE FROM global_definition_search_release_queue
-      USING chosen_release
-      WHERE global_definition_search_release_queue.release_id = chosen_release.release_id
-    RETURNING chosen_release.release_id
+    DELETE FROM scoped_definition_search_queue
+      USING chosen
+      WHERE scoped_definition_search_queue.root_namespace_hash_id = chosen.root_namespace_hash_id
+    RETURNING chosen.release_id, chosen.root_namespace_hash_id, chosen.codebase_user_id
     |]
 
+isRootIndexed :: BranchHashId -> Transaction e Bool
+isRootIndexed rootBranchHashId = do
+  queryExpect1Col
+    [sql|
+      SELECT EXISTS (
+        SELECT FROM indexed_definition_search_doc_roots
+        WHERE root_namespace_hash_id = #{rootBranchHashId}
+      )
+    |]
+
+markRootAsIndexed :: BranchHashId -> Transaction e ()
+markRootAsIndexed rootBranchHashId = do
+  execute_
+    [sql|
+      INSERT INTO indexed_definition_search_doc_roots(root_namespace_hash_id)
+        VALUES(#{rootBranchHashId})
+        ON CONFLICT DO NOTHING
+    |]
+  -- We don't return anything, so we can use `execute_` here.
+  pure ()
+
 -- | Save definition documents to be indexed for search.
-insertDefinitionDocuments :: [DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash)] -> Transaction e ()
+insertDefinitionDocuments :: [DefinitionDocument Name (Name, ShortHash)] -> Transaction e ()
 insertDefinitionDocuments docs = pipelined $ do
   let docsTable = docRow <$> docs
   execute_ $
     [sql|
-      WITH docs(project_id, release_id, name, token_text, arity, tag, metadata) AS (
+      WITH docs(root_namespace_hash_id, name, token_text, arity, tag, metadata) AS (
         SELECT * FROM ^{toTable docsTable}
-      ) INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, tag, metadata)
-        SELECT d.project_id, d.release_id, d.name, tsvector(d.token_text::text), d.arity, d.tag::definition_tag, d.metadata
+      ) INSERT INTO scoped_definition_search_docs (root_namespace_hash_id, name, search_tokens, arity, tag, metadata)
+        SELECT d.root_namespace_hash_id, d.name, tsvector(d.token_text::text), d.arity, d.tag::definition_tag, d.metadata
           FROM docs d
         ON CONFLICT DO NOTHING
       |]
   where
-    docRow :: DefinitionDocument ProjectId ReleaseId Name (Name, ShortHash) -> (ProjectId, ReleaseId, Text, Text, Arity, TermOrTypeTag, Hasql.Jsonb)
-    docRow DefinitionDocument {project, release, fqn, tokens, arity, tag, metadata} =
+    docRow :: DefinitionDocument Name (Name, ShortHash) -> (BranchHashId, Text, Text, Arity, TermOrTypeTag, Hasql.Jsonb)
+    docRow DefinitionDocument {rootBranchHashId, fqn, tokens, arity, tag, metadata} =
       let expandedTokens :: [DefnSearchToken (Either Name ShortHash)]
           expandedTokens =
             tokens & foldMap \case
@@ -109,8 +123,7 @@ insertDefinitionDocuments docs = pipelined $ do
               TermTagToken tag -> [TermTagToken tag]
               TypeTagToken tag -> [TypeTagToken tag]
               TypeModToken mod -> [TypeModToken mod]
-       in ( project,
-            release,
+       in ( rootBranchHashId,
             -- Prefix all names with '.' in the index
             -- It helps with prefix matching by segment.
             Name.toText . Name.makeAbsolute $ fqn,
@@ -119,6 +132,17 @@ insertDefinitionDocuments docs = pipelined $ do
             tag,
             Hasql.Jsonb $ Aeson.toJSON metadata
           )
+
+-- | When we publish a new release, we also copy those search docs into the global search.
+copySearchDocumentsForRelease :: BranchHashId -> ProjectId -> ReleaseId -> Transaction e ()
+copySearchDocumentsForRelease rootBranchHashId projectId releaseId = do
+  execute_
+    [sql|
+    INSERT INTO global_definition_search_docs (project_id, release_id, name, search_tokens, arity, tag, metadata)
+      SELECT #{projectId}, #{releaseId}, doc.name, doc.search_tokens, doc.arity, doc.tag::definition_tag, doc.metadata
+      FROM scoped_definition_search_docs doc
+      WHERE doc.root_namespace_hash_id = #{rootBranchHashId}
+    |]
 
 -- | Wipe out any rows for the given project, useful when re-indexing and we only want to
 -- have records for the latest release.
