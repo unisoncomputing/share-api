@@ -79,8 +79,8 @@ fetch "$test_user" POST branch-create '/ucm/v1/projects/create-project-branch' "
 
 fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notifications/hub'
 
-test_notification_id=$(fetch_data_jq "$test_user" GET list-notifications-test '/users/test/notifications/hub' '.notifications[0].id')
-transcripts_notification_id=$(fetch_data_jq "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' '.notifications[0].id')
+test_notification_id=$(fetch_data_jq "$test_user" GET list-notifications-test '/users/test/notifications/hub' '.items[0].id')
+transcripts_notification_id=$(fetch_data_jq "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' '.items[0].id')
 
 fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub'
 

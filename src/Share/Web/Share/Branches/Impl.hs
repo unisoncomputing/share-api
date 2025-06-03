@@ -7,7 +7,6 @@ module Share.Web.Share.Branches.Impl where
 
 import Control.Lens
 import Control.Monad.Trans.Maybe
-import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (UTCTime)
@@ -415,16 +414,11 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
                   let branchShortHand = BranchShortHand {branchName, contributorHandle}
                    in API.branchToShareBranch branchShortHand branch shareProject contributions
               )
-  pure $ Paged {items = shareBranches, cursor = nextCursor (toListOf (folded . _1) branches)}
+  branches
+    & pagedOn (\(Branch {updatedAt, branchId}, _, _) -> (updatedAt, branchId))
+    & (\p -> p {items = shareBranches})
+    & pure
   where
-    nextCursor branches = case branches of
-      [] -> Nothing
-      branches@(x : xs)
-        | length branches < fromIntegral (getLimit limit) -> Nothing
-        | otherwise ->
-            let Branch {updatedAt, branchId} = NonEmpty.last (x :| xs)
-             in Just $ Cursor (updatedAt, branchId)
-
     userIdForHandle handle = do
       fmap user_id <$> PG.runTransaction (UserQ.userByHandle handle)
     limit = fromMaybe defaultLimit mayLimit
@@ -499,18 +493,13 @@ listBranchesByUserEndpoint (AuthN.MaybeAuthedUserID callerUserId) contributorHan
                       shareProject = projectToAPI projectOwnerHandle project
                    in API.branchToShareBranch branchShortHand branch shareProject contributions
               )
-  pure $ Paged {items = shareBranches, cursor = nextCursor branches}
+  expandedBranches
+    & pagedOn ((\(Branch {updatedAt, branchId}, _contr, _proj, _projOwner) -> (updatedAt, branchId)))
+    & (\p -> p {items = shareBranches})
+    & pure
   where
     defaultLimit = Limit 20
     limit = fromMaybe defaultLimit mayLimit
-
-    nextCursor branches = case branches of
-      [] -> Nothing
-      branches@(x : xs)
-        | length branches < fromIntegral (getLimit limit) -> Nothing
-        | otherwise ->
-            let (Branch {updatedAt, branchId}, _proj, _projOwner) = NonEmpty.last (x :| xs)
-             in Just $ Cursor (updatedAt, branchId)
 
 -- | Given an optional root hash, and a branch head, validate that the root hash is accessible from the branch head.
 resolveRootHash :: Codebase.CodebaseEnv -> CausalId -> Maybe CausalHash -> WebApp CausalId

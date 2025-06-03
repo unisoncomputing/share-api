@@ -1,6 +1,5 @@
 {
   "body": {
-    "cursor": "<CURSOR>",
     "items": [
       {
         "author": {
@@ -59,7 +58,9 @@
         "title": "Fix issue with user authentication",
         "updatedAt": "<TIMESTAMP>"
       }
-    ]
+    ],
+    "nextCursor": "<CURSOR>",
+    "prevCursor": "<CURSOR>"
   },
   "status": [
     {

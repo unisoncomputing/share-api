@@ -1,6 +1,5 @@
 {
   "body": {
-    "cursor": null,
     "items": [
       {
         "branchRef": "@transcripts/contribution",
@@ -61,7 +60,9 @@
         },
         "updatedAt": "<TIMESTAMP>"
       }
-    ]
+    ],
+    "nextCursor": "<CURSOR>",
+    "prevCursor": "<CURSOR>"
   },
   "status": [
     {

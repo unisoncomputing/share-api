@@ -141,10 +141,10 @@ listContributionsByProjectEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) han
       User.user_id <$> UserQ.userByHandle authorHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
     pure (project, authorFilterID)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionListByProject mayCallerUserId projectId
-  (nextCursor, contributions) <- PG.runTransaction $ do
+  pagedContributions <- PG.runTransaction $ do
     ContributionsQ.listContributionsByProjectId projectId limit cursor authorUserId statusFilter kindFilter
-      >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)
-  pure $ Paged {items = contributions, cursor = nextCursor}
+      >>= UsersQ.userDisplayInfoOf (traversed . traversed)
+  pure $ pagedContributions
   where
     limit = fromMaybe 20 mayLimit
     projectShorthand = IDs.ProjectShortHand {userHandle = handle, projectSlug}
@@ -227,13 +227,14 @@ getContributionTimelineEndpoint ::
 getContributionTimelineEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle projectSlug contributionNumber mayCursor mayLimit = do
   (Project {projectId}, shareContributionTimeline, nextCursor) <- PG.runTransactionOrRespondError $ do
     project@Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "project:missing") "Project not found")
-    (nextCursor, shareContributionTimeline) <- ContributionsQ.getPagedShareContributionTimelineByProjectIdAndNumber projectId contributionNumber (unCursor <$> mayCursor) limit
+    (nextCursor, shareContributionTimeline) <- ContributionsQ.getPagedShareContributionTimelineByProjectIdAndNumber projectId contributionNumber (location <$> mayCursor) limit
     shareContributionsTimelineWithUserInfo <-
       shareContributionTimeline
         & UsersQ.userDisplayInfoOf (traverse . traverse)
     pure (project, shareContributionsTimelineWithUserInfo, nextCursor)
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionRead mayCallerUserId projectId
-  pure $ Paged {items = shareContributionTimeline, cursor = Cursor <$> nextCursor}
+  -- We don't currently support backwards pagination on contribution activity.
+  pure $ Paged {items = shareContributionTimeline, nextCursor = Cursor <$> nextCursor <*> pure Next, prevCursor = Nothing}
   where
     limit = fromMaybe 20 mayLimit
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
@@ -247,13 +248,13 @@ listContributionsByUserEndpoint ::
   Maybe ContributionKindFilter ->
   WebApp (Paged ListContributionsCursor (ShareContribution UserDisplayInfo))
 listContributionsByUserEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle mayCursor mayLimit statusFilter kindFilter = do
-  (contributions, nextCursor) <- PG.runTransactionOrRespondError $ do
+  contributions <- PG.runTransactionOrRespondError $ do
     user <- UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "User not found")
-    (nextCursor, contributions) <-
+    contributions <-
       ContributionsQ.listContributionsByUserId mayCallerUserId (User.user_id user) limit mayCursor statusFilter kindFilter
-        >>= UsersQ.userDisplayInfoOf (_2 . traversed . traversed)
-    pure (contributions, nextCursor)
-  pure $ Paged {items = contributions, cursor = nextCursor}
+        >>= UsersQ.userDisplayInfoOf (traversed . traversed)
+    pure contributions
+  pure contributions
   where
     limit = fromMaybe 20 mayLimit
 

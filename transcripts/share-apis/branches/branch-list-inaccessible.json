@@ -1,7 +1,8 @@
 {
   "body": {
-    "cursor": null,
-    "items": []
+    "items": [],
+    "nextCursor": null,
+    "prevCursor": null
   },
   "status": [
     {

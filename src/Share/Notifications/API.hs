@@ -9,7 +9,7 @@ module Share.Notifications.API
     SubscriptionRoutes (..),
     EmailRoutes (..),
     WebhookRoutes (..),
-    GetHubEntriesResponse (..),
+    GetHubEntriesCursor,
     StatusFilter (..),
     UpdateHubEntriesRequest (..),
     GetSubscriptionsResponse (..),
@@ -42,6 +42,7 @@ import Share.IDs
 import Share.Notifications.Types (DeliveryMethodId, HydratedEvent, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, NotificationTopicGroup, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
+import Share.Utils.API (Cursor, Paged)
 import Share.Utils.URI (URIParam)
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
@@ -209,20 +210,14 @@ instance FromJSON StatusFilter where
       Nothing -> fail "Empty status filter"
       Just statuses -> pure $ StatusFilter $ NESet.fromList statuses
 
+type GetHubEntriesCursor = (UTCTime, NotificationHubEntryId)
+
 type GetHubEntriesEndpoint =
   AuthenticatedUserId
     :> QueryParam "limit" Int
-    :> QueryParam "after" UTCTime
+    :> QueryParam "cursor" (Cursor GetHubEntriesCursor)
     :> QueryParam "status" StatusFilter
-    :> Get '[JSON] GetHubEntriesResponse
-
-data GetHubEntriesResponse = GetHubEntriesResponse
-  { notifications :: [NotificationHubEntry UnifiedDisplayInfo HydratedEvent]
-  }
-
-instance ToJSON GetHubEntriesResponse where
-  toJSON GetHubEntriesResponse {notifications} =
-    object ["notifications" .= notifications]
+    :> Get '[JSON] (Paged GetHubEntriesCursor (NotificationHubEntry UnifiedDisplayInfo HydratedEvent))
 
 type UpdateHubEntriesEndpoint =
   AuthenticatedUserId
