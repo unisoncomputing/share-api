@@ -36,8 +36,8 @@ import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.Tickets.Queries qualified as TicketQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
-import Share.Utils.API (Cursor (..), CursorDirection (..))
 import Share.Ticket
+import Share.Utils.API (Cursor (..), CursorDirection (..))
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
@@ -459,8 +459,8 @@ hydrateEventPayload = \case
                 [sql|
                 SELECT cc.comment_id, cc.content, cc.created_at, cc.updated_at
                 FROM comment_content cc
-                JOIN users author ON c.author_user_id = author.id
-                WHERE c.id = #{commentId}
+                JOIN users author ON cc.author_id = author.id
+                WHERE cc.comment_id = #{commentId}
               |]
             )
         <*> (UsersQ.userDisplayInfoOf id commentAuthorUserId)

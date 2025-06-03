@@ -14,6 +14,69 @@
             "kind": "user"
           },
           "data": {
+            "kind": "project:ticket:comment",
+            "link": "http://<HOST>:1234/@test/publictestproject/tickets/1",
+            "payload": {
+              "author": {
+                "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+                "handle": "transcripts",
+                "name": "Transcript User",
+                "userId": "U-<UUID>"
+              },
+              "commentId": "CMT-<UUID>",
+              "content": "This is a new comment on the ticket",
+              "createdAt": "<TIMESTAMP>",
+              "project": {
+                "projectId": "P-<UUID>",
+                "projectOwnerHandle": "test",
+                "projectOwnerUserId": "U-<UUID>",
+                "projectShortHand": "@test/publictestproject",
+                "projectSlug": "publictestproject"
+              },
+              "ticket": {
+                "author": {
+                  "avatarUrl": null,
+                  "handle": "test",
+                  "name": null,
+                  "userId": "U-<UUID>"
+                },
+                "createdAt": "<TIMESTAMP>",
+                "description": "I want the code to solve all my problems but it does not. Please fix.\n\n## Things I need:\n\n* It should tie my *shoes*\n* It should make me _coffee_\n* It should do my taxes\n",
+                "number": 1,
+                "status": "open",
+                "ticketId": "T-<UUID>",
+                "title": "Bug Report"
+              }
+            }
+          },
+          "id": "EVENT-<UUID>",
+          "occurredAt": "<TIMESTAMP>",
+          "scope": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          }
+        },
+        "id": "NOT-<UUID>",
+        "status": "unread"
+      },
+      {
+        "createdAt": "<TIMESTAMP>",
+        "event": {
+          "actor": {
+            "info": {
+              "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+              "handle": "transcripts",
+              "name": "Transcript User",
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          },
+          "data": {
             "kind": "project:ticket:created",
             "link": "http://<HOST>:1234/@test/publictestproject/tickets/3",
             "payload": {

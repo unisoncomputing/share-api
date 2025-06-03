@@ -58,6 +58,26 @@ fetch "$test_user" POST public-contribution-create '/users/test/projects/publict
     "targetBranchRef": "main"
 }'
 
+# Add a comment to a contribution, which should trigger a notification for the test user, which
+# follows "watch_project"
+fetch "$transcripts_user" POST contribution-comment-create '/users/test/projects/publictestproject/contributions/1/timeline/comments' '{
+    "content": "This is a new comment"
+}'
+
+# Create a ticket in the public project, which should trigger a notification for the test user, which
+# follows "watch_project"
+
+fetch "$transcripts_user" POST ticket-create '/users/test/projects/publictestproject/tickets' '{
+    "title": "My Ticket",
+    "description": "My description"
+}'
+
+# Add a comment to the ticket, which should trigger a notification for the test user, which
+# follows "watch_project"
+fetch "$transcripts_user" POST ticket-comment-create '/users/test/projects/publictestproject/tickets/1/timeline/comments' '{
+    "content": "This is a new comment on the ticket"
+}'
+
 # Create a contribution in a private project, which shouldn't create a notification for either, because 'test' has
 # a subscription filter and 'transcripts' doesn't have access.
 fetch "$test_user" POST private-contribution-create '/users/test/projects/privatetestproject/contributions' '{
@@ -81,6 +101,8 @@ fetch "$unauthorized_user" GET notifications-get-unauthorized '/users/test/notif
 
 test_notification_id=$(fetch_data_jq "$test_user" GET list-notifications-test '/users/test/notifications/hub' '.items[0].id')
 transcripts_notification_id=$(fetch_data_jq "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' '.items[0].id')
+
+fetch "$test_user" GET list-notifications-test '/users/test/notifications/hub'
 
 fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub'
 
