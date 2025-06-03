@@ -7,9 +7,10 @@ module Share.Postgres.Contributions.Ops (createContribution) where
 import Share.Contribution (ContributionStatus (..))
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
-import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectContributionData (..))
+import Share.Notifications.Types (ContributionData (..), NotificationEvent (..), NotificationEventData (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContribQ
+import Share.Postgres.Projects.Queries qualified as ProjectQ
 import Share.Prelude
 
 createContribution ::
@@ -55,29 +56,21 @@ createContribution authorId projectId title description status sourceBranchId ta
         RETURNING contributions.id, contributions.contribution_number
       |]
   ContribQ.insertContributionStatusChangeEvent contributionId authorId Nothing status
-  (projectResourceId, projectOwnerUserId, projectPrivate) <-
-    PG.queryExpect1Row
-      [PG.sql|
-    SELECT p.resource_id, p.owner_user_id, p.private
-    FROM projects p
-    WHERE p.id = #{projectId}
-    |]
+  (projectData, projectResourceId, projectOwnerUserId) <- ProjectQ.projectNotificationData projectId
 
-  let contributionEventData =
-        ProjectContributionData
-          { projectId,
-            contributionId,
+  let contributionData =
+        ContributionData
+          { contributionId,
             fromBranchId = sourceBranchId,
             toBranchId = targetBranchId,
-            contributorUserId = authorId,
-            public = not projectPrivate
+            contributorUserId = authorId
           }
   let notifEvent =
         NotificationEvent
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
-            eventData = ProjectContributionCreatedData contributionEventData,
+            eventData = ProjectContributionCreatedData projectData contributionData,
             eventScope = projectOwnerUserId,
             eventActor = authorId
           }

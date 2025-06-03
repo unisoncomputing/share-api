@@ -6,12 +6,14 @@ module Share.Postgres.Projects.Queries
     addProjectRoles,
     removeProjectRoles,
     expectProjectShortHandsOf,
+    projectNotificationData,
   )
 where
 
 import Control.Lens
 import Data.Set qualified as Set
 import Share.IDs
+import Share.Notifications.Types (ProjectData (..))
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -110,3 +112,22 @@ expectProjectShortHandsOf trav s = do
       if length results /= length projIds
         then error "expectProjectShortHandsOf: Missing expected project short hand"
         else pure results
+
+-- | Info used when constructing a notification within a project.
+projectNotificationData :: ProjectId -> Transaction e (ProjectData, ResourceId, UserId)
+projectNotificationData projectId = do
+  (resourceId, ownerUserId, isPrivate) <-
+    PG.queryExpect1Row
+      [PG.sql|
+      SELECT p.resource_id, p.owner_user_id, p.private
+      FROM projects p
+      WHERE p.id = #{projectId}
+    |]
+  pure
+    ( ProjectData
+        { projectId,
+          public = not isPrivate
+        },
+      resourceId,
+      ownerUserId
+    )

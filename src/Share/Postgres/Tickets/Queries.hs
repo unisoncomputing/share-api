@@ -3,8 +3,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Share.Postgres.Tickets.Queries
-  ( createTicket,
-    ticketByProjectIdAndNumber,
+  ( ticketByProjectIdAndNumber,
     shareTicketByProjectIdAndNumber,
     listTicketsByProjectId,
     ticketById,
@@ -31,40 +30,6 @@ import Share.Web.Errors
 import Share.Web.Share.Comments
 import Share.Web.Share.Tickets.API
 import Share.Web.Share.Tickets.Types
-
-createTicket ::
-  -- | Author
-  UserId ->
-  ProjectId ->
-  -- | Title
-  Text ->
-  -- | Description
-  Maybe Text ->
-  TicketStatus ->
-  PG.Transaction e (TicketId, TicketNumber)
-createTicket authorId projectId title description status = do
-  (ticketId, number) <-
-    PG.queryExpect1Row
-      [PG.sql|
-        WITH new_ticket_number AS (
-            SELECT (COALESCE(MAX(ticket_number), 0) + 1) AS new
-            FROM tickets ticket
-            WHERE ticket.project_id = #{projectId}
-        )
-        INSERT INTO tickets(
-          author_id,
-          project_id,
-          title,
-          description,
-          status,
-          ticket_number
-        )
-        SELECT #{authorId}, #{projectId}, #{title}, #{description}, #{status}::ticket_status, new_ticket_number.new
-          FROM new_ticket_number
-        RETURNING tickets.id, tickets.ticket_number
-      |]
-  insertTicketStatusChangeEvent ticketId authorId Nothing status
-  pure (ticketId, number)
 
 ticketByProjectIdAndNumber ::
   ProjectId ->
@@ -167,9 +132,9 @@ listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter =
           nextCursor = lastMay items <&> \(ShareTicket {updatedAt, ticketId}) -> Cursor (updatedAt, ticketId) Next
        in Paged {items, prevCursor, nextCursor}
 
-ticketById :: TicketId -> PG.Transaction e (Maybe Ticket)
+ticketById :: (PG.QueryA m) => TicketId -> m Ticket
 ticketById ticketId = do
-  PG.query1Row
+  PG.queryExpect1Row
     [PG.sql|
         SELECT
           ticket.id,
@@ -185,19 +150,17 @@ ticketById ticketId = do
         WHERE ticket.id = #{ticketId}
       |]
 
-updateTicket :: UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> PG.Transaction e Bool
+updateTicket :: UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> PG.Transaction e ()
 updateTicket callerUserId ticketId newTitle newDescription newStatus = do
-  isJust <$> runMaybeT do
-    Ticket {..} <- MaybeT $ ticketById ticketId
-    let updatedTitle = fromMaybe title newTitle
-    let updatedDescription = fromNullableUpdate description newDescription
-    let updatedStatus = fromMaybe status newStatus
-    -- Add a status change event
-    when (isJust newStatus && newStatus /= Just status) do
-      lift $ insertTicketStatusChangeEvent ticketId callerUserId (Just status) updatedStatus
-    lift $
-      PG.execute_
-        [PG.sql|
+  Ticket {..} <- ticketById ticketId
+  let updatedTitle = fromMaybe title newTitle
+  let updatedDescription = fromNullableUpdate description newDescription
+  let updatedStatus = fromMaybe status newStatus
+  -- Add a status change event
+  when (isJust newStatus && newStatus /= Just status) do
+    insertTicketStatusChangeEvent ticketId callerUserId (Just status) updatedStatus
+  PG.execute_
+    [PG.sql|
         UPDATE tickets
         SET
           title = #{updatedTitle},

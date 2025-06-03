@@ -64,6 +64,7 @@ library
       Share.Postgres.Causal.Conversions
       Share.Postgres.Causal.Queries
       Share.Postgres.Causal.Types
+      Share.Postgres.Comments.Ops
       Share.Postgres.Comments.Queries
       Share.Postgres.Contributions.Ops
       Share.Postgres.Contributions.Queries
@@ -93,6 +94,7 @@ library
       Share.Postgres.Sync.Conversions
       Share.Postgres.Sync.Queries
       Share.Postgres.Sync.Types
+      Share.Postgres.Tickets.Ops
       Share.Postgres.Tickets.Queries
       Share.Postgres.Users.Queries
       Share.Prelude

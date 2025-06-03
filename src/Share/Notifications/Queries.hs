@@ -33,8 +33,10 @@ import Share.Notifications.Types
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
+import Share.Postgres.Tickets.Queries qualified as TicketQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
+import Share.Ticket
 import Share.Utils.API (Cursor (..), CursorDirection (..))
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
@@ -315,17 +317,64 @@ getNotificationSubscription subscriberUserId subscriptionId = do
 hydrateEventPayload :: forall m. (QueryA m) => NotificationEventData -> m HydratedEventPayload
 hydrateEventPayload = \case
   ProjectBranchUpdatedData
-    (ProjectBranchData {projectId, branchId}) -> do
+    (ProjectData {projectId})
+    (BranchData {branchId}) -> do
       HydratedProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
   ProjectContributionCreatedData
-    (ProjectContributionData {projectId, contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
-      HydratedProjectContributionCreatedPayload <$> hydrateContributionCreatedPayload contributionId projectId fromBranchId toBranchId contributorUserId
+    (ProjectData {projectId})
+    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
+      HydratedProjectContributionCreatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+  ProjectContributionUpdatedData
+    (ProjectData {projectId})
+    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
+      HydratedProjectContributionUpdatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+  ProjectContributionCommentData
+    (ProjectData {projectId})
+    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId})
+    (CommentData {commentId, commentAuthorUserId}) -> do
+      HydratedProjectContributionCommentPayload
+        <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+        <*> hydrateCommentPayload commentId commentAuthorUserId
+  ProjectTicketCreatedData
+    (ProjectData {projectId})
+    (TicketData {ticketId, ticketAuthorUserId}) -> do
+      HydratedProjectTicketCreatedPayload <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+  ProjectTicketUpdatedData
+    (ProjectData {projectId})
+    (TicketData {ticketId, ticketAuthorUserId}) -> do
+      HydratedProjectTicketUpdatedPayload <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+  ProjectTicketCommentData
+    (ProjectData {projectId})
+    (TicketData {ticketId, ticketAuthorUserId})
+    (CommentData {commentId, commentAuthorUserId}) -> do
+      HydratedProjectTicketCommentPayload
+        <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+        <*> hydrateCommentPayload commentId commentAuthorUserId
   where
-    hydrateContributionCreatedPayload :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionCreatedPayload
-    hydrateContributionCreatedPayload contributionId projectId fromBranchId toBranchId authorUserId = do
+    hydrateTicketPayload :: ProjectId -> TicketId -> UserId -> m ProjectTicketPayload
+    hydrateTicketPayload projectId ticketId authorUserId = do
+      projectInfo <- hydrateProjectPayload projectId
+      ticketInfo <- hydrateTicketInfo ticketId authorUserId
+      pure $ ProjectTicketPayload {projectInfo, ticketInfo}
+    hydrateTicketInfo :: TicketId -> UserId -> m TicketPayload
+    hydrateTicketInfo ticketId authorUserId = do
+      author <- UsersQ.userDisplayInfoOf id authorUserId
+      ticket <- TicketQ.ticketById ticketId
+      pure $
+        TicketPayload
+          { ticketId,
+            ticketNumber = ticket.number,
+            ticketTitle = ticket.title,
+            ticketDescription = ticket.description,
+            ticketStatus = ticket.status,
+            ticketAuthor = author,
+            ticketCreatedAt = ticket.createdAt
+          }
+    hydrateContributionPayload :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionPayload
+    hydrateContributionPayload contributionId projectId fromBranchId toBranchId authorUserId = do
       projectInfo <- hydrateProjectPayload projectId
       contributionInfo <- hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId
-      pure $ ProjectContributionCreatedPayload {projectInfo, contributionInfo = contributionInfo projectInfo}
+      pure $ ProjectContributionPayload {projectInfo, contributionInfo = contributionInfo projectInfo}
     hydrateContributionInfo :: ContributionId -> BranchId -> BranchId -> UserId -> m (ProjectPayload -> ContributionPayload)
     hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId = do
       author <- UsersQ.userDisplayInfoOf id authorUserId
@@ -341,7 +390,8 @@ hydrateEventPayload = \case
             contributionStatus = contribution.status,
             contributionAuthor = author,
             contributionSourceBranch = sourceBranch projectInfo,
-            contributionTargetBranch = targetBranch projectInfo
+            contributionTargetBranch = targetBranch projectInfo,
+            contributionCreatedAt = contribution.createdAt
           }
     hydrateProjectBranchPayload projectId branchId = do
       projectInfo <- hydrateProjectPayload projectId
@@ -395,3 +445,22 @@ hydrateEventPayload = \case
                     projectOwnerHandle,
                     projectOwnerUserId
                   }
+    hydrateCommentPayload :: CommentId -> UserId -> m CommentPayload
+    hydrateCommentPayload commentId commentAuthorUserId = do
+      let construct (commentId, commentContent, commentCreatedAt) commentAuthor =
+            CommentPayload
+              { commentId,
+                commentContent,
+                commentCreatedAt,
+                commentAuthor
+              }
+      construct
+        <$> ( queryExpect1Row
+                [sql|
+                SELECT cc.comment_id, cc.content, cc.created_at, cc.updated_at
+                FROM comment_content cc
+                JOIN users author ON cc.author_id = author.id
+                WHERE cc.comment_id = #{commentId}
+              |]
+            )
+        <*> (UsersQ.userDisplayInfoOf id commentAuthorUserId)

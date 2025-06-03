@@ -10,6 +10,7 @@ import Share.IDs
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
+import Share.Postgres.Comments.Ops qualified as CommentOps
 import Share.Postgres.Comments.Queries qualified as CommentsQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Users.Queries qualified as UserQ
@@ -37,7 +38,7 @@ createCommentEndpoint session userHandle projectSlug contributionOrTicketId (Cre
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkCommentCreate callerUserId projectId
 
   PG.runTransaction $ do
-    commentEvent <- CommentsQ.createComment callerUserId contributionOrTicketId content
+    commentEvent <- CommentOps.createComment callerUserId contributionOrTicketId content
     UserQ.userDisplayInfoOf traversed (CommentEvent commentEvent)
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}

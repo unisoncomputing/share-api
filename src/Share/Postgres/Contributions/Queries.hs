@@ -20,6 +20,7 @@ module Share.Postgres.Contributions.Queries
     getPrecomputedNamespaceDiff,
     savePrecomputedNamespaceDiff,
     contributionsRelatedToBranches,
+    contributionNotificationData,
   )
 where
 
@@ -32,6 +33,7 @@ import Safe (headMay, lastMay)
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
+import Share.Notifications.Types (ContributionData (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Comments.Queries (commentsByTicketOrContribution)
 import Share.Postgres.IDs
@@ -572,3 +574,14 @@ contributionsRelatedToBranches branchIds = do
             )
             AND contr.status IN (#{Draft}, #{InReview})
       |]
+
+contributionNotificationData :: ContributionId -> PG.Transaction e ContributionData
+contributionNotificationData contributionId = do
+  Contribution {..} <- contributionById contributionId
+  pure
+    ContributionData
+      { contributionId,
+        fromBranchId = sourceBranchId,
+        toBranchId = targetBranchId,
+        contributorUserId = author
+      }

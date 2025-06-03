@@ -14,7 +14,7 @@
             "kind": "user"
           },
           "data": {
-            "kind": "projectBranchUpdated",
+            "kind": "project:branch:updated",
             "link": "http://<HOST>:1234/@test/publictestproject/code/newbranch/latest",
             "payload": {
               "branch": {
