@@ -23,6 +23,7 @@ import Share.PrettyPrintEnvDecl.Postgres qualified as PostgresPPE
 import Share.Utils.Caching.JSON qualified as Caching
 import U.Codebase.Causal qualified as V2Causal
 import Unison.Codebase.Path qualified as Path
+import Unison.Codebase.Runtime qualified as Rt
 import Unison.LabeledDependency qualified as LD
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Reference qualified as Reference
@@ -30,6 +31,8 @@ import Unison.Server.Doc (Doc)
 import Unison.Server.Doc qualified as Doc
 import Unison.ShortHash qualified as SH
 import Unison.Util.Pretty (Width)
+
+data DocEvalError = DocEvalError (NonEmpty Rt.Error)
 
 -- | Find, eval, and render the first doc we find with any of the provided names within the given namespace
 -- If no doc is found, return Nothing
@@ -41,7 +44,7 @@ findAndRenderDoc ::
   Path.Path ->
   CausalId ->
   Maybe Width ->
-  CodebaseM e (Maybe Doc)
+  CodebaseM e (Maybe (Doc, Maybe (NonEmpty Rt.Error)))
 findAndRenderDoc docNames runtime namespacePath rootCausalId _mayWidth = runMaybeT do
   rootNamespaceHashId <- lift $ CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
   namespaceCausal <- MaybeT $ CausalQ.loadCausalNamespaceAtPath rootCausalId namespacePath
@@ -56,9 +59,17 @@ findAndRenderDoc docNames runtime namespacePath rootCausalId _mayWidth = runMayb
             sandbox = Just codebaseOwnerUserId
           }
 
-  lift $ Caching.usingJSONCache cacheKey do
+  cacheResult <- lift $ Caching.usingJSONCache cacheKey do
     namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootNamespaceHashId (coerce $ Path.toList namespacePath)
-    eDoc <- Backend.evalDocRef runtime docRef
+    (eDoc, errs) <- Backend.evalDocRef runtime docRef
     let docDeps = Doc.dependencies eDoc <> Set.singleton (LD.TermReference docRef)
     docPPE <- PostgresPPE.ppedForReferences namesPerspective docDeps
-    pure $ Doc.renderDoc docPPE eDoc
+    let result = Doc.renderDoc docPPE eDoc
+    case errs of
+      Nothing -> pure $ Right result
+      Just errors -> pure $ Left (result, errors)
+  case cacheResult of
+    Left (doc, errors) -> do
+      pure (doc, Just errors)
+    Right doc -> do
+      pure (doc, Nothing)

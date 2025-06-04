@@ -9,7 +9,9 @@ module Share.Utils.Caching
     conditionallyCachedResponse,
     causalIdCacheKey,
     branchIdCacheKey,
+    toCached,
     Cached,
+    ShouldCache (..),
   )
 where
 
@@ -56,11 +58,18 @@ cachedResponse ::
   WebApp a ->
   WebApp (Cached ct a)
 cachedResponse authzReceipt endpointName cacheParams action =
-  conditionallyCachedResponse authzReceipt endpointName cacheParams ((,True) <$> action)
+  conditionallyCachedResponse authzReceipt endpointName cacheParams (Right <$> action)
+    <&> either absurd id
+
+data ShouldCache = DoCache | DontCache
+  deriving (Eq)
+
+toCached :: forall ct a. (Servant.MimeRender ct a) => a -> Cached ct a
+toCached a = Cached . BL.toStrict $ Servant.mimeRender (Proxy @ct) a
 
 -- | Like 'cachedResponse', but only cache (True, x) values.
 conditionallyCachedResponse ::
-  forall ct a.
+  forall ct e a.
   (Servant.MimeRender ct a) =>
   AuthZ.AuthZReceipt ->
   -- | The name of the endpoint we're caching. Must be unique.
@@ -68,8 +77,8 @@ conditionallyCachedResponse ::
   -- | Cache Keys: All parameters which affect the response
   [Text] ->
   -- | How to generate the response if it's not in the cache. True means cache, false means don't cache.
-  WebApp (a, Bool) ->
-  WebApp (Cached ct a)
+  WebApp (Either e a) ->
+  WebApp (Either e (Cached ct a))
 conditionallyCachedResponse authzReceipt endpointName cacheParams action = do
   requestIsCacheable <- shouldUseCaching
   let mayCachingToken = AuthZ.getCacheability authzReceipt
@@ -79,16 +88,18 @@ conditionallyCachedResponse authzReceipt endpointName cacheParams action = do
       then getCachedResponse endpointName cacheParams
       else pure Nothing
   case mayCachedResponse of
-    Just cachedResponse -> pure cachedResponse
+    Just cachedResponse -> pure $ Right cachedResponse
     Nothing -> do
-      (a, cache) <- action
-      let cachedResponse :: Cached ct a
-          cachedResponse = Cached . BL.toStrict $ Servant.mimeRender (Proxy @ct) a
-      when (shouldUseCaching && cache) do
-        -- Only actually cache the response if it's valid to do so.
-        whenJust mayCachingToken \ct ->
-          cacheResponse ct endpointName cacheParams cachedResponse
-      pure cachedResponse
+      action >>= \case
+        Right a -> do
+          let cachedResponse :: Cached ct a
+              cachedResponse = toCached a
+          when (shouldUseCaching) do
+            -- Only actually cache the response if it's valid to do so.
+            whenJust mayCachingToken \ct ->
+              cacheResponse ct endpointName cacheParams cachedResponse
+          pure . Right $ cachedResponse
+        Left e -> pure $ Left e
 
 -- | Cached responses expire if not accessed in 7 days.
 -- Or, it could be evicted sooner if we run out of space.

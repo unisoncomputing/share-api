@@ -286,7 +286,7 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
     lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
 
   let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newCausalId, Caching.causalIdCacheKey oldCausalId]
-  Caching.conditionallyCachedResponse authZReceipt "contribution-diff" cacheKeys do
+  result <- Caching.conditionallyCachedResponse authZReceipt "contribution-diff" cacheKeys do
     (oldCausalHash, newCausalHash, maybeNamespaceDiff) <-
       PG.runTransaction do
         PG.pipelined do
@@ -294,20 +294,22 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
             <$> CausalQ.expectCausalHashesByIdsOf id oldCausalId
             <*> CausalQ.expectCausalHashesByIdsOf id newCausalId
             <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId)
+
+    let diff = case maybeNamespaceDiff of
+          Just diff -> Right $ ShareNamespaceDiffStatus'Done (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
+          Nothing -> Left $ ShareNamespaceDiffStatus'StillComputing
     let response =
-          ShareNamespaceDiffResponse
-            { project = projectShorthand,
-              newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
-              newRefHash = Just $ PrefixedHash newCausalHash,
-              oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
-              oldRefHash = Just $ PrefixedHash oldCausalHash,
-              diff =
-                case maybeNamespaceDiff of
-                  Just diff -> ShareNamespaceDiffStatus'Done (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
-                  Nothing -> ShareNamespaceDiffStatus'StillComputing
-            }
-    let shouldCache = isJust maybeNamespaceDiff
-    pure (response, shouldCache)
+          diff & bothMap \diff ->
+            ShareNamespaceDiffResponse
+              { project = projectShorthand,
+                newRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand newPBSH,
+                newRefHash = Just $ PrefixedHash newCausalHash,
+                oldRef = IDs.IsBranchShortHand $ IDs.projectBranchShortHandToBranchShortHand oldPBSH,
+                oldRefHash = Just $ PrefixedHash oldCausalHash,
+                diff
+              }
+    pure response
+  pure $ either Caching.toCached id result
   where
     projectShorthand = IDs.ProjectShortHand {userHandle, projectSlug}
 
