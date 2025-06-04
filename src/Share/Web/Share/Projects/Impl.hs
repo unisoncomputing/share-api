@@ -20,6 +20,7 @@ import Share.Codebase qualified as Codebase
 import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
+import Share.Notifications.Queries qualified as NotifsQ
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
@@ -118,6 +119,7 @@ projectServer session handle =
                      :<|> getProjectEndpoint session handle slug
                      :<|> favProjectEndpoint session handle slug
                      :<|> maintainersResourceServer slug
+                     :<|> projectNotificationSubscriptionEndpoint session handle slug
              )
   where
     addTags :: forall x. ProjectSlug -> WebApp x -> WebApp x
@@ -308,11 +310,12 @@ namespaceHashForBranchOrRelease authZReceipt Project {projectId, ownerUserId = p
         pure (codebase, causalId, branchHashId)
 
 createProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> CreateProjectRequest -> WebApp CreateProjectResponse
-createProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug req = do
+createProjectEndpoint mayCaller userHandle projectSlug req = do
+  callerUserId <- AuthN.requireAuthenticatedUser mayCaller
   User {user_id = targetUserId} <- PGO.expectUserByHandle userHandle
   AuthZ.permissionGuard $ AuthZ.checkProjectCreate callerUserId targetUserId
   let CreateProjectRequest {summary, tags, visibility} = req
-  projectId <- PGO.createProject targetUserId projectSlug summary tags visibility
+  projectId <- PGO.createProject callerUserId targetUserId projectSlug summary tags visibility
   addRequestTag "project-id" (IDs.toText projectId)
   pure CreateProjectResponse
 
@@ -344,17 +347,23 @@ getProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp GetPr
 getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug = do
   projectId <- PG.runTransaction (Q.projectIDFromHandleAndSlug userHandle projectSlug) `or404` (EntityMissing (ErrorID "project:missing") "Project not found")
   addRequestTag "project-id" (IDs.toText projectId)
-  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats, permissionsForProject, isPremiumProjectInfo) <- PG.runTransactionOrRespondError do
+  (releaseDownloads, (project, favData, projectOwner, defaultBranch, latestRelease), contributionStats, ticketStats, permissionsForProject, isPremiumProjectInfo, isUserWatchingProject) <- PG.runTransactionOrRespondError do
     projectWithMeta <- (Q.projectByIdWithMetadata callerUserId projectId) `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     releaseDownloads <- Q.releaseDownloadStatsForProject projectId
     contributionStats <- Q.contributionStatsForProject projectId
     ticketStats <- Q.ticketStatsForProject projectId
     permissionsForProject <- PermissionsInfo <$> AuthZQ.permissionsForProject callerUserId projectId
     isPremiumProjectInfo <- IsPremiumProject <$> ProjectsQ.isPremiumProject projectId
-    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats, permissionsForProject, isPremiumProjectInfo)
+    isUserWatchingProject <- case callerUserId of
+      Nothing -> pure $ IsSubscribed False
+      Just caller -> do
+        NotifsQ.isUserSubscribedToWatchProject caller projectId >>= \case
+          Just _ -> pure $ IsSubscribed True
+          Nothing -> pure $ IsSubscribed False
+    pure (releaseDownloads, projectWithMeta, contributionStats, ticketStats, permissionsForProject, isPremiumProjectInfo, isUserWatchingProject)
   let releaseDownloadStats = ReleaseDownloadStats {releaseDownloads}
   AuthZ.permissionGuard $ AuthZ.checkProjectGet callerUserId projectId
-  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats :++ permissionsForProject :++ isPremiumProjectInfo)
+  pure (projectToAPI projectOwner project :++ favData :++ APIProjectBranchAndReleaseDetails {defaultBranch, latestRelease} :++ releaseDownloadStats :++ contributionStats :++ ticketStats :++ permissionsForProject :++ isPremiumProjectInfo :++ isUserWatchingProject)
 
 favProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> FavProjectRequest -> WebApp NoContent
 favProjectEndpoint sess userHandle projectSlug (FavProjectRequest {isFaved}) = do
@@ -406,3 +415,15 @@ removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {r
     updatedRoles <- ProjectsQ.removeProjectRoles projectId roleAssignments
     roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
     pure $ RemoveRolesResponse {roleAssignments}
+
+projectNotificationSubscriptionEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> ProjectNotificationSubscriptionRequest -> WebApp ProjectNotificationSubscriptionResponse
+projectNotificationSubscriptionEndpoint session projectUserHandler projectSlug (ProjectNotificationSubscriptionRequest {isSubscribed}) = do
+  caller <- AuthN.requireAuthenticatedUser session
+  projectId <- PG.runTransactionOrRespondError $ do
+    Q.projectIDFromHandleAndSlug projectUserHandler projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage caller caller
+  maySubscriptionId <- PG.runTransaction $ NotifsQ.updateWatchProjectSubscription caller projectId isSubscribed
+  pure $
+    ProjectNotificationSubscriptionResponse
+      { subscriptionId = maySubscriptionId
+      }
