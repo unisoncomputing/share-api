@@ -310,11 +310,12 @@ namespaceHashForBranchOrRelease authZReceipt Project {projectId, ownerUserId = p
         pure (codebase, causalId, branchHashId)
 
 createProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> CreateProjectRequest -> WebApp CreateProjectResponse
-createProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug req = do
+createProjectEndpoint mayCaller userHandle projectSlug req = do
+  callerUserId <- AuthN.requireAuthenticatedUser mayCaller
   User {user_id = targetUserId} <- PGO.expectUserByHandle userHandle
   AuthZ.permissionGuard $ AuthZ.checkProjectCreate callerUserId targetUserId
   let CreateProjectRequest {summary, tags, visibility} = req
-  projectId <- PGO.createProject targetUserId projectSlug summary tags visibility
+  projectId <- PGO.createProject callerUserId targetUserId projectSlug summary tags visibility
   addRequestTag "project-id" (IDs.toText projectId)
   pure CreateProjectResponse
 
