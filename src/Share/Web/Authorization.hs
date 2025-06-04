@@ -393,9 +393,8 @@ checkDownloadFromProjectBranchCodebase :: WebApp (Either AuthZFailure AuthZ.Auth
 checkDownloadFromProjectBranchCodebase =
   pure . Right $ AuthZ.UnsafeAuthZReceipt Nothing
 
-checkProjectCreate :: Maybe UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
-checkProjectCreate mayReqUserId targetUserId = maybePermissionFailure (ProjectPermission (ProjectCreate targetUserId)) $ do
-  reqUserId <- guardMaybe mayReqUserId
+checkProjectCreate :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkProjectCreate reqUserId targetUserId = maybePermissionFailure (ProjectPermission (ProjectCreate targetUserId)) $ do
   -- Can create projects in their own user, or in any org they have permission to create projects in.
   guard (reqUserId == targetUserId) <|> checkCreateInOrg reqUserId
   pure $ AuthZ.UnsafeAuthZReceipt Nothing

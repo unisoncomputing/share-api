@@ -5,6 +5,7 @@ import Control.Monad.Except
 import Servant
 import Share.IDs (ProjectId, ProjectSlug (..), UserHandle (..), UserId (..))
 import Share.IDs qualified as IDs
+import Share.Notifications.Queries qualified as Notifs
 import Share.Postgres qualified as PG
 import Share.Postgres.Queries as Q
 import Share.Postgres.Users.Queries qualified as UserQ
@@ -46,9 +47,12 @@ projectIdByUserHandleAndSlug :: UserHandle -> ProjectSlug -> WebApp ProjectId
 projectIdByUserHandleAndSlug userHandle projectSlug = do
   PG.runTransaction (Q.projectIDFromHandleAndSlug userHandle projectSlug) `or404` (EntityMissing (ErrorID "no-project-for-handle-and-slug") $ "Project not found: " <> IDs.toText userHandle <> "/" <> IDs.toText projectSlug)
 
-createProject :: UserId -> ProjectSlug -> Maybe Text -> Set ProjectTag -> ProjectVisibility -> WebApp ProjectId
-createProject ownerUserId slug summary tags visibility = do
+createProject :: UserId -> UserId -> ProjectSlug -> Maybe Text -> Set ProjectTag -> ProjectVisibility -> WebApp ProjectId
+createProject caller ownerUserId slug summary tags visibility = do
   PG.runTransactionOrRespondError do
     Q.projectIDFromUserIdAndSlug ownerUserId slug >>= \case
       Just projectId -> throwError (ProjectAlreadyExists ownerUserId slug projectId)
-      Nothing -> Q.createProject ownerUserId slug summary tags visibility
+      Nothing -> do
+        projId <- Q.createProject ownerUserId slug summary tags visibility
+        _ <- Notifs.updateWatchProjectSubscription caller projId True
+        pure projId
