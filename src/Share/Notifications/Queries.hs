@@ -20,6 +20,7 @@ module Share.Notifications.Queries
     hydrateEventPayload,
     hasUnreadNotifications,
     updateWatchProjectSubscription,
+    isUserSubscribedToWatchProject,
   )
 where
 
@@ -472,17 +473,7 @@ hydrateEventPayload = \case
 updateWatchProjectSubscription :: UserId -> ProjectId -> Bool -> Transaction e ()
 updateWatchProjectSubscription userId projId shouldBeSubscribed = do
   let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
-  existing <-
-    query1Col @NotificationSubscriptionId
-      [sql|
-      SELECT ns.id FROM notification_subscriptions ns
-                   JOIN projects p ON p.id = #{projId}
-        WHERE ns.subscriber_user_id = #{userId}
-          AND ns.scope_user_id = p.owner_user_id
-          AND ns.topic_groups = ARRAY[#{WatchProject}::notification_topic]
-          AND ns.filter = #{filter}::jsonb
-          LIMIT 1
-      |]
+  existing <- isUserSubscribedToWatchProject userId projId
   case existing of
     Just existingId | not shouldBeSubscribed -> do
       execute_
@@ -502,3 +493,17 @@ updateWatchProjectSubscription userId projId shouldBeSubscribed = do
         |]
       void $ createNotificationSubscription userId projectOwnerUserId mempty (Set.singleton WatchProject) (Just filter)
     _ -> pure ()
+
+isUserSubscribedToWatchProject :: UserId -> ProjectId -> Transaction e (Maybe NotificationSubscriptionId)
+isUserSubscribedToWatchProject userId projId = do
+  let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
+  query1Col @NotificationSubscriptionId
+    [sql|
+      SELECT ns.id FROM notification_subscriptions ns
+                   JOIN projects p ON p.id = #{projId}
+        WHERE ns.subscriber_user_id = #{userId}
+          AND ns.scope_user_id = p.owner_user_id
+          AND ns.topic_groups = ARRAY[#{WatchProject}::notification_topic]
+          AND ns.filter = #{filter}::jsonb
+          LIMIT 1
+    |]

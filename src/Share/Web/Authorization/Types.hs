@@ -27,6 +27,7 @@ module Share.Web.Authorization.Types
     AddRolesRequest (..),
     RemoveRolesRequest (..),
     ProjectNotificationSubscriptionRequest (..),
+    ProjectNotificationSubscriptionResponse (..),
 
     -- * AuthZReceipt
     AuthZReceipt (..),
@@ -446,3 +447,15 @@ instance FromJSON ProjectNotificationSubscriptionRequest where
   parseJSON = Aeson.withObject "ProjectNotificationSubscriptionRequest" $ \o -> do
     isSubscribed <- o Aeson..: "isSubscribed"
     pure ProjectNotificationSubscriptionRequest {isSubscribed}
+
+data ProjectNotificationSubscriptionResponse
+  = ProjectNotificationSubscriptionResponse
+  { subscriptionId :: NotificationSubscriptionId
+  }
+  deriving (Show, Eq)
+
+instance ToJSON ProjectNotificationSubscriptionResponse where
+  toJSON ProjectNotificationSubscriptionResponse {..} =
+    object
+      [ "subscriptionId" .= subscriptionId
+      ]

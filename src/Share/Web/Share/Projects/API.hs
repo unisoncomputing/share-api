@@ -115,4 +115,4 @@ type RemoveRolesEndpoint =
 
 type ProjectNotificationSubscriptionEndpoint =
   ReqBody '[JSON] ProjectNotificationSubscriptionRequest
-    :> Put '[JSON] ()
+    :> Put '[JSON] ProjectNotificationSubscriptionResponse
