@@ -72,6 +72,7 @@ module Share.Codebase
     convertTerm2to1,
 
     -- * Utilities
+    conditionallyCachedCodebaseResponse,
     cachedCodebaseResponse,
   )
 where
@@ -256,6 +257,29 @@ codebaseMToTransaction codebaseEnv m = runReaderT m codebaseEnv
 
 -- | Wrap a response in caching.
 -- This combinator respects the cachability stored on the provided auth receipt.
+conditionallyCachedCodebaseResponse ::
+  forall ct e a.
+  (Servant.MimeRender ct a) =>
+  AuthZ.AuthZReceipt ->
+  CodebaseLocation ->
+  -- | The name of the endpoint we're caching. Must be unique.
+  Text ->
+  -- | All parameters which affect the response
+  [Text] ->
+  -- | The root hash the cache is keyed on.
+  CausalId ->
+  -- | How to generate the response if it's not in the cache.
+  WebApp (Either e a) ->
+  WebApp (Either e (Cached ct a))
+conditionallyCachedCodebaseResponse authzReceipt codebaseOwner endpointName providedCacheParams rootCausalId action = do
+  let cacheParams = ["codebase", codebaseViewCacheKey, "root-hash", Caching.causalIdCacheKey rootCausalId] <> providedCacheParams
+  Caching.conditionallyCachedResponse authzReceipt endpointName cacheParams action
+  where
+    codebaseViewCacheKey :: Text
+    codebaseViewCacheKey = IDs.toText (codebaseOwnerUserId codebaseOwner)
+
+-- | Wrap a response in caching.
+-- This combinator respects the cachability stored on the provided auth receipt.
 cachedCodebaseResponse ::
   forall ct a.
   (Servant.MimeRender ct a) =>
@@ -271,11 +295,8 @@ cachedCodebaseResponse ::
   WebApp a ->
   WebApp (Cached ct a)
 cachedCodebaseResponse authzReceipt codebaseOwner endpointName providedCacheParams rootCausalId action = do
-  let cacheParams = ["codebase", codebaseViewCacheKey, "root-hash", Caching.causalIdCacheKey rootCausalId] <> providedCacheParams
-  Caching.cachedResponse authzReceipt endpointName cacheParams action
-  where
-    codebaseViewCacheKey :: Text
-    codebaseViewCacheKey = IDs.toText (codebaseOwnerUserId codebaseOwner)
+  conditionallyCachedCodebaseResponse authzReceipt codebaseOwner endpointName providedCacheParams rootCausalId (Right <$> action)
+    <&> either absurd id
 
 -- | Load a term and its type.
 loadTerm :: TermReferenceId -> CodebaseM e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))

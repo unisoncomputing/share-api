@@ -29,6 +29,8 @@ import Share.Project qualified as Project
 import Share.User (User (..))
 import Share.Utils.API
 import Share.Utils.Caching
+import Share.Utils.Caching qualified as Caching
+import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
@@ -45,6 +47,7 @@ import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
+import Unison.PrintError qualified as Pretty
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
@@ -269,10 +272,20 @@ projectBranchNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) use
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
-  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-namespaces-by-name" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
+  result <- Codebase.conditionallyCachedCodebaseResponse authZReceipt codebaseLoc "project-branch-namespaces-by-name" cacheParams causalId $ do
+    (nd, mayErrs) <- Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
       ND.namespaceDetails rt (fromMaybe mempty path) causalId renderWidth
         `whenNothingM` throwError (EntityMissing (ErrorID "namespace-not-found") "Namespace not found")
+    for_ mayErrs \errs -> do
+      errs
+        & fmap (Text.pack . Pretty.toANSI Pretty.defaultWidth)
+        & toList
+        & Text.intercalate "\n"
+        & Logging.logErrorText
+    case mayErrs of
+      Nothing -> pure $ Right nd
+      Just _errs -> pure $ Left nd
+  pure $ either Caching.toCached id result
   where
     cacheParams = [IDs.toText projectBranchShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -293,13 +306,20 @@ getProjectBranchReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
-  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-project-branch-readme" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      mayNamespaceDetails <- ND.namespaceDetails rt rootPath causalId Nothing
-      let mayReadme = do
-            NamespaceDetails {readme} <- mayNamespaceDetails
-            readme
-      pure $ ReadmeResponse {readMe = mayReadme}
+  result <- Codebase.conditionallyCachedCodebaseResponse authZReceipt codebaseLoc "get-project-branch-readme" cacheParams causalId $ do
+    result <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
+      ND.namespaceDetails rt rootPath causalId Nothing
+    case result of
+      Nothing -> pure . Right $ ReadmeResponse {readMe = Nothing}
+      Just (NamespaceDetails {readme}, errs) -> do
+        for_ errs \err -> do
+          err
+            & fmap (Text.pack . Pretty.toANSI Pretty.defaultWidth)
+            & toList
+            & Text.intercalate "\n"
+            & Logging.logErrorText
+        pure . Left $ ReadmeResponse {readMe = readme}
+  pure $ either Caching.toCached id result
   where
     cacheParams = [IDs.toText projectBranchShortHand]
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -372,10 +392,20 @@ getProjectBranchDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUse
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
-  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams causalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      doc <- findAndRenderDoc docNames rt rootPath causalId Nothing
-      pure $ DocResponse {doc}
+  result <- Codebase.conditionallyCachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams causalId $ do
+    result <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
+      findAndRenderDoc docNames rt rootPath causalId Nothing
+    case result of
+      Just (doc, Just errs) -> do
+        errs
+          & fmap (Text.pack . Pretty.toANSI Pretty.defaultWidth)
+          & toList
+          & Text.intercalate "\n"
+          & Logging.logErrorText
+        pure $ Left $ DocResponse {doc = Just doc}
+      Just (doc, Nothing) -> pure $ Right $ DocResponse {doc = Just doc}
+      Nothing -> pure . Right $ DocResponse {doc = Nothing}
+  pure $ either Caching.toCached id result
   where
     cacheParams = [IDs.toText projectBranchShortHand]
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}

@@ -36,7 +36,10 @@ where
 
 import Control.Lens hiding ((??))
 import Data.List qualified as List
+import Data.List.NonEmpty qualified as NEL
 import Data.Map qualified as Map
+import Data.Sequence (Seq)
+import Data.Sequence qualified as Seq
 import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseRuntime (CodebaseRuntime, cachedEvalResult))
@@ -88,6 +91,8 @@ import Unison.Util.Pretty (Width)
 import Unison.Util.Pretty qualified as Pretty
 import Unison.Util.SyntaxText qualified as UST
 import Unison.Var (Var)
+import UnliftIO (TVar)
+import UnliftIO qualified
 
 mkTypeDefinition ::
   PPED.PrettyPrintEnvDecl ->
@@ -192,11 +197,11 @@ getTermTag r termType = do
     V2Referent.Con ref _ -> Just <$> Codebase.expectDeclKind ref
   pure $
     if
-        | isDoc -> Doc
-        | isTest -> Test
-        | Just CT.Effect <- constructorType -> Constructor Ability
-        | Just CT.Data <- constructorType -> Constructor Data
-        | otherwise -> Plain
+      | isDoc -> Doc
+      | isTest -> Test
+      | Just CT.Effect <- constructorType -> Constructor Ability
+      | Just CT.Data <- constructorType -> Constructor Data
+      | otherwise -> Plain
 
 getTypeTag ::
   (PG.QueryM m) =>
@@ -233,10 +238,13 @@ displayType = \case
 evalDocRef ::
   Codebase.CodebaseRuntime IO ->
   V2.TermReference ->
-  Codebase.CodebaseM e (Doc.EvaluatedDoc Symbol)
+  Codebase.CodebaseM e (Doc.EvaluatedDoc Symbol, Maybe (NonEmpty Rt.Error))
 evalDocRef (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
   let tm = Term.ref () termRef
-  Doc.evalDoc terms typeOf eval decls tm
+  errsVar <- PG.transactionUnsafeIO $ UnliftIO.newTVarIO Seq.empty
+  evalResult <- Doc.evalDoc terms typeOf (eval errsVar) decls tm
+  errs <- PG.transactionUnsafeIO $ UnliftIO.readTVarIO errsVar
+  pure (evalResult, NEL.nonEmpty $ toList errs)
   where
     terms :: Reference -> Codebase.CodebaseM e (Maybe (V1.Term Symbol ()))
     terms termRef@(Reference.Builtin _) = pure (Just (Term.ref () termRef))
@@ -246,19 +254,25 @@ evalDocRef (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termR
     typeOf :: Referent.Referent -> Codebase.CodebaseM e (Maybe (V1.Type Symbol ()))
     typeOf termRef = fmap void <$> Codebase.loadTypeOfReferent (Cv.referent1to2 termRef)
 
-    eval :: V1.Term Symbol a -> Codebase.CodebaseM e (Maybe (V1.Term Symbol ()))
-    eval (Term.amap (const mempty) -> tm) = do
+    eval :: TVar (Seq Rt.Error) -> V1.Term Symbol a -> Codebase.CodebaseM e (Maybe (V1.Term Symbol ()))
+    eval errsVar (Term.amap (const mempty) -> tm) = do
       -- We use an empty ppe for evalutation, it's only used for adding additional context to errors.
       let evalPPE = PPE.empty
-      termRef <- fmap eitherToMaybe . lift . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE unisonRuntime tm
+      termRef <- lift . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE unisonRuntime tm
       case termRef of
         -- don't cache when there were decompile errors
-        Just (errs, tmr) | null errs -> do
-          Codebase.saveCachedEvalResult
-            (Hashing.hashClosedTerm tm)
-            (Term.amap (const mempty) tmr)
-        _ -> pure ()
-      pure $ termRef <&> Term.amap (const mempty) . snd
+        Right (errs, tmr)
+          | null errs -> do
+              Codebase.saveCachedEvalResult
+                (Hashing.hashClosedTerm tm)
+                (Term.amap (const mempty) tmr)
+          | otherwise -> do
+              PG.transactionUnsafeIO . UnliftIO.atomically $ UnliftIO.modifyTVar' errsVar (<> Seq.fromList errs)
+              pure ()
+        Left err -> do
+          PG.transactionUnsafeIO . UnliftIO.atomically $ UnliftIO.modifyTVar' errsVar (<> Seq.singleton err)
+          pure ()
+      pure $ eitherToMaybe termRef <&> Term.amap (const mempty) . snd
 
     decls :: Reference -> Codebase.CodebaseM e (Maybe (DD.Decl Symbol ()))
     decls (Reference.DerivedId typeRef) = fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclaration typeRef)

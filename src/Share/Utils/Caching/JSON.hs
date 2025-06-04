@@ -39,19 +39,24 @@ encodeKey (CacheKey {key, rootCausalId}) =
         <&> (\(k, v) -> k <> "=" <> v)
           & T.intercalate ","
 
+-- | Use a JSON cache entry, or build it if it doesn't exist.
+--
+-- You can choose `f` to be `Maybe`, `Identity`, `Either e`, or anything else useful.
+-- It will only cache the value inside the `f` focused by foldable.
 usingJSONCache ::
-  (ToJSON v, FromJSON v, PG.QueryM m) =>
+  forall f v m.
+  (ToJSON v, FromJSON v, PG.QueryM m, Applicative f, Foldable f) =>
   CacheKey ->
   -- How to build the value if it's not in the cache.
-  m v ->
-  m v
+  m (f v) ->
+  m (f v)
 usingJSONCache ck action = do
   getJSONCacheEntry ck >>= \case
-    Just v -> pure v
+    Just v -> pure $ pure v
     Nothing -> do
-      v <- action
-      putJSONCacheEntry ck v
-      pure v
+      fv <- action
+      for_ fv \v -> putJSONCacheEntry ck v
+      pure fv
 
 data JSONCacheError
   = JSONCacheDecodingError CacheKey Text

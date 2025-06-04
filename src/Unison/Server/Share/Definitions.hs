@@ -90,9 +90,9 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
             rootCausalId = Just rootCausalId,
             sandbox = Just codebaseOwnerUserId
           }
-  Caching.usingJSONCache cacheKey go
+  runIdentity <$> Caching.usingJSONCache cacheKey go
   where
-    go :: Codebase.CodebaseM e DefinitionDisplayResults
+    go :: Codebase.CodebaseM e (Identity DefinitionDisplayResults)
     go = do
       rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
       (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
@@ -134,7 +134,7 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
       let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
           renderedDisplayTypes = Map.mapKeys Reference.toText typeDefinitions
           renderedMisses = fmap HQ.toText misses
-      pure $
+      pure . Identity $
         DefinitionDisplayResults
           renderedDisplayTerms
           renderedDisplayTypes
