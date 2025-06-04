@@ -450,7 +450,7 @@ instance FromJSON ProjectNotificationSubscriptionRequest where
 
 data ProjectNotificationSubscriptionResponse
   = ProjectNotificationSubscriptionResponse
-  { subscriptionId :: NotificationSubscriptionId
+  { subscriptionId :: Maybe NotificationSubscriptionId
   }
   deriving (Show, Eq)
 

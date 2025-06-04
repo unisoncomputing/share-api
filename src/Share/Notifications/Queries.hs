@@ -470,18 +470,21 @@ hydrateEventPayload = \case
         <*> (UsersQ.userDisplayInfoOf id commentAuthorUserId)
 
 -- | Subscribe or unsubscribe to watching a project
-updateWatchProjectSubscription :: UserId -> ProjectId -> Bool -> Transaction e ()
+updateWatchProjectSubscription :: UserId -> ProjectId -> Bool -> Transaction e (Maybe NotificationSubscriptionId)
 updateWatchProjectSubscription userId projId shouldBeSubscribed = do
   let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
   existing <- isUserSubscribedToWatchProject userId projId
   case existing of
-    Just existingId | not shouldBeSubscribed -> do
-      execute_
-        [sql|
-          DELETE FROM notification_subscriptions
-          WHERE id = #{existingId}
-            AND subscriber_user_id = #{userId}
-        |]
+    Just existingId
+      | not shouldBeSubscribed -> do
+          execute_
+            [sql|
+              DELETE FROM notification_subscriptions
+              WHERE id = #{existingId}
+                AND subscriber_user_id = #{userId}
+            |]
+          pure Nothing
+      | otherwise -> pure (Just existingId)
     Nothing | shouldBeSubscribed -> do
       -- Create a new subscription
       projectOwnerUserId <-
@@ -491,8 +494,8 @@ updateWatchProjectSubscription userId projId shouldBeSubscribed = do
             FROM projects p
           WHERE p.id = #{projId}
         |]
-      void $ createNotificationSubscription userId projectOwnerUserId mempty (Set.singleton WatchProject) (Just filter)
-    _ -> pure ()
+      Just <$> createNotificationSubscription userId projectOwnerUserId mempty (Set.singleton WatchProject) (Just filter)
+    _ -> pure Nothing
 
 isUserSubscribedToWatchProject :: UserId -> ProjectId -> Transaction e (Maybe NotificationSubscriptionId)
 isUserSubscribedToWatchProject userId projId = do
@@ -503,7 +506,7 @@ isUserSubscribedToWatchProject userId projId = do
                    JOIN projects p ON p.id = #{projId}
         WHERE ns.subscriber_user_id = #{userId}
           AND ns.scope_user_id = p.owner_user_id
-          AND ns.topic_groups = ARRAY[#{WatchProject}::notification_topic]
+          AND ns.topic_groups = ARRAY[#{WatchProject}::notification_topic_group]
           AND ns.filter = #{filter}::jsonb
           LIMIT 1
     |]

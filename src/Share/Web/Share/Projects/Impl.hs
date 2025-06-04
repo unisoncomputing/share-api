@@ -415,10 +415,14 @@ removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {r
     roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
     pure $ RemoveRolesResponse {roleAssignments}
 
-projectNotificationSubscriptionEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> ProjectNotificationSubscriptionRequest -> WebApp ()
+projectNotificationSubscriptionEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> ProjectNotificationSubscriptionRequest -> WebApp ProjectNotificationSubscriptionResponse
 projectNotificationSubscriptionEndpoint session projectUserHandler projectSlug (ProjectNotificationSubscriptionRequest {isSubscribed}) = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
     Q.projectIDFromHandleAndSlug projectUserHandler projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage caller caller
-  PG.runTransaction $ NotifsQ.updateWatchProjectSubscription caller projectId isSubscribed
+  maySubscriptionId <- PG.runTransaction $ NotifsQ.updateWatchProjectSubscription caller projectId isSubscribed
+  pure $
+    ProjectNotificationSubscriptionResponse
+      { subscriptionId = maySubscriptionId
+      }
