@@ -26,6 +26,7 @@ module Share.Web.Authorization.Types
     RemoveRolesResponse (..),
     AddRolesRequest (..),
     RemoveRolesRequest (..),
+    ProjectNotificationSubscriptionRequest (..),
 
     -- * AuthZReceipt
     AuthZReceipt (..),
@@ -434,3 +435,14 @@ data AuthZReceipt = UnsafeAuthZReceipt {getCacheability :: Maybe CachingToken}
 -- | Requests should only be cached if they're for a public endpoint.
 -- Obtaining a caching token is proof that the resource was public and can be cached.
 data CachingToken = CachingToken
+
+data ProjectNotificationSubscriptionRequest
+  = ProjectNotificationSubscriptionRequest
+  { isSubscribed :: Bool
+  }
+  deriving (Show, Eq)
+
+instance FromJSON ProjectNotificationSubscriptionRequest where
+  parseJSON = Aeson.withObject "ProjectNotificationSubscriptionRequest" $ \o -> do
+    isSubscribed <- o Aeson..: "isSubscribed"
+    pure ProjectNotificationSubscriptionRequest {isSubscribed}

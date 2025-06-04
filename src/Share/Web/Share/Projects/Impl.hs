@@ -20,6 +20,7 @@ import Share.Codebase qualified as Codebase
 import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
+import Share.Notifications.Queries qualified as NotifsQ
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
@@ -118,6 +119,7 @@ projectServer session handle =
                      :<|> getProjectEndpoint session handle slug
                      :<|> favProjectEndpoint session handle slug
                      :<|> maintainersResourceServer slug
+                     :<|> projectNotificationSubscriptionEndpoint session handle slug
              )
   where
     addTags :: forall x. ProjectSlug -> WebApp x -> WebApp x
@@ -406,3 +408,11 @@ removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {r
     updatedRoles <- ProjectsQ.removeProjectRoles projectId roleAssignments
     roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
     pure $ RemoveRolesResponse {roleAssignments}
+
+projectNotificationSubscriptionEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> ProjectNotificationSubscriptionRequest -> WebApp ()
+projectNotificationSubscriptionEndpoint session projectUserHandler projectSlug (ProjectNotificationSubscriptionRequest {isSubscribed}) = do
+  caller <- AuthN.requireAuthenticatedUser session
+  projectId <- PG.runTransactionOrRespondError $ do
+    Q.projectIDFromHandleAndSlug projectUserHandler projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage caller caller
+  PG.runTransaction $ NotifsQ.updateWatchProjectSubscription caller projectId isSubscribed
