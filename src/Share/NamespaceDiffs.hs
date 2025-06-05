@@ -290,9 +290,10 @@ instance ToJSON NamespaceDiffResult where
                in case reason of
                     EitherWay.Alice reason -> f "old" reason
                     EitherWay.Bob reason -> f "new" reason
-            LibFoundAtUnexpectedPath _ ->
+            LibFoundAtUnexpectedPath path ->
               Aeson.object
                 [ "tag" .= ("libFoundAtUnexpectedPath" :: Text)
+                , "path" .= path
                 ]
             MissingEntityError _ ->
               Aeson.object
