@@ -17,6 +17,7 @@ import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Tickets.Ops qualified as TicketOps
 import Share.Postgres.Tickets.Queries qualified as TicketsQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
@@ -108,7 +109,7 @@ createTicketEndpoint session userHandle projectSlug (CreateTicketRequest {title,
     pure project
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketCreate callerUserId projectId
   PG.runTransactionOrRespondError $ do
-    (_, ticketNumber) <- TicketsQ.createTicket callerUserId projectId title description Open
+    (_, ticketNumber) <- TicketOps.createTicket callerUserId projectId title description Open
     TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (InternalServerError "create-ticket-error" internalServerError)
       >>= UserQ.userDisplayInfoOf traverse
   where

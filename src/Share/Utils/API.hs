@@ -288,6 +288,12 @@ instance (Typeable a, Typeable b, ToJSON a, ToJSON b) => ToJSON (a :++ b) where
       -- If either is not an object, error, showing the type of the non-object value
       _ -> error $ "Cannot merge JSON representation of " <> show (typeRep (Proxy @a)) <> " with " <> show (typeRep (Proxy @b))
 
+instance (Typeable a, Typeable b, FromJSON a, FromJSON b) => FromJSON (a :++ b) where
+  parseJSON v = do
+    a <- parseJSON v
+    b <- parseJSON v
+    pure $ a :++ b
+
 -- | Wrapper useful in combination with `:++` to include the given payload at a specific key.
 newtype AtKey (key :: Symbol) a = AtKey a
 

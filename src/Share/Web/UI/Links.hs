@@ -107,6 +107,21 @@ contributionLink (ProjectShortHand {userHandle, projectSlug}) contributionNumber
   let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "contributions", IDs.toText contributionNumber]
   shareUIPath path
 
+contributionCommentLink :: (MonadReader (Env.Env ctx) m) => ProjectShortHand -> ContributionNumber -> CommentId -> m URI
+contributionCommentLink (ProjectShortHand {userHandle, projectSlug}) contributionNumber _commentId = do
+  let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "contributions", IDs.toText contributionNumber]
+  shareUIPath path
+
+ticketLink :: (MonadReader (Env.Env ctx) m) => ProjectShortHand -> TicketNumber -> m URI
+ticketLink (ProjectShortHand {userHandle, projectSlug}) ticketNumber = do
+  let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "tickets", IDs.toText ticketNumber]
+  shareUIPath path
+
+ticketCommentLink :: (MonadReader (Env.Env ctx) m) => ProjectShortHand -> TicketNumber -> CommentId -> m URI
+ticketCommentLink (ProjectShortHand {userHandle, projectSlug}) ticketNumber _commentId = do
+  let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "tickets", IDs.toText ticketNumber]
+  shareUIPath path
+
 -- | Where the user should go when clicking on a notification
 notificationLink :: (MonadReader (Env.Env ctx) m) => HydratedEventPayload -> m URI
 notificationLink = \case
@@ -114,6 +129,16 @@ notificationLink = \case
     projectBranchBrowseLink payload.branchInfo.projectBranchShortHand
   HydratedProjectContributionCreatedPayload payload ->
     contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
+  HydratedProjectContributionUpdatedPayload payload ->
+    contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
+  HydratedProjectContributionCommentPayload payload comment ->
+    contributionCommentLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber comment.commentId
+  HydratedProjectTicketCreatedPayload payload ->
+    ticketLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber
+  HydratedProjectTicketUpdatedPayload payload ->
+    ticketLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber
+  HydratedProjectTicketCommentPayload payload comment ->
+    ticketCommentLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber comment.commentId
 
 unisonLogoImage :: URI
 unisonLogoImage =

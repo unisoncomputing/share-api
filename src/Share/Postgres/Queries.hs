@@ -18,12 +18,13 @@ import Share.Contribution
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Notifications.Queries qualified as NotifQ
-import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), ProjectBranchData (..))
+import Share.Notifications.Types (BranchData (..), NotificationEvent (..), NotificationEventData (..), ProjectData (..))
 import Share.OAuth.Types
 import Share.Postgres (unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
+import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
@@ -560,7 +561,7 @@ createBranch ::
 createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget creatorId = do
   branchId <- PG.queryExpect1Col createBranchSQL
   PG.execute_ (updateReflogSQL branchId ("Branch Created" :: Text))
-  recordNotificationEvent branchId
+  recordNotificationEvent branchId contributorId
   pure branchId
   where
     createBranchSQL =
@@ -602,29 +603,20 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
         WHERE id = #{branchId}
       |]
 
-    recordNotificationEvent :: BranchId -> PG.Transaction e ()
-    recordNotificationEvent branchId = do
-      (projectId, projectResourceId, projectOwnerUserId, branchContributorUserId, private) <-
-        PG.queryExpect1Row
-          [PG.sql|
-        SELECT p.id, p.resource_id, p.owner_user_id, pb.contributor_id, p.private
-          FROM project_branches pb
-          JOIN projects p ON p.id = pb.project_id
-        WHERE pb.id = #{branchId}
-        |]
-      let branchUpdateEventData =
-            ProjectBranchData
-              { projectId,
-                branchId,
-                branchContributorUserId,
-                public = not private
+    recordNotificationEvent :: BranchId -> Maybe UserId -> PG.Transaction e ()
+    recordNotificationEvent branchId branchContributorUserId = do
+      (projectData, projectResourceId, projectOwnerUserId) <- ProjectsQ.projectNotificationData projectId
+      let branchData =
+            BranchData
+              { branchId,
+                branchContributorUserId
               }
       let notifEvent =
             NotificationEvent
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
-                eventData = ProjectBranchUpdatedData branchUpdateEventData,
+                eventData = ProjectBranchUpdatedData projectData branchData,
                 eventScope = projectOwnerUserId,
                 eventActor = creatorId
               }
@@ -718,19 +710,22 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
           JOIN projects p ON p.id = pb.project_id
         WHERE pb.id = #{branchId}
         |]
-      let branchUpdateEventData =
-            ProjectBranchData
+      let projectData =
+            ProjectData
               { projectId,
-                branchId,
-                branchContributorUserId,
                 public = not private
+              }
+      let branchData =
+            BranchData
+              { branchId,
+                branchContributorUserId
               }
       let notifEvent =
             NotificationEvent
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
-                eventData = ProjectBranchUpdatedData branchUpdateEventData,
+                eventData = ProjectBranchUpdatedData projectData branchData,
                 eventScope = projectOwnerUserId,
                 eventActor = callerUserId
               }
