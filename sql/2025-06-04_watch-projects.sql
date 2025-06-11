@@ -5,7 +5,7 @@ INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, topic
          p.owner_user_id, 
          '{}', 
          ARRAY['watch_project'::notification_topic_group]::notification_topic_group[],
-         jsonb_build_object('projectId', p.id)
+         jsonb_build_object('projectId', 'P-' || p.id)
     FROM users u
     JOIN projects p ON u.id = p.owner_user_id
   WHERE NOT EXISTS (
@@ -14,6 +14,6 @@ INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, topic
       AND ns.scope_user_id = p.owner_user_id
       AND ns.topics = '{}'
       AND ns.topic_groups = ARRAY['watch_project'::notification_topic_group]
-      AND ns.filter = jsonb_build_object('projectId', p.id)
+      AND ns.filter = jsonb_build_object('projectId', 'P-' || p.id)
     )
 ;
