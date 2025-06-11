@@ -4,6 +4,7 @@
     "defaultBranch": null,
     "isFaved": false,
     "isPremiumProject": false,
+    "isSubscribed": true,
     "latestRelease": null,
     "numActiveContributions": 0,
     "numClosedContributions": 0,

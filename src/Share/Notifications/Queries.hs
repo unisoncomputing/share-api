@@ -19,12 +19,16 @@ module Share.Notifications.Queries
     getNotificationSubscription,
     hydrateEventPayload,
     hasUnreadNotifications,
+    updateWatchProjectSubscription,
+    isUserSubscribedToWatchProject,
   )
 where
 
 import Control.Lens
+import Data.Aeson qualified as Aeson
 import Data.Foldable qualified as Foldable
 import Data.Ord (clamp)
+import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Share.Contribution
 import Share.IDs
@@ -464,3 +468,45 @@ hydrateEventPayload = \case
               |]
             )
         <*> (UsersQ.userDisplayInfoOf id commentAuthorUserId)
+
+-- | Subscribe or unsubscribe to watching a project
+updateWatchProjectSubscription :: UserId -> ProjectId -> Bool -> Transaction e (Maybe NotificationSubscriptionId)
+updateWatchProjectSubscription userId projId shouldBeSubscribed = do
+  let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
+  existing <- isUserSubscribedToWatchProject userId projId
+  case existing of
+    Just existingId
+      | not shouldBeSubscribed -> do
+          execute_
+            [sql|
+              DELETE FROM notification_subscriptions
+              WHERE id = #{existingId}
+                AND subscriber_user_id = #{userId}
+            |]
+          pure Nothing
+      | otherwise -> pure (Just existingId)
+    Nothing | shouldBeSubscribed -> do
+      -- Create a new subscription
+      projectOwnerUserId <-
+        queryExpect1Col
+          [sql|
+          SELECT p.owner_user_id
+            FROM projects p
+          WHERE p.id = #{projId}
+        |]
+      Just <$> createNotificationSubscription userId projectOwnerUserId mempty (Set.singleton WatchProject) (Just filter)
+    _ -> pure Nothing
+
+isUserSubscribedToWatchProject :: UserId -> ProjectId -> Transaction e (Maybe NotificationSubscriptionId)
+isUserSubscribedToWatchProject userId projId = do
+  let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
+  query1Col @NotificationSubscriptionId
+    [sql|
+      SELECT ns.id FROM notification_subscriptions ns
+                   JOIN projects p ON p.id = #{projId}
+        WHERE ns.subscriber_user_id = #{userId}
+          AND ns.scope_user_id = p.owner_user_id
+          AND ns.topic_groups = ARRAY[#{WatchProject}::notification_topic_group]
+          AND ns.filter = #{filter}::jsonb
+          LIMIT 1
+    |]

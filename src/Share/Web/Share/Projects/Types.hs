@@ -25,6 +25,7 @@ module Share.Web.Share.Projects.Types
     IsPremiumProject (..),
     APIProjectBranchAndReleaseDetails (..),
     PermissionsInfo (..),
+    IsSubscribed (..),
   )
 where
 
@@ -223,6 +224,12 @@ newtype IsPremiumProject = IsPremiumProject
   deriving (Show)
   deriving (ToJSON) via (AtKey "isPremiumProject" Bool)
 
+newtype IsSubscribed = IsSubscribed
+  { isSubscribed :: Bool
+  }
+  deriving (Show)
+  deriving (ToJSON) via (AtKey "isSubscribed" Bool)
+
 type GetProjectResponse =
   APIProject
     :++ FavData
@@ -232,6 +239,7 @@ type GetProjectResponse =
     :++ TicketStats
     :++ PermissionsInfo
     :++ IsPremiumProject
+    :++ IsSubscribed
 
 data ListProjectsResponse = ListProjectsResponse
   { projects :: [APIProject :++ FavData]

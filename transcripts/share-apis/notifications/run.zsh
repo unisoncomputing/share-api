@@ -6,18 +6,10 @@ source "../../transcript_helpers.sh"
 
 publictestproject_id=$(project_id_from_handle_and_slug 'test' 'publictestproject')
 
-# Subscribe to project-related notifications for the test user's publictestproject.
-# This subscription uses a topic group rather than a specific topic.
-subscription_id=$(fetch_data_jq "$test_user" POST create-subscription-for-project '/users/test/notifications/subscriptions' '.subscription.id' "{
-  \"scope\": \"test\",
-  \"topics\": [],
-  \"topicGroups\": [
-    \"watch_project\"
-  ],
-  \"filter\": {
-    \"projectId\": \"$publictestproject_id\"
-  }
-}" )
+# Can subscribe to project-related notifications for the test user's publictestproject.
+subscription_id=$(fetch_data_jq "$test_user" PUT subscribe-to-watch-project '/users/test/projects/publictestproject/subscription' '.subscriptionId' '{
+  "isSubscribed": true
+}' )
 
 webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
   \"url\": \"${echo_server}/good-webhook\",
@@ -137,3 +129,14 @@ successful_webhooks=$(pg_sql "SELECT COUNT(*) FROM notification_webhook_queue WH
 unsuccessful_webhooks=$(pg_sql "SELECT COUNT(*) FROM notification_webhook_queue WHERE NOT delivered;")
 
 echo "Successful webhooks: $successful_webhooks\nUnsuccessful webhooks: $unsuccessful_webhooks\n" > ./webhook_results.txt
+
+# List 'test' user's subscriptions
+fetch "$test_user" GET list-subscriptions-test '/users/test/notifications/subscriptions'
+
+# Can unsubscribe from project-related notifications for the test user's publictestproject.
+fetch "$test_user" PUT unsubscribe-from-project '/users/test/projects/publictestproject/subscription' '{
+  "isSubscribed": false
+}'
+
+# List 'test' user's subscriptions again
+fetch "$test_user" GET list-subscriptions-test-after-unsubscribe '/users/test/notifications/subscriptions'

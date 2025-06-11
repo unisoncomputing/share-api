@@ -87,7 +87,8 @@ getProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) mayUcmProjectId mayUcm
       lift $ parseParam @ProjectId "id" ucmProjectId
 
 createProjectEndpoint :: Maybe Session -> UCMProjects.CreateProjectRequest -> WebApp UCMProjects.CreateProjectResponse
-createProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) (UCMProjects.CreateProjectRequest {projectName}) = toResponse do
+createProjectEndpoint caller (UCMProjects.CreateProjectRequest {projectName}) = toResponse do
+  callerUserId <- lift $ AuthN.requireAuthenticatedUser caller
   ProjectShortHand {userHandle, projectSlug} <- lift $ parseParam @ProjectShortHand "projectName" projectName
   (User {user_id = targetUserId}, mayOrg) <- pgT do
     user@(User {user_id}) <- UserQ.userByHandle userHandle `orThrow` UCMProjects.CreateProjectResponseNotFound (UCMProjects.NotFound "User not found")
@@ -99,7 +100,7 @@ createProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) (UCMProjects.Create
         Just (Org {isCommercial}) -> if isCommercial then ProjectPrivate else ProjectPublic
   let summary = Nothing
   let tags = mempty
-  projectId <- lift $ PGO.createProject targetUserId projectSlug summary tags visibility
+  projectId <- lift $ PGO.createProject callerUserId targetUserId projectSlug summary tags visibility
   let apiProject = UCMProjects.Project {projectId = IDs.toText projectId, projectName, latestRelease = Nothing, defaultBranch = Nothing}
   pure $ UCMProjects.CreateProjectResponseSuccess apiProject
 

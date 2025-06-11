@@ -41,7 +41,8 @@ type ProjectResourceAPI =
       :<|> GetProjectEndpoint
       :<|> ( "fav" :> FavProjectEndpoint
            )
-      :<|> "roles" :> MaintainersResourceAPI
+      :<|> ("roles" :> MaintainersResourceAPI)
+      :<|> ("subscription" :> ProjectNotificationSubscriptionEndpoint)
   )
 
 type ProjectDiffNamespacesEndpoint =
@@ -111,3 +112,7 @@ type RemoveRolesEndpoint =
     :>
     -- Return the updated list of maintainers
     Delete '[JSON] RemoveRolesResponse
+
+type ProjectNotificationSubscriptionEndpoint =
+  ReqBody '[JSON] ProjectNotificationSubscriptionRequest
+    :> Put '[JSON] ProjectNotificationSubscriptionResponse

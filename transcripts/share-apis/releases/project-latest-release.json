@@ -4,6 +4,7 @@
     "defaultBranch": "main",
     "isFaved": true,
     "isPremiumProject": true,
+    "isSubscribed": false,
     "latestRelease": "4.5.6",
     "numActiveContributions": 2,
     "numClosedContributions": 0,
