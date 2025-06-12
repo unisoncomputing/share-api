@@ -1,4 +1,10 @@
-module Share.Postgres.Tickets.Ops (createTicket) where
+{-# LANGUAGE RecordWildCards #-}
+
+module Share.Postgres.Tickets.Ops
+  ( createTicket,
+    updateTicket,
+  )
+where
 
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
@@ -7,7 +13,8 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Tickets.Queries qualified as TicketQ
 import Share.Prelude
-import Share.Ticket (TicketStatus)
+import Share.Ticket (Ticket (..), TicketStatus)
+import Share.Utils.API (NullableUpdate, fromNullableUpdate)
 
 createTicket ::
   -- | Author
@@ -40,7 +47,7 @@ createTicket authorId projectId title description status = do
           FROM new_ticket_number
         RETURNING tickets.id, tickets.ticket_number
       |]
-  TicketQ.insertTicketStatusChangeEvent ticketId authorId Nothing status
+  insertTicketStatusChangeEvent projectId ticketId authorId Nothing status
 
   (projectData, projectResourceId, projectOwnerUserId) <- ProjectsQ.projectNotificationData projectId
   let ticketData =
@@ -59,3 +66,53 @@ createTicket authorId projectId title description status = do
           }
   NotifQ.recordEvent notifEvent
   pure (ticketId, number)
+
+updateTicket :: UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> PG.Transaction e ()
+updateTicket callerUserId ticketId newTitle newDescription newStatus = do
+  Ticket {..} <- TicketQ.ticketById ticketId
+  let updatedTitle = fromMaybe title newTitle
+  let updatedDescription = fromNullableUpdate description newDescription
+  let updatedStatus = fromMaybe status newStatus
+  -- Add a status change event
+  when (isJust newStatus && newStatus /= Just status) do
+    insertTicketStatusChangeEvent projectId ticketId callerUserId (Just status) updatedStatus
+  PG.execute_
+    [PG.sql|
+        UPDATE tickets
+        SET
+          title = #{updatedTitle},
+          description = #{updatedDescription},
+          status = #{updatedStatus}::ticket_status
+        WHERE id = #{ticketId}
+        |]
+
+insertTicketStatusChangeEvent :: ProjectId -> TicketId -> UserId -> Maybe TicketStatus -> TicketStatus -> PG.Transaction e ()
+insertTicketStatusChangeEvent projectId ticketId actorUserId oldStatus newStatus = do
+  PG.execute_
+    [PG.sql|
+        INSERT INTO ticket_status_events
+          (ticket_id, actor, old_status, new_status)
+          VALUES (#{ticketId}, #{actorUserId}, #{oldStatus}::ticket_status, #{newStatus}::ticket_status)
+      |]
+
+  -- Only record a notification event if it's a status change, not a creation
+  case oldStatus of
+    Nothing -> pure ()
+    Just _ -> do
+      (projectData, projectResourceId, projectOwnerUserId) <- ProjectsQ.projectNotificationData projectId
+      -- Record the status update notification event
+      let ticketData =
+            TicketData
+              { ticketId,
+                ticketAuthorUserId = actorUserId
+              }
+      let notifEvent =
+            NotificationEvent
+              { eventId = (),
+                eventOccurredAt = (),
+                eventResourceId = projectResourceId,
+                eventData = ProjectTicketUpdatedData projectData ticketData,
+                eventScope = projectOwnerUserId,
+                eventActor = actorUserId
+              }
+      NotifQ.recordEvent notifEvent
