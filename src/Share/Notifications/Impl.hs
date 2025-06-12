@@ -12,7 +12,7 @@ import Share.Notifications.Types
 import Share.Postgres qualified as PG
 import Share.Postgres.Ops qualified as UserQ
 import Share.User (User (..))
-import Share.Utils.API (Cursor, Paged, pagedOn)
+import Share.Utils.API (Cursor, Paged)
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
@@ -93,9 +93,7 @@ getHubEntriesEndpoint userHandle callerUserId limit mayCursor mayStatusFilter = 
   notifications <- PG.runTransaction $ do
     notifs <- NotificationQ.listNotificationHubEntryPayloads notificationUserId limit mayCursor (API.getStatusFilter <$> mayStatusFilter)
     forOf (traversed . traversed) notifs NotifOps.hydrateEvent
-  notifications
-    & pagedOn (\(NotificationHubEntry {hubEntryId, hubEntryCreatedAt}) -> (hubEntryCreatedAt, hubEntryId))
-    & pure
+  pure notifications
 
 updateHubEntriesEndpoint :: UserHandle -> UserId -> API.UpdateHubEntriesRequest -> WebApp ()
 updateHubEntriesEndpoint userHandle callerUserId API.UpdateHubEntriesRequest {notificationStatus, notificationIds} = do

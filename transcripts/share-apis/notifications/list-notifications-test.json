@@ -266,8 +266,8 @@
         "status": "unread"
       }
     ],
-    "nextCursor": "<CURSOR>",
-    "prevCursor": "<CURSOR>"
+    "nextCursor": null,
+    "prevCursor": null
   },
   "status": [
     {
