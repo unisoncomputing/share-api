@@ -94,6 +94,8 @@
                 },
                 "title": "Fix issue with user authentication"
               },
+              "newStatus": "closed",
+              "oldStatus": "in_review",
               "project": {
                 "projectId": "P-<UUID>",
                 "projectOwnerHandle": "test",
