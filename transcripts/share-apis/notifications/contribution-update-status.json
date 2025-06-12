@@ -1,0 +1,26 @@
+{
+  "body": {
+    "author": {
+      "avatarUrl": null,
+      "handle": "test",
+      "name": null,
+      "userId": "U-<UUID>"
+    },
+    "createdAt": "<TIMESTAMP>",
+    "description": "This contribution addresses an issue where users were unable to log in due to a validation error in the authentication process.\n\n## Changes made:\n\n* Modified the validation logic for the Auth type to properly authenticate users.\n* Added unit tests to ensure the authentication process works as expected.\n\n## Testing:\n\nI tested this change locally on my development environment and confirmed that users can now log in without any issues. All unit tests are passing.",
+    "id": "C-<UUID>",
+    "numComments": 3,
+    "number": 1,
+    "projectRef": "@test/publictestproject",
+    "sourceBranchRef": "@transcripts/contribution",
+    "status": "closed",
+    "targetBranchRef": "main",
+    "title": "Fix issue with user authentication",
+    "updatedAt": "<TIMESTAMP>"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
