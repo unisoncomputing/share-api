@@ -13,6 +13,7 @@ module Share.Utils.API
     emptySetUpdate,
     Cursor (..),
     Paged (..),
+    guardPaged,
     Query (..),
     Limit (..),
     (:++) (..),
@@ -228,6 +229,13 @@ instance (ToJSON a, ToJSON cursor) => ToJSON (Paged cursor a) where
         "prevCursor" .= prevCursor,
         "nextCursor" .= nextCursor
       ]
+
+guardPaged :: Bool -> Bool -> Paged cursor a -> Paged cursor a
+guardPaged hasPrev hasNext paged@(Paged {prevCursor, nextCursor}) =
+  paged
+    { prevCursor = if hasPrev then prevCursor else Nothing,
+      nextCursor = if hasNext then nextCursor else Nothing
+    }
 
 -- | The maximum page size for pageable endpoints
 maxLimit :: Int64

@@ -41,7 +41,7 @@ import Share.Postgres.Tickets.Queries qualified as TicketQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.Ticket
-import Share.Utils.API (Cursor (..), CursorDirection (..))
+import Share.Utils.API (Cursor (..), CursorDirection (..), Paged (..), guardPaged, pagedOn)
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
@@ -62,30 +62,45 @@ expectEvent eventId = do
       WHERE id = #{eventId}
     |]
 
-listNotificationHubEntryPayloads :: UserId -> Maybe Int -> Maybe (Cursor GetHubEntriesCursor) -> Maybe (NESet NotificationStatus) -> Transaction e [NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload]
+listNotificationHubEntryPayloads :: UserId -> Maybe Int -> Maybe (Cursor GetHubEntriesCursor) -> Maybe (NESet NotificationStatus) -> Transaction e (Paged GetHubEntriesCursor (NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload))
 listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFilter = do
-  let limit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
-  let statusFilterList = Foldable.toList <$> statusFilter
-  let cursorFilter = case mayCursor of
+  let inflatedLimit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 . (fmap (+ 1)) $ mayLimit
+  let mkCursorFilter = \case
         Nothing -> mempty
-        Just (Cursor (beforeTime, entryId) Previous) -> [PG.sql| AND (hub.created_at, hub.id) < (#{beforeTime}, #{entryId})|]
-        Just (Cursor (afterTime, entryId) Next) -> [PG.sql| AND (hub.created_at, hub.id) > (#{afterTime}, #{entryId})|]
-  dbNotifications <-
-    queryListRows @(NotificationHubEntry UserId NotificationEventData)
-      [sql|
-      SELECT hub.id, hub.status, hub.created_at, event.id, event.occurred_at, event.scope_user_id, event.actor_user_id, event.resource_id, event.topic, event.data
-        FROM notification_hub_entries hub
-        JOIN notification_events event ON hub.event_id = event.id
-      WHERE hub.user_id = #{notificationUserId}
-            AND (#{statusFilterList} IS NULL OR hub.status = ANY(#{statusFilterList}::notification_status[]))
-            -- By default omit notifications that are from the user themself.
-            AND event.actor_user_id <> #{notificationUserId}
-            ^{cursorFilter}
-      ORDER BY hub.created_at DESC
-      LIMIT #{limit}
-    |]
+        Just (Cursor (beforeTime, entryId) Previous) -> [PG.sql| AND (hub.created_at, hub.id) > (#{beforeTime}, #{entryId})|]
+        Just (Cursor (afterTime, entryId) Next) -> [PG.sql| AND (hub.created_at, hub.id) < (#{afterTime}, #{entryId})|]
+  dbNotifications <- query inflatedLimit (mkCursorFilter mayCursor)
   hydratedPayloads <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventPayload
-  hydratedPayloads & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
+  results <- hydratedPayloads & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
+  let hasNextPage = length results == fromIntegral inflatedLimit
+  let paged@(Paged {prevCursor}) =
+        results
+          & (take (fromIntegral inflatedLimit - 1))
+          & pagedOn (\(NotificationHubEntry {hubEntryId, hubEntryCreatedAt}) -> (hubEntryCreatedAt, hubEntryId))
+  hasPrevPage <- not . null <$> query 1 (mkCursorFilter prevCursor)
+  pure $ guardPaged hasPrevPage hasNextPage paged
+  where
+    statusFilterList :: Maybe [NotificationStatus]
+    statusFilterList = Foldable.toList <$> statusFilter
+    query ::
+      (QueryA m) =>
+      Int32 ->
+      PG.Sql ->
+      m [NotificationHubEntry UserId NotificationEventData]
+    query limit cursorFilter =
+      queryListRows @(NotificationHubEntry UserId NotificationEventData)
+        [sql|
+          SELECT hub.id, hub.status, hub.created_at, event.id, event.occurred_at, event.scope_user_id, event.actor_user_id, event.resource_id, event.topic, event.data
+            FROM notification_hub_entries hub
+            JOIN notification_events event ON hub.event_id = event.id
+          WHERE hub.user_id = #{notificationUserId}
+                AND (#{statusFilterList} IS NULL OR hub.status = ANY(#{statusFilterList}::notification_status[]))
+                -- By default omit notifications that are from the user themself.
+                AND event.actor_user_id <> #{notificationUserId}
+                ^{cursorFilter}
+          ORDER BY hub.created_at DESC
+          LIMIT #{limit}
+        |]
 
 hasUnreadNotifications :: UserId -> Transaction e Bool
 hasUnreadNotifications notificationUserId = do
