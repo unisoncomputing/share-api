@@ -27,6 +27,7 @@ import Share.BackgroundJobs.Webhooks.Queries qualified as WQ
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.ChatApps (Author (..))
 import Share.ChatApps qualified as ChatApps
+import Share.Contribution (displayContributionStatus)
 import Share.Env qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
@@ -41,6 +42,7 @@ import Share.Notifications.Webhooks.Secrets qualified as Webhooks
 import Share.Postgres qualified as PG
 import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
+import Share.Ticket (displayTicketStatus)
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..))
 import Share.Web.Authorization qualified as AuthZ
@@ -308,8 +310,16 @@ buildWebhookRequest webhookId uri event defaultPayload = do
         HydratedProjectContributionCreatedPayload payload -> do
           let mkPretext pbShorthand = "New Contribution in " <> IDs.toText pbShorthand
           contributionChatMessage event author mainLink payload mkPretext
-        HydratedProjectContributionUpdatedPayload payload -> do
-          let mkPretext pbShorthand = "Updated Contribution in " <> IDs.toText pbShorthand
+        HydratedProjectContributionStatusUpdatedPayload payload (StatusUpdatePayload {oldStatus, newStatus}) -> do
+          let mkPretext pbShorthand =
+                Text.unwords
+                  [ "Contribution in",
+                    IDs.toText pbShorthand,
+                    "changed from",
+                    displayContributionStatus oldStatus,
+                    "to",
+                    displayContributionStatus newStatus
+                  ]
           contributionChatMessage event author mainLink payload mkPretext
         HydratedProjectContributionCommentPayload payload comment -> do
           let mkPretext pbShorthand = "New Comment on Contribution in " <> IDs.toText pbShorthand
@@ -321,8 +331,16 @@ buildWebhookRequest webhookId uri event defaultPayload = do
         HydratedProjectTicketCreatedPayload payload -> do
           let mkPretext projectShorthand = "New Ticket in " <> IDs.toText projectShorthand
           ticketChatMessage event author mainLink payload mkPretext
-        HydratedProjectTicketUpdatedPayload payload -> do
-          let mkPretext projectShorthand = "Updated Ticket in " <> IDs.toText projectShorthand
+        HydratedProjectTicketStatusUpdatedPayload payload (StatusUpdatePayload {oldStatus, newStatus}) -> do
+          let mkPretext projectShorthand =
+                Text.unwords
+                  [ "Ticket in",
+                    IDs.toText projectShorthand,
+                    "changed from",
+                    displayTicketStatus oldStatus,
+                    "to",
+                    displayTicketStatus newStatus
+                  ]
           ticketChatMessage event author mainLink payload mkPretext
         HydratedProjectTicketCommentPayload payload comment -> do
           let mkPretext projectShorthand = "New Comment on Ticket in " <> IDs.toText projectShorthand

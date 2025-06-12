@@ -4,10 +4,11 @@
       "filter": null,
       "id": "NS-<UUID>",
       "scope": "U-<UUID>",
-      "topicGroups": [],
+      "topicGroups": [
+        "watch_project"
+      ],
       "topics": [
-        "project:branch:updated",
-        "project:contribution:created"
+        "project:branch:updated"
       ]
     }
   },

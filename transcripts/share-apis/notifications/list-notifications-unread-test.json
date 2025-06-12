@@ -97,7 +97,7 @@
                   "branchShortHand": "main",
                   "projectBranchShortHand": "@test/publictestproject/main"
                 },
-                "status": "in_review",
+                "status": "closed",
                 "targetBranch": {
                   "branchContributorHandle": "transcripts",
                   "branchContributorUserId": "U-<UUID>",

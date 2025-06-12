@@ -7,8 +7,6 @@ module Share.Postgres.Tickets.Queries
     shareTicketByProjectIdAndNumber,
     listTicketsByProjectId,
     ticketById,
-    updateTicket,
-    insertTicketStatusChangeEvent,
     ticketStatusChangeEventsByTicketId,
     ticketCommentsByTicketId,
     listTicketsByUserId,
@@ -148,34 +146,6 @@ ticketById ticketId = do
           ticket.author_id
         FROM tickets AS ticket
         WHERE ticket.id = #{ticketId}
-      |]
-
-updateTicket :: UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> PG.Transaction e ()
-updateTicket callerUserId ticketId newTitle newDescription newStatus = do
-  Ticket {..} <- ticketById ticketId
-  let updatedTitle = fromMaybe title newTitle
-  let updatedDescription = fromNullableUpdate description newDescription
-  let updatedStatus = fromMaybe status newStatus
-  -- Add a status change event
-  when (isJust newStatus && newStatus /= Just status) do
-    insertTicketStatusChangeEvent ticketId callerUserId (Just status) updatedStatus
-  PG.execute_
-    [PG.sql|
-        UPDATE tickets
-        SET
-          title = #{updatedTitle},
-          description = #{updatedDescription},
-          status = #{updatedStatus}::ticket_status
-        WHERE id = #{ticketId}
-        |]
-
-insertTicketStatusChangeEvent :: TicketId -> UserId -> Maybe TicketStatus -> TicketStatus -> PG.Transaction e ()
-insertTicketStatusChangeEvent ticketId actorUserId oldStatus newStatus = do
-  PG.execute_
-    [PG.sql|
-        INSERT INTO ticket_status_events
-          (ticket_id, actor, old_status, new_status)
-          VALUES (#{ticketId}, #{actorUserId}, #{oldStatus}::ticket_status, #{newStatus}::ticket_status)
       |]
 
 ticketStatusChangeEventsByTicketId :: TicketId -> Maybe UTCTime -> Maybe UTCTime -> PG.Transaction e [StatusChangeEvent UserId]

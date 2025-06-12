@@ -129,13 +129,13 @@ notificationLink = \case
     projectBranchBrowseLink payload.branchInfo.projectBranchShortHand
   HydratedProjectContributionCreatedPayload payload ->
     contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
-  HydratedProjectContributionUpdatedPayload payload ->
+  HydratedProjectContributionStatusUpdatedPayload payload _status ->
     contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
   HydratedProjectContributionCommentPayload payload comment ->
     contributionCommentLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber comment.commentId
   HydratedProjectTicketCreatedPayload payload ->
     ticketLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber
-  HydratedProjectTicketUpdatedPayload payload ->
+  HydratedProjectTicketStatusUpdatedPayload payload _status ->
     ticketLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber
   HydratedProjectTicketCommentPayload payload comment ->
     ticketCommentLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber comment.commentId

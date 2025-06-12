@@ -30,6 +30,7 @@ import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.Contributions.Ops qualified as ContribOps
 import Share.Postgres.Contributions.Ops qualified as ContributionOps
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.NameLookups.Ops qualified as NL
@@ -209,7 +210,7 @@ updateContributionByNumberEndpoint session handle projectSlug contributionNumber
     pure (contribution, maySourceBranch, mayTargetBranch)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionUpdate callerUserId contribution updateRequest
   PG.runTransactionOrRespondError $ do
-    _ <- ContributionsQ.updateContribution callerUserId contributionId title description status (branchId <$> maySourceBranch) (branchId <$> mayTargetBranch)
+    _ <- ContribOps.updateContribution callerUserId contributionId title description status (branchId <$> maySourceBranch) (branchId <$> mayTargetBranch)
     DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
     ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
       >>= UsersQ.userDisplayInfoOf traversed

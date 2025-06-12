@@ -30,9 +30,9 @@ fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/s
 fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/transcripts/notifications/subscriptions' "{
   \"scope\": \"test\",
   \"topics\": [
-    \"project:contribution:created\", \"project:branch:updated\"
+    \"project:branch:updated\"
   ],
-  \"topicGroups\": []
+  \"topicGroups\": [\"watch_project\"]
 }"
 
 fetch "$test_user" POST create-email-delivery '/users/test/notifications/delivery-methods/emails' '{
@@ -70,6 +70,12 @@ fetch "$transcripts_user" POST ticket-create '/users/test/projects/publictestpro
 fetch "$transcripts_user" POST ticket-comment-create '/users/test/projects/publictestproject/tickets/1/timeline/comments' '{
     "content": "This is a new comment on the ticket"
 }'
+
+# Update the contribution status, which should trigger a status update notification.
+fetch "$test_user" PATCH contribution-update-status '/users/test/projects/publictestproject/contributions/1' '{
+    "status": "closed"
+}'
+
 
 # Create a contribution in a private project, which shouldn't create a notification for either, because 'test' has
 # a subscription filter and 'transcripts' doesn't have access.
