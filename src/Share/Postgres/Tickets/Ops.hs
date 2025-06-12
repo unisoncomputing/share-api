@@ -8,7 +8,7 @@ where
 
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
-import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), TicketData (..))
+import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), StatusUpdateData (..), TicketData (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Tickets.Queries qualified as TicketQ
@@ -98,7 +98,7 @@ insertTicketStatusChangeEvent projectId ticketId actorUserId oldStatus newStatus
   -- Only record a notification event if it's a status change, not a creation
   case oldStatus of
     Nothing -> pure ()
-    Just _ -> do
+    Just oldStatus' -> do
       (projectData, projectResourceId, projectOwnerUserId) <- ProjectsQ.projectNotificationData projectId
       -- Record the status update notification event
       let ticketData =
@@ -106,12 +106,13 @@ insertTicketStatusChangeEvent projectId ticketId actorUserId oldStatus newStatus
               { ticketId,
                 ticketAuthorUserId = actorUserId
               }
+      let statusUpdateData = StatusUpdateData {oldStatus = oldStatus', newStatus}
       let notifEvent =
             NotificationEvent
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
-                eventData = ProjectTicketUpdatedData projectData ticketData,
+                eventData = ProjectTicketStatusUpdatedData projectData ticketData statusUpdateData,
                 eventScope = projectOwnerUserId,
                 eventActor = actorUserId
               }

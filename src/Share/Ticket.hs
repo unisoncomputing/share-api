@@ -4,13 +4,13 @@ module Share.Ticket where
 
 import Data.Aeson qualified as Aeson
 import Data.Time (UTCTime)
-import Share.IDs
-import Share.Postgres qualified as PG
-import Share.Prelude
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Hasql
 import Servant (FromHttpApiData (..))
+import Share.IDs
+import Share.Postgres qualified as PG
+import Share.Prelude
 
 data TicketStatus
   = Open
@@ -52,6 +52,11 @@ instance Hasql.DecodeValue TicketStatus where
           "closed" -> Just Closed
           _ -> Nothing
       )
+
+displayTicketStatus :: TicketStatus -> Text
+displayTicketStatus = \case
+  Open -> "Open"
+  Closed -> "Closed"
 
 data Ticket = Ticket
   { ticketId :: TicketId,

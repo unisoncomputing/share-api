@@ -332,10 +332,14 @@ hydrateEventPayload = \case
     (ProjectData {projectId})
     (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
       HydratedProjectContributionCreatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
-  ProjectContributionUpdatedData
+  ProjectContributionStatusUpdatedData
     (ProjectData {projectId})
-    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
-      HydratedProjectContributionUpdatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+    (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId})
+    (StatusUpdateData {oldStatus, newStatus}) -> do
+      let statusPayload = StatusUpdatePayload {oldStatus, newStatus}
+      HydratedProjectContributionStatusUpdatedPayload
+        <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+        <*> pure statusPayload
   ProjectContributionCommentData
     (ProjectData {projectId})
     (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId})
@@ -347,10 +351,14 @@ hydrateEventPayload = \case
     (ProjectData {projectId})
     (TicketData {ticketId, ticketAuthorUserId}) -> do
       HydratedProjectTicketCreatedPayload <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
-  ProjectTicketUpdatedData
+  ProjectTicketStatusUpdatedData
     (ProjectData {projectId})
-    (TicketData {ticketId, ticketAuthorUserId}) -> do
-      HydratedProjectTicketUpdatedPayload <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+    (TicketData {ticketId, ticketAuthorUserId})
+    (StatusUpdateData {oldStatus, newStatus}) -> do
+      let statusPayload = StatusUpdatePayload {oldStatus, newStatus}
+      HydratedProjectTicketStatusUpdatedPayload
+        <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+        <*> pure statusPayload
   ProjectTicketCommentData
     (ProjectData {projectId})
     (TicketData {ticketId, ticketAuthorUserId})

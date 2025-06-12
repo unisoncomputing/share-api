@@ -36,6 +36,13 @@ instance Aeson.FromJSON ContributionStatus where
       "merged" -> pure Merged
       _ -> fail "Invalid contribution status"
 
+displayContributionStatus :: ContributionStatus -> Text
+displayContributionStatus = \case
+  Draft -> "Draft"
+  InReview -> "In Review"
+  Closed -> "Closed"
+  Merged -> "Merged"
+
 instance Hasql.EncodeValue ContributionStatus where
   encodeValue =
     PG.encodeValue & contramap \case
