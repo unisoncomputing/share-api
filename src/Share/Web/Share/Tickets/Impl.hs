@@ -148,7 +148,7 @@ updateTicketByNumberEndpoint session handle projectSlug ticketNumber updateReque
     pure ticket
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkTicketUpdate callerUserId ticket updateRequest
   PG.runTransactionOrRespondError $ do
-    _ <- TicketsQ.updateTicket callerUserId ticketId title description status
+    _ <- TicketOps.updateTicket callerUserId ticketId title description status
     TicketsQ.shareTicketByProjectIdAndNumber projectId ticketNumber `whenNothingM` throwError (EntityMissing (ErrorID "ticket:missing") "Ticket not found")
       >>= UserQ.userDisplayInfoOf traversed
   where
