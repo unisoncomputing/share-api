@@ -102,6 +102,8 @@ test_notification_id=$(fetch_data_jq "$test_user" GET list-notifications-test '/
 transcripts_notification_id=$(fetch_data_jq "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub' '.items[0].id')
 
 fetch "$test_user" GET list-notifications-test '/users/test/notifications/hub'
+# If we pass a limit, we should get a next cursor
+fetch "$test_user" GET list-notifications-test-paging '/users/test/notifications/hub?limit=1'
 
 fetch "$transcripts_user" GET list-notifications-transcripts '/users/transcripts/notifications/hub'
 
@@ -120,7 +122,7 @@ fetch "$transcripts_user" PATCH mark-notifications-read-transcripts '/users/tran
   ]
 }"
 
-# Show only unread notifications (none should be unread):
+# Show only unread notifications:
 fetch "$test_user" GET list-notifications-unread-test '/users/test/notifications/hub?status=unread'
 
 # Show only read notifications (the one we just marked as read):
