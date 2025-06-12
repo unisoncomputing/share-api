@@ -78,6 +78,8 @@ listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFil
         JOIN notification_events event ON hub.event_id = event.id
       WHERE hub.user_id = #{notificationUserId}
             AND (#{statusFilterList} IS NULL OR hub.status = ANY(#{statusFilterList}::notification_status[]))
+            -- By default omit notifications that are from the user themself.
+            AND event.actor_user_id <> #{notificationUserId}
             ^{cursorFilter}
       ORDER BY hub.created_at DESC
       LIMIT #{limit}
@@ -86,14 +88,16 @@ listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFil
   hydratedPayloads & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
 
 hasUnreadNotifications :: UserId -> Transaction e Bool
-hasUnreadNotifications userId = do
+hasUnreadNotifications notificationUserId = do
   queryExpect1Col
     [sql|
       SELECT EXISTS(
         SELECT
           FROM notification_hub_entries hub
-        WHERE hub.user_id = #{userId}
+          JOIN notification_events event ON hub.event_id = event.id
+        WHERE hub.user_id = #{notificationUserId}
               AND hub.status = #{Unread}::notification_status
+              AND event.actor_user_id <> #{notificationUserId}
       )
     |]
 

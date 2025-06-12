@@ -41,8 +41,9 @@ fetch "$test_user" POST create-email-delivery '/users/test/notifications/deliver
 
 fetch "$test_user" GET check-delivery-methods '/users/test/notifications/delivery-methods'
 
-# Create a contribution in a public project, which should trigger a notification for both users
-fetch "$test_user" POST public-contribution-create '/users/test/projects/publictestproject/contributions' '{
+# Create a contribution in a public project, which should trigger a notification for both users, but will be omitted
+# from 'transcripts' notification list since it's a self-notification.
+fetch "$transcripts_user" POST public-contribution-create '/users/test/projects/publictestproject/contributions' '{
     "title": "My contribution",
     "description": "My description",
     "status": "draft",
@@ -80,7 +81,7 @@ fetch "$test_user" POST private-contribution-create '/users/test/projects/privat
     "targetBranchRef": "main"
 }'
 
-# Create a new branch in the watched project, which should trigger a branch updated notification 
+# Create a new branch in the watched project, which should trigger a branch updated notification
 fetch "$test_user" POST branch-create '/ucm/v1/projects/create-project-branch' "{
   \"project-id\": \"${publictestproject_id}\",
   \"branch-name\": \"newbranch\",
