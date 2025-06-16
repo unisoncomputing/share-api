@@ -170,7 +170,7 @@ searchProjects caller userIdFilter (Query query) limit = do
     PG.queryListRows
       [PG.sql|
     SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-      FROM to_tsquery('english', #{queryToken}) AS tokenquery, projects AS p
+      FROM websearch_to_tsquery('english', #{queryToken}) AS tokenquery, projects AS p
         JOIN users AS owner ON p.owner_user_id = owner.id
       WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
       AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
