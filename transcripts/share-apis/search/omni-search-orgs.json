@@ -10,12 +10,6 @@
         "name": "Unison Org",
         "userId": "U-<UUID>"
       }
-    },
-    {
-      "projectRef": "@unison/privateorgproject",
-      "summary": "Private Unison Project",
-      "tag": "project",
-      "visibility": "private"
     }
   ],
   "status": [
