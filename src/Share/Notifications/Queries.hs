@@ -64,20 +64,19 @@ expectEvent eventId = do
 
 listNotificationHubEntryPayloads :: UserId -> Maybe Int -> Maybe (Cursor GetHubEntriesCursor) -> Maybe (NESet NotificationStatus) -> Transaction e (Paged GetHubEntriesCursor (NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload))
 listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFilter = do
-  let inflatedLimit = clamp (0, 1000) . fromIntegral @Int @Int32 . fromMaybe 50 . (fmap (+ 1)) $ mayLimit
+  let limit = clamp (0, 100) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
   let mkCursorFilter = \case
         Nothing -> mempty
         Just (Cursor (beforeTime, entryId) Previous) -> [PG.sql| AND (hub.created_at, hub.id) > (#{beforeTime}, #{entryId})|]
         Just (Cursor (afterTime, entryId) Next) -> [PG.sql| AND (hub.created_at, hub.id) < (#{afterTime}, #{entryId})|]
-  dbNotifications <- query inflatedLimit (mkCursorFilter mayCursor)
+  dbNotifications <- query limit (mkCursorFilter mayCursor)
   hydratedPayloads <- PG.pipelined $ forOf (traversed . traversed) dbNotifications hydrateEventPayload
   results <- hydratedPayloads & DisplayInfoQ.unifiedDisplayInfoForUserOf (traversed . hubEntryUserInfo_)
-  let hasNextPage = length results == fromIntegral inflatedLimit
-  let paged@(Paged {prevCursor}) =
+  let paged@(Paged {prevCursor, nextCursor}) =
         results
-          & (take (fromIntegral inflatedLimit - 1))
           & pagedOn (\(NotificationHubEntry {hubEntryId, hubEntryCreatedAt}) -> (hubEntryCreatedAt, hubEntryId))
   hasPrevPage <- not . null <$> query 1 (mkCursorFilter prevCursor)
+  hasNextPage <- not . null <$> query 1 (mkCursorFilter nextCursor)
   pure $ guardPaged hasPrevPage hasNextPage paged
   where
     statusFilterList :: Maybe [NotificationStatus]
