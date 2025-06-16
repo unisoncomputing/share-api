@@ -202,16 +202,26 @@ updateContributionByNumberEndpoint ::
   WebApp (ShareContribution UserDisplayInfo)
 updateContributionByNumberEndpoint session handle projectSlug contributionNumber updateRequest@UpdateContributionRequest {title, description, status, sourceBranchSH, targetBranchSH} = do
   callerUserId <- AuthN.requireAuthenticatedUser session
-  (contribution@Contribution {contributionId, projectId, number = contributionNumber}, maySourceBranch, mayTargetBranch) <- PG.runTransactionOrRespondError $ do
+  (contribution@Contribution {contributionId, projectId, number = contributionNumber, sourceBranchId = oldSourceBranchId, targetBranchId = oldTargetBranchId}, maySourceBranch, mayTargetBranch) <- PG.runTransactionOrRespondError $ do
     Project {projectId} <- Q.projectByShortHand projectShorthand `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
     contribution <- ContributionsQ.contributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
     maySourceBranch <- for sourceBranchSH \sb -> Q.branchByProjectIdAndShortHand projectId sb `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
     mayTargetBranch <- for targetBranchSH \tb -> Q.branchByProjectIdAndShortHand projectId tb `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
     pure (contribution, maySourceBranch, mayTargetBranch)
   _authReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionUpdate callerUserId contribution updateRequest
+
+  let sourceBranchDiffers = isJust $ do
+        sourceBranch <- maySourceBranch
+        guard $ sourceBranch.branchId /= oldSourceBranchId
+  let targetBranchDiffers = isJust $ do
+        targetBranch <- mayTargetBranch
+        guard $ targetBranch.branchId /= oldTargetBranchId
+
   PG.runTransactionOrRespondError $ do
     _ <- ContribOps.updateContribution callerUserId contributionId title description status (branchId <$> maySourceBranch) (branchId <$> mayTargetBranch)
-    DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
+    -- Only submit contributions to be diffed if the source or target branch has changed.
+    when (sourceBranchDiffers || targetBranchDiffers) do
+      DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
     ContributionsQ.shareContributionByProjectIdAndNumber projectId contributionNumber `whenNothingM` throwError (EntityMissing (ErrorID "contribution:missing") "Contribution not found")
       >>= UsersQ.userDisplayInfoOf traversed
   where
