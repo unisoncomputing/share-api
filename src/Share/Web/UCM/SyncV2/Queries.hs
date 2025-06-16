@@ -13,6 +13,7 @@ import Share.Postgres.IDs
 import Share.Prelude
 import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.TempEntity (TempEntity)
+import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
 
@@ -23,6 +24,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  Debug.debugM Debug.Temp "populating except hashes for N causal hashes:" (length exceptCausalHashes)
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -31,27 +33,31 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
       SELECT c.id
       FROM the_causal_hashes tch
         JOIN causals c ON tch.hash = c.hash
-    ), dependency_hashes(hash) AS (
-      SELECT DISTINCT deps.hash
+    ), dependency_hashes(hash, kind) AS (
+      SELECT DISTINCT deps.hash, deps.kind
       FROM dependencies_of_causals_without_ancestors((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
     ), do_causals AS (
       INSERT INTO except_causals(causal_id)
       SELECT DISTINCT causal.id
       FROM dependency_hashes dh
         JOIN causals causal ON dh.hash = causal.hash
+      WHERE dh.kind = 'causal'::dependency_kind
       ON CONFLICT DO NOTHING
     ), do_namespaces AS (
       INSERT INTO except_namespaces(branch_hash_ids)
       SELECT DISTINCT bh.id
       FROM dependency_hashes dh
         JOIN branch_hashes bh ON dh.hash = bh.base32
+      WHERE dh.kind = 'namespace'::dependency_kind
       ON CONFLICT DO NOTHING
     ) INSERT INTO except_components(component_hash_id)
       SELECT DISTINCT ch.id
       FROM dependency_hashes dh
         JOIN component_hashes ch ON dh.hash = ch.base32
+      WHERE dh.kind = 'component'::dependency_kind
       ON CONFLICT DO NOTHING
     |]
+  Debug.debugLogM Debug.Temp "populated except hashes"
   cursor <-
     PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
       "serialized_entities"
