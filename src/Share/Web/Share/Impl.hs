@@ -18,6 +18,8 @@ import Share.Notifications.Impl qualified as Notifications
 import Share.Notifications.Queries qualified as NotifQ
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
+import Unison.Server.Doc.Markdown.Render qualified as MD
+import Unison.Server.Doc.Markdown.Types qualified as MD
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.IDs (CausalHash)
@@ -336,7 +338,7 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
       let mayReadme = do
             NamespaceDetails {readme} <- mayNamespaceDetails
             readme
-      pure $ ReadmeResponse {readMe = mayReadme}
+      pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
   where
     cacheParams = [IDs.toText userHandle]
 
