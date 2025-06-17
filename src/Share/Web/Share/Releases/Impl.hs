@@ -50,6 +50,8 @@ import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
+import Unison.Server.Doc.Markdown.Render qualified as MD
+import Unison.Server.Doc.Markdown.Types qualified as MD
 import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.Definitions qualified as ShareBackend
@@ -313,7 +315,7 @@ getProjectReleaseReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandl
       let mayReadme = do
             NamespaceDetails {readme} <- mayNamespaceDetails
             readme
-      pure $ ReadmeResponse {readMe = mayReadme}
+      pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
   where
     cacheParams = [IDs.toText projectReleaseShortHand]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}

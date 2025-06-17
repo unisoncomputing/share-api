@@ -95,14 +95,16 @@ instance ToJSON DescribeUserProfile where
           ]
 
 data ReadmeResponse = ReadmeResponse
-  { readMe :: Maybe Doc
+  { readMe :: Maybe Doc,
+    markdownReadMe :: Maybe Text
   }
   deriving (Show)
 
 instance ToJSON ReadmeResponse where
   toJSON ReadmeResponse {..} =
     Aeson.object
-      [ "readMe" .= readMe
+      [ "readMe" .= readMe,
+        "markdownReadMe" .= markdownReadMe
       ]
 
 -- | A reponse for rendering docs.
