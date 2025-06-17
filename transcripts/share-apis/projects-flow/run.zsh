@@ -8,6 +8,8 @@ transcript_ucm transcript prelude.md
 
 fetch "$unauthenticated_user" GET project-get-simple '/users/test/projects/publictestproject'
 
+
+fetch "$transcripts_user" GET project-readme "/users/transcripts/projects/transcriptproject/readme"
 fetch "$transcripts_user" GET project-browse-definition "/users/transcripts/projects/transcriptproject/branches/main/definitions/by-name/someTerm"
 fetch "$transcripts_user" GET project-browse-definition-in-dependency "/users/transcripts/projects/transcriptproject/branches/main/definitions/by-name/lib.someLib.depNum"
 

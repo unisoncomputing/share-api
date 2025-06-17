@@ -1,0 +1,50 @@
+{
+  "body": {
+    "markdownReadMe": "# Title\n\nReferences `someTerm`\n\n\n",
+    "readMe": {
+      "contents": [
+        {
+          "contents": [
+            {
+              "contents": "Title",
+              "tag": "Word"
+            }
+          ],
+          "tag": "Paragraph"
+        },
+        [
+          {
+            "contents": [
+              {
+                "contents": "References",
+                "tag": "Word"
+              },
+              {
+                "contents": {
+                  "contents": [
+                    {
+                      "annotation": {
+                        "contents": "#3r86bb0g1gn0ugqcf1hcvchic4rmlkep93agjdni44rfpf8m8pn9n3rtfq0jo4kovhv1nus01eqiivgdk2b20snsarln4n57dbk88m0",
+                        "tag": "TermReference"
+                      },
+                      "segment": "someTerm"
+                    }
+                  ],
+                  "tag": "Link"
+                },
+                "tag": "Special"
+              }
+            ],
+            "tag": "Paragraph"
+          }
+        ]
+      ],
+      "tag": "Section"
+    }
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
