@@ -7,7 +7,6 @@
 
 module Share.Postgres.Queries where
 
-import Data.Char qualified as Char
 import Data.List qualified as List
 import Data.Monoid (Sum (..))
 import Data.Set qualified as Set
@@ -158,19 +157,11 @@ searchProjects caller (Just userId) (Query "") limit = do
       |]
     <&> fmap \(project PG.:. PG.Only handle) -> (project, handle)
 searchProjects caller userIdFilter (Query query) limit = do
-  let queryToken =
-        query
-          -- Remove any chars with special meaning for tsqueries.
-          & Text.filter (\c -> Char.isAlphaNum c || Char.isSpace c || c `elem` ['_', '-'])
-          & \case
-            -- Empty prefix searches are invalid, Nullify the prefix search.
-            "" -> Nothing
-            txt -> Just $ "'" <> txt <> "'" <> ":*"
   results <-
     PG.queryListRows
       [PG.sql|
     SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-      FROM to_tsquery('english', #{queryToken}) AS tokenquery, projects AS p
+      FROM websearch_to_tsquery('english', #{query}) AS tokenquery, projects AS p
         JOIN users AS owner ON p.owner_user_id = owner.id
       WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
       AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
