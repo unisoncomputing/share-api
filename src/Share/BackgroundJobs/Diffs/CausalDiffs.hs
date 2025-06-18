@@ -54,6 +54,7 @@ processDiffs authZReceipt makeRuntime = do
               Just causalDiffInfo -> do
                 startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
                 result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt makeRuntime causalDiffInfo)
+                DQ.deleteClaimedCausalDiff causalDiffInfo
                 pure (Just (causalDiffInfo, startTime, result))
         whenJust result \(CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}, startTime, result) -> do
           let tags =
