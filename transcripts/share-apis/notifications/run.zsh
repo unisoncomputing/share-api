@@ -25,12 +25,13 @@ fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/s
   \"deliveryMethods\": [{\"kind\": \"webhook\",  \"id\": \"${webhook_id}\"}, {\"kind\": \"webhook\",  \"id\": \"${failing_webhook_id}\"}]
 }"
 
-# Add a subscription within the transcripts user to notifications for contributions created in any project belonging to the test user.
+# Add a subscription within the transcripts user to notifications for some select topics in any project owned by the test
+# user.
 # No filter is applied.
 fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/transcripts/notifications/subscriptions' "{
   \"scope\": \"test\",
   \"topics\": [
-    \"project:branch:updated\"
+    \"project:branch:updated\", \"project:release:created\"
   ],
   \"topicGroups\": [\"watch_project\"]
 }"
@@ -49,6 +50,15 @@ fetch "$transcripts_user" POST public-contribution-create '/users/test/projects/
     "status": "draft",
     "sourceBranchRef": "feature",
     "targetBranchRef": "main"
+}'
+
+# Create a release in a public project, which should trigger a notification for both users, but will be omitted
+# from 'test' notification list since it's a self-notification.
+fetch "$test_user" POST release-create '/users/test/projects/publictestproject/releases' '{
+    "causalHash": "#sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg",
+    "major": 2,
+    "minor": 3,
+    "patch": 4
 }'
 
 # Add a comment to a contribution, which should trigger a notification for the test user, which
