@@ -8,7 +8,8 @@
         "watch_project"
       ],
       "topics": [
-        "project:branch:updated"
+        "project:branch:updated",
+        "project:release:created"
       ]
     }
   },
