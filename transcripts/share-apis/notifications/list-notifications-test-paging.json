@@ -17,15 +17,17 @@
             "kind": "project:ticket:comment",
             "link": "http://<HOST>:1234/@test/publictestproject/tickets/1",
             "payload": {
-              "author": {
-                "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
-                "handle": "transcripts",
-                "name": "The Transcript User",
-                "userId": "U-<UUID>"
+              "comment": {
+                "author": {
+                  "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+                  "handle": "transcripts",
+                  "name": "The Transcript User",
+                  "userId": "U-<UUID>"
+                },
+                "commentId": "CMT-<UUID>",
+                "content": "This is a new comment on the ticket",
+                "createdAt": "<TIMESTAMP>"
               },
-              "commentId": "CMT-<UUID>",
-              "content": "This is a new comment on the ticket",
-              "createdAt": "<TIMESTAMP>",
               "project": {
                 "projectId": "P-<UUID>",
                 "projectOwnerHandle": "test",

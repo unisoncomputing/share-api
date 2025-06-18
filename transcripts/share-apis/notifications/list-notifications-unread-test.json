@@ -71,14 +71,17 @@
             "kind": "project:contribution:comment",
             "link": "http://<HOST>:1234/@test/publictestproject/contributions/1",
             "payload": {
-              "author": {
-                "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
-                "handle": "transcripts",
-                "name": "The Transcript User",
-                "userId": "U-<UUID>"
+              "comment": {
+                "author": {
+                  "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+                  "handle": "transcripts",
+                  "name": "The Transcript User",
+                  "userId": "U-<UUID>"
+                },
+                "commentId": "CMT-<UUID>",
+                "content": "This is a new comment",
+                "createdAt": "<TIMESTAMP>"
               },
-              "commentId": "CMT-<UUID>",
-              "content": "This is a new comment",
               "contribution": {
                 "author": {
                   "avatarUrl": null,
@@ -108,7 +111,6 @@
                 },
                 "title": "Fix issue with user authentication"
               },
-              "createdAt": "<TIMESTAMP>",
               "project": {
                 "projectId": "P-<UUID>",
                 "projectOwnerHandle": "test",

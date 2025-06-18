@@ -94,14 +94,16 @@
                 },
                 "title": "Fix issue with user authentication"
               },
-              "newStatus": "closed",
-              "oldStatus": "in_review",
               "project": {
                 "projectId": "P-<UUID>",
                 "projectOwnerHandle": "test",
                 "projectOwnerUserId": "U-<UUID>",
                 "projectShortHand": "@test/publictestproject",
                 "projectSlug": "publictestproject"
+              },
+              "status_update": {
+                "newStatus": "closed",
+                "oldStatus": "in_review"
               }
             }
           },
