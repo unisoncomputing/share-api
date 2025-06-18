@@ -1,15 +1,22 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Share.Postgres.Releases.Queries
   ( expectReleaseVersionsOf,
     latestReleaseVersionByProjectId,
+    releaseById,
+    UpdateReleaseResult (..),
+    updateRelease,
   )
 where
 
 import Control.Lens
 import Share.IDs
 import Share.Postgres
+import Share.Postgres.IDs
 import Share.Prelude
+import Share.Release
+import Share.Web.Share.Releases.Types (StatusUpdate (..))
 
 expectReleaseVersionsOf :: Traversal s t ReleaseId ReleaseVersion -> s -> Transaction e t
 expectReleaseVersionsOf trav s = do
@@ -44,3 +51,65 @@ latestReleaseVersionByProjectId projectId = do
         ORDER BY release.major_version DESC, release.minor_version DESC, release.patch_version DESC
         LIMIT 1
       |]
+
+releaseById :: (QueryA m) => ReleaseId -> m (Release CausalId UserId)
+releaseById releaseId = do
+  queryExpect1Row
+    [sql|
+        SELECT
+          release.id,
+          release.project_id,
+          release.unsquashed_causal_id,
+          release.squashed_causal_id,
+          release.created_at,
+          release.updated_at,
+          release.created_at,
+          release.created_by,
+          release.deprecated_at,
+          release.deprecated_by,
+          release.created_by,
+          release.major_version,
+          release.minor_version,
+          release.patch_version
+        FROM project_releases AS release
+        WHERE release.id = #{releaseId}
+      |]
+
+data UpdateReleaseResult
+  = UpdateRelease'Success
+  | UpdateRelease'NotFound
+  | UpdateRelease'CantPublishDeprecated
+
+updateRelease :: (QueryM m) => UserId -> ReleaseId -> Maybe StatusUpdate -> m UpdateReleaseResult
+updateRelease caller releaseId newStatus = do
+  fromMaybe UpdateRelease'NotFound <$> runMaybeT do
+    Release {..} <- lift $ releaseById releaseId
+    -- Can go from draft -> published -> deprecated
+    -- or straight from draft -> deprecated
+    -- but can't go from published -> draft or deprecated -> draft.
+    case (status, newStatus) of
+      (_, Nothing) ->
+        -- No-op
+        pure UpdateRelease'Success
+      (DeprecatedRelease {}, Just MakePublished) -> do
+        pure UpdateRelease'CantPublishDeprecated
+      (PublishedRelease {}, Just MakePublished) ->
+        -- No-op
+        pure UpdateRelease'Success
+      (PublishedRelease {}, Just MakeDeprecated) -> do
+        lift makeDeprecated
+        pure UpdateRelease'Success
+      (DeprecatedRelease {}, Just MakeDeprecated) -> do
+        -- No-op
+        pure UpdateRelease'Success
+  where
+    makeDeprecated = do
+      execute_
+        [sql|
+          UPDATE project_releases
+          SET
+            deprecated_at = NOW(),
+            deprecated_by = #{caller}
+          WHERE
+            id = #{releaseId}
+        |]

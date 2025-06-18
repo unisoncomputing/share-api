@@ -24,6 +24,7 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Releases.Queries qualified as ReleasesQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -403,10 +404,10 @@ updateReleaseEndpoint session userHandle projectSlug releaseVersion UpdateReleas
   callerUserId <- AuthN.requireAuthenticatedUser session
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReleaseUpdate (Just callerUserId) projectId
   PG.runTransactionOrRespondError do
-    Q.updateRelease callerUserId releaseId newStatus >>= \case
-      Q.UpdateRelease'Success -> pure ()
-      Q.UpdateRelease'NotFound -> throwSomeServerError releaseNotFound
-      Q.UpdateRelease'CantPublishDeprecated -> throwSomeServerError cantPublishDeprecated
+    ReleasesQ.updateRelease callerUserId releaseId newStatus >>= \case
+      ReleasesQ.UpdateRelease'Success -> pure ()
+      ReleasesQ.UpdateRelease'NotFound -> throwSomeServerError releaseNotFound
+      ReleasesQ.UpdateRelease'CantPublishDeprecated -> throwSomeServerError cantPublishDeprecated
   where
     releaseNotFound = EntityMissing (ErrorID "missing-release") "Release could not be found"
     cantPublishDeprecated = BadRequest "Cannot publish a release which has already been deprecated"

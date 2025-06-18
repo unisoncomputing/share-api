@@ -122,23 +122,30 @@ ticketCommentLink (ProjectShortHand {userHandle, projectSlug}) ticketNumber _com
   let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "tickets", IDs.toText ticketNumber]
   shareUIPath path
 
+releaseLink :: (MonadReader (Env.Env ctx) m) => ProjectShortHand -> ReleaseVersion -> m URI
+releaseLink (ProjectShortHand {userHandle, projectSlug}) releaseVersion = do
+  let path = [IDs.toText (PrefixedID @"@" userHandle), IDs.toText projectSlug, "releases", IDs.toText releaseVersion]
+  shareUIPath path
+
 -- | Where the user should go when clicking on a notification
 notificationLink :: (MonadReader (Env.Env ctx) m) => HydratedEventPayload -> m URI
 notificationLink = \case
-  HydratedProjectBranchUpdatedPayload payload ->
-    projectBranchBrowseLink payload.branchInfo.projectBranchShortHand
-  HydratedProjectContributionCreatedPayload payload ->
-    contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
-  HydratedProjectContributionStatusUpdatedPayload payload _status ->
-    contributionLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber
-  HydratedProjectContributionCommentPayload payload comment ->
-    contributionCommentLink payload.projectInfo.projectShortHand payload.contributionInfo.contributionNumber comment.commentId
-  HydratedProjectTicketCreatedPayload payload ->
-    ticketLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber
-  HydratedProjectTicketStatusUpdatedPayload payload _status ->
-    ticketLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber
-  HydratedProjectTicketCommentPayload payload comment ->
-    ticketCommentLink payload.projectInfo.projectShortHand payload.ticketInfo.ticketNumber comment.commentId
+  HydratedProjectBranchUpdatedPayload _project branch ->
+    projectBranchBrowseLink branch.projectBranchShortHand
+  HydratedProjectContributionCreatedPayload project contribution ->
+    contributionLink project.projectShortHand contribution.contributionNumber
+  HydratedProjectContributionStatusUpdatedPayload project contribution _status ->
+    contributionLink project.projectShortHand contribution.contributionNumber
+  HydratedProjectContributionCommentPayload project contribution comment ->
+    contributionCommentLink project.projectShortHand contribution.contributionNumber comment.commentId
+  HydratedProjectTicketCreatedPayload project ticket ->
+    ticketLink project.projectShortHand ticket.ticketNumber
+  HydratedProjectTicketStatusUpdatedPayload project ticket _status ->
+    ticketLink project.projectShortHand ticket.ticketNumber
+  HydratedProjectTicketCommentPayload project ticket comment ->
+    ticketCommentLink project.projectShortHand ticket.ticketNumber comment.commentId
+  HydratedProjectReleaseCreatedPayload project release ->
+    releaseLink project.projectShortHand release.releaseVersion
 
 unisonLogoImage :: URI
 unisonLogoImage =

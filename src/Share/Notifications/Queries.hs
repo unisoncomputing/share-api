@@ -37,9 +37,11 @@ import Share.Notifications.Types
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
+import Share.Postgres.Releases.Queries qualified as ReleasesQ
 import Share.Postgres.Tickets.Queries qualified as TicketQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
+import Share.Release (Release (..))
 import Share.Ticket
 import Share.Utils.API (Cursor (..), CursorDirection (..), Paged (..), guardPaged, pagedOn)
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
@@ -341,51 +343,70 @@ hydrateEventPayload = \case
   ProjectBranchUpdatedData
     (ProjectData {projectId})
     (BranchData {branchId}) -> do
-      HydratedProjectBranchUpdatedPayload <$> hydrateProjectBranchPayload projectId branchId
+      (\projectPayload mkBranchPayload -> HydratedProjectBranchUpdatedPayload projectPayload (mkBranchPayload projectPayload))
+        <$> hydrateProjectPayload projectId
+        <*> hydrateBranchPayload branchId
   ProjectContributionCreatedData
     (ProjectData {projectId})
     (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId}) -> do
-      HydratedProjectContributionCreatedPayload <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+      (\projectPayload mkContributionPayload -> HydratedProjectContributionCreatedPayload projectPayload (mkContributionPayload projectPayload))
+        <$> hydrateProjectPayload projectId
+        <*> hydrateContributionInfo contributionId fromBranchId toBranchId contributorUserId
   ProjectContributionStatusUpdatedData
     (ProjectData {projectId})
     (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId})
     (StatusUpdateData {oldStatus, newStatus}) -> do
       let statusPayload = StatusUpdatePayload {oldStatus, newStatus}
-      HydratedProjectContributionStatusUpdatedPayload
-        <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
-        <*> pure statusPayload
+      (\projectPayload mkContributionPayload -> HydratedProjectContributionStatusUpdatedPayload projectPayload (mkContributionPayload projectPayload) statusPayload)
+        <$> hydrateProjectPayload projectId
+        <*> hydrateContributionInfo contributionId fromBranchId toBranchId contributorUserId
   ProjectContributionCommentData
     (ProjectData {projectId})
     (ContributionData {contributionId, fromBranchId, toBranchId, contributorUserId})
     (CommentData {commentId, commentAuthorUserId}) -> do
-      HydratedProjectContributionCommentPayload
-        <$> hydrateContributionPayload contributionId projectId fromBranchId toBranchId contributorUserId
+      (\projectPayload mkContributionPayload -> HydratedProjectContributionCommentPayload projectPayload (mkContributionPayload projectPayload))
+        <$> hydrateProjectPayload projectId
+        <*> hydrateContributionInfo contributionId fromBranchId toBranchId contributorUserId
         <*> hydrateCommentPayload commentId commentAuthorUserId
   ProjectTicketCreatedData
     (ProjectData {projectId})
     (TicketData {ticketId, ticketAuthorUserId}) -> do
-      HydratedProjectTicketCreatedPayload <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+      HydratedProjectTicketCreatedPayload
+        <$> hydrateProjectPayload projectId
+        <*> hydrateTicketInfo ticketId ticketAuthorUserId
   ProjectTicketStatusUpdatedData
     (ProjectData {projectId})
     (TicketData {ticketId, ticketAuthorUserId})
     (StatusUpdateData {oldStatus, newStatus}) -> do
       let statusPayload = StatusUpdatePayload {oldStatus, newStatus}
       HydratedProjectTicketStatusUpdatedPayload
-        <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+        <$> hydrateProjectPayload projectId
+        <*> hydrateTicketInfo ticketId ticketAuthorUserId
         <*> pure statusPayload
   ProjectTicketCommentData
     (ProjectData {projectId})
     (TicketData {ticketId, ticketAuthorUserId})
     (CommentData {commentId, commentAuthorUserId}) -> do
       HydratedProjectTicketCommentPayload
-        <$> hydrateTicketPayload projectId ticketId ticketAuthorUserId
+        <$> hydrateProjectPayload projectId
+        <*> hydrateTicketInfo ticketId ticketAuthorUserId
         <*> hydrateCommentPayload commentId commentAuthorUserId
-  where
-    hydrateTicketPayload :: ProjectId -> TicketId -> UserId -> m ProjectTicketPayload
-    hydrateTicketPayload projectId ticketId authorUserId = do
+  ProjectReleaseCreatedData
+    (ProjectData {projectId})
+    (ReleaseData {releaseId}) -> do
       projectInfo <- hydrateProjectPayload projectId
-      ticketInfo <- hydrateTicketInfo ticketId authorUserId
-      pure $ ProjectTicketPayload {projectInfo, ticketInfo}
+      releasePayload <- hydrateReleasePayload releaseId
+      pure $ HydratedProjectReleaseCreatedPayload projectInfo releasePayload
+  where
+    hydrateReleasePayload :: ReleaseId -> m ReleasePayload
+    hydrateReleasePayload releaseId = do
+      release <- ReleasesQ.releaseById releaseId
+      pure $
+        ReleasePayload
+          { releaseId,
+            releaseVersion = release.version,
+            releaseCreatedAt = release.createdAt
+          }
     hydrateTicketInfo :: TicketId -> UserId -> m TicketPayload
     hydrateTicketInfo ticketId authorUserId = do
       author <- UsersQ.userDisplayInfoOf id authorUserId
@@ -400,11 +421,6 @@ hydrateEventPayload = \case
             ticketAuthor = author,
             ticketCreatedAt = ticket.createdAt
           }
-    hydrateContributionPayload :: ContributionId -> ProjectId -> BranchId -> BranchId -> UserId -> m ProjectContributionPayload
-    hydrateContributionPayload contributionId projectId fromBranchId toBranchId authorUserId = do
-      projectInfo <- hydrateProjectPayload projectId
-      contributionInfo <- hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId
-      pure $ ProjectContributionPayload {projectInfo, contributionInfo = contributionInfo projectInfo}
     hydrateContributionInfo :: ContributionId -> BranchId -> BranchId -> UserId -> m (ProjectPayload -> ContributionPayload)
     hydrateContributionInfo contributionId fromBranchId toBranchId authorUserId = do
       author <- UsersQ.userDisplayInfoOf id authorUserId
@@ -423,10 +439,6 @@ hydrateEventPayload = \case
             contributionTargetBranch = targetBranch projectInfo,
             contributionCreatedAt = contribution.createdAt
           }
-    hydrateProjectBranchPayload projectId branchId = do
-      projectInfo <- hydrateProjectPayload projectId
-      branchInfo <- hydrateBranchPayload branchId
-      pure $ ProjectBranchUpdatedPayload {projectInfo, branchInfo = branchInfo projectInfo}
     hydrateBranchPayload ::
       BranchId ->
       -- We return a func so we can convince GHC this whole thing is Applicative
