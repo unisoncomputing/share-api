@@ -1,6 +1,7 @@
 module Share.BackgroundJobs.Diffs.Queries
   ( submitContributionsToBeDiffed,
     claimCausalDiff,
+    deleteClaimedCausalDiff,
   )
 where
 
@@ -44,19 +45,21 @@ claimCausalDiff :: Transaction e (Maybe CausalDiffInfo)
 claimCausalDiff = do
   query1Row
     [sql|
-      WITH chosen(from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner) AS (
-        SELECT q.from_causal_id, q.to_causal_id, q.from_codebase_owner, q.to_codebase_owner
-        FROM causal_diff_queue q
-        ORDER BY q.created_at ASC
-        LIMIT 1
-        -- Skip any that are being synced by other workers.
-        FOR UPDATE SKIP LOCKED
-      )
+      SELECT from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner
+      FROM causal_diff_queue
+      ORDER BY created_at ASC
+      LIMIT 1
+      -- Skip any that are being synced by other workers.
+      FOR UPDATE SKIP LOCKED
+    |]
+
+deleteClaimedCausalDiff :: CausalDiffInfo -> Transaction e ()
+deleteClaimedCausalDiff CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner} =
+  execute_
+    [sql|
       DELETE FROM causal_diff_queue
-        USING chosen
-        WHERE causal_diff_queue.from_causal_id = chosen.from_causal_id
-          AND causal_diff_queue.to_causal_id = chosen.to_causal_id
-          AND causal_diff_queue.from_codebase_owner = chosen.from_codebase_owner
-          AND causal_diff_queue.to_codebase_owner = chosen.to_codebase_owner
-      RETURNING chosen.from_causal_id, chosen.to_causal_id, chosen.from_codebase_owner, chosen.to_codebase_owner
+        WHERE causal_diff_queue.from_causal_id = #{fromCausalId}
+          AND causal_diff_queue.to_causal_id = #{toCausalId}
+          AND causal_diff_queue.from_codebase_owner = #{fromCodebaseOwner}
+          AND causal_diff_queue.to_codebase_owner = #{toCodebaseOwner}
     |]

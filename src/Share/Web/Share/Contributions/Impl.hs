@@ -300,11 +300,18 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   Caching.conditionallyCachedResponse authZReceipt "contribution-diff" cacheKeys do
     (oldCausalHash, newCausalHash, maybeNamespaceDiff) <-
       PG.runTransaction do
-        PG.pipelined do
-          (,,)
-            <$> CausalQ.expectCausalHashesByIdsOf id oldCausalId
-            <*> CausalQ.expectCausalHashesByIdsOf id newCausalId
-            <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId)
+        (oldCausalHash, newCausalHash, maybeNamespaceDiff) <-
+          PG.pipelined do
+            (,,)
+              <$> CausalQ.expectCausalHashesByIdsOf id oldCausalId
+              <*> CausalQ.expectCausalHashesByIdsOf id newCausalId
+              <*> ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId)
+        -- If the namespace diff isn't already precomputed, it's probably being actively worked on. However, we try
+        -- inserting a new entry in the work queue anyway, to cover cases like: we wiped out precomputed diffs to fix
+        -- a bug and want them to automatically repopulate themselves as people request diffs.
+        when (isNothing maybeNamespaceDiff) do
+          DiffsQ.submitContributionsToBeDiffed $ Set.singleton contributionId
+        pure (oldCausalHash, newCausalHash, maybeNamespaceDiff)
     let response =
           ShareNamespaceDiffResponse
             { project = projectShorthand,
