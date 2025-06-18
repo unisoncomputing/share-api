@@ -24,6 +24,7 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Releases.Ops qualified as ReleaseOps
 import Share.Postgres.Releases.Queries qualified as ReleasesQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
@@ -437,7 +438,7 @@ createRelease session userHandle projectSlug CreateReleaseRequest {releaseVersio
     pure (nlReceipt, squashedCausalId, unsquashedCausalId)
   -- Separate transaction to ensure squashing and name lookups make progress even on failure.
   Codebase.runCodebaseTransactionOrRespondError codebase $ do
-    release <- Q.createRelease nlReceipt projectId releaseVersion squashedCausalId unsquashedCausalId callerUserId
+    release <- ReleaseOps.createRelease nlReceipt projectId releaseVersion squashedCausalId unsquashedCausalId callerUserId
     releaseWithHandles <- forOf releaseUsers_ release \userId -> (fmap User.handle <$> UserQ.userByUserId userId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandles
     User {handle = projectOwnerHandle} <- (UserQ.userByUserId ownerUserId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")

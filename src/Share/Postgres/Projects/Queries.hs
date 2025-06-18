@@ -114,20 +114,19 @@ expectProjectShortHandsOf trav s = do
         else pure results
 
 -- | Info used when constructing a notification within a project.
-projectNotificationData :: ProjectId -> Transaction e (ProjectData, ResourceId, UserId)
+projectNotificationData :: (QueryA m) => ProjectId -> m (ProjectData, ResourceId, UserId)
 projectNotificationData projectId = do
-  (resourceId, ownerUserId, isPrivate) <-
-    PG.queryExpect1Row
-      [PG.sql|
+  PG.queryExpect1Row
+    [PG.sql|
       SELECT p.resource_id, p.owner_user_id, p.private
       FROM projects p
       WHERE p.id = #{projectId}
     |]
-  pure
-    ( ProjectData
-        { projectId,
-          public = not isPrivate
-        },
-      resourceId,
-      ownerUserId
-    )
+    <&> \(resourceId, ownerUserId, isPrivate) ->
+      ( ProjectData
+          { projectId,
+            public = not isPrivate
+          },
+        resourceId,
+        ownerUserId
+      )
