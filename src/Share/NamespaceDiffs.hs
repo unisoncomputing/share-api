@@ -265,7 +265,8 @@ instance ToJSON NamespaceDiffResult where
               let f :: Text -> IncoherentDeclReason -> Aeson.Value
                   f which reason =
                     Aeson.object
-                      ( "oldOrNewBranch" .= which
+                      ( "oldOrNewBranch"
+                          .= which
                           : case reason of
                             IncoherentDeclReason'ConstructorAlias typeName constructorName1 constructorName2 ->
                               [ "tag" .= ("constructorAlias" :: Text),
@@ -290,9 +291,10 @@ instance ToJSON NamespaceDiffResult where
                in case reason of
                     EitherWay.Alice reason -> f "old" reason
                     EitherWay.Bob reason -> f "new" reason
-            LibFoundAtUnexpectedPath _ ->
+            LibFoundAtUnexpectedPath path ->
               Aeson.object
-                [ "tag" .= ("libFoundAtUnexpectedPath" :: Text)
+                [ "tag" .= ("libFoundAtUnexpectedPath" :: Text),
+                  "path" .= path
                 ]
             MissingEntityError _ ->
               Aeson.object
@@ -408,8 +410,7 @@ instance ToJSON NamespaceDiffResult where
 type NamespaceAndLibdepsDiff referent reference renderedTerm renderedType termDiff typeDiff libdep =
   GNamespaceAndLibdepsDiff Path referent reference renderedTerm renderedType termDiff typeDiff libdep
 
-data GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType termDiff typeDiff libdep
-  = NamespaceAndLibdepsDiff
+data GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType termDiff typeDiff libdep = NamespaceAndLibdepsDiff
   { defns :: GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff,
     libdeps :: Map NameSegment (DiffOp libdep)
   }
