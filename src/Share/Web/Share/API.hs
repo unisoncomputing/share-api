@@ -7,7 +7,7 @@ import Servant
 import Share.IDs
 import Share.Notifications.API qualified as Notifications
 import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
-import Share.Prelude (NonEmpty)
+import Share.Prelude
 import Share.Utils.API
 import Share.Utils.Caching
 import Share.Utils.IDs qualified as IDs
@@ -51,6 +51,8 @@ type UserReadmeEndpoint = Get '[JSON] (Cached JSON ReadmeResponse)
 type SearchEndpoint =
   MaybeAuthenticatedSession
     :> RequiredQueryParam "query" Query
+    :> QueryParam "kinds" SearchKinds
+    :> QueryParam "project-search-kind" ProjectSearchKind
     :> QueryParam "limit" Limit
     :> Get '[JSON] [SearchResult]
 

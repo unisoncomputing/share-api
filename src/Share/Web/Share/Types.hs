@@ -6,6 +6,11 @@ module Share.Web.Share.Types where
 
 import Data.Aeson (KeyValue ((.=)), ToJSON (..))
 import Data.Aeson qualified as Aeson
+import Data.List.NonEmpty qualified as NEL
+import Data.Set qualified as Set
+import Data.Set.NonEmpty qualified as NESet
+import Data.Text qualified as Text
+import Servant.API
 import Share.BackgroundJobs.Search.DefinitionSync.Types (TermOrTypeTag)
 import Share.BackgroundJobs.Search.DefinitionSync.Types qualified as DefSync
 import Share.IDs
@@ -283,3 +288,44 @@ instance ToJSON DefinitionSearchResult where
                 "tag" Aeson..= tag
               ]
           )
+
+data SearchKind
+  = SearchKindProject
+  | SearchKindUser
+  deriving (Eq, Show, Ord, Bounded, Enum)
+
+newtype SearchKinds = SearchKinds (NESet.NESet SearchKind)
+
+allSearchKinds :: SearchKinds
+allSearchKinds = SearchKinds $ NESet.fromList $ NEL.fromList [minBound .. maxBound :: SearchKind]
+
+instance FromHttpApiData SearchKinds where
+  parseQueryParam q = do
+    let parts =
+          q
+            & Text.splitOn ","
+            & fmap Text.strip
+    parsed <- for parts $ \part ->
+      case parseQueryParam part of
+        Right kind -> Right kind
+        Left err -> Left $ "Invalid search kind: " <> err
+    case NESet.nonEmptySet (Set.fromList parsed) of
+      Just kinds -> Right $ SearchKinds kinds
+      Nothing -> do
+        Left $ "Invalid search kinds: " <> q
+
+instance FromHttpApiData SearchKind where
+  parseQueryParam "project" = Right SearchKindProject
+  parseQueryParam "user" = Right SearchKindUser
+  parseQueryParam _ = Left "Invalid search kind"
+
+data ProjectSearchKind
+  = ProjectSearchKindWebSearch
+  | ProjectSearchKindSlugPrefix
+  | ProjectSearchKindSlugInfix
+
+instance FromHttpApiData ProjectSearchKind where
+  parseQueryParam "web-search" = Right ProjectSearchKindWebSearch
+  parseQueryParam "slug-prefix" = Right ProjectSearchKindSlugPrefix
+  parseQueryParam "slug-infix" = Right ProjectSearchKindSlugInfix
+  parseQueryParam _ = Left "Invalid project search kind"
