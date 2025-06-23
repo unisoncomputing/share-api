@@ -364,7 +364,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe allSear
   -- projects.
   (userLikes, projects) <- PG.runTransaction $ do
     userLikesWithInfo <-
-      if SearchKindUser `NESet.member` searchKinds
+      if SearchKindUsers `NESet.member` searchKinds
         then do
           -- If the user is searching for users, we search for users by name or handle prefix.
           -- We limit to 5 results to avoid overwhelming the user with too many results.
@@ -373,7 +373,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe allSear
           pure (userLikesWithInfo)
         else pure []
     projects <-
-      if SearchKindProject `NESet.member` searchKinds
+      if SearchKindProjects `NESet.member` searchKinds
         then Q.searchProjects callerUserId projectUserFilter projectQuery psk limit
         else pure []
     pure (userLikesWithInfo, projects)

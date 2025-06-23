@@ -290,8 +290,8 @@ instance ToJSON DefinitionSearchResult where
           )
 
 data SearchKind
-  = SearchKindProject
-  | SearchKindUser
+  = SearchKindProjects
+  | SearchKindUsers
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 newtype SearchKinds = SearchKinds (NESet.NESet SearchKind)
@@ -306,7 +306,7 @@ instance FromHttpApiData SearchKinds where
             & Text.splitOn ","
             & fmap Text.strip
     parsed <- for parts $ \part ->
-      case parseQueryParam part of
+      case parseQueryParam @SearchKind part of
         Right kind -> Right kind
         Left err -> Left $ "Invalid search kind: " <> err
     case NESet.nonEmptySet (Set.fromList parsed) of
@@ -315,8 +315,8 @@ instance FromHttpApiData SearchKinds where
         Left $ "Invalid search kinds: " <> q
 
 instance FromHttpApiData SearchKind where
-  parseQueryParam "project" = Right SearchKindProject
-  parseQueryParam "user" = Right SearchKindUser
+  parseQueryParam "projects" = Right SearchKindProjects
+  parseQueryParam "users" = Right SearchKindUsers
   parseQueryParam _ = Left "Invalid search kind"
 
 data ProjectSearchKind
