@@ -89,8 +89,17 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
       Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
         (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
         let knownCausalHashes = Set.map hash32ToCausalHash knownHashes
-        cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId knownCausalHashes
-        Cursor.foldBatched cursor batchSize \batch -> do
+        (cursor1, cursor2, cursor3, cursor4) <- SSQ.allSerializedDependenciesOfCausalCursor causalId knownCausalHashes
+        Cursor.foldBatched cursor1 batchSize \batch -> do
+          let entityChunkBatch = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
+          PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
+        Cursor.foldBatched cursor2 batchSize \batch -> do
+          let entityChunkBatch = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
+          PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
+        Cursor.foldBatched cursor3 batchSize \batch -> do
+          let entityChunkBatch = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
+          PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
+        Cursor.foldBatched cursor4 batchSize \batch -> do
           let entityChunkBatch = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
