@@ -241,5 +241,6 @@ spineAndLibDependenciesOfCausalCursor cid = do
           FROM lib_deps ld
           JOIN causals c ON ld.causal_id = c.id
       ORDER BY ord ASC, is_lib ASC, is_spine ASC
+      LIMIT 300
   |]
     <&> fmap (\(hash, isSpine, isLibRoot) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))
