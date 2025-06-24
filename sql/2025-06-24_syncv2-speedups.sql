@@ -1,0 +1,15 @@
+-- -- Return all other causals in the history of a causal, including itself.
+-- CREATE OR REPLACE FUNCTION causal_history(causal_id INTEGER)
+-- RETURNS TABLE (causal_id INTEGER, depth INTEGER)
+-- AS $$
+--   WITH RECURSIVE history(causal_id, depth) AS (
+--       SELECT causal.id, 0
+--       FROM causals causal
+--           WHERE causal.id = causal_history.causal_id
+--       UNION
+--       SELECT c.id, h.depth + 1
+--       FROM history h
+--           JOIN causal_ancestors ca ON h.causal_id = ca.causal_id
+--           JOIN causals c ON ca.ancestor_id = c.id
+--   ) SELECT h.causal_id FROM history h;
+-- $$ LANGUAGE sql;
