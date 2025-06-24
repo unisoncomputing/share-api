@@ -24,7 +24,6 @@ allSerializedDependenciesOfCausalCursor ::
     e
     ( PGCursor (CBORBytes TempEntity, Hash32),
       PGCursor (CBORBytes TempEntity, Hash32),
-      PGCursor (CBORBytes TempEntity, Hash32),
       PGCursor (CBORBytes TempEntity, Hash32)
     )
 allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
@@ -36,7 +35,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   execute_ [sql| CREATE TEMP TABLE components_to_sync ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE patches_to_sync ( patch_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE namespaces_to_sync ( namespace_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
-  execute_ [sql| CREATE TEMP TABLE causals_to_sync (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE causals_to_sync (causal_id INTEGER PRIMARY KEY, causal_hash TEXT ) ON COMMIT DROP |]
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -89,15 +88,13 @@ WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_
             JOIN causals child_causal ON nc.child_causal_id = child_causal.id
             WHERE NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = child_causal.id)
     )
-), all_namespaces(namespace_hash_id, namespace_hash) AS (
-    SELECT DISTINCT tc.causal_namespace_hash_id AS namespace_hash_id, bh.base32 as namespace_hash
+), all_namespaces(namespace_hash_id) AS (
+    SELECT DISTINCT tc.causal_namespace_hash_id AS namespace_hash_id
     FROM transitive_causals tc
-    JOIN branch_hashes bh ON tc.causal_namespace_hash_id = bh.id
-), all_patches(patch_id, patch_hash) AS (
-    SELECT DISTINCT patch.id, patch.hash
+), all_patches(patch_id) AS (
+    SELECT DISTINCT np.patch_id
     FROM all_namespaces an
         JOIN namespace_patches np ON an.namespace_hash_id = np.namespace_hash_id
-        JOIN patches patch ON np.patch_id = patch.id
 ),
 -- term components to start transitively joining dependencies to
 base_term_components(component_hash_id) AS (
@@ -185,8 +182,8 @@ transitive_components(component_hash_id) AS (
     SELECT DISTINCT ttcd.component_hash_id
     FROM transitive_type_component_deps ttcd
 ), do_causals AS (
-  INSERT INTO causals_to_sync(causal_id)
-  SELECT tc.causal_id
+  INSERT INTO causals_to_sync(causal_id, causal_hash)
+  SELECT tc.causal_id, tc.causal_hash
   FROM transitive_causals tc
 ), do_components AS (
   INSERT INTO components_to_sync(component_hash_id)
@@ -219,40 +216,38 @@ transitive_components(component_hash_id) AS (
     PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
       "serialized_patches"
       [sql|
-    SELECT bytes.bytes, ap.patch_hash, pd.depth
-      FROM all_patches ap
-        JOIN serialized_patches sp ON ap.patch_id = sp.patch_id
+    SELECT bytes.bytes, p.hash, pd.depth
+      FROM patches_to_sync pts
+        JOIN patches p ON pts.patch_id = p.id
+        JOIN serialized_patches sp ON pts.patch_id = sp.patch_id
         JOIN bytes ON sp.bytes_id = bytes.id
-        LEFT JOIN patch_depth pd ON ap.patch_id = pd.patch_id
+        LEFT JOIN patch_depth pd ON pts.patch_id = pd.patch_id
     ORDER BY pd.depth ASC NULLS FIRST
     |]
-  namespacesCursor <-
+  namespacesAndCausalsCursor <-
     PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
       "serialized_namespaces"
       [sql|
-    SELECT bytes.bytes, an.namespace_hash, nd.depth
-      FROM all_namespaces an
-        JOIN serialized_namespaces sn ON an.namespace_hash_id = sn.namespace_hash_id
-        JOIN bytes ON sn.bytes_id = bytes.id
-        LEFT JOIN namespace_depth nd ON an.namespace_hash_id = nd.namespace_hash_id
-    ORDER BY nd.depth ASC NULLS FIRST
-    |]
-  causalsCursor <-
-    PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
-      "serialized_causals"
-      [sql|
-    SELECT bytes.bytes, tc.causal_hash, cd.depth
-      FROM transitive_causals tc
-        JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
-        JOIN bytes ON sc.bytes_id = bytes.id
-        LEFT JOIN causal_depth cd ON tc.causal_id = cd.causal_id
-    ORDER BY cd.depth ASC NULLS FIRST
+    SELECT bytes, hash, depth FROM (
+      SELECT bytes.bytes, bh.base32, nd.depth
+        FROM namespaces_to_sync nts
+          JOIN branch_hashes bh ON nts.namespace_hash_id = bh.id
+          JOIN serialized_namespaces sn ON nts.namespace_hash_id = sn.namespace_hash_id
+          JOIN bytes ON sn.bytes_id = bytes.id
+          LEFT JOIN namespace_depth nd ON nts.namespace_hash_id = nd.namespace_hash_id
+        UNION
+      SELECT bytes.bytes, cts.causal_hash, cd.depth
+        FROM causals_to_sync cts
+          JOIN serialized_causals sc ON cts.causal_id = sc.causal_id
+          JOIN bytes ON sc.bytes_id = bytes.id
+          LEFT JOIN causal_depth cd ON cts.causal_id = cd.causal_id
+    ) AS combined(bytes, hash, depth)
+    ORDER BY depth ASC NULLS FIRST
   |]
   pure
     ( componentsCursor <&> \(bytes, hash, _depth) -> (bytes, hash),
       patchesCursor <&> \(bytes, hash, _depth) -> (bytes, hash),
-      namespacesCursor <&> \(bytes, hash, _depth) -> (bytes, hash),
-      causalsCursor <&> \(bytes, hash, _depth) -> (bytes, hash)
+      namespacesAndCausalsCursor <&> \(bytes, hash, _depth) -> (bytes, hash)
     )
 
 -- ( cursor <&> \(bytes, hash, depth) -> case depth of
