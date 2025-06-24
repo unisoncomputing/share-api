@@ -24,7 +24,6 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER PRIMARY KEY ) ON COMMIT DROP |]
-  Debug.debugM Debug.Temp "populating except hashes for N causal hashes:" (length exceptCausalHashes)
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -36,28 +35,20 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
     ), dependency_hashes(hash, kind) AS (
       SELECT DISTINCT deps.hash, deps.kind
       FROM dependencies_of_causals_without_ancestors((SELECT ARRAY_AGG(kci.causal_id) FROM known_causal_ids kci)) AS deps
-    ), do_causals AS (
+    )
       INSERT INTO except_causals(causal_id)
       SELECT DISTINCT causal.id
       FROM dependency_hashes dh
         JOIN causals causal ON dh.hash = causal.hash
       WHERE dh.kind = 'causal'::dependency_kind
       ON CONFLICT DO NOTHING
-    ), do_namespaces AS (
-      INSERT INTO except_namespaces(branch_hash_ids)
-      SELECT DISTINCT bh.id
-      FROM dependency_hashes dh
-        JOIN branch_hashes bh ON dh.hash = bh.base32
-      WHERE dh.kind = 'namespace'::dependency_kind
-      ON CONFLICT DO NOTHING
-    ) INSERT INTO except_components(component_hash_id)
-      SELECT DISTINCT ch.id
-      FROM dependency_hashes dh
-        JOIN component_hashes ch ON dh.hash = ch.base32
-      WHERE dh.kind = 'component'::dependency_kind
-      ON CONFLICT DO NOTHING
-    |]
-  Debug.debugLogM Debug.Temp "populated except hashes"
+     |]
+  numExceptedCausals <- queryExpect1Col @Int64 [sql| SELECT COUNT(*) FROM ^{singleColumnTable (toList exceptCausalHashes)} |]
+  Debug.debugM Debug.Temp "populating except hashes for N causal hashes:" (numExceptedCausals)
+  numExceptedComponents <- queryExpect1Col @Int64 [sql| SELECT COUNT(*) FROM component_hashes WHERE id IN (SELECT component_hash_id FROM except_components) |]
+  Debug.debugM Debug.Temp "populating except hashes for N component hashes:" (numExceptedComponents)
+  numExceptedNamespaces <- queryExpect1Col @Int64 [sql| SELECT COUNT(*) FROM branch_hashes WHERE id IN (SELECT branch_hash_ids FROM except_namespaces) |]
+  Debug.debugM Debug.Temp "populating except hashes for N namespace hashes:" (numExceptedNamespaces)
   cursor <-
     PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
       "serialized_entities"
@@ -91,7 +82,6 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
             SELECT DISTINCT tc.causal_namespace_hash_id AS namespace_hash_id, bh.base32 as namespace_hash
             FROM transitive_causals tc
             JOIN branch_hashes bh ON tc.causal_namespace_hash_id = bh.id
-            WHERE NOT EXISTS (SELECT FROM except_namespaces en WHERE en.branch_hash_ids = tc.causal_namespace_hash_id)
         ), all_patches(patch_id, patch_hash) AS (
             SELECT DISTINCT patch.id, patch.hash
             FROM all_namespaces an
@@ -123,7 +113,6 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                 JOIN namespace_types nt ON an.namespace_hash_id = nt.namespace_hash_id
                 JOIN namespace_type_metadata meta ON nt.id = meta.named_type
                 JOIN terms term ON meta.metadata_term_id = term.id
-            WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = term.component_hash_id)
         ),
         -- type components to start transitively joining dependencies to
         base_type_components(component_hash_id) AS (
@@ -148,7 +137,6 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                 JOIN patch_constructor_mappings pcm ON ap.patch_id = pcm.patch_id
                 JOIN constructors con ON pcm.to_constructor_id = con.id
                 JOIN types typ ON con.type_id = typ.id
-            WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = typ.component_hash_id)
         ),
         -- All the dependencies we join in transitively from the known term & type components we depend on.
         -- Unfortunately it's not possible to know which hashes are terms vs types :'(
@@ -170,7 +158,6 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                     -- component
                     JOIN terms term ON atc.component_hash_id = term.component_hash_id
                     JOIN term_local_component_references ref ON term.id = ref.term_id
-                    WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = ref.component_hash_id)
                 UNION
                 -- recursively union in type dependencies
                 SELECT DISTINCT ref.component_hash_id
@@ -179,7 +166,6 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
                     -- component
                     JOIN types typ ON atc.component_hash_id = typ.component_hash_id
                     JOIN type_local_component_references ref ON typ.id = ref.type_id
-                    WHERE NOT EXISTS (SELECT FROM except_components ec WHERE ec.component_hash_id = ref.component_hash_id)
             )
         )
            (SELECT bytes.bytes, ch.base32, cd.depth
