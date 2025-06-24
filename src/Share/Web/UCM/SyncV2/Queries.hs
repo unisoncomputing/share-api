@@ -17,13 +17,26 @@ import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
 
-allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
+allSerializedDependenciesOfCausalCursor ::
+  CausalId ->
+  Set CausalHash ->
+  CodebaseM
+    e
+    ( PGCursor (CBORBytes TempEntity, Hash32),
+      PGCursor (CBORBytes TempEntity, Hash32),
+      PGCursor (CBORBytes TempEntity, Hash32),
+      PGCursor (CBORBytes TempEntity, Hash32)
+    )
 allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   ownerUserId <- asks codebaseOwner
   -- Create a temp table for storing the dependencies we know the calling client already has.
   execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE components_to_sync ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE patches_to_sync ( patch_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE namespaces_to_sync ( namespace_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
+  execute_ [sql| CREATE TEMP TABLE causals_to_sync (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -49,10 +62,8 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
   Debug.debugM Debug.Temp "populating except hashes for N component hashes:" (numExceptedComponents)
   numExceptedNamespaces <- queryExpect1Col @Int64 [sql| SELECT COUNT(*) FROM branch_hashes WHERE id IN (SELECT branch_hash_ids FROM except_namespaces) |]
   Debug.debugM Debug.Temp "populating except hashes for N namespace hashes:" (numExceptedNamespaces)
-  cursor <-
-    PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
-      "serialized_entities"
-      [sql|
+  execute_
+    [sql|
 WITH RECURSIVE transitive_causals(causal_id, causal_hash, causal_namespace_hash_id) AS (
     SELECT causal.id, causal.hash, causal.namespace_hash_id
     FROM causals causal
@@ -173,46 +184,83 @@ transitive_components(component_hash_id) AS (
     UNION
     SELECT DISTINCT ttcd.component_hash_id
     FROM transitive_type_component_deps ttcd
+), do_causals AS (
+  INSERT INTO causals_to_sync(causal_id)
+  SELECT tc.causal_id
+  FROM transitive_causals tc
+), do_components AS (
+  INSERT INTO components_to_sync(component_hash_id)
+  SELECT tc.component_hash_id
+  FROM transitive_components tc
+), do_patches AS (
+  INSERT INTO patches_to_sync(patch_id)
+  SELECT ap.patch_id
+  FROM all_patches ap
 )
-    (SELECT bytes.bytes, ch.base32, cd.depth
-      FROM transitive_components tc
-        JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND tc.component_hash_id = sc.component_hash_id
+-- do_namespaces
+  INSERT INTO namespaces_to_sync(namespace_hash_id)
+  SELECT an.namespace_hash_id
+  FROM all_namespaces an
+|]
+
+  componentsCursor <-
+    PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
+      "serialized_components"
+      [sql|
+    SELECT bytes.bytes, ch.base32, cd.depth
+      FROM components_to_sync cts
+        JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND cts.component_hash_id = sc.component_hash_id
         JOIN bytes ON sc.bytes_id = bytes.id
-        JOIN component_hashes ch ON tc.component_hash_id = ch.id
+        JOIN component_hashes ch ON cts.component_hash_id = ch.id
         LEFT JOIN component_depth cd ON ch.id = cd.component_hash_id
-    )
-    UNION ALL
-    (SELECT bytes.bytes, ap.patch_hash, pd.depth
+    ORDER BY cd.depth ASC NULLS FIRST
+  |]
+  patchesCursor <-
+    PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
+      "serialized_patches"
+      [sql|
+    SELECT bytes.bytes, ap.patch_hash, pd.depth
       FROM all_patches ap
         JOIN serialized_patches sp ON ap.patch_id = sp.patch_id
         JOIN bytes ON sp.bytes_id = bytes.id
         LEFT JOIN patch_depth pd ON ap.patch_id = pd.patch_id
-    )
-    UNION ALL
-    (SELECT bytes.bytes, an.namespace_hash, nd.depth
+    ORDER BY pd.depth ASC NULLS FIRST
+    |]
+  namespacesCursor <-
+    PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
+      "serialized_namespaces"
+      [sql|
+    SELECT bytes.bytes, an.namespace_hash, nd.depth
       FROM all_namespaces an
         JOIN serialized_namespaces sn ON an.namespace_hash_id = sn.namespace_hash_id
         JOIN bytes ON sn.bytes_id = bytes.id
         LEFT JOIN namespace_depth nd ON an.namespace_hash_id = nd.namespace_hash_id
-    )
-    UNION ALL
-    (SELECT bytes.bytes, tc.causal_hash, cd.depth
+    ORDER BY nd.depth ASC NULLS FIRST
+    |]
+  causalsCursor <-
+    PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
+      "serialized_causals"
+      [sql|
+    SELECT bytes.bytes, tc.causal_hash, cd.depth
       FROM transitive_causals tc
         JOIN serialized_causals sc ON tc.causal_id = sc.causal_id
         JOIN bytes ON sc.bytes_id = bytes.id
         LEFT JOIN causal_depth cd ON tc.causal_id = cd.causal_id
-    )
-    -- Put them in dependency order, nulls come first because we want to bail and
-    -- report an error if we are somehow missing a depth.
-    ORDER BY depth ASC NULLS FIRST
+    ORDER BY cd.depth ASC NULLS FIRST
   |]
   pure
-    ( cursor <&> \(bytes, hash, depth) -> case depth of
-        -- This should never happen, but is a sanity check in case we're missing a depth.
-        -- Better than silently omitting a required result.
-        Nothing -> error $ "allSerializedDependenciesOfCausalCursor: Missing depth for entity: " <> show hash
-        Just _ -> (bytes, hash)
+    ( componentsCursor <&> \(bytes, hash, _depth) -> (bytes, hash),
+      patchesCursor <&> \(bytes, hash, _depth) -> (bytes, hash),
+      namespacesCursor <&> \(bytes, hash, _depth) -> (bytes, hash),
+      causalsCursor <&> \(bytes, hash, _depth) -> (bytes, hash)
     )
+
+-- ( cursor <&> \(bytes, hash, depth) -> case depth of
+--     -- This should never happen, but is a sanity check in case we're missing a depth.
+--     -- Better than silently omitting a required result.
+--     Nothing -> error $ "allSerializedDependenciesOfCausalCursor: Missing depth for entity: " <> show hash
+--     Just _ -> (bytes, hash)
+-- )
 
 spineAndLibDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
 spineAndLibDependenciesOfCausalCursor cid = do
