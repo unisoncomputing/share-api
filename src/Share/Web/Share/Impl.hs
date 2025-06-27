@@ -7,6 +7,7 @@
 module Share.Web.Share.Impl where
 
 import Control.Lens
+import Data.Set.NonEmpty qualified as NESet
 import Data.Text qualified as Text
 import Servant
 import Share.Codebase qualified as Codebase
@@ -18,8 +19,6 @@ import Share.Notifications.Impl qualified as Notifications
 import Share.Notifications.Queries qualified as NotifQ
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
-import Unison.Server.Doc.Markdown.Render qualified as MD
-import Unison.Server.Doc.Markdown.Types qualified as MD
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.IDs (CausalHash)
@@ -60,6 +59,8 @@ import Unison.Name (Name)
 import Unison.Reference (Reference)
 import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
+import Unison.Server.Doc.Markdown.Render qualified as MD
+import Unison.Server.Doc.Markdown.Types qualified as MD
 import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
 import Unison.Server.Share.Definitions qualified as ShareBackend
@@ -345,9 +346,9 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
 -- | TODO: Should allow users to see private users if they have access to them, but this will
 -- likely change when codebases and users are no longer one-to-one, so for now we just hide
 -- all private users in the PG query itself.
-searchEndpoint :: Maybe Session -> Query -> Maybe Limit -> WebApp [SearchResult]
-searchEndpoint _caller (Query "") _limit = pure []
-searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 20) -> limit) = do
+searchEndpoint :: Maybe Session -> Query -> Maybe SearchKinds -> Maybe ProjectSearchKind -> Maybe Limit -> WebApp [SearchResult]
+searchEndpoint _caller (Query "") _searchKinds _mayPsk _limit = pure []
+searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe allSearchKinds -> SearchKinds searchKinds) (fromMaybe ProjectSearchKindWebSearch -> psk) (fromMaybe (Limit 20) -> limit) = do
   (userQuery :: Query, (projectUserFilter :: Maybe UserId, projectQuery :: Query)) <-
     fromMaybe query (Text.stripPrefix "@" query)
       & Text.splitOn "/"
@@ -362,9 +363,19 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe (Limit 
   -- of 5 users (who match the query as a prefix), then return the rest of the results from
   -- projects.
   (userLikes, projects) <- PG.runTransaction $ do
-    userLikes <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
-    userLikesWithInfo <- DisplayInfoQ.userLikeDisplayInfoOf traversed userLikes
-    projects <- Q.searchProjects callerUserId projectUserFilter projectQuery limit
+    userLikesWithInfo <-
+      if SearchKindUsers `NESet.member` searchKinds
+        then do
+          -- If the user is searching for users, we search for users by name or handle prefix.
+          -- We limit to 5 results to avoid overwhelming the user with too many results.
+          userLikes <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+          userLikesWithInfo <- DisplayInfoQ.userLikeDisplayInfoOf traversed userLikes
+          pure (userLikesWithInfo)
+        else pure []
+    projects <-
+      if SearchKindProjects `NESet.member` searchKinds
+        then Q.searchProjects callerUserId projectUserFilter projectQuery psk limit
+        else pure []
     pure (userLikesWithInfo, projects)
   let userResults = SearchResultUserLike <$> userLikes
   let projectResults =

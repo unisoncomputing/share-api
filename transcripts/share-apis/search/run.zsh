@@ -91,7 +91,17 @@ fetch "$transcripts_user" GET 'defn-search-release-filter-sad' '/search-definiti
 # Omni search should find org users
 fetch "$transcripts_user" GET 'omni-search-orgs' '/search?query=%40uni'
 
-# Omni search should find regular users
-fetch "$transcripts_user" GET 'omni-search-users' '/search?query=%40tes'
-# Omni search should find projects by infix
-fetch "$transcripts_user" GET 'omni-search-projects' '/search?query=%40ear'
+# Omni search should find both matching users and projects
+fetch "$transcripts_user" GET 'omni-search-users-or-projects' '/search?query=%40tes'
+
+# Omni search can be restricted to only users
+fetch "$transcripts_user" GET 'omni-search-only-users' '/search?query=%40tes&kinds=users'
+
+# Omni search can be restricted to only projects
+fetch "$transcripts_user" GET 'omni-search-only-projects' '/search?query=%40tes&kinds=projects'
+
+# Omni search should find projects by infix of project-slug
+fetch "$transcripts_user" GET 'omni-search-projects-infix' '/search?query=%40ear'
+
+# Omni search can be restricted to only a prefix search
+fetch "$transcripts_user" GET 'omni-search-projects-prefix' '/search?query=%40ear&project-search-kind=slug-prefix'

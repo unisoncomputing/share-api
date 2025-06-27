@@ -1,0 +1,15 @@
+{
+  "body": [
+    {
+      "projectRef": "@test/publictestproject",
+      "summary": "test project summary",
+      "tag": "project",
+      "visibility": "public"
+    }
+  ],
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

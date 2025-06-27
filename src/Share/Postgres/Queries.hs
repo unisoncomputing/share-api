@@ -38,6 +38,7 @@ import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
 import Share.Web.Share.Branches.Types (BranchKindFilter (..))
 import Share.Web.Share.Projects.Types (ContributionStats (..), DownloadStats (..), FavData, ProjectOwner, TicketStats (..))
 import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (..))
+import Share.Web.Share.Types
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
@@ -139,52 +140,59 @@ setProjectFav userId projectId fav = do
 --
 -- The PG.queryListRows accepts strings as web search queries, see
 -- https://www.postgresql.org/docs/current/textsearch-controls.html
-searchProjects :: Maybe UserId -> Maybe UserId -> Query -> Limit -> PG.Transaction e [(Project, UserHandle)]
--- Don't search with an empty query
-searchProjects _caller Nothing (Query "") _limit = pure []
-searchProjects caller (Just userId) (Query "") limit = do
-  -- If we have a userId filter but no query, just return all the projects owned by that user
-  -- which the caller has access to.
-  PG.queryListRows @(Project PG.:. PG.Only UserHandle)
-    [PG.sql|
-    SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-      FROM projects p
-        JOIN users owner ON p.owner_user_id = owner.id
-      WHERE p.owner_user_id = #{userId}
+searchProjects :: Maybe UserId -> Maybe UserId -> Query -> ProjectSearchKind -> Limit -> PG.Transaction e [(Project, UserHandle)]
+searchProjects caller userIdFilter (Query query) psk limit = do
+  let pskFilter = case psk of
+        -- This is the default
+        ProjectSearchKindWebSearch -> mempty
+        -- Require that the query is a prefix of the slug
+        ProjectSearchKindSlugPrefix -> [PG.sql| AND p.slug ILIKE (like_escape(#{query}) || '%') |]
+        -- Require that the query is in the slug somewhere, but not necessarily at the start
+        ProjectSearchKindSlugInfix -> [PG.sql| AND p.slug ILIKE ('%' || like_escape(#{query}) || '%') |]
+  results <- case (userIdFilter, query) of
+    (Nothing, "") -> pure []
+    (Just userId, "") ->
+      -- If we have a userId filter but no query, just return all the projects owned by that user
+      -- which the caller has access to.
+      PG.queryListRows @(Project PG.:. PG.Only UserHandle)
+        [PG.sql|
+        SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
+          FROM projects p
+            JOIN users owner ON p.owner_user_id = owner.id
+          WHERE p.owner_user_id = #{userId}
+            AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
+          ORDER BY p.created_at DESC
+          LIMIT #{limit}
+          |]
+    _ -> do
+      PG.queryListRows
+        [PG.sql|
+      SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
+        FROM websearch_to_tsquery('english', #{query}) AS tokenquery, projects AS p
+          JOIN users AS owner ON p.owner_user_id = owner.id
+        WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
+        AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
         AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
-      ORDER BY p.created_at DESC
-      LIMIT #{limit}
-      |]
-    <&> fmap \(project PG.:. PG.Only handle) -> (project, handle)
-searchProjects caller userIdFilter (Query query) limit = do
-  results <-
-    PG.queryListRows
-      [PG.sql|
-    SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-      FROM websearch_to_tsquery('english', #{query}) AS tokenquery, projects AS p
-        JOIN users AS owner ON p.owner_user_id = owner.id
-      WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
-      AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
-      AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
-      ORDER BY
-        p.slug = #{query} DESC,
-        -- Prefer prefix matches
-        p.slug ILIKE (like_escape(#{query}) || '%') DESC,
-        -- Otherwise infix matches
-        p.slug ILIKE ('%' || like_escape(#{query}) || '%') DESC,
-        -- Prefer the caller's projects
-        COALESCE(FALSE, p.owner_user_id = #{caller}) DESC,
-        -- If a user has access to a private project, it's likely relevant
-        p.private DESC,
-        -- Prefer projects in the unison org
-        COALESCE(FALSE, p.owner_user_id = (SELECT unison.id FROM users unison WHERE unison.handle = 'unison'))  DESC,
-        -- Prefer projects in the catalog
-        EXISTS(SELECT FROM project_categories pc WHERE pc.project_id = p.id) DESC,
-        ts_rank_cd(p.project_text_document, tokenquery) DESC,
-        -- Lastly sort by name, just so results are deterministic
-        p.slug ASC
-      LIMIT #{limit}
-      |]
+        ^{pskFilter}
+        ORDER BY
+          p.slug = #{query} DESC,
+          -- Prefer prefix matches
+          p.slug ILIKE (like_escape(#{query}) || '%') DESC,
+          -- Otherwise infix matches
+          p.slug ILIKE ('%' || like_escape(#{query}) || '%') DESC,
+          -- Prefer the caller's projects
+          COALESCE(FALSE, p.owner_user_id = #{caller}) DESC,
+          -- If a user has access to a private project, it's likely relevant
+          p.private DESC,
+          -- Prefer projects in the unison org
+          COALESCE(FALSE, p.owner_user_id = (SELECT unison.id FROM users unison WHERE unison.handle = 'unison'))  DESC,
+          -- Prefer projects in the catalog
+          EXISTS(SELECT FROM project_categories pc WHERE pc.project_id = p.id) DESC,
+          ts_rank_cd(p.project_text_document, tokenquery) DESC,
+          -- Lastly sort by name, just so results are deterministic
+          p.slug ASC
+        LIMIT #{limit}
+        |]
   pure (results <&> \(project PG.:. PG.Only handle) -> (project, handle))
 
 -- | Returns the list of tours the user has completed.
