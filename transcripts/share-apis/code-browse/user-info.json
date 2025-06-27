@@ -2,7 +2,7 @@
   "body": {
     "email": "transcripts@example.com",
     "handle": "transcripts",
-    "name": "Transcript User",
+    "name": "The Transcript User",
     "picture": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
     "profile": "http://<HOST>:1234/@transcripts",
     "sub": "U-<UUID>"

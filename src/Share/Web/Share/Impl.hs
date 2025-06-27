@@ -346,9 +346,9 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
 -- | TODO: Should allow users to see private users if they have access to them, but this will
 -- likely change when codebases and users are no longer one-to-one, so for now we just hide
 -- all private users in the PG query itself.
-searchEndpoint :: Maybe Session -> Query -> Maybe SearchKinds -> Maybe ProjectSearchKind -> Maybe Limit -> WebApp [SearchResult]
-searchEndpoint _caller (Query "") _searchKinds _mayPsk _limit = pure []
-searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe allSearchKinds -> SearchKinds searchKinds) (fromMaybe ProjectSearchKindWebSearch -> psk) (fromMaybe (Limit 20) -> limit) = do
+searchEndpoint :: Maybe Session -> Query -> Maybe SearchKinds -> Maybe ProjectSearchKind -> Maybe UserSearchKind -> Maybe Limit -> WebApp [SearchResult]
+searchEndpoint _caller (Query "") _searchKinds _mayPsk _mayUsk _limit = pure []
+searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe allSearchKinds -> SearchKinds searchKinds) (fromMaybe ProjectSearchKindWebSearch -> psk) (fromMaybe UserSearchKindDefault -> usk) (fromMaybe (Limit 20) -> limit) = do
   (userQuery :: Query, (projectUserFilter :: Maybe UserId, projectQuery :: Query)) <-
     fromMaybe query (Text.stripPrefix "@" query)
       & Text.splitOn "/"
@@ -368,7 +368,7 @@ searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe allSear
         then do
           -- If the user is searching for users, we search for users by name or handle prefix.
           -- We limit to 5 results to avoid overwhelming the user with too many results.
-          userLikes <- UserQ.searchUsersByNameOrHandlePrefix userQuery (Limit 5)
+          userLikes <- UserQ.searchUsersByNameOrHandlePrefix userQuery usk (Limit 5)
           userLikesWithInfo <- DisplayInfoQ.userLikeDisplayInfoOf traversed userLikes
           pure (userLikesWithInfo)
         else pure []

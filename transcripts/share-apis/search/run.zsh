@@ -94,8 +94,14 @@ fetch "$transcripts_user" GET 'omni-search-orgs' '/search?query=%40uni'
 # Omni search should find both matching users and projects
 fetch "$transcripts_user" GET 'omni-search-users-or-projects' '/search?query=%40tes'
 
-# Omni search can be restricted to only users
-fetch "$transcripts_user" GET 'omni-search-only-users' '/search?query=%40tes&kinds=users'
+# Omni search can search by name prefix
+fetch "$transcripts_user" GET 'omni-search-users-name-prefix' '/search?query=the&kinds=users'
+
+# Omni search can search only by handle prefix, (shouldn't find any users)
+fetch "$transcripts_user" GET 'omni-search-users-handle-prefix-no-results' '/search?query=the&kinds=users&user-search-kind=handle-prefix'
+
+# Omni search can search only by handle prefix
+fetch "$transcripts_user" GET 'omni-search-users-handle-prefix-results' '/search?query=transc&kinds=users&user-search-kind=handle-prefix'
 
 # Omni search can be restricted to only projects
 fetch "$transcripts_user" GET 'omni-search-only-projects' '/search?query=%40tes&kinds=projects'

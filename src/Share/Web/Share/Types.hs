@@ -319,10 +319,21 @@ instance FromHttpApiData SearchKind where
   parseQueryParam "users" = Right SearchKindUsers
   parseQueryParam _ = Left "Invalid search kind"
 
+data UserSearchKind
+  = UserSearchKindDefault
+  | -- Only search handle, and only by prefix (useful for tab-completion)
+    UserSearchKindHandlePrefix
+
+instance FromHttpApiData UserSearchKind where
+  parseQueryParam "default" = Right UserSearchKindDefault
+  parseQueryParam "handle-prefix" = Right UserSearchKindHandlePrefix
+  parseQueryParam _ = Left "Invalid user search kind"
+
 data ProjectSearchKind
   = ProjectSearchKindWebSearch
   | ProjectSearchKindSlugPrefix
-  | ProjectSearchKindSlugInfix
+  | -- Only search slug, and only by infix (useful for tab-completion)
+    ProjectSearchKindSlugInfix
 
 instance FromHttpApiData ProjectSearchKind where
   parseQueryParam "web-search" = Right ProjectSearchKindWebSearch
