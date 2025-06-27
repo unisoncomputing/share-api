@@ -8,7 +8,7 @@
       "createdAt": "<TIMESTAMP>",
       "owner": {
         "handle": "@transcripts",
-        "name": "Transcript User",
+        "name": "The Transcript User",
         "type": "user"
       },
       "slug": "merge",
