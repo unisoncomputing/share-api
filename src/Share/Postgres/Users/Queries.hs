@@ -51,7 +51,7 @@ import Share.Utils.URI (URIParam (..))
 import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..), ToServerError (..))
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..), UserLike (..))
-import Share.Web.Share.Types (PlanTier (..))
+import Share.Web.Share.Types (PlanTier (..), UserSearchKind (UserSearchKindDefault, UserSearchKindHandlePrefix))
 
 -- | Efficiently resolve User Display Info for UserIds within a structure.
 userDisplayInfoOf :: (PG.QueryA m) => Traversal s t UserId UserDisplayInfo -> s -> m t
@@ -277,16 +277,20 @@ findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarU
     Nothing -> do
       New <$> createFromGithubUser authZReceipt ghu primaryEmail userHandle
 
-searchUsersByNameOrHandlePrefix :: Query -> Limit -> PG.Transaction e [(UserLike UserId OrgId)]
-searchUsersByNameOrHandlePrefix (Query prefix) (Limit limit) = do
+searchUsersByNameOrHandlePrefix :: Query -> UserSearchKind -> Limit -> PG.Transaction e [(UserLike UserId OrgId)]
+searchUsersByNameOrHandlePrefix (Query prefix) usk (Limit limit) = do
   let q = likeEscape prefix <> "%"
+  let uskFilter = case usk of
+        -- This is the default, also allow matches on user's name.
+        UserSearchKindDefault -> [PG.sql| OR u.name ILIKE #{q} |]
+        UserSearchKindHandlePrefix -> mempty
   PG.queryListRows @(UserId, Maybe OrgId)
     [PG.sql|
     SELECT u.id, org.id
       FROM users u
       LEFT JOIN orgs org ON org.user_id = u.id
       WHERE (u.handle ILIKE #{q}
-             OR u.name ILIKE #{q}
+            ^{uskFilter}
             ) AND NOT u.private
       LIMIT #{limit}
       |]

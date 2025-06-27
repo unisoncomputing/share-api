@@ -53,6 +53,7 @@ type SearchEndpoint =
     :> RequiredQueryParam "query" Query
     :> QueryParam "kinds" SearchKinds
     :> QueryParam "project-search-kind" ProjectSearchKind
+    :> QueryParam "user-search-kind" UserSearchKind
     :> QueryParam "limit" Limit
     :> Get '[JSON] [SearchResult]
 
