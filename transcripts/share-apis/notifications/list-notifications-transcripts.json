@@ -121,6 +121,51 @@
         },
         "id": "NOT-<UUID>",
         "status": "unread"
+      },
+      {
+        "createdAt": "<TIMESTAMP>",
+        "event": {
+          "actor": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          },
+          "data": {
+            "kind": "project:release:created",
+            "link": "http://<HOST>:1234/@test/publictestproject/releases/2.3.4",
+            "payload": {
+              "project": {
+                "projectId": "P-<UUID>",
+                "projectOwnerHandle": "test",
+                "projectOwnerUserId": "U-<UUID>",
+                "projectShortHand": "@test/publictestproject",
+                "projectSlug": "publictestproject"
+              },
+              "release": {
+                "createdAt": "<TIMESTAMP>",
+                "releaseId": "R-<UUID>",
+                "version": "2.3.4"
+              }
+            }
+          },
+          "id": "EVENT-<UUID>",
+          "occurredAt": "<TIMESTAMP>",
+          "scope": {
+            "info": {
+              "avatarUrl": null,
+              "handle": "test",
+              "name": null,
+              "userId": "U-<UUID>"
+            },
+            "kind": "user"
+          }
+        },
+        "id": "NOT-<UUID>",
+        "status": "unread"
       }
     ],
     "nextCursor": null,
