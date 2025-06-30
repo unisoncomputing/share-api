@@ -66,8 +66,9 @@ import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.DataDeclaration (Decl)
+import Unison.DeclCoherencyCheck (IncoherentDeclReason (..))
 import Unison.LabeledDependency (LabeledDependency)
-import Unison.Merge (DiffOp, EitherWay, IncoherentDeclReason (..), Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge (DiffOp, EitherWay, Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
 import Unison.Merge.EitherWay qualified as EitherWay
 import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
@@ -265,7 +266,8 @@ instance ToJSON NamespaceDiffResult where
               let f :: Text -> IncoherentDeclReason -> Aeson.Value
                   f which reason =
                     Aeson.object
-                      ( "oldOrNewBranch" .= which
+                      ( "oldOrNewBranch"
+                          .= which
                           : case reason of
                             IncoherentDeclReason'ConstructorAlias typeName constructorName1 constructorName2 ->
                               [ "tag" .= ("constructorAlias" :: Text),
@@ -408,8 +410,7 @@ instance ToJSON NamespaceDiffResult where
 type NamespaceAndLibdepsDiff referent reference renderedTerm renderedType termDiff typeDiff libdep =
   GNamespaceAndLibdepsDiff Path referent reference renderedTerm renderedType termDiff typeDiff libdep
 
-data GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType termDiff typeDiff libdep
-  = NamespaceAndLibdepsDiff
+data GNamespaceAndLibdepsDiff k referent reference renderedTerm renderedType termDiff typeDiff libdep = NamespaceAndLibdepsDiff
   { defns :: GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff,
     libdeps :: Map NameSegment (DiffOp libdep)
   }
