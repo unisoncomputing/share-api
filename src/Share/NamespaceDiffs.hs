@@ -66,8 +66,9 @@ import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.DataDeclaration (Decl)
+import Unison.DeclCoherencyCheck (IncoherentDeclReason (..))
 import Unison.LabeledDependency (LabeledDependency)
-import Unison.Merge (DiffOp, EitherWay, IncoherentDeclReason (..), Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge (DiffOp, EitherWay, Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
 import Unison.Merge.EitherWay qualified as EitherWay
 import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
