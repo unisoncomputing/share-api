@@ -242,11 +242,11 @@ buildWebhookRequest webhookId uri event defaultPayload = do
               HTTPClient.requestBody = HTTPClient.RequestBodyLBS $ Aeson.encode defaultPayload
             }
 
-    contributionChatMessage :: NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> Author -> Maybe URI -> ProjectContributionPayload -> (ProjectBranchShortHand -> Text) -> Background (ChatApps.MessageContent provider)
-    contributionChatMessage event author mainLink payload mkPretext = do
-      let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.contributionInfo.contributionSourceBranch.branchShortHand)
-          title = payload.contributionInfo.contributionTitle
-          description = fromMaybe "" $ payload.contributionInfo.contributionDescription
+    contributionChatMessage :: NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> Author -> Maybe URI -> ProjectPayload -> ContributionPayload -> (ProjectBranchShortHand -> Text) -> Background (ChatApps.MessageContent provider)
+    contributionChatMessage event author mainLink project contribution mkPretext = do
+      let pbShorthand = (projectBranchShortHandFromParts project.projectShortHand contribution.contributionSourceBranch.branchShortHand)
+          title = contribution.contributionTitle
+          description = fromMaybe "" $ contribution.contributionDescription
       pure $
         ChatApps.MessageContent
           { preText = mkPretext pbShorthand,
@@ -257,13 +257,13 @@ buildWebhookRequest webhookId uri event defaultPayload = do
             thumbnailUrl = Nothing,
             timestamp = event.eventOccurredAt
           }
-    ticketChatMessage :: NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> Author -> Maybe URI -> ProjectTicketPayload -> (ProjectShortHand -> Text) -> Background (ChatApps.MessageContent provider)
-    ticketChatMessage event author mainLink payload mkPretext = do
-      let title = payload.ticketInfo.ticketTitle
-          description = fromMaybe "" $ payload.ticketInfo.ticketDescription
+    ticketChatMessage :: NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> Author -> Maybe URI -> ProjectPayload -> TicketPayload -> (ProjectShortHand -> Text) -> Background (ChatApps.MessageContent provider)
+    ticketChatMessage event author mainLink project ticket mkPretext = do
+      let title = ticket.ticketTitle
+          description = fromMaybe "" $ ticket.ticketDescription
       pure $
         ChatApps.MessageContent
-          { preText = mkPretext payload.projectInfo.projectShortHand,
+          { preText = mkPretext project.projectShortHand,
             content = description,
             title = title,
             mainLink,
@@ -271,9 +271,31 @@ buildWebhookRequest webhookId uri event defaultPayload = do
             thumbnailUrl = Nothing,
             timestamp = event.eventOccurredAt
           }
-    branchMessage :: NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> Author -> (Maybe URI) -> ProjectBranchUpdatedPayload -> Background (ChatApps.MessageContent provider)
-    branchMessage event author mainLink payload = do
-      let pbShorthand = (projectBranchShortHandFromParts payload.projectInfo.projectShortHand payload.branchInfo.branchShortHand)
+    releaseChatMessage :: NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> Author -> Maybe URI -> ProjectPayload -> ReleasePayload -> (ProjectShortHand -> Text) -> Background (ChatApps.MessageContent provider)
+    releaseChatMessage event author mainLink project release mkPretext = do
+      let title =
+            IDs.toText
+              ( ProjectReleaseShortHand
+                  { userHandle = project.projectShortHand.userHandle,
+                    projectSlug = project.projectShortHand.projectSlug,
+                    releaseVersion = release.releaseVersion
+                  }
+              )
+              <> " has been released."
+          description = ""
+      pure $
+        ChatApps.MessageContent
+          { preText = mkPretext project.projectShortHand,
+            content = description,
+            title = title,
+            mainLink,
+            author,
+            thumbnailUrl = Nothing,
+            timestamp = event.eventOccurredAt
+          }
+    branchMessage :: NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> Author -> (Maybe URI) -> ProjectPayload -> BranchPayload -> Background (ChatApps.MessageContent provider)
+    branchMessage event author mainLink project branch = do
+      let pbShorthand = (projectBranchShortHandFromParts project.projectShortHand branch.branchShortHand)
           title = "Branch " <> IDs.toText pbShorthand <> " was just updated."
           preText = title
       pure $
@@ -305,12 +327,12 @@ buildWebhookRequest webhookId uri event defaultPayload = do
       let mainLink = Just event.eventData.hydratedEventLink
       author <- mkAuthor event
       messageContent :: ChatApps.MessageContent provider <- case event.eventData.hydratedEventPayload of
-        HydratedProjectBranchUpdatedPayload payload -> do
-          branchMessage event author mainLink payload
-        HydratedProjectContributionCreatedPayload payload -> do
+        HydratedProjectBranchUpdatedPayload project branch -> do
+          branchMessage event author mainLink project branch
+        HydratedProjectContributionCreatedPayload project contribution -> do
           let mkPretext pbShorthand = "New Contribution in " <> IDs.toText pbShorthand
-          contributionChatMessage event author mainLink payload mkPretext
-        HydratedProjectContributionStatusUpdatedPayload payload (StatusUpdatePayload {oldStatus, newStatus}) -> do
+          contributionChatMessage event author mainLink project contribution mkPretext
+        HydratedProjectContributionStatusUpdatedPayload project contribution (StatusUpdatePayload {oldStatus, newStatus}) -> do
           let mkPretext pbShorthand =
                 Text.unwords
                   [ "Contribution in",
@@ -320,18 +342,18 @@ buildWebhookRequest webhookId uri event defaultPayload = do
                     "to",
                     displayContributionStatus newStatus
                   ]
-          contributionChatMessage event author mainLink payload mkPretext
-        HydratedProjectContributionCommentPayload payload comment -> do
+          contributionChatMessage event author mainLink project contribution mkPretext
+        HydratedProjectContributionCommentPayload project contribution comment -> do
           let mkPretext pbShorthand = "New Comment on Contribution in " <> IDs.toText pbShorthand
-          contributionChatMessage event author mainLink payload mkPretext
+          contributionChatMessage event author mainLink project contribution mkPretext
             <&> \msgContent ->
               msgContent
                 { ChatApps.content = comment.commentContent
                 }
-        HydratedProjectTicketCreatedPayload payload -> do
+        HydratedProjectTicketCreatedPayload project ticket -> do
           let mkPretext projectShorthand = "New Ticket in " <> IDs.toText projectShorthand
-          ticketChatMessage event author mainLink payload mkPretext
-        HydratedProjectTicketStatusUpdatedPayload payload (StatusUpdatePayload {oldStatus, newStatus}) -> do
+          ticketChatMessage event author mainLink project ticket mkPretext
+        HydratedProjectTicketStatusUpdatedPayload project ticket (StatusUpdatePayload {oldStatus, newStatus}) -> do
           let mkPretext projectShorthand =
                 Text.unwords
                   [ "Ticket in",
@@ -341,14 +363,17 @@ buildWebhookRequest webhookId uri event defaultPayload = do
                     "to",
                     displayTicketStatus newStatus
                   ]
-          ticketChatMessage event author mainLink payload mkPretext
-        HydratedProjectTicketCommentPayload payload comment -> do
+          ticketChatMessage event author mainLink project ticket mkPretext
+        HydratedProjectTicketCommentPayload project ticket comment -> do
           let mkPretext projectShorthand = "New Comment on Ticket in " <> IDs.toText projectShorthand
-          ticketChatMessage event author mainLink payload mkPretext
+          ticketChatMessage event author mainLink project ticket mkPretext
             <&> \msgContent ->
               msgContent
                 { ChatApps.content = comment.commentContent
                 }
+        HydratedProjectReleaseCreatedPayload project release -> do
+          let mkPretext projectShorthand = "New Release in " <> IDs.toText projectShorthand
+          releaseChatMessage event author mainLink project release mkPretext
       pure $
         HTTPClient.requestFromURI uri
           & mapLeft (\e -> InvalidRequest event.eventId webhookId e)

@@ -24,6 +24,8 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Releases.Ops qualified as ReleaseOps
+import Share.Postgres.Releases.Queries qualified as ReleasesQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project (Project (..))
@@ -403,10 +405,10 @@ updateReleaseEndpoint session userHandle projectSlug releaseVersion UpdateReleas
   callerUserId <- AuthN.requireAuthenticatedUser session
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReleaseUpdate (Just callerUserId) projectId
   PG.runTransactionOrRespondError do
-    Q.updateRelease callerUserId releaseId newStatus >>= \case
-      Q.UpdateRelease'Success -> pure ()
-      Q.UpdateRelease'NotFound -> throwSomeServerError releaseNotFound
-      Q.UpdateRelease'CantPublishDeprecated -> throwSomeServerError cantPublishDeprecated
+    ReleasesQ.updateRelease callerUserId releaseId newStatus >>= \case
+      ReleasesQ.UpdateRelease'Success -> pure ()
+      ReleasesQ.UpdateRelease'NotFound -> throwSomeServerError releaseNotFound
+      ReleasesQ.UpdateRelease'CantPublishDeprecated -> throwSomeServerError cantPublishDeprecated
   where
     releaseNotFound = EntityMissing (ErrorID "missing-release") "Release could not be found"
     cantPublishDeprecated = BadRequest "Cannot publish a release which has already been deprecated"
@@ -436,7 +438,7 @@ createRelease session userHandle projectSlug CreateReleaseRequest {releaseVersio
     pure (nlReceipt, squashedCausalId, unsquashedCausalId)
   -- Separate transaction to ensure squashing and name lookups make progress even on failure.
   Codebase.runCodebaseTransactionOrRespondError codebase $ do
-    release <- Q.createRelease nlReceipt projectId releaseVersion squashedCausalId unsquashedCausalId callerUserId
+    release <- ReleaseOps.createRelease nlReceipt projectId releaseVersion squashedCausalId unsquashedCausalId callerUserId
     releaseWithHandles <- forOf releaseUsers_ release \userId -> (fmap User.handle <$> UserQ.userByUserId userId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandles
     User {handle = projectOwnerHandle} <- (UserQ.userByUserId ownerUserId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")

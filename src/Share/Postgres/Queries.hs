@@ -24,7 +24,6 @@ import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
-import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project
@@ -37,7 +36,7 @@ import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
 import Share.Web.Share.Branches.Types (BranchKindFilter (..))
 import Share.Web.Share.Projects.Types (ContributionStats (..), DownloadStats (..), FavData, ProjectOwner, TicketStats (..))
-import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..), StatusUpdate (..))
+import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..))
 import Share.Web.Share.Types
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
@@ -621,48 +620,6 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
               }
       NotifQ.recordEvent notifEvent
 
-createRelease ::
-  (PG.QueryM m) =>
-  NameLookupReceipt ->
-  ProjectId ->
-  ReleaseVersion ->
-  CausalId ->
-  CausalId ->
-  UserId ->
-  m (Release CausalId UserId)
-createRelease !_nlReceipt projectId ReleaseVersion {major, minor, patch} squashedCausalId unsquashedCausalId creatorId = do
-  release@Release {releaseId} <-
-    PG.queryExpect1Row
-      [PG.sql|
-        INSERT INTO project_releases(
-          project_id,
-          created_by,
-          squashed_causal_id,
-          unsquashed_causal_id,
-          major_version,
-          minor_version,
-          patch_version
-        )
-        VALUES (#{projectId}, #{creatorId}, #{squashedCausalId}, #{unsquashedCausalId}, #{major}, #{minor}, #{patch})
-        RETURNING
-          id,
-          project_id,
-          unsquashed_causal_id,
-          squashed_causal_id,
-          created_at,
-          updated_at,
-          created_at,
-          created_by,
-          deprecated_at,
-          deprecated_by,
-          created_by,
-          major_version,
-          minor_version,
-          patch_version
-      |]
-  DDQ.submitReleaseToBeSynced releaseId
-  pure release
-
 setBranchCausalHash ::
   NameLookupReceipt ->
   Text ->
@@ -1004,34 +961,6 @@ organizationMemberships uid = do
           WHERE member_user_id = #{uid}
       |]
 
-releaseById :: ReleaseId -> PG.Transaction e (Maybe (Release CausalId UserId))
-releaseById releaseId = do
-  PG.query1Row
-    [PG.sql|
-        SELECT
-          release.id,
-          release.project_id,
-          release.unsquashed_causal_id,
-          release.squashed_causal_id,
-          release.created_at,
-          release.updated_at,
-          release.created_at,
-          release.created_by,
-          release.deprecated_at,
-          release.deprecated_by,
-          release.created_by,
-          release.major_version,
-          release.minor_version,
-          release.patch_version
-        FROM project_releases AS release
-        WHERE release.id = #{releaseId}
-      |]
-
-expectReleaseById :: ReleaseId -> PG.Transaction e (Release CausalId UserId)
-expectReleaseById releaseId = do
-  mayRow <- releaseById releaseId
-  whenNothing mayRow $ unrecoverableError $ EntityMissing (ErrorID "release:missing") ("Release with id " <> IDs.toText releaseId <> " not found")
-
 releaseByProjectReleaseShortHand :: ProjectReleaseShortHand -> PG.Transaction e (Maybe (Release CausalId UserId))
 releaseByProjectReleaseShortHand ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion = ReleaseVersion {major, minor, patch}} = do
   PG.query1Row
@@ -1192,45 +1121,6 @@ incrementBranchDownloads branchId = do
 
 likeEscape :: Text -> Text
 likeEscape = Text.replace "%" "\\%" . Text.replace "_" "\\_"
-
-data UpdateReleaseResult
-  = UpdateRelease'Success
-  | UpdateRelease'NotFound
-  | UpdateRelease'CantPublishDeprecated
-
-updateRelease :: UserId -> ReleaseId -> Maybe StatusUpdate -> PG.Transaction e UpdateReleaseResult
-updateRelease caller releaseId newStatus = do
-  fromMaybe UpdateRelease'NotFound <$> runMaybeT do
-    Release {..} <- lift $ expectReleaseById releaseId
-    -- Can go from draft -> published -> deprecated
-    -- or straight from draft -> deprecated
-    -- but can't go from published -> draft or deprecated -> draft.
-    case (status, newStatus) of
-      (_, Nothing) ->
-        -- No-op
-        pure UpdateRelease'Success
-      (DeprecatedRelease {}, Just MakePublished) -> do
-        pure UpdateRelease'CantPublishDeprecated
-      (PublishedRelease {}, Just MakePublished) ->
-        -- No-op
-        pure UpdateRelease'Success
-      (PublishedRelease {}, Just MakeDeprecated) -> do
-        lift makeDeprecated
-        pure UpdateRelease'Success
-      (DeprecatedRelease {}, Just MakeDeprecated) -> do
-        -- No-op
-        pure UpdateRelease'Success
-  where
-    makeDeprecated = do
-      PG.execute_
-        [PG.sql|
-          UPDATE project_releases
-          SET
-            deprecated_at = NOW(),
-            deprecated_by = #{caller}
-          WHERE
-            id = #{releaseId}
-        |]
 
 getOAuthConfigForClient :: OAuthClientId -> PG.Transaction e (Maybe OAuthClientConfig)
 getOAuthConfigForClient clientId = do

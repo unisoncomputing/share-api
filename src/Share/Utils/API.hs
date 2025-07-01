@@ -304,6 +304,7 @@ instance (Typeable a, Typeable b, FromJSON a, FromJSON b) => FromJSON (a :++ b) 
 
 -- | Wrapper useful in combination with `:++` to include the given payload at a specific key.
 newtype AtKey (key :: Symbol) a = AtKey a
+  deriving stock (Eq, Ord, Show)
 
 instance (ToJSON a, TypeLits.KnownSymbol key) => ToJSON (AtKey key a) where
   toJSON (AtKey a) = object [String.fromString (TypeLits.symbolVal (Proxy @key)) .= a]

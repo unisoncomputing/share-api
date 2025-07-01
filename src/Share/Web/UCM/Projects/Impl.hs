@@ -24,6 +24,7 @@ import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Releases.Ops qualified as ReleaseOps
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project
@@ -306,7 +307,7 @@ createProjectRelease callerUserId projectId unsquashedCausalHash releaseName = t
   (nlReceipt, squashedCausalId, squashedCausalHash) <- either (lift . respondError) pure squashResult
   signedSquashedCausalHash <- lift $ HashJWT.signHashForUser (Just callerUserId) (causalHashToHash32 squashedCausalHash)
   apiRelease <- pgT $ do
-    Release {releaseId} <- Q.createRelease nlReceipt projectId releaseName squashedCausalId unsquashedCausalId callerUserId
+    Release {releaseId} <- ReleaseOps.createRelease nlReceipt projectId releaseName squashedCausalId unsquashedCausalId callerUserId
     User {handle = projectOwnerHandle} <- UserQ.userByUserId ownerUserId `orThrow` UCMProjects.CreateProjectBranchResponseNotFound (UCMProjects.NotFound "Project owner not found")
     let projectShortHand =
           ProjectShortHand

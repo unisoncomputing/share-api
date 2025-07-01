@@ -88,6 +88,7 @@ library
       Share.Postgres.Projects.Queries
       Share.Postgres.Queries
       Share.Postgres.Refs.Types
+      Share.Postgres.Releases.Ops
       Share.Postgres.Releases.Queries
       Share.Postgres.Search.DefinitionSearch.Queries
       Share.Postgres.Serialization

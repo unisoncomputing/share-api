@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Share.Notifications.Types
@@ -15,6 +16,7 @@ module Share.Notifications.Types
     ContributionData (..),
     TicketData (..),
     CommentData (..),
+    ReleaseData (..),
     StatusUpdateData (..),
     NotificationHubEntry (..),
     NotificationStatus (..),
@@ -28,10 +30,8 @@ module Share.Notifications.Types
     ProjectPayload (..),
     ContributionPayload (..),
     TicketPayload (..),
-    ProjectTicketPayload (..),
     CommentPayload (..),
-    ProjectBranchUpdatedPayload (..),
-    ProjectContributionPayload (..),
+    ReleasePayload (..),
     StatusUpdatePayload (..),
     eventTopic,
     hydratedEventTopic,
@@ -69,6 +69,7 @@ data NotificationTopic
   | ProjectTicketCreated
   | ProjectTicketStatusUpdated
   | ProjectTicketComment
+  | ProjectReleaseCreated
   deriving (Eq, Show, Ord)
 
 instance PG.EncodeValue NotificationTopic where
@@ -80,6 +81,7 @@ instance PG.EncodeValue NotificationTopic where
     ProjectTicketCreated -> "project:ticket:created"
     ProjectTicketStatusUpdated -> "project:ticket:updated"
     ProjectTicketComment -> "project:ticket:comment"
+    ProjectReleaseCreated -> "project:release:created"
 
 instance PG.DecodeValue NotificationTopic where
   decodeValue = HasqlDecoders.enum \case
@@ -90,6 +92,7 @@ instance PG.DecodeValue NotificationTopic where
     "project:ticket:created" -> Just ProjectTicketCreated
     "project:ticket:updated" -> Just ProjectTicketStatusUpdated
     "project:ticket:comment" -> Just ProjectTicketComment
+    "project:release:created" -> Just ProjectReleaseCreated
     _ -> Nothing
 
 instance Aeson.ToJSON NotificationTopic where
@@ -101,6 +104,7 @@ instance Aeson.ToJSON NotificationTopic where
     ProjectTicketCreated -> "project:ticket:created"
     ProjectTicketStatusUpdated -> "project:ticket:updated"
     ProjectTicketComment -> "project:ticket:comment"
+    ProjectReleaseCreated -> "project:release:created"
 
 instance Aeson.FromJSON NotificationTopic where
   parseJSON = Aeson.withText "NotificationTopic" \case
@@ -111,6 +115,7 @@ instance Aeson.FromJSON NotificationTopic where
     "project:ticket:created" -> pure ProjectTicketCreated
     "project:ticket:updated" -> pure ProjectTicketStatusUpdated
     "project:ticket:comment" -> pure ProjectTicketComment
+    "project:release:created" -> pure ProjectReleaseCreated
     s -> fail $ "Invalid notification topic: " <> Text.unpack s
 
 data NotificationTopicGroup
@@ -229,6 +234,25 @@ instance Aeson.FromJSON CommentData where
     commentAuthorUserId <- o .: "commentAuthorUserId"
     pure CommentData {commentId, commentAuthorUserId}
 
+data ReleaseData = ReleaseData
+  { releaseId :: ReleaseId,
+    releaseVersion :: ReleaseVersion
+  }
+  deriving stock (Eq, Show)
+
+instance Aeson.ToJSON ReleaseData where
+  toJSON ReleaseData {releaseId, releaseVersion} =
+    Aeson.object
+      [ "releaseId" .= releaseId,
+        "releaseVersion" .= releaseVersion
+      ]
+
+instance Aeson.FromJSON ReleaseData where
+  parseJSON = Aeson.withObject "ReleaseData" \o -> do
+    releaseId <- o .: "releaseId"
+    releaseVersion <- o .: "releaseVersion"
+    pure ReleaseData {releaseId, releaseVersion}
+
 data TicketData = TicketData
   { ticketId :: TicketId,
     ticketAuthorUserId :: UserId
@@ -322,6 +346,7 @@ data NotificationEventData
   | ProjectTicketCreatedData ProjectData TicketData
   | ProjectTicketStatusUpdatedData ProjectData TicketData (StatusUpdateData TicketStatus)
   | ProjectTicketCommentData ProjectData TicketData CommentData
+  | ProjectReleaseCreatedData ProjectData ReleaseData
   deriving stock (Eq, Show)
 
 instance Aeson.ToJSON NotificationEventData where
@@ -340,6 +365,7 @@ instance Aeson.ToJSON NotificationEventData where
         ProjectTicketCreatedData project ticket -> Aeson.toJSON (project :++ ticket)
         ProjectTicketStatusUpdatedData project ticket status -> Aeson.toJSON (project :++ ticket :++ status)
         ProjectTicketCommentData project ticket comm -> Aeson.toJSON (project :++ ticket :++ comm)
+        ProjectReleaseCreatedData project release -> Aeson.toJSON (project :++ release)
 
 instance PG.EncodeValue NotificationEventData where
   encodeValue =
@@ -352,6 +378,7 @@ instance PG.EncodeValue NotificationEventData where
         ProjectTicketCreatedData project ticket -> Aeson.toJSON (project :++ ticket)
         ProjectTicketStatusUpdatedData project ticket status -> Aeson.toJSON (project :++ ticket :++ status)
         ProjectTicketCommentData project ticket comm -> Aeson.toJSON (project :++ ticket :++ comm)
+        ProjectReleaseCreatedData project release -> Aeson.toJSON (project :++ release)
 
 instance Hasql.DecodeRow NotificationEventData where
   decodeRow = do
@@ -379,6 +406,9 @@ instance Hasql.DecodeRow NotificationEventData where
       ProjectTicketComment -> do
         (project :++ ticket :++ comm) <- parseJsonData jsonData
         pure $ ProjectTicketCommentData project ticket comm
+      ProjectReleaseCreated -> do
+        (project :++ release) <- parseJsonData jsonData
+        pure $ ProjectReleaseCreatedData project release
     where
       parseJsonData v = case Aeson.fromJSON v of
         Aeson.Error e -> fail e
@@ -393,6 +423,7 @@ eventTopic = \case
   ProjectTicketCreatedData {} -> ProjectTicketCreated
   ProjectTicketStatusUpdatedData {} -> ProjectTicketStatusUpdated
   ProjectTicketCommentData {} -> ProjectTicketComment
+  ProjectReleaseCreatedData {} -> ProjectReleaseCreated
 
 -- | Description of a notifiable event.
 data NotificationEvent id userInfo occurredAt eventPayload = NotificationEvent
@@ -621,25 +652,6 @@ instance FromJSON ProjectPayload where
     projectOwnerUserId <- o .: "projectOwnerUserId"
     pure ProjectPayload {projectId, projectSlug, projectShortHand, projectOwnerHandle, projectOwnerUserId}
 
-data ProjectBranchUpdatedPayload = ProjectBranchUpdatedPayload
-  { projectInfo :: ProjectPayload,
-    branchInfo :: BranchPayload
-  }
-  deriving stock (Show, Eq)
-
-instance ToJSON ProjectBranchUpdatedPayload where
-  toJSON ProjectBranchUpdatedPayload {projectInfo, branchInfo} =
-    Aeson.object
-      [ "project" Aeson..= projectInfo,
-        "branch" Aeson..= branchInfo
-      ]
-
-instance FromJSON ProjectBranchUpdatedPayload where
-  parseJSON = Aeson.withObject "ProjectBranchUpdatedPayload" \o -> do
-    projectInfo <- o .: "project"
-    branchInfo <- o .: "branch"
-    pure ProjectBranchUpdatedPayload {projectInfo, branchInfo}
-
 data CommentPayload = CommentPayload
   { commentId :: CommentId,
     commentContent :: Text,
@@ -699,24 +711,27 @@ instance FromJSON TicketPayload where
     ticketCreatedAt <- o .: "createdAt"
     pure TicketPayload {ticketId, ticketTitle, ticketNumber, ticketDescription, ticketStatus, ticketAuthor, ticketCreatedAt}
 
-data ProjectTicketPayload = ProjectTicketPayload
-  { projectInfo :: ProjectPayload,
-    ticketInfo :: TicketPayload
+data ReleasePayload = ReleasePayload
+  { releaseId :: ReleaseId,
+    releaseVersion :: ReleaseVersion,
+    releaseCreatedAt :: UTCTime
   }
   deriving stock (Show, Eq)
 
-instance ToJSON ProjectTicketPayload where
-  toJSON ProjectTicketPayload {projectInfo, ticketInfo} =
+instance ToJSON ReleasePayload where
+  toJSON ReleasePayload {releaseId, releaseVersion, releaseCreatedAt} =
     Aeson.object
-      [ "project" Aeson..= projectInfo,
-        "ticket" Aeson..= ticketInfo
+      [ "releaseId" Aeson..= releaseId,
+        "version" Aeson..= releaseVersion,
+        "createdAt" Aeson..= releaseCreatedAt
       ]
 
-instance FromJSON ProjectTicketPayload where
-  parseJSON = Aeson.withObject "ProjectTicketPayload" \o -> do
-    projectInfo <- o .: "project"
-    ticketInfo <- o .: "ticket"
-    pure ProjectTicketPayload {projectInfo, ticketInfo}
+instance FromJSON ReleasePayload where
+  parseJSON = Aeson.withObject "ReleasePayload" \o -> do
+    releaseId <- o .: "releaseId"
+    releaseVersion <- o .: "version"
+    releaseCreatedAt <- o .: "createdAt"
+    pure ReleasePayload {releaseId, releaseVersion, releaseCreatedAt}
 
 data ContributionPayload = ContributionPayload
   { contributionId :: ContributionId,
@@ -757,25 +772,6 @@ instance FromJSON ContributionPayload where
     contributionCreatedAt <- o .: "createdAt"
     pure ContributionPayload {contributionId, contributionNumber, contributionTitle, contributionDescription, contributionStatus, contributionAuthor, contributionSourceBranch, contributionTargetBranch, contributionCreatedAt}
 
-data ProjectContributionPayload = ProjectContributionPayload
-  { projectInfo :: ProjectPayload,
-    contributionInfo :: ContributionPayload
-  }
-  deriving stock (Show, Eq)
-
-instance ToJSON ProjectContributionPayload where
-  toJSON ProjectContributionPayload {projectInfo, contributionInfo} =
-    Aeson.object
-      [ "project" Aeson..= projectInfo,
-        "contribution" Aeson..= contributionInfo
-      ]
-
-instance FromJSON ProjectContributionPayload where
-  parseJSON = Aeson.withObject "ProjectContributionPayload" \o -> do
-    projectInfo <- o .: "project"
-    contributionInfo <- o .: "contribution"
-    pure ProjectContributionPayload {projectInfo, contributionInfo}
-
 data StatusUpdatePayload status
   = StatusUpdatePayload
   { oldStatus :: status,
@@ -806,13 +802,22 @@ instance ToJSON HydratedEvent where
   toJSON he@(HydratedEvent {hydratedEventPayload, hydratedEventLink}) =
     let kind = hydratedEventTopic he
         payload = case hydratedEventPayload of
-          HydratedProjectBranchUpdatedPayload p -> Aeson.toJSON p
-          HydratedProjectContributionCreatedPayload p -> Aeson.toJSON p
-          HydratedProjectContributionStatusUpdatedPayload p status -> Aeson.toJSON (p :++ status)
-          HydratedProjectContributionCommentPayload p comm -> Aeson.toJSON (p :++ comm)
-          HydratedProjectTicketCreatedPayload p -> Aeson.toJSON p
-          HydratedProjectTicketStatusUpdatedPayload p status -> Aeson.toJSON (p :++ status)
-          HydratedProjectTicketCommentPayload p comm -> Aeson.toJSON (p :++ comm)
+          HydratedProjectBranchUpdatedPayload p b ->
+            Aeson.object ["project" .= p, "branch" .= b]
+          HydratedProjectContributionCreatedPayload p c ->
+            Aeson.object ["project" .= p, "contribution" .= c]
+          HydratedProjectContributionStatusUpdatedPayload p c status ->
+            Aeson.object ["project" .= p, "contribution" .= c, "status_update" .= status]
+          HydratedProjectContributionCommentPayload p c comm ->
+            Aeson.object ["project" .= p, "contribution" .= c, "comment" .= comm]
+          HydratedProjectTicketCreatedPayload p t ->
+            Aeson.object ["project" .= p, "ticket" .= t]
+          HydratedProjectTicketStatusUpdatedPayload p t status ->
+            Aeson.object ["project" .= p, "ticket" .= t, "status_update" .= status]
+          HydratedProjectTicketCommentPayload p t comm ->
+            Aeson.object ["project" .= p, "ticket" .= t, "comment" .= comm]
+          HydratedProjectReleaseCreatedPayload p r ->
+            Aeson.object ["project" .= p, "release" .= r]
      in Aeson.object
           [ "payload" .= payload,
             "link" .= URIParam hydratedEventLink,
@@ -824,40 +829,71 @@ instance FromJSON HydratedEvent where
     kind <- o .: "kind"
     hydratedEventLink <- o .: "link"
     hydratedEventPayload <- case kind of
-      ProjectBranchUpdated -> HydratedProjectBranchUpdatedPayload <$> o .: "payload"
-      ProjectContributionCreated -> HydratedProjectContributionCreatedPayload <$> o .: "payload"
+      ProjectBranchUpdated -> do
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        branch <- payload .: "branch"
+        pure $ HydratedProjectBranchUpdatedPayload project branch
+      ProjectContributionCreated -> do
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        contribution <- payload .: "contribution"
+        pure $ HydratedProjectContributionCreatedPayload project contribution
       ProjectContributionStatusUpdated -> do
-        (p :++ status) <- o .: "payload"
-        pure $ HydratedProjectContributionStatusUpdatedPayload p status
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        contribution <- payload .: "contribution"
+        status <- payload .: "status_update"
+        pure $ HydratedProjectContributionStatusUpdatedPayload project contribution status
       ProjectContributionComment -> do
-        (p :++ comm) <- o .: "payload"
-        pure $ HydratedProjectContributionCommentPayload p comm
-      ProjectTicketCreated -> HydratedProjectTicketCreatedPayload <$> o .: "payload"
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        contribution <- payload .: "contribution"
+        comment <- payload .: "comment"
+        pure $ HydratedProjectContributionCommentPayload project contribution comment
+      ProjectTicketCreated -> do
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        ticket <- payload .: "ticket"
+        pure $ HydratedProjectTicketCreatedPayload project ticket
       ProjectTicketStatusUpdated -> do
-        (p :++ status) <- o .: "payload"
-        pure $ HydratedProjectTicketStatusUpdatedPayload p status
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        ticket <- payload .: "ticket"
+        statusUpdate <- payload .: "status_update"
+        pure $ HydratedProjectTicketStatusUpdatedPayload project ticket statusUpdate
       ProjectTicketComment -> do
-        (p :++ comm) <- o .: "payload"
-        pure $ HydratedProjectTicketCommentPayload p comm
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        ticket <- payload .: "ticket"
+        comment <- payload .: "comment"
+        pure $ HydratedProjectTicketCommentPayload project ticket comment
+      ProjectReleaseCreated -> do
+        payload <- o .: "payload"
+        project <- payload .: "project"
+        release <- payload .: "release"
+        pure $ HydratedProjectReleaseCreatedPayload project release
 
     pure HydratedEvent {hydratedEventPayload, hydratedEventLink}
 
 data HydratedEventPayload
-  = HydratedProjectBranchUpdatedPayload ProjectBranchUpdatedPayload
-  | HydratedProjectContributionCreatedPayload ProjectContributionPayload
-  | HydratedProjectContributionStatusUpdatedPayload ProjectContributionPayload (StatusUpdatePayload ContributionStatus)
-  | HydratedProjectContributionCommentPayload ProjectContributionPayload CommentPayload
-  | HydratedProjectTicketCreatedPayload ProjectTicketPayload
-  | HydratedProjectTicketStatusUpdatedPayload ProjectTicketPayload (StatusUpdatePayload TicketStatus)
-  | HydratedProjectTicketCommentPayload ProjectTicketPayload CommentPayload
+  = HydratedProjectBranchUpdatedPayload ProjectPayload BranchPayload
+  | HydratedProjectContributionCreatedPayload ProjectPayload ContributionPayload
+  | HydratedProjectContributionStatusUpdatedPayload ProjectPayload ContributionPayload (StatusUpdatePayload ContributionStatus)
+  | HydratedProjectContributionCommentPayload ProjectPayload ContributionPayload CommentPayload
+  | HydratedProjectTicketCreatedPayload ProjectPayload TicketPayload
+  | HydratedProjectTicketStatusUpdatedPayload ProjectPayload TicketPayload (StatusUpdatePayload TicketStatus)
+  | HydratedProjectTicketCommentPayload ProjectPayload TicketPayload CommentPayload
+  | HydratedProjectReleaseCreatedPayload ProjectPayload ReleasePayload
   deriving stock (Show, Eq)
 
 hydratedEventTopic :: HydratedEvent -> NotificationTopic
 hydratedEventTopic (HydratedEvent {hydratedEventPayload}) = case hydratedEventPayload of
-  HydratedProjectBranchUpdatedPayload _ -> ProjectBranchUpdated
-  HydratedProjectContributionCreatedPayload _ -> ProjectContributionCreated
-  HydratedProjectContributionStatusUpdatedPayload _ _ -> ProjectContributionStatusUpdated
-  HydratedProjectContributionCommentPayload _ _ -> ProjectContributionComment
-  HydratedProjectTicketCreatedPayload _ -> ProjectTicketCreated
-  HydratedProjectTicketStatusUpdatedPayload _ _ -> ProjectTicketStatusUpdated
-  HydratedProjectTicketCommentPayload _ _ -> ProjectTicketComment
+  HydratedProjectBranchUpdatedPayload {} -> ProjectBranchUpdated
+  HydratedProjectContributionCreatedPayload {} -> ProjectContributionCreated
+  HydratedProjectContributionStatusUpdatedPayload {} -> ProjectContributionStatusUpdated
+  HydratedProjectContributionCommentPayload {} -> ProjectContributionComment
+  HydratedProjectTicketCreatedPayload {} -> ProjectTicketCreated
+  HydratedProjectTicketStatusUpdatedPayload {} -> ProjectTicketStatusUpdated
+  HydratedProjectTicketCommentPayload {} -> ProjectTicketComment
+  HydratedProjectReleaseCreatedPayload {} -> ProjectReleaseCreated

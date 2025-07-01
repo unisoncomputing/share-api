@@ -34,6 +34,7 @@ import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.Notifications qualified as Notif
 import Share.Postgres.Queries qualified as PG
 import Share.Postgres.Releases.Queries qualified as RQ
+import Share.Postgres.Releases.Queries qualified as ReleasesQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
@@ -109,7 +110,7 @@ syncRelease ::
   ReleaseId ->
   PG.Transaction e [DefnIndexingFailure]
 syncRelease authZReceipt releaseId = fmap (fromMaybe []) . runMaybeT $ do
-  Release {projectId, releaseId, squashedCausal, version} <- lift $ PG.expectReleaseById releaseId
+  Release {projectId, releaseId, squashedCausal, version} <- lift $ ReleasesQ.releaseById releaseId
   -- Wipe out any existing rows for this release. Normally there should be none, but this
   -- makes it easy to re-index later if we change how we tokenize things.
   latestVersion <- MaybeT $ RQ.latestReleaseVersionByProjectId projectId
