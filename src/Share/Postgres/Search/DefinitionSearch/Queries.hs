@@ -303,12 +303,12 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
   case mayFilter of
     Nothing -> globalDefNameCompletionSearch mayCaller Nothing (Query query) limit
     Just (UserFilter userId) -> globalDefNameCompletionSearch mayCaller (Just userId) (Query query) limit
-    Just (RootBranchFilter _projId _branchOrReleaseSH branchHashId) -> do
+    Just (RootBranchFilter projId _branchOrReleaseSH branchHashId) -> do
       -- If we have a branch filter, we can use the scoped search index.
-      scopedDefNameCompletionSearch mayCaller branchHashId (Query query) limit
+      scopedDefNameCompletionSearch mayCaller projId branchHashId (Query query) limit
 
-scopedDefNameCompletionSearch :: Maybe UserId -> BranchHashId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
-scopedDefNameCompletionSearch mayCaller branchHashId (Query query) limit = do
+scopedDefNameCompletionSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+scopedDefNameCompletionSearch mayCaller projectId branchHashId (Query query) limit = do
   queryListRows @(Name, TermOrTypeTag)
     [sql|
     WITH results(name, tag) AS (
@@ -317,7 +317,7 @@ scopedDefNameCompletionSearch mayCaller branchHashId (Query query) limit = do
         WHERE
           -- Find names which contain the query
           doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
-        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
+        AND user_has_project_permission(#{mayCaller}, #{projectId}, #{ProjectView})
         AND doc.root_namespace_hash_id = #{branchHashId}
       ) SELECT r.name, r.tag FROM results r
         -- Docs and tests to the bottom, then
@@ -379,11 +379,11 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         <&> over (traversed . _2) (IsReleaseShortHand . ReleaseShortHand)
     Just (RootBranchFilter projId branchOrReleaseSH branchHashId) -> do
       -- If we have a branch filter, we can use the scoped search index.
-      scopedDefinitionTokenSearch mayCaller branchHashId limit searchTokens preferredArity
+      scopedDefinitionTokenSearch mayCaller projId branchHashId limit searchTokens preferredArity
         <&> fmap \(name, meta) -> (projId, branchOrReleaseSH, name, meta)
 
-scopedDefinitionTokenSearch :: Maybe UserId -> BranchHashId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(Name, TermOrTypeSummary)]
-scopedDefinitionTokenSearch mayCaller rootBranchHashId limit searchTokens preferredArity = do
+scopedDefinitionTokenSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(Name, TermOrTypeSummary)]
+scopedDefinitionTokenSearch mayCaller projectId rootBranchHashId limit searchTokens preferredArity = do
   let (regularTokens, returnTokens, names) =
         searchTokens & foldMap \token -> case token of
           TypeMentionToken _ ReturnPosition -> (mempty, Set.singleton token, mempty)
@@ -401,11 +401,10 @@ scopedDefinitionTokenSearch mayCaller rootBranchHashId limit searchTokens prefer
     queryListRows @(Name, Hasql.Jsonb)
       [sql|
       SELECT doc.name, doc.metadata FROM scoped_definition_search_docs doc
-        JOIN projects p ON p.id = doc.project_id
         WHERE
           -- match on search tokens using GIN index.
           tsquery(#{tsQueryText}) @@ doc.search_tokens
-        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
+        AND user_has_project_permission(#{mayCaller}, #{projectId}, #{ProjectView})
         AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
           AND doc.root_namespace_hash_id = #{rootBranchHashId}
           ^{namesFilter}
@@ -516,17 +515,15 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
 
 -- | Perform a fuzzy trigram search on definition names
 scopedDefinitionNameSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Query -> Transaction e [(Name, TermOrTypeSummary)]
-scopedDefinitionNameSearch mayCaller projId rootBranchHashId limit (Query query) = do
+scopedDefinitionNameSearch mayCaller projectId rootBranchHashId limit (Query query) = do
   rows <-
     queryListRows @(Name, Hasql.Jsonb)
       [sql|
       SELECT doc.name, doc.metadata FROM scoped_definition_search_docs doc
-        JOIN projects p ON p.id = doc.project_id
         WHERE
           -- We may wish to adjust the similarity threshold before the query.
           #{query} <% doc.name
-        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
-        AND doc.project_id = #{projId}
+        AND user_has_project_permission(#{mayCaller}, #{projectId}, #{ProjectView})
         AND doc.root_namespace_hash_id = #{rootBranchHashId}
         -- Score matches by:
         -- - projects in the catalog
