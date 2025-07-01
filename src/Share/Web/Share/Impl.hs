@@ -10,9 +10,10 @@ import Control.Lens
 import Data.Set.NonEmpty qualified as NESet
 import Data.Text qualified as Text
 import Servant
+import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
-import Share.IDs (TourId, UserHandle (..))
+import Share.IDs (BranchOrReleaseShortHand (..), TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
 import Share.Notifications.Impl qualified as Notifications
@@ -21,6 +22,7 @@ import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
+import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalHash)
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as PQ
@@ -390,10 +392,10 @@ searchDefinitionNamesEndpoint ::
   Maybe Limit ->
   Maybe (IDs.PrefixedID "@" UserHandle) ->
   Maybe IDs.ProjectShortHand ->
-  Maybe IDs.ReleaseVersion ->
+  Maybe BranchOrReleaseShortHand ->
   WebApp [DefinitionNameSearchResult]
 searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit userFilter projectFilter releaseFilter = do
-  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
+  filter <- runMaybeT $ resolveProjectAndBranchFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <-
     (PG.runTransaction $ DDQ.defNameCompletionSearch callerUserId filter query limit)
       <&> ordNubOn (view _1) . (mapMaybe $ traverseOf _1 (rewriteMatches queryText))
@@ -423,17 +425,34 @@ searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit user
               Name.parseText (Text.takeEnd (Text.length $ q <> after) nameText)
       | otherwise = Nothing
 
-resolveProjectAndReleaseFilter :: Maybe IDs.ProjectShortHand -> Maybe IDs.ReleaseVersion -> MaybeT WebApp DDQ.DefnNameSearchFilter
-resolveProjectAndReleaseFilter projectFilter releaseFilter = do
-  projectShortHand <- hoistMaybe projectFilter
-  Project {projectId} <- lift . PG.runTransactionOrRespondError $ Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "no-project-found") $ "No project found for short hand: " <> IDs.toText projectShortHand)
-  case releaseFilter of
-    Nothing -> pure $ DDQ.ProjectFilter projectId
-    Just releaseVersion -> do
-      Release {releaseId} <- lift . PG.runTransactionOrRespondError $ Q.releaseByProjectIdAndReleaseShortHand projectId (IDs.ReleaseShortHand releaseVersion) `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and version: " <> IDs.toText releaseVersion)
-      pure $ DDQ.ReleaseFilter releaseId
+resolveProjectAndBranchFilter :: Maybe IDs.ProjectShortHand -> Maybe BranchOrReleaseShortHand -> MaybeT WebApp DDQ.DefnSearchFilter
+resolveProjectAndBranchFilter Nothing _branchFilter = empty
+resolveProjectAndBranchFilter (Just projectShortHand) branchFilter = MaybeT $ do
+  PG.runTransactionOrRespondError $ do
+    Project {projectId} <- Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "no-project-found") $ "No project found for short hand: " <> IDs.toText projectShortHand)
+    case branchFilter of
+      Nothing -> do
+        -- If the project has a latest release, use that, otherwise search the 'main' branch.
+        RQ.latestReleaseByProjectId projectId >>= \case
+          Nothing -> do
+            Q.branchByProjectIdAndShortHand projectId Branch.defaultBranchShorthand >>= \case
+              Nothing -> pure Nothing
+              Just mainBranch -> do
+                rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id mainBranch.causal
+                pure . Just $ DDQ.RootBranchFilter projectId rootBranchHashId
+          Just release -> do
+            rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id release.squashedCausal
+            pure . Just $ DDQ.RootBranchFilter projectId rootBranchHashId
+      Just (IsBranchShortHand bsh) -> do
+        branch <- Q.branchByProjectIdAndShortHand projectId bsh `whenNothingM` throwError (EntityMissing (ErrorID "no-branch-found") $ "No branch found for project: " <> IDs.toText projectShortHand <> " and branch: " <> IDs.toText bsh)
+        rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id branch.causal
+        pure $ Just $ DDQ.RootBranchFilter projectId rootBranchHashId
+      Just (IsReleaseShortHand rsh) -> do
+        release <- Q.releaseByProjectIdAndReleaseShortHand projectId rsh `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and release: " <> IDs.toText rsh)
+        rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id release.squashedCausal
+        pure $ Just $ DDQ.RootBranchFilter projectId rootBranchHashId
 
-resolveUserFilter :: Maybe UserHandle -> MaybeT WebApp DDQ.DefnNameSearchFilter
+resolveUserFilter :: Maybe UserHandle -> MaybeT WebApp DDQ.DefnSearchFilter
 resolveUserFilter userFilter = do
   userHandle <- hoistMaybe userFilter
   User {user_id} <- lift $ PG.runTransactionOrRespondError $ UserQ.userByHandle userHandle `whenNothingM` throwError (EntityMissing (ErrorID "no-user-for-handle") $ "User not found for handle: " <> IDs.toText userHandle)
@@ -445,10 +464,10 @@ searchDefinitionsEndpoint ::
   Maybe Limit ->
   Maybe (IDs.PrefixedID "@" UserHandle) ->
   Maybe IDs.ProjectShortHand ->
-  Maybe IDs.ReleaseVersion ->
+  Maybe BranchOrReleaseShortHand ->
   WebApp DefinitionSearchResults
 searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
-  filter <- runMaybeT $ resolveProjectAndReleaseFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
+  filter <- runMaybeT $ resolveProjectAndBranchFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <- case Text.words query of
     [] -> pure $ []
     [":"] -> pure $ []

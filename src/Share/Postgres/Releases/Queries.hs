@@ -3,7 +3,7 @@
 
 module Share.Postgres.Releases.Queries
   ( expectReleaseVersionsOf,
-    latestReleaseVersionByProjectId,
+    latestReleaseByProjectId,
     releaseById,
     UpdateReleaseResult (..),
     updateRelease,
@@ -37,11 +37,22 @@ expectReleaseVersionsOf trav s = do
         then error "expectReleaseVersionsOf: Missing expected release version"
         else pure results
 
-latestReleaseVersionByProjectId :: ProjectId -> Transaction e (Maybe ReleaseVersion)
-latestReleaseVersionByProjectId projectId = do
-  query1Row @(ReleaseVersion)
+latestReleaseByProjectId :: ProjectId -> Transaction e (Maybe (Release CausalId UserId))
+latestReleaseByProjectId projectId = do
+  query1Row @(Release CausalId UserId)
     [sql|
         SELECT
+          release.id,
+          release.project_id,
+          release.unsquashed_causal_id,
+          release.squashed_causal_id,
+          release.created_at,
+          release.updated_at,
+          release.created_at,
+          release.created_by,
+          release.deprecated_at,
+          release.deprecated_by,
+          release.created_by,
           release.major_version,
           release.minor_version,
           release.patch_version

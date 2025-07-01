@@ -11,7 +11,7 @@ module Share.Postgres.Search.DefinitionSearch.Queries
     definitionNameSearch,
     isRootIndexed,
     markRootAsIndexed,
-    DefnNameSearchFilter (..),
+    DefnSearchFilter (..),
     -- Exported for logging/debugging
     searchTokensToTsQuery,
   )
@@ -293,18 +293,52 @@ searchTokensToTsQuery tokens =
     & fmap (searchTokenToText True)
     & Text.intercalate " & "
 
-data DefnNameSearchFilter
-  = ProjectFilter ProjectId
-  | ReleaseFilter ReleaseId
+data DefnSearchFilter
+  = RootBranchFilter ProjectId BranchHashId
   | UserFilter UserId
 
--- | Find names which would be valid completions for the given query.
-defNameCompletionSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+defNameCompletionSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
 defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
-  let filters = case mayFilter of
-        Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
-        Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
-        Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
+  case mayFilter of
+    Nothing -> globalDefNameCompletionSearch mayCaller Nothing (Query query) limit
+    Just (UserFilter userId) -> globalDefNameCompletionSearch mayCaller (Just userId) (Query query) limit
+    Just (RootBranchFilter projId branchHashId) -> do
+      -- If we have a branch filter, we can use the scoped search index.
+      scopedDefNameCompletionSearch mayCaller projId branchHashId (Query query) limit
+
+scopedDefNameCompletionSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+scopedDefNameCompletionSearch mayCaller projId branchHashId (Query query) limit = do
+  queryListRows @(Name, TermOrTypeTag)
+    [sql|
+    WITH results(name, tag) AS (
+      SELECT DISTINCT doc.name, doc.tag FROM scoped_definition_search_docs doc
+        JOIN projects p ON p.id = doc.project_id
+        WHERE
+          -- Find names which contain the query
+          doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
+        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
+        AND doc.project_id = #{projId}
+        AND doc.root_namespace_hash_id = #{branchHashId}
+      ) SELECT r.name, r.tag FROM results r
+        -- Docs and tests to the bottom, then
+        -- prefer matches where the original query appears (case-matched),
+        -- then matches where the query is near the end of the name,
+        -- e.g. for query 'List', 'data.List' should come before 'data.List.map'
+        ORDER BY r.tag <> 'doc'::definition_tag DESC, r.tag <> 'test'::definition_tag DESC,
+                 r.name LIKE ('%' || #{query} || '%') DESC, length(r.name) - position(LOWER(#{query}) in LOWER(r.name)) ASC,
+                 -- tie break by name, this just helps keep things deterministic for tests
+                 r.name
+        LIMIT #{limit}
+
+  |]
+    -- Names are stored in absolute form, but we usually work with them in relative form.
+    <&> over (traversed . _1) Name.makeRelative
+
+-- | Find names which would be valid completions for the given query.
+globalDefNameCompletionSearch :: Maybe UserId -> Maybe UserId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+globalDefNameCompletionSearch mayCaller mayUserFilter (Query query) limit = do
+  let filters = case mayUserFilter of
+        Just userId -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
   queryListRows @(Name, TermOrTypeTag)
     [sql|
@@ -332,14 +366,17 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
     -- Names are stored in absolute form, but we usually work with them in relative form.
     <&> over (traversed . _1) Name.makeRelative
 
--- | Perform a type search for the given tokens.
-definitionTokenSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+definitionTokenSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
 definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
-  let filters = case mayFilter of
-        Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
-        Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
-        Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
-        Nothing -> mempty
+  case mayFilter of
+    Nothing -> globalDefinitionTokenSearch mayCaller Nothing limit searchTokens preferredArity
+    Just (UserFilter userId) -> globalDefinitionTokenSearch mayCaller (Just userId) limit searchTokens preferredArity
+    Just (RootBranchFilter projId branchHashId) -> do
+      -- If we have a branch filter, we can use the scoped search index.
+      scopedDefinitionTokenSearch mayCaller projId branchHashId limit searchTokens preferredArity
+
+scopedDefinitionTokenSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+scopedDefinitionTokenSearch mayCaller projId rootBranchHashId limit searchTokens preferredArity = do
   let (regularTokens, returnTokens, names) =
         searchTokens & foldMap \token -> case token of
           TypeMentionToken _ ReturnPosition -> (mempty, Set.singleton token, mempty)
@@ -352,31 +389,7 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
         if Set.null returnTokens
           then Nothing
           else Just $ searchTokensToTsQuery returnTokens
-  let orderClause =
-        names & Set.minView & \case
-          Nothing ->
-            -- Scoring for if there's no name search
-            [sql|
-                (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ doc.search_tokens)) DESC,
-                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
-                 doc.arity ASC,
-                 length(doc.search_tokens) ASC,
-                 -- tie break by name, this just helps keep things deterministic for tests
-                 doc.name
-            |]
-          Just (name, _) ->
-            -- Scoring for if there is a name search
-            [sql|
-                 -- Prefer names which contain the query exactly
-                 doc.name LIKE ('%' || #{name} || '%') DESC,
-                 -- Prefer names where the query is near the end of the name
-                 length(doc.name) - position(LOWER(#{name}) in LOWER(doc.name)) ASC,
-                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
-                 doc.arity ASC,
-                 length(doc.search_tokens) ASC,
-                 -- tie break by name, this just helps keep things deterministic for tests
-                 doc.name
-            |]
+  let orderClause = tokenSearchOrderClause names mayReturnTokensText
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
@@ -387,13 +400,9 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
           tsquery(#{tsQueryText}) @@ doc.search_tokens
         AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
         AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
-          ^{filters}
+          AND doc.project_id = #{projId}
+          AND doc.root_namespace_hash_id = #{rootBranchHashId}
           ^{namesFilter}
-        -- Score matches by:
-        -- - Whether the return type of the query matches the type signature
-        -- - Prefer projects in the catalog
-        -- - Prefer shorter arities
-        -- - Prefer less complex type signatures (by number of tokens)
         ORDER BY ^{orderClause}
         LIMIT #{limit}
   |]
@@ -407,13 +416,134 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
             Aeson.Success summary -> pure summary
       )
 
--- | Perform a fuzzy trigram search on definition names
-definitionNameSearch :: Maybe UserId -> Maybe DefnNameSearchFilter -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+-- | Perform a type search for the given tokens.
+globalDefinitionTokenSearch :: Maybe UserId -> Maybe UserId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+globalDefinitionTokenSearch mayCaller mayUserFilter limit searchTokens preferredArity = do
+  let filters = case mayUserFilter of
+        Just userId -> [sql| AND p.owner_user_id = #{userId} |]
+        Nothing -> mempty
+  let (regularTokens, returnTokens, names) =
+        searchTokens & foldMap \token -> case token of
+          TypeMentionToken _ ReturnPosition -> (mempty, Set.singleton token, mempty)
+          TypeVarToken _ ReturnPosition -> (mempty, Set.singleton token, mempty)
+          NameToken name -> (mempty, mempty, Set.singleton $ Name.toText name)
+          _ -> (Set.singleton token, mempty, mempty)
+  let namesFilter = names & foldMap \name -> [sql| AND #{name} <% doc.name |]
+  let tsQueryText = searchTokensToTsQuery regularTokens
+  let mayReturnTokensText =
+        if Set.null returnTokens
+          then Nothing
+          else Just $ searchTokensToTsQuery returnTokens
+  let orderClause = tokenSearchOrderClause names mayReturnTokensText
+  rows <-
+    queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
+      [sql|
+      SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
+        JOIN projects p ON p.id = doc.project_id
+        WHERE
+          -- match on search tokens using GIN index.
+          tsquery(#{tsQueryText}) @@ doc.search_tokens
+        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
+        AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
+          ^{filters}
+          ^{namesFilter}
+        ORDER BY ^{orderClause}
+        LIMIT #{limit}
+  |]
+  rows
+    & over (traversed . _3) Name.makeRelative
+    & traverseOf
+      (traversed . _4)
+      ( \(Hasql.Jsonb v) -> do
+          case fromJSON v of
+            Aeson.Error err -> unrecoverableError $ FailedToDecodeMetadata v (Text.pack err)
+            Aeson.Success summary -> pure summary
+      )
+
+-- | Score matches by:
+-- - Whether the return type of the query matches the type signature
+-- - Prefer projects in the catalog
+-- - Prefer shorter arities
+-- - Prefer less complex type signatures (by number of tokens)
+tokenSearchOrderClause :: Set Text -> Maybe Text -> Sql
+tokenSearchOrderClause names mayReturnTokensText =
+  case Set.minView names of
+    Nothing ->
+      -- Scoring for if there's no name search
+      [sql|
+                (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ doc.search_tokens)) DESC,
+                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 doc.arity ASC,
+                 length(doc.search_tokens) ASC,
+                 -- tie break by name, this just helps keep things deterministic for tests
+                 doc.name
+            |]
+    Just (name, _) ->
+      -- Scoring for if there is a name search
+      [sql|
+                 -- Prefer names which contain the query exactly
+                 doc.name LIKE ('%' || #{name} || '%') DESC,
+                 -- Prefer names where the query is near the end of the name
+                 length(doc.name) - position(LOWER(#{name}) in LOWER(doc.name)) ASC,
+                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 doc.arity ASC,
+                 length(doc.search_tokens) ASC,
+                 -- tie break by name, this just helps keep things deterministic for tests
+                 doc.name
+            |]
+
+definitionNameSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
 definitionNameSearch mayCaller mayFilter limit (Query query) = do
-  let filters = case mayFilter of
-        Just (ProjectFilter projId) -> [sql| AND doc.project_id = #{projId} |]
-        Just (ReleaseFilter relId) -> [sql| AND doc.release_id = #{relId} |]
-        Just (UserFilter userId) -> [sql| AND p.owner_user_id = #{userId} |]
+  case mayFilter of
+    Nothing -> globalDefinitionNameSearch mayCaller Nothing limit (Query query)
+    Just (UserFilter userId) -> globalDefinitionNameSearch mayCaller (Just userId) limit (Query query)
+    Just (RootBranchFilter projId branchHashId) -> do
+      -- If we have a branch filter, we can use the scoped search index.
+      scopedDefinitionNameSearch mayCaller projId branchHashId limit (Query query)
+
+-- | Perform a fuzzy trigram search on definition names
+scopedDefinitionNameSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+scopedDefinitionNameSearch mayCaller projId rootBranchHashId limit (Query query) = do
+  rows <-
+    queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
+      [sql|
+      SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
+        JOIN projects p ON p.id = doc.project_id
+        WHERE
+          -- We may wish to adjust the similarity threshold before the query.
+          #{query} <% doc.name
+        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
+        AND doc.project_id = #{projId}
+        AND doc.root_namespace_hash_id = #{rootBranchHashId}
+        -- Score matches by:
+        -- - projects in the catalog
+        -- - whether it contains the exact provided spelling
+        -- - how close the query is to the END of the name (generally we want to match the last segment)
+        -- - similarity, just in case the query is a bit off
+        ORDER BY EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 doc.name LIKE ('%' || #{query} || '%') DESC,
+                 length(doc.name) - position(LOWER(#{query}) in LOWER(doc.name)) ASC,
+                 word_similarity(#{query}, doc.name) DESC,
+                 -- Tiebreak by name, this just helps keep things deterministic for tests and
+                 -- such.
+                 doc.name
+        LIMIT #{limit}
+  |]
+  rows
+    & over (traversed . _3) Name.makeRelative
+    & traverseOf
+      (traversed . _4)
+      ( \(Hasql.Jsonb v) -> do
+          case fromJSON v of
+            Aeson.Error err -> unrecoverableError $ FailedToDecodeMetadata v (Text.pack err)
+            Aeson.Success summary -> pure summary
+      )
+
+-- | Perform a fuzzy trigram search on definition names
+globalDefinitionNameSearch :: Maybe UserId -> Maybe UserId -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+globalDefinitionNameSearch mayCaller mayUserFilter limit (Query query) = do
+  let filters = case mayUserFilter of
+        Just userId -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)

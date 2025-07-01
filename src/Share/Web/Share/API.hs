@@ -48,7 +48,7 @@ type UserReadmeEndpoint = Get '[JSON] (Cached JSON ReadmeResponse)
 -- | GET /search?query=hoj&limit=9
 --
 -- Search users by a prefix of their name or handle.
-type SearchEndpoint =
+type OmniSearchEndpoint =
   MaybeAuthenticatedSession
     :> RequiredQueryParam "query" Query
     :> QueryParam "kinds" SearchKinds
@@ -64,7 +64,7 @@ type SearchDefinitionNamesEndpoint =
     :> QueryParam "limit" Limit
     :> QueryParam "user-filter" (IDs.PrefixedID "@" UserHandle)
     :> QueryParam "project-filter" ProjectShortHand
-    :> QueryParam "release-filter" ReleaseVersion
+    :> QueryParam "branch-filter" BranchOrReleaseShortHand
     :> Get '[JSON] [DefinitionNameSearchResult]
 
 -- | Submit a definition search
@@ -74,7 +74,7 @@ type SearchDefinitionsEndpoint =
     :> QueryParam "limit" Limit
     :> QueryParam "user-filter" (IDs.PrefixedID "@" UserHandle)
     :> QueryParam "project-filter" ProjectShortHand
-    :> QueryParam "release-filter" ReleaseVersion
+    :> QueryParam "branch-filter" BranchOrReleaseShortHand
     :> Get '[JSON] DefinitionSearchResults
 
 type AccountAPI =

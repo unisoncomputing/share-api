@@ -133,9 +133,9 @@ syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do
   Release {projectId, releaseId, version} <- lift $ ReleasesQ.releaseById releaseId
   -- Wipe out any existing rows for this release. Normally there should be none, but this
   -- makes it easy to re-index later if we change how we tokenize things.
-  latestVersion <- MaybeT $ RQ.latestReleaseVersionByProjectId projectId
+  latestRelease <- MaybeT $ RQ.latestReleaseByProjectId projectId
   -- Only index the latest version of a release.
-  guard $ version == latestVersion
+  guard $ version == latestRelease.version
   lift $ DDQ.cleanIndexForProject projectId
   -- Copy the indexed documents from the scoped index into the global index.
   lift $ DDQ.copySearchDocumentsForRelease rootBranchHashId projectId releaseId

@@ -25,7 +25,7 @@ type API =
     :<|> ("codebases" :> Share.UserPublicCodebaseAPI)
     :<|> ("users" :> Share.UserAPI)
     :<|> ("orgs" :> Orgs.API)
-    :<|> ("search" :> Share.SearchEndpoint)
+    :<|> ("search" :> Share.OmniSearchEndpoint)
     :<|> ("search-names" :> Share.SearchDefinitionNamesEndpoint)
     :<|> ("search-definitions" :> Share.SearchDefinitionsEndpoint)
     :<|> ("account" :> Share.AccountAPI)
