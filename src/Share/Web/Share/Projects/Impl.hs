@@ -374,12 +374,12 @@ favProjectEndpoint sess userHandle projectSlug (FavProjectRequest {isFaved}) = d
 
 projectReadmeEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp (Cached JSON ReadmeResponse)
 projectReadmeEndpoint session userHandle projectSlug = do
-  latestReleaseVersion <- PG.runTransactionOrRespondError $ do
+  latestRelease <- PG.runTransactionOrRespondError $ do
     projectId <- Q.projectIDFromHandleAndSlug userHandle projectSlug `whenNothingM` throwError (EntityMissing (ErrorID "project:missing") "Project not found")
-    RQ.latestReleaseVersionByProjectId projectId
-  case latestReleaseVersion of
+    RQ.latestReleaseByProjectId projectId
+  case latestRelease of
     Nothing -> getProjectBranchReadmeEndpoint session userHandle projectSlug defaultBranchShorthand Nothing
-    Just releaseVersion -> getProjectReleaseReadmeEndpoint session userHandle projectSlug releaseVersion
+    Just release -> getProjectReleaseReadmeEndpoint session userHandle projectSlug release.version
 
 listRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp ListRolesResponse
 listRolesEndpoint session projectUserHandle projectSlug = do
