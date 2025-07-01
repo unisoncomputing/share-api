@@ -256,7 +256,7 @@ data DefinitionSearchResult = DefinitionSearchResult
   { fqn :: Name,
     summary :: DefSync.TermOrTypeSummary,
     project :: ProjectShortHand,
-    release :: ReleaseShortHand
+    branchRef :: BranchOrReleaseShortHand
   }
 
 instance ToJSON DefinitionSearchResult where
@@ -264,7 +264,7 @@ instance ToJSON DefinitionSearchResult where
     Aeson.object
       [ "fqn" Aeson..= fqn,
         "projectRef" Aeson..= project,
-        "branchRef" Aeson..= release,
+        "branchRef" Aeson..= branchRef,
         "kind" Aeson..= kind,
         "definition" Aeson..= definition
       ]

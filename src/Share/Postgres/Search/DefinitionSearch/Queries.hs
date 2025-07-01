@@ -27,9 +27,10 @@ import Hasql.Interpolate qualified as Hasql
 import Servant (ServerError (..))
 import Servant.Server (err500)
 import Share.BackgroundJobs.Search.DefinitionSync.Types
-import Share.IDs (ProjectId, ReleaseId, UserId)
+import Share.IDs (BranchOrReleaseShortHand (IsReleaseShortHand), ProjectId, ReleaseId, ReleaseShortHand (..), UserId)
 import Share.Postgres
 import Share.Postgres.IDs (BranchHashId)
+import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Prelude
 import Share.Utils.API (Limit, Query (Query))
 import Share.Utils.Logging qualified as Logging
@@ -294,7 +295,7 @@ searchTokensToTsQuery tokens =
     & Text.intercalate " & "
 
 data DefnSearchFilter
-  = RootBranchFilter ProjectId BranchHashId
+  = RootBranchFilter ProjectId BranchOrReleaseShortHand BranchHashId
   | UserFilter UserId
 
 defNameCompletionSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
@@ -302,12 +303,12 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
   case mayFilter of
     Nothing -> globalDefNameCompletionSearch mayCaller Nothing (Query query) limit
     Just (UserFilter userId) -> globalDefNameCompletionSearch mayCaller (Just userId) (Query query) limit
-    Just (RootBranchFilter projId branchHashId) -> do
+    Just (RootBranchFilter _projId _branchOrReleaseSH branchHashId) -> do
       -- If we have a branch filter, we can use the scoped search index.
-      scopedDefNameCompletionSearch mayCaller projId branchHashId (Query query) limit
+      scopedDefNameCompletionSearch mayCaller branchHashId (Query query) limit
 
-scopedDefNameCompletionSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
-scopedDefNameCompletionSearch mayCaller projId branchHashId (Query query) limit = do
+scopedDefNameCompletionSearch :: Maybe UserId -> BranchHashId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+scopedDefNameCompletionSearch mayCaller branchHashId (Query query) limit = do
   queryListRows @(Name, TermOrTypeTag)
     [sql|
     WITH results(name, tag) AS (
@@ -317,7 +318,6 @@ scopedDefNameCompletionSearch mayCaller projId branchHashId (Query query) limit 
           -- Find names which contain the query
           doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
         AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
-        AND doc.project_id = #{projId}
         AND doc.root_namespace_hash_id = #{branchHashId}
       ) SELECT r.name, r.tag FROM results r
         -- Docs and tests to the bottom, then
@@ -366,17 +366,24 @@ globalDefNameCompletionSearch mayCaller mayUserFilter (Query query) limit = do
     -- Names are stored in absolute form, but we usually work with them in relative form.
     <&> over (traversed . _1) Name.makeRelative
 
-definitionTokenSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+definitionTokenSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, BranchOrReleaseShortHand, Name, TermOrTypeSummary)]
 definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
   case mayFilter of
-    Nothing -> globalDefinitionTokenSearch mayCaller Nothing limit searchTokens preferredArity
-    Just (UserFilter userId) -> globalDefinitionTokenSearch mayCaller (Just userId) limit searchTokens preferredArity
-    Just (RootBranchFilter projId branchHashId) -> do
+    Nothing -> do
+      results <- globalDefinitionTokenSearch mayCaller Nothing limit searchTokens preferredArity
+      RQ.expectReleaseVersionsOf (traversed . _2) results
+        <&> over (traversed . _2) (IsReleaseShortHand . ReleaseShortHand)
+    Just (UserFilter userId) -> do
+      results <- globalDefinitionTokenSearch mayCaller (Just userId) limit searchTokens preferredArity
+      RQ.expectReleaseVersionsOf (traversed . _2) results
+        <&> over (traversed . _2) (IsReleaseShortHand . ReleaseShortHand)
+    Just (RootBranchFilter projId branchOrReleaseSH branchHashId) -> do
       -- If we have a branch filter, we can use the scoped search index.
-      scopedDefinitionTokenSearch mayCaller projId branchHashId limit searchTokens preferredArity
+      scopedDefinitionTokenSearch mayCaller branchHashId limit searchTokens preferredArity
+        <&> fmap \(name, meta) -> (projId, branchOrReleaseSH, name, meta)
 
-scopedDefinitionTokenSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
-scopedDefinitionTokenSearch mayCaller projId rootBranchHashId limit searchTokens preferredArity = do
+scopedDefinitionTokenSearch :: Maybe UserId -> BranchHashId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(Name, TermOrTypeSummary)]
+scopedDefinitionTokenSearch mayCaller rootBranchHashId limit searchTokens preferredArity = do
   let (regularTokens, returnTokens, names) =
         searchTokens & foldMap \token -> case token of
           TypeMentionToken _ ReturnPosition -> (mempty, Set.singleton token, mempty)
@@ -391,25 +398,24 @@ scopedDefinitionTokenSearch mayCaller projId rootBranchHashId limit searchTokens
           else Just $ searchTokensToTsQuery returnTokens
   let orderClause = tokenSearchOrderClause names mayReturnTokensText
   rows <-
-    queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
+    queryListRows @(Name, Hasql.Jsonb)
       [sql|
-      SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
+      SELECT doc.name, doc.metadata FROM scoped_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
         WHERE
           -- match on search tokens using GIN index.
           tsquery(#{tsQueryText}) @@ doc.search_tokens
         AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
         AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
-          AND doc.project_id = #{projId}
           AND doc.root_namespace_hash_id = #{rootBranchHashId}
           ^{namesFilter}
         ORDER BY ^{orderClause}
         LIMIT #{limit}
   |]
   rows
-    & over (traversed . _3) Name.makeRelative
+    & over (traversed . _1) Name.makeRelative
     & traverseOf
-      (traversed . _4)
+      (traversed . _2)
       ( \(Hasql.Jsonb v) -> do
           case fromJSON v of
             Aeson.Error err -> unrecoverableError $ FailedToDecodeMetadata v (Text.pack err)
@@ -492,22 +498,29 @@ tokenSearchOrderClause names mayReturnTokensText =
                  doc.name
             |]
 
-definitionNameSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+definitionNameSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Query -> Transaction e [(ProjectId, BranchOrReleaseShortHand, Name, TermOrTypeSummary)]
 definitionNameSearch mayCaller mayFilter limit (Query query) = do
   case mayFilter of
-    Nothing -> globalDefinitionNameSearch mayCaller Nothing limit (Query query)
-    Just (UserFilter userId) -> globalDefinitionNameSearch mayCaller (Just userId) limit (Query query)
-    Just (RootBranchFilter projId branchHashId) -> do
+    Nothing -> do
+      results <- globalDefinitionNameSearch mayCaller Nothing limit (Query query)
+      RQ.expectReleaseVersionsOf (traversed . _2) results
+        <&> over (traversed . _2) (IsReleaseShortHand . ReleaseShortHand)
+    Just (UserFilter userId) -> do
+      results <- globalDefinitionNameSearch mayCaller (Just userId) limit (Query query)
+      RQ.expectReleaseVersionsOf (traversed . _2) results
+        <&> over (traversed . _2) (IsReleaseShortHand . ReleaseShortHand)
+    Just (RootBranchFilter projId branchOrReleaseSH branchHashId) -> do
       -- If we have a branch filter, we can use the scoped search index.
       scopedDefinitionNameSearch mayCaller projId branchHashId limit (Query query)
+        <&> fmap \(name, meta) -> (projId, branchOrReleaseSH, name, meta)
 
 -- | Perform a fuzzy trigram search on definition names
-scopedDefinitionNameSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+scopedDefinitionNameSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Query -> Transaction e [(Name, TermOrTypeSummary)]
 scopedDefinitionNameSearch mayCaller projId rootBranchHashId limit (Query query) = do
   rows <-
-    queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
+    queryListRows @(Name, Hasql.Jsonb)
       [sql|
-      SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
+      SELECT doc.name, doc.metadata FROM scoped_definition_search_docs doc
         JOIN projects p ON p.id = doc.project_id
         WHERE
           -- We may wish to adjust the similarity threshold before the query.
@@ -530,9 +543,9 @@ scopedDefinitionNameSearch mayCaller projId rootBranchHashId limit (Query query)
         LIMIT #{limit}
   |]
   rows
-    & over (traversed . _3) Name.makeRelative
+    & over (traversed . _1) Name.makeRelative
     & traverseOf
-      (traversed . _4)
+      (traversed . _2)
       ( \(Hasql.Jsonb v) -> do
           case fromJSON v of
             Aeson.Error err -> unrecoverableError $ FailedToDecodeMetadata v (Text.pack err)

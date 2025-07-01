@@ -439,18 +439,19 @@ resolveProjectAndBranchFilter (Just projectShortHand) branchFilter = MaybeT $ do
               Nothing -> pure Nothing
               Just mainBranch -> do
                 rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id mainBranch.causal
-                pure . Just $ DDQ.RootBranchFilter projectId rootBranchHashId
+                pure . Just $ DDQ.RootBranchFilter projectId (IsBranchShortHand Branch.defaultBranchShorthand) rootBranchHashId
           Just release -> do
             rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id release.squashedCausal
-            pure . Just $ DDQ.RootBranchFilter projectId rootBranchHashId
-      Just (IsBranchShortHand bsh) -> do
+            let shorthand = IDs.IsReleaseShortHand $ IDs.ReleaseShortHand release.version
+            pure . Just $ DDQ.RootBranchFilter projectId shorthand rootBranchHashId
+      Just shorthand@(IsBranchShortHand bsh) -> do
         branch <- Q.branchByProjectIdAndShortHand projectId bsh `whenNothingM` throwError (EntityMissing (ErrorID "no-branch-found") $ "No branch found for project: " <> IDs.toText projectShortHand <> " and branch: " <> IDs.toText bsh)
         rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id branch.causal
-        pure $ Just $ DDQ.RootBranchFilter projectId rootBranchHashId
-      Just (IsReleaseShortHand rsh) -> do
+        pure $ Just $ DDQ.RootBranchFilter projectId shorthand rootBranchHashId
+      Just shorthand@(IsReleaseShortHand rsh) -> do
         release <- Q.releaseByProjectIdAndReleaseShortHand projectId rsh `whenNothingM` throwError (EntityMissing (ErrorID "no-release-found") $ "No release found for project: " <> IDs.toText projectShortHand <> " and release: " <> IDs.toText rsh)
         rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id release.squashedCausal
-        pure $ Just $ DDQ.RootBranchFilter projectId rootBranchHashId
+        pure $ Just $ DDQ.RootBranchFilter projectId shorthand rootBranchHashId
 
 resolveUserFilter :: Maybe UserHandle -> MaybeT WebApp DDQ.DefnSearchFilter
 resolveUserFilter userFilter = do
@@ -488,15 +489,13 @@ searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter project
     PG.runTransactionMode PG.ReadCommitted PG.Read $
       do
         PQ.expectProjectShortHandsOf (traversed . _1) matches
-        >>= RQ.expectReleaseVersionsOf (traversed . _2)
-        <&> over (traversed . _2) IDs.ReleaseShortHand
         <&> fmap
-          ( \(project, release, fqn, summary) ->
+          ( \(project, branchRef, fqn, summary) ->
               DefinitionSearchResult
                 { fqn,
                   summary,
                   project,
-                  release
+                  branchRef
                 }
           )
   pure $ DefinitionSearchResults results
