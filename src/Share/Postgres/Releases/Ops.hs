@@ -7,7 +7,6 @@ import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
-import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Release
 
 createRelease ::

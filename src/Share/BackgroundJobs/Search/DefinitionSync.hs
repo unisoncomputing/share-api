@@ -31,7 +31,6 @@ import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.Notifications qualified as Notif
-import Share.Postgres.Queries qualified as PG
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Releases.Queries qualified as ReleasesQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ

@@ -27,7 +27,6 @@ import Share.Postgres.Projects.Queries qualified as PQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
-import Share.Postgres.Search.DefinitionSearch.Queries qualified as DSQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
