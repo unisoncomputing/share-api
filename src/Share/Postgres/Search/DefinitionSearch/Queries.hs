@@ -313,7 +313,6 @@ scopedDefNameCompletionSearch mayCaller projectId branchHashId (Query query) lim
     [sql|
     WITH results(name, tag) AS (
       SELECT DISTINCT doc.name, doc.tag FROM scoped_definition_search_docs doc
-        JOIN projects p ON p.id = doc.project_id
         WHERE
           -- Find names which contain the query
           doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
@@ -396,7 +395,7 @@ scopedDefinitionTokenSearch mayCaller projectId rootBranchHashId limit searchTok
         if Set.null returnTokens
           then Nothing
           else Just $ searchTokensToTsQuery returnTokens
-  let orderClause = tokenSearchOrderClause names mayReturnTokensText
+  let orderClause = tokenSearchOrderClause False names mayReturnTokensText
   rows <-
     queryListRows @(Name, Hasql.Jsonb)
       [sql|
@@ -439,7 +438,7 @@ globalDefinitionTokenSearch mayCaller mayUserFilter limit searchTokens preferred
         if Set.null returnTokens
           then Nothing
           else Just $ searchTokensToTsQuery returnTokens
-  let orderClause = tokenSearchOrderClause names mayReturnTokensText
+  let orderClause = tokenSearchOrderClause True names mayReturnTokensText
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
@@ -470,14 +469,18 @@ globalDefinitionTokenSearch mayCaller mayUserFilter limit searchTokens preferred
 -- - Prefer projects in the catalog
 -- - Prefer shorter arities
 -- - Prefer less complex type signatures (by number of tokens)
-tokenSearchOrderClause :: Set Text -> Maybe Text -> Sql
-tokenSearchOrderClause names mayReturnTokensText =
+tokenSearchOrderClause :: Bool -> Set Text -> Maybe Text -> Sql
+tokenSearchOrderClause categoryCheck names mayReturnTokensText = do
+  let categoryFilter =
+        if categoryCheck
+          then [sql| EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC, |]
+          else mempty
   case Set.minView names of
     Nothing ->
       -- Scoring for if there's no name search
       [sql|
                 (#{mayReturnTokensText} IS NOT NULL AND (tsquery(#{mayReturnTokensText}) @@ doc.search_tokens)) DESC,
-                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 ^{categoryFilter}
                  doc.arity ASC,
                  length(doc.search_tokens) ASC,
                  -- tie break by name, this just helps keep things deterministic for tests
@@ -490,7 +493,7 @@ tokenSearchOrderClause names mayReturnTokensText =
                  doc.name LIKE ('%' || #{name} || '%') DESC,
                  -- Prefer names where the query is near the end of the name
                  length(doc.name) - position(LOWER(#{name}) in LOWER(doc.name)) ASC,
-                 EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
+                 ^{categoryFilter}
                  doc.arity ASC,
                  length(doc.search_tokens) ASC,
                  -- tie break by name, this just helps keep things deterministic for tests
@@ -530,8 +533,7 @@ scopedDefinitionNameSearch mayCaller projectId rootBranchHashId limit (Query que
         -- - whether it contains the exact provided spelling
         -- - how close the query is to the END of the name (generally we want to match the last segment)
         -- - similarity, just in case the query is a bit off
-        ORDER BY EXISTS (SELECT FROM project_categories pc WHERE pc.project_id = doc.project_id) DESC,
-                 doc.name LIKE ('%' || #{query} || '%') DESC,
+        ORDER BY doc.name LIKE ('%' || #{query} || '%') DESC,
                  length(doc.name) - position(LOWER(#{query}) in LOWER(doc.name)) ASC,
                  word_similarity(#{query}, doc.name) DESC,
                  -- Tiebreak by name, this just helps keep things deterministic for tests and
