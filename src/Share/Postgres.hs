@@ -381,7 +381,10 @@ instance QueryA (Session e) where
     throwError (Unrecoverable (someServerError e))
 
 instance QueryM (Session e) where
-  transactionUnsafeIO io = Session . lift . lift $ liftIO io
+  transactionUnsafeIO io = Session $ do
+    liftIO (UnliftIO.tryAny io) >>= \case
+      Left someException -> throwError (Unrecoverable (someServerError someException))
+      Right a -> pure a
 
 instance QueryA (Pipeline e) where
   statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
