@@ -64,7 +64,7 @@ instance Hasql.DecodeValue Hash32 where
       -- We can trust that encoded values are valid,
       -- and skipping validation is a significant performance improvement
       <&> Hash32.unsafeFromBase32Hex
-      . Base32Hex.UnsafeFromText
+        . Base32Hex.UnsafeFromText
 
 instance FromHttpApiData Hash where
   parseUrlPiece txt =
