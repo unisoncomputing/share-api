@@ -87,7 +87,12 @@ worker scope = do
     processReleases authZReceipt = do
       (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
         mayUnsynced <- DDQ.claimUnsynced
-        mayErrs <- for mayUnsynced (syncRoot authZReceipt)
+        mayErrs <- for mayUnsynced \(mayReleaseId, branchHashId, userId) -> do
+          r <- syncRoot authZReceipt (mayReleaseId, branchHashId, userId)
+          -- We delete the claimed row even if we have errors, since the errors
+          -- we get are deterministic and would just keep reappearing on retries.
+          DDQ.deleteClaimed branchHashId
+          pure r
         pure (mayErrs, mayUnsynced)
       case mayErrs of
         Just errs@(_ : _rrs) -> Logging.logErrorText $ "Definition sync errors: " <> Text.intercalate "," (tShow <$> errs)

@@ -3,6 +3,7 @@
 -- | This module contains queries for the definition search index.
 module Share.Postgres.Search.DefinitionSearch.Queries
   ( claimUnsynced,
+    deleteClaimed,
     insertDefinitionDocuments,
     copySearchDocumentsForRelease,
     cleanIndexForProject,
@@ -63,18 +64,23 @@ claimUnsynced :: Transaction e (Maybe (Maybe ReleaseId, BranchHashId, UserId))
 claimUnsynced = do
   query1Row
     [sql|
-    WITH chosen(root_namespace_hash_id, codebase_user_id, release_id) AS (
-      SELECT q.root_namespace_hash_id, q.codebase_user_id, q.release_id
+    SELECT q.release_id, q.root_namespace_hash_id, q.codebase_user_id
       FROM scoped_definition_search_queue q
       ORDER BY q.created_at ASC
       LIMIT 1
       -- Skip any that are being synced by other workers.
       FOR UPDATE SKIP LOCKED
-    )
-    DELETE FROM scoped_definition_search_queue
-      USING chosen
-      WHERE scoped_definition_search_queue.root_namespace_hash_id = chosen.root_namespace_hash_id
-    RETURNING chosen.release_id, chosen.root_namespace_hash_id, chosen.codebase_user_id
+    |]
+
+-- | Delete the claimed root from the queue once it's been processed.
+-- We specifically do this right at the end of the transaction to avoid holding a lock on the
+-- table for any longer than necessary.
+deleteClaimed :: BranchHashId -> Transaction e ()
+deleteClaimed rootBranchHashId = do
+  execute_
+    [sql|
+      DELETE FROM scoped_definition_search_queue
+      WHERE root_namespace_hash_id = #{rootBranchHashId}
     |]
 
 isRootIndexed :: BranchHashId -> Transaction e Bool
