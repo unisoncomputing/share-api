@@ -4,7 +4,7 @@ STRICT
 STABLE
 PARALLEL SAFE
 AS $$
- SELECT COALESCE(p.owner_user_id, b.contributor_id)
+ SELECT COALESCE(b.contributor_id, p.owner_user_id)
  FROM project_branches b
  JOIN projects p ON p.id = b.project_id
  WHERE b.id = branch_id
@@ -150,4 +150,5 @@ INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, codebase_use
          branch_codebase_owner(b.id) AS codebase_user_id
   FROM project_branches b
   JOIN causals c ON b.causal_id = c.id
+  WHERE NOT EXISTS (SELECT FROM indexed_definition_search_doc_roots WHERE root_namespace_hash_id = c.namespace_hash_id)
   ON CONFLICT DO NOTHING;
