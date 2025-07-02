@@ -90,9 +90,9 @@ instance (Show a, TL.KnownNat errStatus, TL.KnownSymbol errorMsg) => Loggable (S
   toLog (SimpleServerError err) =
     let severity =
           if
-            | status < 400 -> Info
-            | status < 500 -> UserFault
-            | otherwise -> Error
+              | status < 400 -> Info
+              | status < 500 -> UserFault
+              | otherwise -> Error
      in Logging.textLog (errMsg <> ": " <> tShow err)
           & withSeverity severity
     where
