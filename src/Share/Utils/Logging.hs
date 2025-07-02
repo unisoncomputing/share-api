@@ -58,6 +58,7 @@ import Unison.Server.Backend qualified as Backend
 import Unison.Sync.Types qualified as Sync
 import Unison.Util.Monoid (intercalateMap)
 import Unison.Util.Monoid qualified as Monoid
+import UnliftIO qualified
 import UnliftIO qualified as IO
 import Prelude hiding (log)
 
@@ -95,6 +96,15 @@ instance (Show a, GetSeverity severity) => Loggable (ShowLoggable severity a) wh
 
 class Loggable msg where
   toLog :: msg -> LogMsg
+
+instance Loggable UnliftIO.SomeException where
+  toLog e =
+    LogMsg
+      { severity = Error,
+        callstack = Nothing,
+        msg = Text.pack $ show e,
+        tags = mempty
+      }
 
 -- Helpful for cases where errors are Void
 instance Loggable Void where

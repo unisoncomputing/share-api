@@ -23,6 +23,7 @@ module Share.Postgres
     Only (..),
     QueryA (..),
     QueryM (..),
+    TransactionError (..),
     decodeField,
     (:.) (..),
 
@@ -34,6 +35,7 @@ module Share.Postgres
     tryRunTransaction,
     tryRunTransactionMode,
     catchTransaction,
+    catchAllTransaction,
     unliftTransaction,
     runTransactionOrRespondError,
     transaction,
@@ -106,10 +108,11 @@ import Share.Utils.Postgres (likeEscape)
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
+import UnliftIO qualified
 
 data TransactionError e
   = Unrecoverable SomeServerError
-  | Err e
+  | Err !e
 
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
 newtype Transaction e a = Transaction {unTransaction :: ReaderT (Env.Env ()) Hasql.Session (Either (TransactionError e) a)}
@@ -363,7 +366,12 @@ instance QueryA (Transaction e) where
     Transaction (pure (Left (Unrecoverable (someServerError e))))
 
 instance QueryM (Transaction e) where
-  transactionUnsafeIO io = Transaction (Right <$> liftIO io)
+  -- Catch any IO exceptions that may occur in the transaction, and convert them to an
+  -- unrecoverable error for better error handling.
+  transactionUnsafeIO io = Transaction . liftIO $ do
+    UnliftIO.tryAny io >>= \case
+      Left someException -> pure (Left (Unrecoverable $ someServerError someException))
+      Right a -> pure (Right a)
 
 instance QueryA (Session e) where
   statement q s =
@@ -542,3 +550,11 @@ catchTransaction (Transaction t) = Transaction do
     Left (Err e) -> pure (Right (Left e))
     Left (Unrecoverable err) -> pure (Left (Unrecoverable err))
     Right a -> pure (Right (Right a))
+
+-- | Catch all errors which may occur in a transaction
+catchAllTransaction :: Transaction e a -> Transaction e (Either (TransactionError e) a)
+catchAllTransaction (Transaction t) = Transaction do
+  t >>= \case
+    Left (Err e) -> pure (Right $ Left (Err e))
+    Left (Unrecoverable err) -> pure (Right $ Left (Unrecoverable err))
+    Right a -> pure (Right $ Right a)

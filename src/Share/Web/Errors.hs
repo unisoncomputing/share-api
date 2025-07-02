@@ -75,6 +75,12 @@ newtype ErrorID = ErrorID Text
 class ToServerError e where
   toServerError :: e -> (ErrorID, ServerError)
 
+instance ToServerError UnliftIO.SomeException where
+  toServerError _ =
+    ( ErrorID "unknown-exception",
+      err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Internal Server Error"}
+    )
+
 type StatusExpectationFailed = 417
 
 -- | newtype wrapper for deriving errors.

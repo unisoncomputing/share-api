@@ -18,6 +18,7 @@ import Data.Set.Lens (setOf)
 import Data.Text qualified as Text
 import Data.Vector qualified as V
 import Ki.Unlifted qualified as Ki
+import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, OccurrenceKind (..), TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
 import Share.BackgroundJobs.Workers (newWorker)
@@ -39,6 +40,7 @@ import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Release (Release (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Errors (SomeServerError)
 import U.Codebase.Referent (Referent)
 import U.Codebase.Referent qualified as Referent
 import Unison.ABT qualified as ABT
@@ -66,7 +68,9 @@ import Unison.Var qualified as Var
 data DefnIndexingFailure
   = NoTypeSigForTerm Name Referent
   | NoDeclForType Name TypeReference
+  | CatastrophicError SomeServerError
   deriving stock (Show)
+  deriving (Logging.Loggable) via (Logging.ShowLoggable Logging.Error DefnIndexingFailure)
 
 -- | Check every 10 minutes if we haven't heard on the notifications channel.
 -- Just in case we missed a notification.
@@ -85,27 +89,39 @@ worker scope = do
     processReleases authZReceipt
   where
     processReleases authZReceipt = do
-      (mayErrs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
+      (errs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
         mayUnsynced <- DDQ.claimUnsynced
-        mayErrs <- for mayUnsynced \(mayReleaseId, branchHashId, userId) -> do
-          r <- syncRoot authZReceipt (mayReleaseId, branchHashId, userId)
-          -- We delete the claimed row even if we have errors, since the errors
-          -- we get are deterministic and would just keep reappearing on retries.
-          DDQ.deleteClaimed branchHashId
-          pure r
-        pure (mayErrs, mayUnsynced)
-      case mayErrs of
-        Just errs@(_ : _rrs) -> Logging.logErrorText $ "Definition sync errors: " <> Text.intercalate "," (tShow <$> errs)
-        _ -> pure ()
-      case mayProcessedRelease of
-        Just releaseId -> do
-          Logging.textLog ("Built definition search index for " <> tShow releaseId)
-            & Logging.withTag ("release-id", tShow releaseId)
+        case mayUnsynced of
+          Nothing -> pure (mempty, Nothing)
+          Just (mayReleaseId, branchHashId, userId) -> do
+            result <-
+              PG.catchAllTransaction (syncRoot authZReceipt (mayReleaseId, branchHashId, userId)) >>= \case
+                Right syncErrs -> pure (syncErrs, Just (mayReleaseId, branchHashId, userId))
+                Left (PG.Unrecoverable catastrophicError) -> do
+                  pure ([CatastrophicError catastrophicError], Nothing)
+            -- We delete the claimed row even if we have errors, since the errors
+            -- we get are deterministic and would just keep reappearing on retries.
+            DDQ.deleteClaimed branchHashId
+            pure result
+      case (errs, mayProcessedRelease) of
+        (_, Nothing) -> pure ()
+        (errs@(_ : _), Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
+          let msg =
+                Logging.textLog ("Definition sync errors: " <> Text.intercalate "," (tShow <$> errs))
+                  & Logging.withSeverity Logging.Error
+                  & Logging.withTag ("release-id", tShow mayReleaseId)
+                  & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
+                  & Logging.withTag ("codebase-owner", tShow codebaseOwner)
+          Logging.logMsg msg
+          for_ errs reportError
+        ([], Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
+          Logging.textLog ("Built definition search index for rootBranchHashId: " <> tShow rootBranchHashId <> " for codebaseOwner: " <> tShow codebaseOwner <> " and releaseId: " <> tShow mayReleaseId)
+            & Logging.withTag ("release-id", tShow mayReleaseId)
+            & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
+            & Logging.withTag ("codebase-owner", tShow codebaseOwner)
             & Logging.withSeverity Logging.Info
             & Logging.logMsg
-          -- Keep processing releases until we run out of them.
           processReleases authZReceipt
-        Nothing -> pure ()
 
 syncRoot ::
   AuthZ.AuthZReceipt ->
