@@ -18,10 +18,14 @@ CREATE TABLE scoped_definition_search_queue (
   root_namespace_hash_id INTEGER PRIMARY KEY REFERENCES branch_hashes(id) ON DELETE CASCADE,
   -- A user who has this code. We don't index variable names, so it doesn't matter _which_ user.
   codebase_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- If we've tried to index this and failed, we store the error here so we don't keep trying to re-index it and can
+  -- investigate the issue.
+  errors TEXT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX scoped_definition_search_queue_created_at ON scoped_definition_search_queue(created_at ASC);
+CREATE INDEX scoped_definition_search_queue_created_at ON scoped_definition_search_queue(created_at ASC) 
+  WHERE errors IS NULL;
 
 -- Port the old queue
 INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, codebase_user_id, created_at)
