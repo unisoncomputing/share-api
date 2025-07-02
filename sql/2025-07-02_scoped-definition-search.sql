@@ -66,7 +66,7 @@ CREATE TABLE scoped_definition_search_docs (
   PRIMARY KEY (root_namespace_hash_id, name)
 );
 
--- Port the old indexes to the new table.
+-- Port the existing global indexes to the new table.
 INSERT INTO indexed_definition_search_doc_roots (root_namespace_hash_id)
   SELECT DISTINCT c.namespace_hash_id AS root_namespace_hash_id
   FROM global_definition_search_docs gds
@@ -139,3 +139,11 @@ CREATE TRIGGER scoped_definition_search_queue_on_release_publish
 AFTER INSERT ON project_releases
 FOR EACH ROW
 EXECUTE FUNCTION scoped_definition_search_queue_on_release_publish_trigger();
+
+-- Add all existing branches to the queue to be indexed.
+INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, codebase_user_id)
+  SELECT c.namespace_hash_id AS root_namespace_hash_id,
+         branch_codebase_owner(b.id) AS codebase_user_id
+  FROM project_branches b
+  JOIN causals c ON b.causal_id = c.id
+  ON CONFLICT DO NOTHING;
