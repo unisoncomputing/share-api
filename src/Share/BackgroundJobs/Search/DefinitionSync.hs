@@ -96,15 +96,22 @@ worker scope = do
           Just (mayReleaseId, branchHashId, userId) -> do
             result <-
               PG.catchAllTransaction (syncRoot authZReceipt (mayReleaseId, branchHashId, userId)) >>= \case
-                Right syncErrs -> pure (syncErrs, Just (mayReleaseId, branchHashId, userId))
+                Right syncErrors
+                  | null syncErrors -> do
+                      DDQ.deleteClaimed branchHashId
+                      pure (syncErrors, Just (mayReleaseId, branchHashId, userId))
+                  | otherwise -> do
+                      DDQ.markAsFailed branchHashId (Text.intercalate "," (tShow <$> syncErrors))
+                      pure (syncErrors, Just (mayReleaseId, branchHashId, userId))
                 Left (PG.Unrecoverable catastrophicError) -> do
+                  DDQ.markAsFailed branchHashId (tShow catastrophicError)
                   pure ([CatastrophicError catastrophicError], Nothing)
-            -- We delete the claimed row even if we have errors, since the errors
-            -- we get are deterministic and would just keep reappearing on retries.
-            DDQ.deleteClaimed branchHashId
             pure result
       case (errs, mayProcessedRelease) of
+        -- No errors and no release processed, just return and we'll wait for the next thing
+        -- to hit the queue.
         (_, Nothing) -> pure ()
+        -- Errors occurred, log them then continue processing.
         (errs@(_ : _), Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
           let msg =
                 Logging.textLog ("Definition sync errors: " <> Text.intercalate "," (tShow <$> errs))
@@ -114,6 +121,7 @@ worker scope = do
                   & Logging.withTag ("codebase-owner", tShow codebaseOwner)
           Logging.logMsg msg
           for_ errs reportError
+        -- No errors, but we processed a release, log that.
         ([], Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
           Logging.textLog ("Built definition search index for rootBranchHashId: " <> tShow rootBranchHashId <> " for codebaseOwner: " <> tShow codebaseOwner <> " and releaseId: " <> tShow mayReleaseId)
             & Logging.withTag ("release-id", tShow mayReleaseId)

@@ -4,6 +4,7 @@
 module Share.Postgres.Search.DefinitionSearch.Queries
   ( claimUnsynced,
     deleteClaimed,
+    markAsFailed,
     insertDefinitionDocuments,
     copySearchDocumentsForRelease,
     cleanIndexForProject,
@@ -66,6 +67,7 @@ claimUnsynced = do
     [sql|
     SELECT q.release_id, q.root_namespace_hash_id, q.codebase_user_id
       FROM scoped_definition_search_queue q
+      WHERE q.errors IS NULL
       ORDER BY q.created_at ASC
       LIMIT 1
       -- Skip any that are being synced by other workers.
@@ -80,6 +82,18 @@ deleteClaimed rootBranchHashId = do
   execute_
     [sql|
       DELETE FROM scoped_definition_search_queue
+      WHERE root_namespace_hash_id = #{rootBranchHashId}
+    |]
+
+-- | Delete the claimed root from the queue once it's been processed.
+-- We specifically do this right at the end of the transaction to avoid holding a lock on the
+-- table for any longer than necessary.
+markAsFailed :: BranchHashId -> Text -> Transaction e ()
+markAsFailed rootBranchHashId errors = do
+  execute_
+    [sql|
+      UPDATE scoped_definition_search_queue
+      SET errors = #{errors}
       WHERE root_namespace_hash_id = #{rootBranchHashId}
     |]
 
