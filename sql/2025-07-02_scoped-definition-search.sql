@@ -1,3 +1,16 @@
+CREATE OR REPLACE FUNCTION branch_codebase_owner(branch_id UUID)
+RETURNS UUID 
+STRICT
+STABLE
+PARALLEL SAFE
+AS $$
+ SELECT COALESCE(p.owner_user_id, b.contributor_id)
+ FROM project_branches b
+ JOIN projects p ON p.id = b.project_id
+ WHERE b.id = branch_id
+ LIMIT 1;
+$$ LANGUAGE sql;
+
 -- Table of all root branch hashes which need to be synced to the relevant definition search index(es).
 CREATE TABLE scoped_definition_search_queue (
   -- Nullable release ID, if set we'll also updat the global definition search index.
@@ -20,7 +33,7 @@ INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, codebase_use
   JOIN causals c ON release.squashed_causal_id = c.id
   JOIN projects p ON release.project_id = p.id
   ON CONFLICT DO NOTHING;
-TRUNCATE global_definition_search_release_queue;
+DROP TABLE IF EXISTS global_definition_search_release_queue;
 
 
 -- Expand the global definition search to include all branch and release heads.
@@ -89,9 +102,8 @@ BEGIN
     IF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.causal_id IS DISTINCT FROM NEW.causal_id) THEN
         INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, codebase_user_id)
           SELECT c.namespace_hash_id AS root_namespace_hash_id,
-                 p.owner_user_id AS codebase_user_id
+                 branch_codebase_owner(NEW.id) AS codebase_user_id
           FROM causals c
-          JOIN projects p ON p.id = NEW.project_id
           WHERE c.id = NEW.causal_id
           ON CONFLICT DO NOTHING;
         NOTIFY definition_sync;
@@ -127,4 +139,3 @@ CREATE TRIGGER scoped_definition_search_queue_on_release_publish
 AFTER INSERT ON project_releases
 FOR EACH ROW
 EXECUTE FUNCTION scoped_definition_search_queue_on_release_publish_trigger();
-
