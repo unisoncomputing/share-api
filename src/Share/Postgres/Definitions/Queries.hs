@@ -72,6 +72,7 @@ import U.Codebase.Reference qualified as Reference
 import U.Codebase.Reference qualified as V2
 import U.Codebase.Reference qualified as V2Reference
 import U.Codebase.Referent qualified as Referent
+import U.Codebase.Referent qualified as V2
 import U.Codebase.Sqlite.Decl.Format qualified as DeclFormat
 import U.Codebase.Sqlite.HashHandle (HashHandle (..))
 import U.Codebase.Sqlite.LocalIds qualified as LocalIds
@@ -153,7 +154,7 @@ loadTermId (Reference.Id compHash (pgComponentIndex -> compIndex)) =
             AND term.component_index = #{compIndex}
       |]
 
-expectTermId :: QueryA m => TermReferenceId -> m TermId
+expectTermId :: (QueryA m) => TermReferenceId -> m TermId
 expectTermId refId =
   unrecoverableEitherMap
     ( \case
@@ -310,7 +311,7 @@ loadTermById codebaseUser termId = do
     <$> loadTermComponentElementByTermId codebaseUser termId
     <*> termLocalReferences termId
 
-expectTermById :: QueryA m => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
+expectTermById :: (QueryA m) => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
 expectTermById userId refId termId =
   unrecoverableEitherMap
     ( \case
@@ -423,11 +424,11 @@ loadDecl codebaseUser refId = runMaybeT $ do
   let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
   pure $ s2cDecl localIds decl
 
-loadDeclByTypeComponentElementAndTypeId :: QueryA m => (TypeComponentElement, TypeId) -> m (V2.Decl Symbol)
+loadDeclByTypeComponentElementAndTypeId :: (QueryA m) => (TypeComponentElement, TypeId) -> m (V2.Decl Symbol)
 loadDeclByTypeComponentElementAndTypeId (TypeComponentElement decl, typeId) =
   typeLocalReferences typeId <&> \Share.LocalIds {texts, hashes} ->
     let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
-    in s2cDecl localIds decl
+     in s2cDecl localIds decl
 
 loadTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TypeReferenceId -> m (Maybe (TypeComponentElement, TypeId))
 loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgComponentIndex -> compIndex)) = do
@@ -443,7 +444,7 @@ loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgCompone
             AND typ.component_index = #{compIndex}
       |]
 
-expectTypeComponentElementAndTypeId :: QueryA m => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
+expectTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
 expectTypeComponentElementAndTypeId codebaseUser refId =
   unrecoverableEitherMap
     ( \case

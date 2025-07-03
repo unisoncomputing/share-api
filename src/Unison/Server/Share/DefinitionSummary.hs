@@ -53,27 +53,26 @@ serveTermSummary ::
   CodebaseM e TermSummary
 serveTermSummary referent mayName rootCausalId relativeTo mayWidth = do
   rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
+  let relativeToPath = fromMaybe mempty relativeTo
+  namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
   let v2Referent = CV.referent1to2 referent
   sig <-
     Codebase.loadTypeOfReferent v2Referent
       `whenNothingM` unrecoverableError (MissingSignatureForTerm $ V2Referent.toReference v2Referent)
-  termSummaryForReferent v2Referent sig mayName rootBranchHashId relativeTo mayWidth
+  termSummaryForReferent v2Referent sig mayName namesPerspective mayWidth
 
 termSummaryForReferent ::
   V2Referent.Referent ->
   Type.Type Symbol Ann ->
   Maybe Name ->
-  BranchHashId ->
-  Maybe Path.Path ->
+  NameLookups.NamesPerspective ->
   Maybe Width ->
   CodebaseM e TermSummary
-termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayWidth = do
+termSummaryForReferent referent typeSig mayName namesPerspective mayWidth = do
   let shortHash = V2Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
-  let relativeToPath = fromMaybe mempty relativeTo
   let termReference = V2Referent.toReference referent
   let deps = Type.labeledDependencies typeSig
-  namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
   pped <- PPEPostgres.ppedForReferences namesPerspective deps
   let formattedTypeSig = Backend.formatSuffixedType pped width typeSig
   let summary = mkSummary termReference formattedTypeSig

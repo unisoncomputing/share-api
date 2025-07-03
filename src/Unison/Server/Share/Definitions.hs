@@ -4,7 +4,9 @@
 --
 -- Perhaps we'll move them when the backing implementation switches to postgres.
 module Unison.Server.Share.Definitions
-  ( definitionForHQName,
+  ( displayDefinitionByHQName,
+    resolveHQName,
+    definitionDependencies,
     termDefinitionByName,
     typeDefinitionByName,
   )
@@ -20,6 +22,7 @@ import Data.Set.NonEmpty qualified as NESet
 import Share.Backend qualified as Backend
 import Share.Codebase (CodebaseM, CodebaseRuntime)
 import Share.Codebase qualified as Codebase
+import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
@@ -28,10 +31,12 @@ import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Caching.JSON qualified as Caching
+import Share.Web.Share.Types (DefinitionSearchResult (..))
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
-import Unison.ConstructorReference (ConstructorReference)
+import Unison.Codebase.SqliteCodebase.Conversions qualified as CV
+import Unison.ConstructorReference (ConstructorReference, GConstructorReference (..))
 import Unison.ConstructorReference qualified as ConstructorReference
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration.Dependencies qualified as DD
@@ -53,6 +58,7 @@ import Unison.Server.NameSearch qualified as NameSearch
 import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
 import Unison.Server.QueryResult (QueryResult (..))
 import Unison.Server.SearchResult qualified as SR
+import Unison.Server.Share.DefinitionSummary qualified as Summary
 import Unison.Server.Share.Docs qualified as Docs
 import Unison.Server.Types
 import Unison.Symbol (Symbol)
@@ -64,9 +70,88 @@ import Unison.Type qualified as Type
 import Unison.Util.List qualified as List
 import Unison.Util.Map qualified as Map
 import Unison.Util.Pretty (Width)
+import Unison.Util.Set qualified as Set
+
+resolveHQName ::
+  -- | The name, hash, or both, of the definition to display.
+  HQ.HashQualified Name ->
+  NameSearch (PG.Transaction e) ->
+  Codebase.CodebaseM e (Set LD.LabeledDependency)
+resolveHQName name nameSearch = do
+  -- namesPerspective@NamesPerspective {relativePerspective} <- namesPerspectiveForRootAndPath rootBh (PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ fullPath)
+  QueryResult {hits} <- lift $ hqNameQuery nameSearch [name]
+  hits
+    & fmap
+      ( \case
+          SR.Tm (SR.TermResult {referent}) -> LD.TermReferent referent
+          SR.Tp (SR.TypeResult {reference}) -> LD.TypeReference reference
+      )
+    & Set.fromList
+    & pure
+
+dependenciesToReferences ::
+  Set LD.LabeledDependency ->
+  Set (Either Reference.TermReference Reference.TypeReference)
+dependenciesToReferences deps =
+  deps & Set.mapMaybe \case
+    LD.ConReference (ConstructorReference typeRef _) _ -> Just $ Left typeRef
+    LD.TypeReference typeRef -> Just $ Left typeRef
+    LD.TermReference termRef -> Just $ Right termRef
+
+definitionDependencies ::
+  -- | The name, hash, or both, of the definition to display.
+  HQ.HashQualified Name ->
+  NameSearch (PG.Transaction e) ->
+  Codebase.CodebaseM e (Set LD.LabeledDependency)
+definitionDependencies name nameSearch = do
+  definitions <- resolveHQName name nameSearch
+  -- Collapse constructor referents into just the containing type.
+  let refs =
+        definitions
+          & dependenciesToReferences
+          & Set.mapMaybe \case
+            Left (Reference.DerivedId typeRefId) -> Just $ Left typeRefId
+            Right (Reference.DerivedId termRefId) -> Just $ Right termRefId
+            _ -> Nothing
+  refs & foldMapM \case
+    Left typeRefId -> do
+      Codebase.loadTypeDeclaration typeRefId <&> \case
+        Nothing -> mempty
+        Just decl -> DD.labeledDeclDependenciesIncludingSelfAndFieldAccessors (Reference.DerivedId typeRefId) decl
+    Right termRefId -> do
+      Codebase.loadTerm termRefId <&> \case
+        Nothing -> mempty
+        Just (term, _) ->
+          Term.labeledDependencies term
+
+definitionDependencyResults ::
+  HQ.HashQualified Name ->
+  ProjectShortHand ->
+  BranchOrReleaseShortHand ->
+  NL.NamesPerspective ->
+  Codebase.CodebaseM e [DefinitionSearchResult]
+definitionDependencyResults hqName project branchRef np = do
+  let nameSearch = PGNameSearch.nameSearchForPerspective np
+  deps <- definitionDependencies hqName nameSearch
+  ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
+  forMaybe (Set.toList $ dependenciesToReferences deps) \dep -> runMaybeT $ case dep of
+    Left termRef -> do
+      let referent = Referent.fromTermReference termRef
+      let v2Referent = CV.referent1to2 referent
+      hqFqn <- hoistMaybe $ PPE.terms ppe referent
+      let fqn = HQ'.toName hqFqn
+      typ <- MaybeT $ (Codebase.loadTypeOfReferent (CV.referent1to2 referent))
+      lift $ Summary.termSummaryForReferent v2Referent typ (Just fqn) _branchHashId _path _width
+      pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
+    Right typeRef -> do
+      fqn <- hoistMaybe $ PPE.types ppe typeRef
+      pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
+
+-- typeSummaryForReference
+-- termSummaryForReference
 
 -- | Renders a definition for the given name or hash alongside its documentation.
-definitionForHQName ::
+displayDefinitionByHQName ::
   -- | The path representing the user's current namesRoot.
   -- Searches will be limited to definitions within this path, and names will be relative to
   -- this path.
@@ -81,11 +166,11 @@ definitionForHQName ::
   -- | The name, hash, or both, of the definition to display.
   HQ.HashQualified Name ->
   Codebase.CodebaseM e DefinitionDisplayResults
-definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
+displayDefinitionByHQName perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   let cacheKey =
         Caching.CacheKey
-          { cacheTopic = "definitionForHQName",
+          { cacheTopic = "displayDefinitionByHQName",
             key = [("perspective", Path.toText perspective), ("suffixify", tShow $ suffixified (suffixifyBindings)), ("hqName", HQ.toText perspectiveQuery), ("width", tShow renderWidth)],
             rootCausalId = Just rootCausalId,
             sandbox = Just codebaseOwnerUserId
