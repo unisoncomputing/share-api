@@ -216,7 +216,7 @@ syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
                       (ns :| rest) -> ns :| take 1 rest
                     & Name.fromReverseSegments
             -- TODO: batchify this
-            termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) rootBranchHashId Nothing Nothing
+            termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) namesPerspective Nothing
             let sh = Referent.toShortHash ref
             let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
             let dd =
