@@ -63,8 +63,9 @@ instance Logging.Loggable DefinitionSearchError where
 -- | Claim the oldest unsynced root to be indexed.
 claimUnsynced :: Transaction e (Maybe (Maybe ReleaseId, BranchHashId, UserId))
 claimUnsynced = do
-  query1Row
-    [sql|
+  r <-
+    query1Row
+      [sql|
     SELECT q.release_id, q.root_namespace_hash_id, q.codebase_user_id
       FROM scoped_definition_search_queue q
       WHERE q.errors IS NULL
@@ -73,6 +74,18 @@ claimUnsynced = do
       -- Skip any that are being synced by other workers.
       FOR UPDATE SKIP LOCKED
     |]
+  for r \(_, branchHashId, _) -> do
+    execute_
+      [sql|
+        UPDATE scoped_definition_search_queue
+        SET attempts = attempts + 1,
+            errors = CASE 
+                WHEN attempts + 1 > 5 THEN 'Max attempts reached'
+                ELSE errors
+            END
+        WHERE root_namespace_hash_id = #{branchHashId}
+      |]
+  pure r
 
 -- | Delete the claimed root from the queue once it's been processed.
 -- We specifically do this right at the end of the transaction to avoid holding a lock on the

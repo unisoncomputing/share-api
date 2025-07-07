@@ -21,6 +21,8 @@ CREATE TABLE scoped_definition_search_queue (
   -- If we've tried to index this and failed, we store the error here so we don't keep trying to re-index it and can
   -- investigate the issue.
   errors TEXT NULL,
+  -- Number of attempts we've made to index this branch.
+  attempts INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
