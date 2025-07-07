@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 
 -- | This module contains queries for the definition search index.
@@ -22,7 +23,9 @@ where
 import Control.Lens
 import Data.Aeson (fromJSON)
 import Data.Aeson qualified as Aeson
+import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
+import Data.List.NonEmpty qualified as NEL
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Hasql.Interpolate qualified as Hasql
@@ -41,6 +44,8 @@ import Share.Web.Errors qualified as Errors
 import Unison.DataDeclaration qualified as DD
 import Unison.Name (Name)
 import Unison.Name qualified as Name
+import Unison.Name.Internal qualified as NameInternal
+import Unison.NameSegment.Internal qualified as NameSegmentInternal
 import Unison.Server.Types (TermTag (..), TypeTag (..))
 import Unison.ShortHash (ShortHash)
 import Unison.ShortHash qualified as SH
@@ -79,7 +84,7 @@ claimUnsynced = do
       [sql|
         UPDATE scoped_definition_search_queue
         SET attempts = attempts + 1,
-            errors = CASE 
+            errors = CASE
                 WHEN attempts + 1 > 5 THEN 'Max attempts reached'
                 ELSE errors
             END
@@ -132,9 +137,14 @@ markRootAsIndexed rootBranchHashId = do
   pure ()
 
 -- | Save definition documents to be indexed for search.
-insertDefinitionDocuments :: [DefinitionDocument Name (Name, ShortHash)] -> Transaction e ()
+-- Returns errors related to invalid names for logging.
+insertDefinitionDocuments :: [DefinitionDocument Name (Name, ShortHash)] -> Transaction e ([Text])
 insertDefinitionDocuments docs = pipelined $ do
-  let docsTable = docRow <$> docs
+  let (badNames, validNames) =
+        docs
+          & fmap validateDoc
+          & partitionEithers
+  let docsTable = docRow <$> validNames
   execute_ $
     [sql|
       WITH docs(root_namespace_hash_id, name, token_text, arity, tag, metadata) AS (
@@ -144,6 +154,7 @@ insertDefinitionDocuments docs = pipelined $ do
           FROM docs d
         ON CONFLICT DO NOTHING
       |]
+  pure badNames
   where
     docRow :: DefinitionDocument Name (Name, ShortHash) -> (BranchHashId, Text, Text, Arity, TermOrTypeTag, Hasql.Jsonb)
     docRow DefinitionDocument {rootBranchHashId, fqn, tokens, arity, tag, metadata} =
@@ -166,6 +177,20 @@ insertDefinitionDocuments docs = pipelined $ do
             tag,
             Hasql.Jsonb $ Aeson.toJSON metadata
           )
+    validateDoc :: DefinitionDocument Name (Name, ShortHash) -> Either Text (DefinitionDocument Name (Name, ShortHash))
+    validateDoc doc@(DefinitionDocument {fqn, rootBranchHashId, tokens}) =
+      case validateName fqn of
+        Right _validFqn -> Right doc
+        Left err -> Left $ "Doc in rootBranchHashId:" <> tShow rootBranchHashId <> " Failed to index with invalid name: " <> err <> "\nTokens: " <> tShow tokens
+
+    -- \| Some names contain empty segments due to glitches with escaped names,
+    -- for now we just omit them from the indexes, but we should revisit with a better fix later
+    -- if possible.
+    validateName :: Name -> Either Text Name
+    validateName
+      name@(NameInternal.Name _pos segments)
+        | all (\(NameSegmentInternal.NameSegment ns) -> not (Text.null ns)) segments = Right name
+        | otherwise = Left $ tShow (NEL.reverse (NameSegmentInternal.toUnescapedText <$> segments))
 
 -- | When we publish a new release, we also copy those search docs into the global search.
 copySearchDocumentsForRelease :: BranchHashId -> ProjectId -> ReleaseId -> Transaction e ()

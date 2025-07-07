@@ -89,23 +89,23 @@ worker scope = do
     processReleases authZReceipt
   where
     processReleases authZReceipt = do
-      (errs, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
+      (errs, badNames, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
         mayUnsynced <- DDQ.claimUnsynced
         case mayUnsynced of
-          Nothing -> pure (mempty, Nothing)
+          Nothing -> pure (mempty, mempty, Nothing)
           Just (mayReleaseId, branchHashId, userId) -> do
             result <-
               PG.catchAllTransaction (syncRoot authZReceipt (mayReleaseId, branchHashId, userId)) >>= \case
-                Right syncErrors
+                Right (syncErrors, badNames)
                   | null syncErrors -> do
                       DDQ.deleteClaimed branchHashId
-                      pure (syncErrors, Just (mayReleaseId, branchHashId, userId))
+                      pure (syncErrors, badNames, Just (mayReleaseId, branchHashId, userId))
                   | otherwise -> do
                       DDQ.markAsFailed branchHashId (Text.intercalate "," (tShow <$> syncErrors))
-                      pure (syncErrors, Just (mayReleaseId, branchHashId, userId))
+                      pure (syncErrors, badNames, Just (mayReleaseId, branchHashId, userId))
                 Left (PG.Unrecoverable catastrophicError) -> do
                   DDQ.markAsFailed branchHashId (tShow catastrophicError)
-                  pure ([CatastrophicError catastrophicError], Nothing)
+                  pure ([CatastrophicError catastrophicError], mempty, Nothing)
             pure result
       case (errs, mayProcessedRelease) of
         -- No errors and no release processed, just return and we'll wait for the next thing
@@ -123,6 +123,15 @@ worker scope = do
           for_ errs reportError
         -- No errors, but we processed a release, log that.
         ([], Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
+          for_ badNames \badName -> do
+            let msg =
+                  Logging.textLog ("Definition sync found bad name: " <> badName)
+                    & Logging.withSeverity Logging.Error
+                    & Logging.withTag ("release-id", tShow mayReleaseId)
+                    & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
+                    & Logging.withTag ("codebase-owner", tShow codebaseOwner)
+            Logging.logMsg msg
+
           Logging.textLog ("Built definition search index for rootBranchHashId: " <> tShow rootBranchHashId <> " for codebaseOwner: " <> tShow codebaseOwner <> " and releaseId: " <> tShow mayReleaseId)
             & Logging.withTag ("release-id", tShow mayReleaseId)
             & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
@@ -134,10 +143,10 @@ worker scope = do
 syncRoot ::
   AuthZ.AuthZReceipt ->
   (Maybe ReleaseId, BranchHashId, UserId) ->
-  PG.Transaction e [DefnIndexingFailure]
+  PG.Transaction e ([DefnIndexingFailure], [Text])
 syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
   -- Only index it if it's not already indexed.
-  errs <-
+  (errs, badNames) <-
     (DDQ.isRootIndexed rootBranchHashId) >>= \case
       False -> do
         DDQ.markRootAsIndexed rootBranchHashId
@@ -155,7 +164,7 @@ syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
       True -> pure mempty
   -- Copy relevant index rows into the global search index as well
   for mayReleaseId (syncRelease rootBranchHashId)
-  pure errs
+  pure (errs, badNames)
 
 syncRelease :: BranchHashId -> ReleaseId -> PG.Transaction e ()
 syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do
@@ -173,7 +182,7 @@ syncTerms ::
   NL.NamesPerspective ->
   BranchHashId ->
   Cursors.PGCursor (Name, Referent) ->
-  CodebaseM e [DefnIndexingFailure]
+  CodebaseM e ([DefnIndexingFailure], [Text])
 syncTerms namesPerspective rootBranchHashId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
     (errs, refDocs) <-
@@ -219,8 +228,8 @@ syncTerms namesPerspective rootBranchHashId termsCursor = do
               for token \ref -> do
                 name <- PPE.types ppe ref
                 pure $ (HQ'.toName $ name, Reference.toShortHash ref)
-    lift $ PG.timeTransaction "Inserting Docs" $ DDQ.insertDefinitionDocuments namedDocs
-    pure errs
+    badNames <- lift $ PG.timeTransaction "Inserting Docs" $ DDQ.insertDefinitionDocuments namedDocs
+    pure (errs, badNames)
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
 tokensForTerm :: (Var.Var v) => Name -> Referent -> Type.Type v a -> Summary.TermSummary -> (Set (DefnSearchToken TypeReference), Arity)
@@ -348,7 +357,7 @@ syncTypes ::
   NL.NamesPerspective ->
   BranchHashId ->
   Cursors.PGCursor (Name, TypeReference) ->
-  CodebaseM e [DefnIndexingFailure]
+  CodebaseM e ([DefnIndexingFailure], [Text])
 syncTypes namesPerspective rootBranchHashId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
     (errs, refDocs) <-
@@ -389,8 +398,8 @@ syncTypes namesPerspective rootBranchHashId typesCursor = do
               for token \ref -> do
                 name <- PPE.types ppe ref
                 pure $ (HQ'.toName name, Reference.toShortHash ref)
-    lift $ DDQ.insertDefinitionDocuments namedDocs
-    pure errs
+    badNames <- lift $ DDQ.insertDefinitionDocuments namedDocs
+    pure (errs, badNames)
 
 -- | Compute the search tokens for a type declaration.
 -- Note that constructors are handled separately when syncing terms.
