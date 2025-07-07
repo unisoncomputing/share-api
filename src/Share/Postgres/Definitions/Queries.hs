@@ -1220,3 +1220,16 @@ expectedTypeError refId =
 missingDeclKindError :: TypeReference -> InternalServerError Text
 missingDeclKindError r =
   InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r
+
+listTermDependencies :: TermId -> CodebaseM e (Set V2.Reference)
+listTermDependencies termId = do
+  queryListRows @V2.Referent
+    [sql|
+      WITH components(component_hash_id) AS (
+        SELECT local.component_hash_id
+          FROM term_local_component_references local
+          WHERE local.term_id = #{termId}
+      ) SELECT * from terms t
+          JOIN components c ON t.component_hash_id = c.component_hash_id
+    |]
+    <&> Set.fromList
