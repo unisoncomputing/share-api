@@ -37,7 +37,7 @@ module Share.Utils.Logging
   )
 where
 
-import Control.Monad.Except (ExceptT)
+import Control.Monad.Except (ExceptT, MonadError, catchError)
 import Control.Monad.Reader
 import Data.Char qualified as Char
 import Data.Map qualified as Map
@@ -64,10 +64,13 @@ import Prelude hiding (log)
 
 type Logger = FL.LogStr -> IO ()
 
-newtype LoggerT m a = LoggerT (ReaderT (Logger, IO FL.FormattedTime, Severity, Map Text Text) m a)
+newtype LoggerT m a = LoggerT {unLoggerT :: ReaderT (Logger, IO FL.FormattedTime, Severity, Map Text Text) m a}
   deriving newtype (Functor, Applicative, Monad, MonadIO)
 
 deriving instance (MonadUnliftIO m) => MonadUnliftIO (LoggerT m)
+
+instance MonadTrans LoggerT where
+  lift = LoggerT . lift
 
 instance (MonadIO m) => MonadLogger (LoggerT m) where
   logMsg msg = LoggerT $ do
@@ -77,6 +80,14 @@ instance (MonadIO m) => MonadLogger (LoggerT m) where
       logger . formatter timestamp $ msg {tags = tags msg `Map.union` tags'}
     where
       formatter = if Deployment.onLocal then localLogFmtLogger else logFmtFormatter
+
+instance (MonadError e m) => MonadError e (LoggerT m) where
+  throwError = LoggerT . throwError
+  catchError (LoggerT m) handler = LoggerT $ catchError m (unLoggerT . handler)
+
+instance (MonadReader r m) => MonadReader r (LoggerT m) where
+  ask = LoggerT $ lift ask
+  local f (LoggerT m) = LoggerT $ mapReaderT (local f) m
 
 runLoggerT :: Severity -> Logger -> Map Text Text -> IO FL.FormattedTime -> LoggerT m a -> m a
 runLoggerT minSeverity l reqTags ft (LoggerT m) = runReaderT m (l, ft, minSeverity, reqTags)

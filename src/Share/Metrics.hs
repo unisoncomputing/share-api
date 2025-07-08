@@ -68,7 +68,7 @@ data SlowChangingMetrics = SlowChangingMetrics
   }
 
 -- | Serves the app's prometheus metrics at `/metrics`
-serveMetricsMiddleware :: Env.Env x -> IO Wai.Middleware
+serveMetricsMiddleware :: (Env.HasTags x) => Env.Env x -> IO Wai.Middleware
 serveMetricsMiddleware env = do
   Prom.register Prom.ghcMetrics
   getMetrics <- atMostOnceEveryInterval metricUpdateInterval $ do

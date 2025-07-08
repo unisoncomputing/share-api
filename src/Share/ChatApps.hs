@@ -47,7 +47,7 @@ data Author = Author
   }
   deriving (Show, Eq, Ord)
 
-authorFromUserId :: UserId -> AppM reqCtx Author
+authorFromUserId :: (Env.HasTags reqCtx) => UserId -> AppM reqCtx Author
 authorFromUserId userId = do
   User {avatar_url = avatarUrl, user_name, handle} <- PG.runTransaction $ UsersQ.expectUser userId
   authorLink <- Links.userProfilePage handle

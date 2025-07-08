@@ -11,6 +11,7 @@ where
 import Control.Monad.Random.Strict
 import Control.Monad.Reader
 import Crypto.Random.Types qualified as Cryptonite
+import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Database.Redis qualified as R
 import Servant
@@ -21,6 +22,17 @@ import Share.Utils.Logging qualified as Logging
 
 newtype AppM reqCtx a = AppM {_unAppM :: ReaderT (Env reqCtx) IO a}
   deriving newtype (Functor, Applicative, Monad, MonadReader (Env reqCtx), MonadRandom, MonadIO, MonadUnliftIO)
+
+instance (Env.HasTags ctx) => Logging.MonadLogger (AppM ctx) where
+  logMsg msg = do
+    log <- asks Env.logger
+    ctx <- asks ctx
+    currentTags <- liftIO $ Env.getTags ctx
+    msg <- pure $ msg {Logging.tags = Logging.tags msg `Map.union` currentTags}
+    minSeverity <- asks Env.minLogSeverity
+    when (Logging.severity msg >= minSeverity) $ do
+      timestamp <- asks timeCache >>= liftIO
+      liftIO . log . Logging.logFmtFormatter timestamp $ msg
 
 runAppM :: Env reqCtx -> AppM reqCtx a -> IO a
 runAppM env (AppM m) = runReaderT m env

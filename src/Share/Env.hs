@@ -1,5 +1,6 @@
 module Share.Env
   ( Env (..),
+    HasTags (..),
   )
 where
 
@@ -60,3 +61,13 @@ data Env ctx = Env
     maxParallelismPerUploadRequest :: Int
   }
   deriving (Functor)
+
+-- | A Class for different request contexts to expose their tags.
+class HasTags ctx where
+  getTags :: ctx -> IO (Map Text Text)
+
+instance (HasTags ctx) => HasTags (Env ctx) where
+  getTags env = getTags (ctx env)
+
+instance HasTags () where
+  getTags _ = pure mempty
