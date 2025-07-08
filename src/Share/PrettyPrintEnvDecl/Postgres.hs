@@ -26,19 +26,23 @@ ppedForReferences namesPerspective refs = do
     Set.toList refs
       & CV.labeledDependencies1ToPG
 
-  Logging.logDebugText $ "ppedForReferences: withPGRefs: " <> tShow withPGRefs
+  -- Logging.logDebugText $ "ppedForReferences: withPGRefs: " <> tShow withPGRefs
   (termNames, typeNames) <- foldMapM namesForReference withPGRefs
-  Logging.logDebugText $ "ppedForReferences: termNames: " <> tShow termNames
+  -- Logging.logDebugText $ "ppedForReferences: termNames: " <> tShow termNames
   pure $ ppedFromNamesWithSuffixes termNames typeNames
   where
     namesForReference :: Either (V1.Referent, PGReferent) (V1.Reference, PGReference) -> m ([(Name, Name, V1.Referent)], [(Name, Name, V1.Reference)])
     namesForReference = \case
       Left (ref, pgref) -> do
+        Logging.logDebugText $ "ppedForReferences: namesForReference: " <> tShow ref <> " pgref: " <> tShow pgref
         termNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.termNamesForRefWithinNamespace namesPerspective pgref Nothing
+        Logging.logDebugText $ "ppedForReferences: namesForReference: got termNames: " <> tShow termNames
         let termNames' = termNames <&> \(fqn, suffixed) -> (fqn, suffixed, ref)
         pure $ (termNames', [])
       Right (ref, pgref) -> do
+        Logging.logDebugText $ "ppedForReferences: namesForReference: " <> tShow ref <> " pgref: " <> tShow pgref
         typeNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.typeNamesForRefWithinNamespace namesPerspective pgref Nothing
+        Logging.logDebugText $ "ppedForReferences: namesForReference: got typeNames: " <> tShow typeNames
         let typeNames' = typeNames <&> \(fqn, suffixed) -> (fqn, suffixed, ref)
         pure $ ([], typeNames')
 
