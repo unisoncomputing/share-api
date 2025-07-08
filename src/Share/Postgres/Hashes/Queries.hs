@@ -55,15 +55,14 @@ ensureComponentHashId componentHash = ensureComponentHashIdsOf id componentHash
 
 -- | Get the matching hashId for every component hash, saving any that are missing.
 -- Maintains the invariant that the returned list matches the positions of the input list.
-ensureComponentHashIdsOf :: forall m s t. (QueryM m, HasCallStack) => Traversal s t ComponentHash ComponentHashId -> s -> m t
+ensureComponentHashIdsOf :: forall m s t. (QueryA m, HasCallStack) => Traversal s t ComponentHash ComponentHashId -> s -> m t
 ensureComponentHashIdsOf trav s =
   s
     & unsafePartsOf trav %%~ \componentHashes ->
       do
         let numberedHashIds = zip [1 :: Int32 ..] componentHashes
-        results <-
-          queryListCol @ComponentHashId
-            [sql|
+        queryListCol @ComponentHashId
+          [sql|
     WITH new_hashes(ord, hash) AS (
           SELECT * FROM ^{toTable numberedHashIds}
     ), inserted_hashes(hash, id) AS (
@@ -78,37 +77,24 @@ ensureComponentHashIdsOf trav s =
         LEFT JOIN inserted_hashes ON inserted_hashes.hash = new_hashes.hash
       ORDER BY new_hashes.ord ASC
     |]
-        if length results /= length componentHashes
-          then error "ensureComponentHashIdsOf: Missing expected component hash"
-          else pure results
+          <&> \results ->
+            if length results /= length componentHashes
+              then error "ensureComponentHashIdsOf: Missing expected component hash"
+              else results
 
-expectComponentHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t ComponentHash ComponentHashId -> s -> m t
+expectComponentHashIdsOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHash ComponentHashId -> s -> m t
 expectComponentHashIdsOf trav s = do
-  s
-    & unsafePartsOf trav %%~ \componentHashes -> do
-      let numberedHashes = zip [1 :: Int32 ..] componentHashes
-      results :: [ComponentHashId] <-
-        queryListCol
-          [sql|
-      WITH hashes(ord, hash) AS (
-        SELECT * FROM ^{toTable numberedHashes}
-      )
-      SELECT component_hashes.id FROM component_hashes JOIN hashes ON component_hashes.base32 = hashes.hash
-        ORDER BY hashes.ord ASC
-      |]
-      if length results /= length componentHashes
-        then error "expectComponentHashIdsOf: Missing expected component hash"
-        else pure results
+  let expectJust f ch = fmap (fromMaybe $ error "Expected a component hash but got Nothing!") $ f ch
+  componentHashIdsOf (trav . expectJust) s
 
 -- | Get the matching hashId for every component hash, or Nothing if the hash is not found.
-componentHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t ComponentHash (Maybe ComponentHashId) -> s -> m t
+componentHashIdsOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHash (Maybe ComponentHashId) -> s -> m t
 componentHashIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \componentHashes -> do
       let numberedHashes = zip [1 :: Int32 ..] componentHashes
-      results :: [Maybe ComponentHashId] <-
-        queryListCol
-          [sql|
+      queryListCol @(Maybe ComponentHashId)
+        [sql|
       WITH hashes(ord, hash) AS (
         SELECT * FROM ^{toTable numberedHashes}
       )
@@ -116,9 +102,10 @@ componentHashIdsOf trav s = do
         LEFT JOIN component_hashes ON component_hashes.base32 = hashes.hash
         ORDER BY hashes.ord ASC
       |]
-      if length results /= length componentHashes
-        then error "expectComponentHashIdsOf: Missing expected component hash"
-        else pure results
+        <&> \results ->
+          if length results /= length componentHashes
+            then error "expectComponentHashIdsOf: Missing expected component hash"
+            else results
 
 expectComponentHashId :: (HasCallStack, QueryM m) => ComponentHash -> m ComponentHashId
 expectComponentHashId componentHash = do

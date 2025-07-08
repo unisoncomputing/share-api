@@ -143,7 +143,7 @@ namedReferences2ToPG refs =
     unsafePartsOf (traversed . ref_ . V2.h_)
       %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
 
-labeledDependencies1ToPG :: (PG.QueryM m) => [LD.LabeledDependency] -> m [Either (V1.Referent, PGReferent) (V1.Reference, PGReference)]
+labeledDependencies1ToPG :: (PG.QueryA m) => [LD.LabeledDependency] -> m [Either (V1.Referent, PGReferent) (V1.Reference, PGReference)]
 labeledDependencies1ToPG refs =
   refs
     & map \case
@@ -156,7 +156,7 @@ labeledDependencies1ToPG refs =
 
 -- | This is similar to `labeledDependencies1ToPG`, but it filters out refs for components
 -- which don't exist on Share, e.g. generated accessors.
-labeledDependencies1ToValidPGRefs :: (PG.QueryM m) => [LD.LabeledDependency] -> m [Either (V1.Referent, PGReferent) (V1.Reference, PGReference)]
+labeledDependencies1ToValidPGRefs :: (PG.QueryA m) => [LD.LabeledDependency] -> m [Either (V1.Referent, PGReferent) (V1.Reference, PGReference)]
 labeledDependencies1ToValidPGRefs refs =
   refs
     & map \case

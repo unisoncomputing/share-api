@@ -22,6 +22,7 @@ namesForReferences namesPerspective refs = do
   withPGRefs <-
     Set.toList refs
       & CV.labeledDependencies1ToValidPGRefs
+      & PG.pipelined
   (termNames, typeNames) <- foldMapM namesForReference withPGRefs
   pure $ Names.fromTermsAndTypes termNames typeNames
   where
