@@ -110,8 +110,9 @@ termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
   if null directNames
     then do
       Logging.logDebugText $ "termNamesForRefWithinNamespace: No direct names found, searching transitive dependencies for bhId: " <> tShow bhId <> ", namespacePrefix: " <> tShow namespacePrefix <> ", reversedNamePrefix: " <> tShow reversedNamePrefix
-      PG.queryListRows
-        [PG.sql|
+      results <-
+        PG.queryListRows
+          [PG.sql|
         ^{transitiveDependenciesSql bhId}
         SELECT (reversed_name || reversed_mount_path) AS reversed_name, suffixify_term_fqn(#{bhId}, #{namespacePrefix}, reversed_mount_path, ROW(scoped_term_name_lookup.*)) AS suffixified_name
           FROM transitive_dependency_mounts
@@ -131,6 +132,8 @@ termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
               ) AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
         LIMIT 1
       |]
+      Logging.logDebugText $ "termNamesForRefWithinNamespace: Found transitive names: " <> tShow results
+      pure results
     else do
       Logging.logDebugText $ "termNamesForRefWithinNamespace: Found direct names: " <> tShow directNames
       pure directNames
