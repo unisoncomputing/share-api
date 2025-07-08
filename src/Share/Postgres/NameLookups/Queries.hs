@@ -148,6 +148,15 @@ typeNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
   let reversedNamePrefix = case maySuffix of
         Just suffix -> toReversedNamePrefix suffix
         Nothing -> ""
+  Logging.logDebugText $
+    "typeNamesForRefWithinNamespace: bhId: "
+      <> tShow bhId
+      <> ", namespacePrefix: "
+      <> tShow namespacePrefix
+      <> ", reversedNamePrefix: "
+      <> tShow reversedNamePrefix
+      <> ", ref: "
+      <> tShow ref
   directNames <-
     PG.queryListRows
       [PG.sql|
@@ -191,9 +200,11 @@ typeNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
   -- If we don't find a name in the name lookup, expand the search to recursively include transitive deps
   -- and just return the first one we find.
   if null directNames
-    then
-      PG.queryListRows
-        [PG.sql|
+    then do
+      Logging.logDebugText $ "typeNamesForRefWithinNamespace: No direct names found, searching transitive dependencies for bhId: " <> tShow bhId <> ", namespacePrefix: " <> tShow namespacePrefix <> ", reversedNamePrefix: " <> tShow reversedNamePrefix
+      results <-
+        PG.queryListRows
+          [PG.sql|
         ^{transitiveDependenciesSql bhId}
         SELECT (reversed_name || reversed_mount_path) AS reversed_name, suffixify_type_fqn(#{bhId}, #{namespacePrefix}, reversed_mount_path, ROW(scoped_type_name_lookup.*)) AS suffixified_name
           FROM transitive_dependency_mounts
@@ -212,7 +223,11 @@ typeNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
               ) AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
         LIMIT 1
           |]
-    else pure directNames
+      Logging.logDebugText $ "typeNamesForRefWithinNamespace: Found transitive names: " <> tShow results
+      pure results
+    else do
+      Logging.logDebugText $ "typeNamesForRefWithinNamespace: Found direct names: " <> tShow directNames
+      pure directNames
   where
     (refBuiltin, refComponentHash, refComponentIndex) = referenceFields ref
 
