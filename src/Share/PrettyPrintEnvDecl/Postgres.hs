@@ -10,6 +10,7 @@ import Share.Postgres.NameLookups.Types (NamesPerspective)
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Postgres.Refs.Types
 import Share.Prelude
+import Share.Utils.Logging qualified as Logging
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency (LabeledDependency)
 import Unison.Name (Name)
@@ -20,10 +21,14 @@ import Unison.Referent qualified as V1
 
 ppedForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledDependency -> m PPED.PrettyPrintEnvDecl
 ppedForReferences namesPerspective refs = do
+  Logging.logDebugText $ "ppedForReferences: " <> tShow refs
   withPGRefs <-
     Set.toList refs
       & CV.labeledDependencies1ToPG
+
+  Logging.logDebugText $ "ppedForReferences: withPGRefs: " <> tShow withPGRefs
   (termNames, typeNames) <- foldMapM namesForReference withPGRefs
+  Logging.logDebugText $ "ppedForReferences: termNames: " <> tShow termNames
   pure $ ppedFromNamesWithSuffixes termNames typeNames
   where
     namesForReference :: Either (V1.Referent, PGReferent) (V1.Reference, PGReference) -> m ([(Name, Name, V1.Referent)], [(Name, Name, V1.Reference)])

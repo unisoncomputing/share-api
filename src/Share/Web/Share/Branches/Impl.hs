@@ -62,7 +62,6 @@ import Unison.Server.Share.RenderDoc (findAndRenderDoc)
 import Unison.Server.Types (DefinitionDisplayResults, NamespaceDetails (..), Suffixify (..))
 import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty qualified as Pretty
-import UnliftIO qualified
 
 getProjectBranch ::
   ProjectBranchShortHand ->
@@ -158,16 +157,9 @@ projectBranchDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
     Logging.textLog "Before codebase transaction"
       & Logging.withSeverity Logging.Debug
       & Logging.logMsg
-    toIO <- UnliftIO.askRunInIO
-    let transactionLogger msg =
-          Logging.textLog msg
-            & Logging.withSeverity Logging.Debug
-            & Logging.logMsg
-            & toIO
-            & PG.transactionUnsafeIO
     Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      transactionLogger "Within codebase transaction"
-      ShareBackend.definitionForHQName transactionLogger (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
+      Logging.logDebugText "Within codebase transaction"
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -193,7 +185,7 @@ projectBranchDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-hash" cacheParams causalId $ do
     Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (const $ pure ()) (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
