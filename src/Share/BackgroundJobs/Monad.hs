@@ -21,6 +21,9 @@ data BackgroundCtx = BackgroundCtx
 
 instance HasTags BackgroundCtx where
   getTags BackgroundCtx {loggingTags, workerName} = pure $ Map.singleton "workerName" workerName <> loggingTags
+  updateTags f BackgroundCtx {loggingTags, workerName} = do
+    let newTags = f loggingTags
+    pure $ BackgroundCtx {workerName, loggingTags = newTags}
 
 type Background = AppM BackgroundCtx
 

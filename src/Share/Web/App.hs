@@ -70,6 +70,10 @@ instance HasTags RequestCtx where
     reqTags <- liftIO $ readTVarIO reqTagsVar
     -- local tags take precedence over request tags
     pure $ localTags <> reqTags
+  updateTags f reqCtx = do
+    tags <- getTags reqCtx
+    let newTags = f tags
+    pure $ reqCtx {localTags = newTags <> localTags reqCtx}
 
 -- | Add a tag to the current request. This tag will be used in logging and error reports
 addRequestTag :: (MonadReader (Env RequestCtx) m, MonadIO m) => Text -> Text -> m ()

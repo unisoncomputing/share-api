@@ -42,7 +42,6 @@ import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.User (User (..))
-import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant (parseParam)
 import Share.Web.App
@@ -228,7 +227,7 @@ uploadEntitiesEndpoint callingUserId (UploadEntitiesRequest {repoInfo, entities}
 -- | Insert entities to the user's codebase (either temp storage or main), returning the hashes of any missing dependencies
 -- we still need from the client.
 insertEntitiesToCodebase ::
-  (MonadLogger (AppM r), Env.HasTags r) =>
+  (Env.HasTags r) =>
   CodebaseEnv ->
   NEMap Hash32 (Sync.Entity Text Hash32 Hash32) ->
   AppM r (Either Sync.EntityValidationError (Maybe (NESet Hash32)))

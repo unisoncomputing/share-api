@@ -118,6 +118,7 @@ newtype Tags = Tags (Map Text Text)
 
 instance Env.HasTags Tags where
   getTags (Tags tags) = pure tags
+  updateTags f (Tags tags) = pure (Tags (f tags))
 
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
 newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)}
@@ -218,7 +219,7 @@ transaction isoLevel mode (Transaction t) = Session do
         case res of
           Nothing -> do
             lift . lift $ rollbackSession
-            loop
+            Logging.withTags (Map.singleton "transaction-retry" "true") loop
           Just res -> pure res
   coerce loop
   where

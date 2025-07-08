@@ -64,10 +64,15 @@ data Env ctx = Env
 
 -- | A Class for different request contexts to expose their tags.
 class HasTags ctx where
-  getTags :: ctx -> IO (Map Text Text)
+  getTags :: (MonadIO m) => ctx -> m (Map Text Text)
+  updateTags :: (MonadIO m) => (Map Text Text -> Map Text Text) -> ctx -> m ctx
 
 instance (HasTags ctx) => HasTags (Env ctx) where
   getTags env = getTags (ctx env)
+  updateTags f env = do
+    ctx' <- updateTags f (ctx env)
+    pure $ env {ctx = ctx'}
 
 instance HasTags () where
   getTags _ = pure mempty
+  updateTags _ _ = pure ()

@@ -34,16 +34,13 @@ instance (Env.HasTags ctx) => Logging.MonadLogger (AppM ctx) where
       timestamp <- asks timeCache >>= liftIO
       liftIO . log . Logging.logFmtFormatter timestamp $ msg
 
+  withTags newTags (AppM m) = do
+    env <- ask
+    env' <- Env.updateTags (Map.union newTags) env
+    AppM $ local (const env') m
+
 runAppM :: Env reqCtx -> AppM reqCtx a -> IO a
 runAppM env (AppM m) = runReaderT m env
-
-instance Logging.MonadLogger (AppM ()) where
-  logMsg msg = do
-    log' <- asks Env.logger
-    minSeverity <- asks Env.minLogSeverity
-    when (Logging.severity msg >= minSeverity) $ do
-      timestamp <- asks timeCache >>= liftIO
-      liftIO . log' . Logging.logFmtFormatter timestamp $ msg
 
 instance Cryptonite.MonadRandom (AppM reqCtx) where
   getRandomBytes =
