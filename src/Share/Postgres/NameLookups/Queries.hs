@@ -34,6 +34,7 @@ import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
+import Share.Utils.Logging qualified as Logging
 import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType)
 import U.Codebase.Referent qualified as V2
@@ -50,6 +51,15 @@ termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
   let reversedNamePrefix = case maySuffix of
         Just suffix -> toReversedNamePrefix suffix
         Nothing -> ""
+  Logging.logDebugText $
+    "termNamesForRefWithinNamespace: bhId: "
+      <> tShow bhId
+      <> ", namespacePrefix: "
+      <> tShow namespacePrefix
+      <> ", reversedNamePrefix: "
+      <> tShow reversedNamePrefix
+      <> ", ref: "
+      <> tShow ref
   directNames <-
     PG.queryListRows
       [PG.sql|
@@ -99,6 +109,7 @@ termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
   -- and just return the first one we find.
   if null directNames
     then do
+      Logging.logDebugText $ "termNamesForRefWithinNamespace: No direct names found, searching transitive dependencies for bhId: " <> tShow bhId <> ", namespacePrefix: " <> tShow namespacePrefix <> ", reversedNamePrefix: " <> tShow reversedNamePrefix
       PG.queryListRows
         [PG.sql|
         ^{transitiveDependenciesSql bhId}
@@ -120,7 +131,9 @@ termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuf
               ) AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
         LIMIT 1
       |]
-    else pure directNames
+    else do
+      Logging.logDebugText $ "termNamesForRefWithinNamespace: Found direct names: " <> tShow directNames
+      pure directNames
   where
     (refBuiltin, refComponentHash, refComponentIndex, refConstructorIndex) = referentFields ref
 
