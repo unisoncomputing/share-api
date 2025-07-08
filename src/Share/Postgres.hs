@@ -46,7 +46,6 @@ module Share.Postgres
     tryRunSessionWithEnv,
     unliftSession,
     defaultIsolationLevel,
-    pipelined,
     pEitherMap,
     pFor,
     pFor_,
@@ -82,6 +81,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Functor.Compose (Compose (..))
+import Data.Kind (Type)
 import Data.Map qualified as Map
 import Data.Maybe
 import Data.Time.Clock (picosecondsToDiffTime)
@@ -135,10 +135,6 @@ instance MonadError e (Transaction e) where
 -- | Applicative pipelining transaction
 newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (TransactionError e) a)}
   deriving (Functor, Applicative) via (Compose Hasql.Pipeline.Pipeline (Either (TransactionError e)))
-
--- | Run a pipeline in a transaction
-pipelined :: Pipeline e a -> Transaction e a
-pipelined p = Transaction (lift . lift $ Hasql.pipeline (unPipeline p))
 
 -- | Like fmap, but the provided function can throw a recoverable error by returning 'Left'.
 pEitherMap :: (a -> Either e b) -> Pipeline e a -> Pipeline e b
@@ -349,6 +345,7 @@ runSessionOrRespondError t = tryRunSession t >>= either respondError pure
 
 -- | Represents anywhere we can run a statement
 class (Applicative m) => QueryA m where
+  type TError m :: Type
   statement :: q -> Hasql.Statement q r -> m r
 
   -- | Fail the transaction and whole request with an unrecoverable server error.
@@ -370,7 +367,10 @@ class (Logging.MonadLogger m, QueryA m) => QueryM m where
   -- the transaction is retried.
   transactionUnsafeIO :: IO a -> m a
 
+  pipelined :: Pipeline (TError m) a -> m a
+
 instance QueryA (Transaction e) where
+  type TError (Transaction e) = e
   statement q s = do
     transactionStatement q s
 
@@ -384,8 +384,13 @@ instance QueryM (Transaction e) where
     UnliftIO.tryAny io >>= \case
       Left someException -> pure (Left (Unrecoverable $ someServerError someException))
       Right a -> pure (Right a)
+  pipelined p = Transaction (lift . lift $ Hasql.pipeline (unPipeline p))
 
+-- | Run a pipeline in a transaction
+-- pipelined :: Pipeline e a -> Transaction e a
+-- pipelined
 instance QueryA (Session e) where
+  type TError (Session e) = e
   statement q s =
     Session . lift . lift . lift $ Session.statement q s
 
@@ -397,8 +402,11 @@ instance QueryM (Session e) where
     liftIO (UnliftIO.tryAny io) >>= \case
       Left someException -> throwError (Unrecoverable (someServerError someException))
       Right a -> pure a
+  pipelined p = Session $ do
+    lift . lift . ExceptT $ Hasql.pipeline (unPipeline p)
 
 instance QueryA (Pipeline e) where
+  type TError (Pipeline e) = e
   statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
 
   unrecoverableError e = Pipeline $ pure (Left (Unrecoverable (someServerError e)))
@@ -410,6 +418,7 @@ instance QueryA (Pipeline e) where
         Left e -> Left e
 
 instance (QueryM m) => QueryA (ReaderT e m) where
+  type TError (ReaderT e m) = TError m
   statement q s = lift $ statement q s
 
   unrecoverableError e = do
@@ -417,14 +426,17 @@ instance (QueryM m) => QueryA (ReaderT e m) where
 
 instance (QueryM m) => QueryM (ReaderT e m) where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
+  pipelined p = lift $ pipelined p
 
 instance (QueryM m) => QueryA (MaybeT m) where
+  type TError (MaybeT m) = TError m
   statement q s = lift $ statement q s
 
   unrecoverableError e = lift $ unrecoverableError e
 
 instance (QueryM m) => QueryM (MaybeT m) where
   transactionUnsafeIO io = lift $ transactionUnsafeIO io
+  pipelined p = lift $ pipelined p
 
 prepareStatements :: Bool
 prepareStatements = True
