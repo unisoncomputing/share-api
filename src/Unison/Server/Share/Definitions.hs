@@ -67,6 +67,8 @@ import Unison.Util.Pretty (Width)
 
 -- | Renders a definition for the given name or hash alongside its documentation.
 definitionForHQName ::
+  forall e.
+  (Text -> Codebase.CodebaseM e ()) ->
   -- | The path representing the user's current namesRoot.
   -- Searches will be limited to definitions within this path, and names will be relative to
   -- this path.
@@ -81,7 +83,7 @@ definitionForHQName ::
   -- | The name, hash, or both, of the definition to display.
   HQ.HashQualified Name ->
   Codebase.CodebaseM e DefinitionDisplayResults
-definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
+definitionForHQName logger perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
   codebaseOwnerUserId <- asks Codebase.codebaseOwner
   let cacheKey =
         Caching.CacheKey
@@ -90,11 +92,14 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
             rootCausalId = Just rootCausalId,
             sandbox = Just codebaseOwnerUserId
           }
+  logger "Before JSON Cache"
   Caching.usingJSONCache cacheKey go
   where
     go :: Codebase.CodebaseM e DefinitionDisplayResults
     go = do
+      logger "Inside Go, before CausalQ.expectNamespaceIdsByCausalIdsOf"
       rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
+      logger "Inside Go, before NameLookupOps.relocateToNameRoot"
       (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
       -- Bias towards both relative and absolute path to queries,
       -- This allows us to still bias towards definitions outside our namesRoot but within the
@@ -106,34 +111,41 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
       let biases = maybeToList $ HQ.toName query
       let ppedBuilder deps = (PPED.biasTo biases) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
       let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+      logger "Inside Go, before mkDefinitionsForQuery"
       dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery nameSearch [query]
       let width = mayDefaultWidth renderWidth
       let docResults :: Name -> Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
           docResults name = do
             -- We need to re-lookup the names perspective here because the name we've found
             -- may now be in a lib.
+            logger $ "Searching for docs for: " <> tShow name
             namesPerspective <- NameLookupOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (NL.nameToPathSegments name)
             let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
             docRefs <- Docs.docsForDefinitionName nameSearch name
+            logger $ "Found n docs for: " <> tShow name <> ": " <> tShow (length docRefs) <> ", rendering docs"
             renderDocRefs ppedBuilder width rt docRefs
-
       let drDeps = Backend.definitionResultsDependencies dr
+      logger "Inside Go, before ppedBuilder"
       termAndTypePPED <- ppedBuilder drDeps
       let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
+      logger "Inside Go, before typesToSyntaxOf"
       typeDefinitions <-
         ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
           let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
           docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
           lift $ Backend.mkTypeDefinition termAndTypePPED width ref docs tp
+      logger "Inside Go, before termsToSyntaxOf"
       termDefinitions <-
         ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
           let referent = Referent.Ref reference
           let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
           docs <- maybe (pure []) docResults (HQ.toName hqTermName)
+          logger $ "Inside Go, making term definition for: " <> tShow hqTermName
           Backend.mkTermDefinition termAndTypePPED width reference docs trm
       let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
           renderedDisplayTypes = Map.mapKeys Reference.toText typeDefinitions
           renderedMisses = fmap HQ.toText misses
+      logger $ "Finished Go, Returning."
       pure $
         DefinitionDisplayResults
           renderedDisplayTerms

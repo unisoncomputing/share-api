@@ -29,6 +29,7 @@ import Share.Project qualified as Project
 import Share.User (User (..))
 import Share.Utils.API
 import Share.Utils.Caching
+import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
@@ -61,6 +62,7 @@ import Unison.Server.Share.RenderDoc (findAndRenderDoc)
 import Unison.Server.Types (DefinitionDisplayResults, NamespaceDetails (..), Suffixify (..))
 import Unison.Syntax.Name qualified as Name
 import Unison.Util.Pretty qualified as Pretty
+import UnliftIO qualified
 
 getProjectBranch ::
   ProjectBranchShortHand ->
@@ -142,16 +144,30 @@ projectBranchDefinitionsByNameEndpoint ::
   Maybe Pretty.Width ->
   Maybe CausalHash ->
   WebApp (Cached JSON DefinitionDisplayResults)
-projectBranchDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) name relativeTo renderWidth rootHash = do
+projectBranchDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug (BranchShortHand {contributorHandle, branchName}) name relativeTo renderWidth rootHash = withLocalTag "userHandle" (IDs.toText userHandle) . withLocalTag "projectSlug" (IDs.toText projectSlug) . withLocalTag "name" (tShow (Name.toText <$> HQ.toName name)) $ do
   (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
   rt <- Codebase.codebaseRuntime codebase
+  Logging.textLog "Before redis caching"
+    & Logging.withSeverity Logging.Debug
+    & Logging.logMsg
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-name" cacheParams causalId $ do
+    Logging.textLog "Before codebase transaction"
+      & Logging.withSeverity Logging.Debug
+      & Logging.logMsg
+    toIO <- UnliftIO.askRunInIO
+    let transactionLogger msg =
+          Logging.textLog msg
+            & Logging.withSeverity Logging.Debug
+            & Logging.logMsg
+            & toIO
+            & PG.transactionUnsafeIO
     Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
+      transactionLogger "Within codebase transaction"
+      ShareBackend.definitionForHQName transactionLogger (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -177,7 +193,7 @@ projectBranchDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   rt <- Codebase.codebaseRuntime codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-hash" cacheParams causalId $ do
     Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
+      ShareBackend.definitionForHQName (const $ pure ()) (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
