@@ -9,6 +9,7 @@ module Unison.Server.Share.Definitions
     definitionDependencies,
     termDefinitionByName,
     typeDefinitionByName,
+    definitionDependencyResults,
   )
 where
 
@@ -20,6 +21,7 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty qualified as NESet
 import Share.Backend qualified as Backend
+import Share.BackgroundJobs.Search.DefinitionSync.Types (TermOrTypeSummary (..))
 import Share.Codebase (CodebaseM, CodebaseRuntime)
 import Share.Codebase qualified as Codebase
 import Share.IDs
@@ -129,8 +131,9 @@ definitionDependencyResults ::
   ProjectShortHand ->
   BranchOrReleaseShortHand ->
   NL.NamesPerspective ->
+  Maybe Width ->
   Codebase.CodebaseM e [DefinitionSearchResult]
-definitionDependencyResults hqName project branchRef np = do
+definitionDependencyResults hqName project branchRef np mayWidth = do
   let nameSearch = PGNameSearch.nameSearchForPerspective np
   deps <- definitionDependencies hqName nameSearch
   ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
@@ -141,10 +144,12 @@ definitionDependencyResults hqName project branchRef np = do
       hqFqn <- hoistMaybe $ PPE.terms ppe referent
       let fqn = HQ'.toName hqFqn
       typ <- MaybeT $ (Codebase.loadTypeOfReferent (CV.referent1to2 referent))
-      lift $ Summary.termSummaryForReferent v2Referent typ (Just fqn) _branchHashId _path _width
+      summary <- fmap ToTTermSummary . lift $ Summary.termSummaryForReferent v2Referent typ (Just fqn) np mayWidth
       pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
     Right typeRef -> do
-      fqn <- hoistMaybe $ PPE.types ppe typeRef
+      hqFqn <- hoistMaybe $ PPE.types ppe typeRef
+      let fqn = HQ'.toName hqFqn
+      summary <- fmap ToTTypeSummary . lift $ Summary.typeSummaryForReference typeRef (Just fqn) mayWidth
       pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
 
 -- typeSummaryForReference
