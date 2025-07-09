@@ -111,11 +111,11 @@ expectComponentHashId :: (HasCallStack, QueryM m) => ComponentHash -> m Componen
 expectComponentHashId componentHash = do
   queryExpect1Col [sql|SELECT id FROM component_hashes WHERE base32 = #{componentHash}|]
 
-expectComponentHashesOf :: (HasCallStack, QueryM m) => Traversal s t ComponentHashId ComponentHash -> s -> m t
+expectComponentHashesOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHashId ComponentHash -> s -> m t
 expectComponentHashesOf trav = do
-  unsafePartsOf trav %%~ \hashIds -> do
-    let numberedHashIds = zip [0 :: Int32 ..] hashIds
-    results :: [ComponentHash] <-
+  unsafePartsOf trav %%~ \hashIds ->
+    do
+      let numberedHashIds = zip [0 :: Int32 ..] hashIds
       queryListCol
         [sql|
       WITH hash_ids(ord, id) AS (
@@ -124,9 +124,10 @@ expectComponentHashesOf trav = do
       SELECT base32 FROM component_hashes JOIN hash_ids ON component_hashes.id = hash_ids.id
         ORDER BY hash_ids.ord ASC
       |]
-    if length results /= length hashIds
-      then error "expectComponentHashesOf: Missing expected component hash"
-      else pure results
+      <&> \results ->
+        if length results /= length hashIds
+          then error "expectComponentHashesOf: Missing expected component hash"
+          else results
 
 expectComponentHash :: (HasCallStack, QueryM m) => ComponentHashId -> m ComponentHash
 expectComponentHash hashId = queryExpect1Col [sql|SELECT base32 FROM component_hashes WHERE id = #{hashId}|]

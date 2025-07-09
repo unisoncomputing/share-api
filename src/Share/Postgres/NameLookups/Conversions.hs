@@ -2,21 +2,13 @@
 -- Strongly prefer converting in batches using the plural combinators, they're much more
 -- efficient than converting in a loop.
 module Share.Postgres.NameLookups.Conversions
-  ( reference1ToPG,
-    references1ToPG,
-    reference2ToPG,
+  ( references1ToPG,
     references2ToPG,
-    referent1ToPG,
     referents1ToPG,
-    referent2ToPG,
     referents2ToPG,
-    referencePGTo1,
-    referencesPGTo1,
-    referencePGTo2,
+    referencesPGTo1Of,
     referencesPGTo2Of,
-    referentPGTo1UsingCT,
-    referentsPGTo1UsingCT,
-    referentPGTo2,
+    referentsPGTo1UsingCTOf,
     referentsPGTo2Of,
     namedReferentsWithCT2ToPG,
     namedReferents2ToPG,
@@ -29,19 +21,17 @@ where
 import Control.Lens
 import Share.Postgres qualified as PG
 import Share.Postgres.Hashes.Queries qualified as Hashes
-import Share.Postgres.IDs (ComponentHash (..))
+import Share.Postgres.IDs (ComponentHash (..), ComponentHashId)
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import U.Codebase.Reference qualified as V2
 import U.Codebase.Referent qualified as V2
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
+import Unison.Hash qualified as UHash
 import Unison.LabeledDependency qualified as LD
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
-
-reference1ToPG :: (PG.QueryM m) => V1.Reference -> m PGReference
-reference1ToPG = fmap runIdentity . references1ToPG . Identity
 
 references1ToPG :: (Traversable t, PG.QueryM m) => t V1.Reference -> m (t PGReference)
 references1ToPG refs =
@@ -50,17 +40,11 @@ references1ToPG refs =
     -- This is safe here because ensureComponentHashIdsOf always returns the same number of elements as it is given
     & unsafePartsOf (traversed . V2.h_) %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
 
-reference2ToPG :: (PG.QueryM m) => V2.Reference -> m PGReference
-reference2ToPG = fmap runIdentity . references2ToPG . Identity
-
 references2ToPG :: (Traversable t, PG.QueryM m) => t V2.Reference -> m (t PGReference)
 references2ToPG refs =
   refs
     -- This is safe here because ensureComponentHashIdsOf always returns the same number of elements as it is given
     & unsafePartsOf (traversed . V2.h_) %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
-
-referent1ToPG :: (PG.QueryM m) => V1.Referent -> m PGReferent
-referent1ToPG = fmap runIdentity . referents1ToPG . Identity
 
 referents1ToPG :: (Traversable t, PG.QueryM m) => t V1.Referent -> m (t PGReferent)
 referents1ToPG refs =
@@ -69,48 +53,36 @@ referents1ToPG refs =
     -- This is safe here because ensureComponentHashIdsOf always returns the same number of elements as it is given
     & unsafePartsOf (traversed . V2.refs_ . V2.h_) %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
 
-referent2ToPG :: (PG.QueryM m) => V2.Referent -> m PGReferent
-referent2ToPG = fmap runIdentity . referents2ToPG . Identity
-
 referents2ToPG :: (Traversable t, PG.QueryM m) => t V2.Referent -> m (t PGReferent)
 referents2ToPG refs =
   refs
     -- This is safe here because ensureComponentHashIdsOf always returns the same number of elements as it is given
     & unsafePartsOf (traversed . V2.refs_ . V2.h_) %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
 
-referencePGTo1 :: (PG.QueryM m) => PGReference -> m V1.Reference
-referencePGTo1 = fmap runIdentity . referencesPGTo1 . Identity
-
-referencesPGTo1 :: (PG.QueryM m, Traversable t) => t PGReference -> m (t V1.Reference)
-referencesPGTo1 refs =
-  refs
+referencesPGTo1Of :: (PG.QueryA m) => Traversal s t PGReference V1.Reference -> s -> m t
+referencesPGTo1Of trav s =
+  s
     -- This is safe here because ensureComponentHashes always returns the same number of elements as it is given
-    & unsafePartsOf (traversed . V2.h_) %%~ fmap coerce . Hashes.expectComponentHashesOf traversed
-    <&> fmap Cv.reference2to1
+    & Hashes.expectComponentHashesOf (trav . V2.h_ . uHashAsComponentHash_)
 
-referencePGTo2 :: (PG.QueryM m) => PGReference -> m V2.Reference
-referencePGTo2 = referencesPGTo2Of id
+uHashAsComponentHash_ :: Traversal ComponentHashId UHash.Hash ComponentHashId ComponentHash
+uHashAsComponentHash_ = coerced
 
-referencesPGTo2Of :: (PG.QueryM m) => Traversal s t PGReference V2.Reference -> s -> m t
+referencesPGTo2Of :: (PG.QueryA m) => Traversal s t PGReference V2.Reference -> s -> m t
 referencesPGTo2Of trav s =
   s
     -- This is safe here because ensureComponentHashes always returns the same number of elements as it is given
     & unsafePartsOf (trav . V2.h_) %%~ fmap coerce . Hashes.expectComponentHashesOf traversed
 
-referentPGTo1UsingCT :: (PG.QueryM m, HasCallStack) => (PGReferent, Maybe V2.ConstructorType) -> m V1.Referent
-referentPGTo1UsingCT = fmap runIdentity . referentsPGTo1UsingCT . Identity
-
-referentsPGTo1UsingCT :: (PG.QueryM m, Traversable t, HasCallStack) => t (PGReferent, Maybe V2.ConstructorType) -> m (t V1.Referent)
-referentsPGTo1UsingCT refs =
-  refs
+referentsPGTo1UsingCTOf :: (PG.QueryM m, HasCallStack) => Traversal s t (PGReferent, Maybe V2.ConstructorType) V1.Referent -> s -> m t
+referentsPGTo1UsingCTOf trav s =
+  s
     -- This is safe here because ensureComponentHashes always returns the same number of elements as it is given
-    & unsafePartsOf (traversed . _1 . V2.refs_ . V2.h_) %%~ (fmap coerce . Hashes.expectComponentHashesOf traversed)
-    <&> fmap (\(ref, mayCT) -> Cv.referent2to1UsingCT (fromMaybe (error "referentsPGTo1UsingCT: missing Constructor Type") mayCT) ref)
+    & unsafePartsOf trav %%~ \refs -> do
+      (Hashes.expectComponentHashesOf (traversed . _1 . V2.refs_ . V2.h_ . uHashAsComponentHash_) refs)
+        <&> fmap \(ref', mayCT) -> (Cv.referent2to1UsingCT (fromMaybe (error "referentsPGTo1UsingCT: missing Constructor Type") mayCT) ref')
 
-referentPGTo2 :: (PG.QueryM m) => PGReferent -> m V2.Referent
-referentPGTo2 = referentsPGTo2Of id
-
-referentsPGTo2Of :: (PG.QueryM m) => Traversal s t PGReferent V2.Referent -> s -> m t
+referentsPGTo2Of :: (PG.QueryA m) => Traversal s t PGReferent V2.Referent -> s -> m t
 referentsPGTo2Of trav s =
   s
     -- This is safe here because ensureComponentHashes always returns the same number of elements as it is given
