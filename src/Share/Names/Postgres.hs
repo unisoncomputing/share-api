@@ -21,7 +21,8 @@ namesForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set Labeled
 namesForReferences namesPerspective refs = do
   withPGRefs <-
     Set.toList refs
-      & CV.labeledDependencies1ToValidPGRefs
+      & CV.labeledDependencies1ToPG
+      & fmap catMaybes -- Filter out any missing components
       & PG.pipelined
   (termNames, typeNames) <- foldMapM namesForReference withPGRefs
   pure $ Names.fromTermsAndTypes termNames typeNames

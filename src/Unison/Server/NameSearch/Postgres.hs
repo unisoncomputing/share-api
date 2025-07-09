@@ -57,16 +57,16 @@ nameSearchForPerspective namesPerspective =
         }
 
     lookupNamesForTypes :: V1.Reference -> PG.Transaction e (Set (HQ'.HashQualified Name))
-    lookupNamesForTypes ref = do
-      pgRef <- CV.references1ToPGOf id ref
+    lookupNamesForTypes ref = fromMaybeT (pure mempty) $ do
+      pgRef <- MaybeT $ CV.references1ToPGOf id ref
       names <- NLOps.typeNamesForRefWithinNamespace namesPerspective pgRef Nothing
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Reference.toShortHash ref))
         & Set.fromList
         & pure
     lookupNamesForTerms :: V1Referent.Referent -> PG.Transaction e (Set (HQ'.HashQualified Name))
-    lookupNamesForTerms ref = do
-      pgRef <- CV.referents1ToPGOf id ref
+    lookupNamesForTerms ref = fromMaybeT (pure mempty) $ do
+      pgRef <- MaybeT $ CV.referents1ToPGOf id ref
       names <- NLOps.termNamesForRefWithinNamespace namesPerspective pgRef Nothing
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Referent.toShortHash ref))
@@ -86,7 +86,7 @@ nameSearchForPerspective namesPerspective =
           let fqn = fullyQualifyName name
           termRefsV1 <-
             Set.toList <$> Codebase.termReferentsByShortHash sh
-          termRefsPG <- CV.referents1ToPGOf traversed termRefsV1
+          termRefsPG <- catMaybes <$> CV.referents1ToPGOf traversed termRefsV1
           fmap Set.fromList . forMaybe (zip termRefsV1 termRefsPG) $ \(termRef, pgTermRef) -> do
             matches <-
               NLOps.termNamesForRefWithinNamespace namesPerspective pgTermRef (Just . coerce $ Name.reverseSegments name)
@@ -109,7 +109,7 @@ nameSearchForPerspective namesPerspective =
         HQ'.HashQualified name sh -> do
           let fqn = fullyQualifyName name
           typeRefs <- Set.toList <$> Codebase.typeReferencesByShortHash sh
-          pgTypeRefs <- CV.references1ToPGOf traversed typeRefs
+          pgTypeRefs <- catMaybes <$> CV.references1ToPGOf traversed typeRefs
           fmap Set.fromList . forMaybe (zip typeRefs pgTypeRefs) $ \(typeRef, pgTypeRef) -> do
             matches <-
               NLOps.typeNamesForRefWithinNamespace namesPerspective pgTypeRef (Just . coerce $ Name.reverseSegments name)
