@@ -24,9 +24,7 @@ ppedForReferences namesPerspective refs = do
   Logging.logDebugText $ "ppedForReferences: " <> tShow refs
   withPGRefs <-
     Set.toList refs
-      & CV.labeledDependencies1ToPG
-
-  -- Logging.logDebugText $ "ppedForReferences: withPGRefs: " <> tShow withPGRefs
+      & CV.labeledDependencies1ToValidPGRefs
   (termNames, typeNames) <- foldMapM namesForReference withPGRefs
   -- Logging.logDebugText $ "ppedForReferences: termNames: " <> tShow termNames
   pure $ ppedFromNamesWithSuffixes termNames typeNames
