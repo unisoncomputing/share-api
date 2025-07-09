@@ -333,7 +333,7 @@ instance DecodeRow FuzzySearchScore where
 -- | Searches for all names within the given name lookup which contain the provided list of segments
 -- in order.
 -- Search is case insensitive.
-fuzzySearchTerms :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
+fuzzySearchTerms :: (PG.QueryA m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
 fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
   fmap unRow
     <$> PG.queryListRows
@@ -392,7 +392,7 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
 -- in order.
 --
 -- Search is case insensitive.
-fuzzySearchTypes :: (PG.QueryM m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef PGReference)]
+fuzzySearchTypes :: (PG.QueryA m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef PGReference)]
 fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
   fmap unRow
     <$> PG.queryListRows
