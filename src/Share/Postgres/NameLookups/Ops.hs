@@ -124,20 +124,22 @@ fuzzySearchDefinitions ::
   Text ->
   m ([(Q.FuzzySearchScore, NameLookups.NamedRef (Referent, Maybe ConstructorType))], [(Q.FuzzySearchScore, NamedRef Reference)])
 fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHashId, relativePerspective, nameLookupReceipt} limit querySegments lastQuerySegment = do
-  pgTermNames <-
-    Q.fuzzySearchTerms nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
-      <&> fmap \termName ->
-        termName
-          & second (stripPrefixFromNamedRef relativePerspective)
-  pgTypeNames <-
-    Q.fuzzySearchTypes nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
-      <&> fmap \typeName ->
-        typeName
-          & second (stripPrefixFromNamedRef relativePerspective)
-
-  termNames <- pgTermNames & (traversed . _2 . traversed . _1) %%~ CV.referentPGTo2
-  typeNames <- pgTypeNames & (traversed . _2 . traversed) %%~ CV.referencePGTo2
-  pure (termNames, typeNames)
+  (pgTermNames, pgTypeNames) <- PG.pipelined $ do
+    pgTermNames <-
+      Q.fuzzySearchTerms nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
+        <&> fmap \termName ->
+          termName
+            & second (stripPrefixFromNamedRef relativePerspective)
+    pgTypeNames <-
+      Q.fuzzySearchTypes nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
+        <&> fmap \typeName ->
+          typeName
+            & second (stripPrefixFromNamedRef relativePerspective)
+    pure (pgTermNames, pgTypeNames)
+  PG.pipelined $ do
+    termNames <- pgTermNames & CV.referentsPGTo2Of (traversed . _2 . traversed . _1)
+    typeNames <- pgTypeNames & CV.referencesPGTo2Of (traversed . _2 . traversed)
+    pure (termNames, typeNames)
 
 -- | Get the list of (fqn, suffixified) names for a given Referent.
 termNamesForRefWithinNamespace :: (PG.QueryM m) => NamesPerspective -> PGReferent -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
@@ -167,12 +169,12 @@ refsForExactName query NamesPerspective {nameLookupBranchHashId, pathToMountedNa
 termRefsForExactName :: (PG.QueryM m) => NamesPerspective -> ReversedName -> m [NamedRef V1.Referent]
 termRefsForExactName namesPerspective reversedName = do
   refsForExactName NameLookupQ.termRefsForExactName namesPerspective reversedName
-    >>= traverse (traverse (CV.referentPGTo1UsingCT))
+    >>= CV.referentsPGTo1UsingCTOf (traversed . traversed)
 
 typeRefsForExactName :: (PG.QueryM m) => NamesPerspective -> ReversedName -> m [NamedRef V1.Reference]
 typeRefsForExactName namesPerspective reversedName = do
   refsForExactName NameLookupQ.typeRefsForExactName namesPerspective reversedName
-    >>= (traverse . traverse) CV.referencePGTo1
+    >>= CV.referencesPGTo1Of (traverse . traverse)
 
 -- | Check whether we've already got an index for a given branch hash.
 checkBranchHashNameLookupExists :: (PG.QueryM m) => BranchHash -> m Bool
