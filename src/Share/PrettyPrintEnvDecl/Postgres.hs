@@ -22,7 +22,7 @@ ppedForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledD
 ppedForReferences namesPerspective refs = do
   withPGRefs <-
     Set.toList refs
-      & CV.labeledDependencies1ToPG
+      & CV.labeledDependencies1ToValidPGRefs
   (termNames, typeNames) <- foldMapM namesForReference withPGRefs
   pure $ ppedFromNamesWithSuffixes termNames typeNames
   where

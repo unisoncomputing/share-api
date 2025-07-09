@@ -17,6 +17,7 @@ module Share.Postgres.Hashes.Queries
     expectComponentHashesOf,
     expectComponentHashId,
     expectComponentHash,
+    componentHashIdsOf,
     expectPatchHashesOf,
     expectPatchIdsOf,
     ensureBranchHashId,
@@ -93,6 +94,26 @@ expectComponentHashIdsOf trav s = do
         SELECT * FROM ^{toTable numberedHashes}
       )
       SELECT component_hashes.id FROM component_hashes JOIN hashes ON component_hashes.base32 = hashes.hash
+        ORDER BY hashes.ord ASC
+      |]
+      if length results /= length componentHashes
+        then error "expectComponentHashIdsOf: Missing expected component hash"
+        else pure results
+
+-- | Get the matching hashId for every component hash, or Nothing if the hash is not found.
+componentHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t ComponentHash (Maybe ComponentHashId) -> s -> m t
+componentHashIdsOf trav s = do
+  s
+    & unsafePartsOf trav %%~ \componentHashes -> do
+      let numberedHashes = zip [1 :: Int32 ..] componentHashes
+      results :: [Maybe ComponentHashId] <-
+        queryListCol
+          [sql|
+      WITH hashes(ord, hash) AS (
+        SELECT * FROM ^{toTable numberedHashes}
+      )
+      SELECT component_hashes.id FROM hashes
+        LEFT JOIN component_hashes ON component_hashes.base32 = hashes.hash
         ORDER BY hashes.ord ASC
       |]
       if length results /= length componentHashes
