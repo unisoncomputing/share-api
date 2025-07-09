@@ -10,9 +10,6 @@ module Share.Postgres.NameLookups.Conversions
     referencesPGTo2Of,
     referentsPGTo1UsingCTOf,
     referentsPGTo2Of,
-    namedReferentsWithCT2ToPG,
-    namedReferents2ToPG,
-    namedReferences2ToPG,
     labeledDependencies1ToPG,
   )
 where
@@ -21,7 +18,6 @@ import Control.Lens
 import Share.Postgres qualified as PG
 import Share.Postgres.Hashes.Queries qualified as Hashes
 import Share.Postgres.IDs (ComponentHash (..))
-import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import U.Codebase.Reference qualified as V2
@@ -89,33 +85,6 @@ referentsPGTo2Of trav s =
   s
     -- This is safe here because ensureComponentHashes always returns the same number of elements as it is given
     & unsafePartsOf (trav . V2.refs_ . V2.h_) %%~ (fmap coerce . Hashes.expectComponentHashesOf traversed)
-
--- | Batch convert named refs, ensuring we also have a hash saved for each ref.
-namedReferentsWithCT2ToPG :: (PG.QueryA m) => [NamedRef (V2.Referent, Maybe V2.ConstructorType)] -> m [NamedRef (PGReferent, Maybe V2.ConstructorType)]
-namedReferentsWithCT2ToPG refs =
-  refs
-    &
-    -- This is safe here because ensureComponentHashIdsOf always returns the same number of elements as it is given
-    unsafePartsOf (traversed . ref_ . _1 . V2.refs_ . V2.h_)
-      %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
-
--- | Batch convert named refs, ensuring we also have a hash saved for each ref.
-namedReferents2ToPG :: (PG.QueryA m) => [NamedRef V2.Referent] -> m [NamedRef PGReferent]
-namedReferents2ToPG refs =
-  refs
-    &
-    -- This is safe here because ensureComponentHashIdsOf always returns the same number of elements as it is given
-    unsafePartsOf (traversed . ref_ . V2.refs_ . V2.h_)
-      %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
-
--- | Batch convert named refs, ensuring we also have a hash saved for each ref.
-namedReferences2ToPG :: (PG.QueryA m) => [NamedRef V2.Reference] -> m [NamedRef PGReference]
-namedReferences2ToPG refs =
-  refs
-    &
-    -- This is safe here because ensureComponentHashIdsOf always returns the same number of elements as it is given
-    unsafePartsOf (traversed . ref_ . V2.h_)
-      %%~ (Hashes.ensureComponentHashIdsOf traversed . fmap ComponentHash)
 
 -- | This is similar to `labeledDependencies1ToPG`, but it filters out refs for components
 -- which don't exist on Share, e.g. generated accessors.
