@@ -114,9 +114,15 @@ data TransactionError e
   = Unrecoverable SomeServerError
   | Err !e
 
+newtype Tags = Tags (Map Text Text)
+
+instance Env.HasTags Tags where
+  getTags (Tags tags) = pure tags
+  updateTags f (Tags tags) = pure (Tags (f tags))
+
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
-newtype Transaction e a = Transaction {unTransaction :: ReaderT (Env.Env ()) Hasql.Session (Either (TransactionError e) a)}
-  deriving (Functor, Applicative, Monad, MonadReader (Env.Env ())) via (ReaderT (Env.Env ()) (ExceptT (TransactionError e) Hasql.Session))
+newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)}
+  deriving (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger) via (Logging.LoggerT (ReaderT (Env.Env Tags) (ExceptT (TransactionError e) Hasql.Session)))
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err
@@ -132,7 +138,7 @@ newtype Pipeline e a = Pipeline {unPipeline :: Hasql.Pipeline.Pipeline (Either (
 
 -- | Run a pipeline in a transaction
 pipelined :: Pipeline e a -> Transaction e a
-pipelined p = Transaction (lift $ Hasql.pipeline (unPipeline p))
+pipelined p = Transaction (lift . lift $ Hasql.pipeline (unPipeline p))
 
 -- | Like fmap, but the provided function can throw a recoverable error by returning 'Left'.
 pEitherMap :: (a -> Either e b) -> Pipeline e a -> Pipeline e b
@@ -154,8 +160,8 @@ pFor_ f p = pipelined $ for_ f p
 type T = Transaction Void
 
 -- | A session that may fail with an error 'e'
-newtype Session e a = Session {_unSession :: ReaderT (Env.Env ()) (ExceptT (TransactionError e) Hasql.Session) a}
-  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env ()), MonadIO, MonadError (TransactionError e))
+newtype Session e a = Session {_unSession :: Logging.LoggerT (ReaderT (Env.Env Tags) (ExceptT (TransactionError e) Hasql.Session)) a}
+  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), MonadIO, Logging.MonadLogger, MonadError (TransactionError e))
 
 data PostgresError
   = PostgresError (Pool.UsageError)
@@ -190,9 +196,9 @@ data IsolationLevel
 -- | Run a transaction in a session
 transaction :: forall e a. IsolationLevel -> Mode -> Transaction e a -> Session e a
 transaction isoLevel mode (Transaction t) = Session do
-  let loop :: ReaderT (Env.Env ()) Session.Session (Either (TransactionError e) a)
+  let loop :: Logging.LoggerT (ReaderT (Env.Env Tags) Session.Session) (Either (TransactionError e) a)
       loop = do
-        lift $ beginTransaction isoLevel mode
+        lift . lift $ beginTransaction isoLevel mode
         res <- catchError (Just <$> mayCommit t) \case
           Session.QueryError
             _
@@ -206,25 +212,25 @@ transaction isoLevel mode (Transaction t) = Session do
           err -> do
             -- Try rolling back, but this will most likely fail since the connection has
             -- already failed. If this fails we just rethrow the original exception.
-            lift $ catchError rollbackSession (const $ throwError err)
+            lift . lift $ catchError rollbackSession (const $ throwError err)
             -- It's very important to rethrow all QueryErrors so Hasql can remove the
             -- connection from the pool.
             throwError err
         case res of
           Nothing -> do
-            lift $ rollbackSession
-            loop
+            lift . lift $ rollbackSession
+            Logging.withTags (Map.singleton "transaction-retry" "true") loop
           Just res -> pure res
-  mapReaderT ExceptT loop
+  coerce loop
   where
-    mayCommit :: ReaderT (Env.Env ()) Hasql.Session (Either (TransactionError e) a) -> ReaderT (Env.Env ()) Hasql.Session (Either (TransactionError e) a)
+    mayCommit :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a) -> Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)
     mayCommit m =
       m >>= \case
         Left err -> do
-          lift rollbackSession
+          lift . lift $ rollbackSession
           pure (Left err)
         Right a -> do
-          lift commit
+          lift . lift $ commit
           pure (Right a)
 
 beginTransaction :: IsolationLevel -> Mode -> Hasql.Session ()
@@ -254,7 +260,7 @@ rollback e = Transaction do
 
 transactionStatement :: a -> Hasql.Statement a b -> Transaction e b
 transactionStatement v stmt = Transaction do
-  Right <$> lift (Session.statement v stmt)
+  Right <$> (lift . lift $ (Session.statement v stmt))
 
 -- | Run a read-only transaction within a session
 readTransaction :: Transaction e a -> Session e a
@@ -272,20 +278,20 @@ writeTransaction t = transaction defaultIsolationLevel ReadWrite t
 --
 -- Uses a Write transaction for simplicity since there's not much
 -- benefit in distinguishing transaction types.
-runTransaction :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => Transaction Void a -> m a
+runTransaction :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Transaction Void a -> m a
 runTransaction t = runSession (writeTransaction t)
 
-runTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => IsolationLevel -> Mode -> Transaction Void a -> m a
+runTransactionMode :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => IsolationLevel -> Mode -> Transaction Void a -> m a
 runTransactionMode isoLevel mode t = runSession (transaction isoLevel mode t)
 
 -- | Run a transaction in the App monad, returning an Either error.
 --
 -- Uses a Write transaction for simplicity since there's not much
 -- benefit in distinguishing transaction types.
-tryRunTransaction :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => Transaction e a -> m (Either e a)
+tryRunTransaction :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Transaction e a -> m (Either e a)
 tryRunTransaction t = tryRunSession (writeTransaction t)
 
-tryRunTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => IsolationLevel -> Mode -> Transaction e a -> m (Either e a)
+tryRunTransactionMode :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => IsolationLevel -> Mode -> Transaction e a -> m (Either e a)
 tryRunTransactionMode isoLevel mode t = tryRunSession (transaction isoLevel mode t)
 
 -- | Run a transaction in the App monad, responding to the request with an error if it fails.
@@ -299,33 +305,39 @@ runTransactionOrRespondError t = runSessionOrRespondError (writeTransaction t)
 --
 -- Uses a Write transaction for simplicity since there's not much
 -- benefit in distinguishing transaction types.
-unliftTransaction :: Transaction e a -> AppM x (IO (Either e a))
+unliftTransaction :: (Env.HasTags ctx) => Transaction e a -> AppM ctx (IO (Either e a))
 unliftTransaction t = unliftSession (writeTransaction t)
 
 -- | Run a session in the App monad without any errors.
-runSession :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => Session Void a -> m a
+runSession :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Session Void a -> m a
 runSession t = either absurd id <$> tryRunSession t
 
 -- | Run a session in the App monad, returning an Either error.
-tryRunSession :: (MonadReader (Env.Env x) m, MonadIO m, HasCallStack) => Session e a -> m (Either e a)
+tryRunSession :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Session e a -> m (Either e a)
 tryRunSession s = do
   env <- ask
   liftIO $ tryRunSessionWithEnv env s
 
 -- | Unlift a session to run in IO.
-unliftSession :: Session e a -> AppM x (IO (Either e a))
+unliftSession :: (Env.HasTags ctx) => Session e a -> AppM ctx (IO (Either e a))
 unliftSession s = do
   env <- ask
   pure $ tryRunSessionWithEnv env s
 
 -- | Manually run an unfailing session using the connection pool from the provided env.
-runSessionWithEnv :: (HasCallStack) => Env.Env any -> Session Void a -> IO a
+runSessionWithEnv :: (HasCallStack, Env.HasTags ctx) => Env.Env ctx -> Session Void a -> IO a
 runSessionWithEnv env s = either absurd id <$> tryRunSessionWithEnv env s
 
 -- | Manually run a session, using the connection pool from the provided env, returning an Either error.
-tryRunSessionWithEnv :: (HasCallStack) => Env.Env any -> Session e a -> IO (Either e a)
-tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool}) (Session s) = do
-  liftIO (Pool.use pool (runExceptT $ runReaderT s (void env))) >>= \case
+tryRunSessionWithEnv :: (HasCallStack, Env.HasTags ctx) => Env.Env ctx -> Session e a -> IO (Either e a)
+tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = do
+  tags <- Env.getTags env
+  let ioSession =
+        s
+          & Logging.runLoggerT minLogSeverity logger tags timeCache
+          & flip runReaderT (env $> Tags tags)
+          & runExceptT
+  liftIO (Pool.use pool ioSession) >>= \case
     Left err -> throwIO . someServerError $ PostgresError err
     Right (Left (Unrecoverable e)) -> throwIO e
     Right (Left (Err e)) -> pure (Left e)
@@ -353,7 +365,7 @@ class (Applicative m) => QueryA m where
       Right y -> pure y
       Left e -> unrecoverableError e
 
-class (Monad m, QueryA m) => QueryM m where
+class (Logging.MonadLogger m, QueryA m) => QueryM m where
   -- | Allow running IO actions in a transaction. These actions may be run multiple times if
   -- the transaction is retried.
   transactionUnsafeIO :: IO a -> m a
@@ -375,7 +387,7 @@ instance QueryM (Transaction e) where
 
 instance QueryA (Session e) where
   statement q s =
-    Session . lift . lift $ Session.statement q s
+    Session . lift . lift . lift $ Session.statement q s
 
   unrecoverableError e = do
     throwError (Unrecoverable (someServerError e))

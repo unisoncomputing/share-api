@@ -48,7 +48,7 @@ initialize scope = Ki.fork_ scope $ forever do
         PG.statement () $ Hasql.listen (Hasql.Identifier . Text.encodeUtf8 $ toChannelText kind)
       -- Wait for notifications
       let loop = do
-            Hasql.Notification {channel} <- PG.Session . lift . lift $ Hasql.await
+            Hasql.Notification {channel} <- PG.Session . lift . lift . lift $ Hasql.await
             fromChannelText channel & \case
               Just kind -> do
                 liftIO . STM.atomically $ STM.modifyTVar' notifs $ Set.insert kind

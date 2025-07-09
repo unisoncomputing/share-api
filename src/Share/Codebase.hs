@@ -187,7 +187,7 @@ codebaseEnv !_authZReceipt codebaseLoc = do
 
 -- | Construct a Runtime linked to a specific codebase.
 -- Don't use the runtime for one codebase with another codebase.
-codebaseRuntime :: (MonadReader (Env.Env x) m, MonadUnliftIO m) => CodebaseEnv -> m (CodebaseRuntime IO)
+codebaseRuntime :: (MonadReader (Env.Env x) m, MonadUnliftIO m, Env.HasTags x) => CodebaseEnv -> m (CodebaseRuntime IO)
 codebaseRuntime codebase = do
   unisonRuntime <- asks Env.sandboxedRuntime
   rt <- liftIO (codebaseRuntimeTransaction unisonRuntime codebase)
@@ -212,7 +212,7 @@ codebaseRuntimeTransaction unisonRuntime CodebaseEnv {codebaseOwner} = do
 -- will run every lookup in a separate transaction. But we can't use a `CodebaseRuntime Transaction` because we call
 -- back into UCM library code that expects a `CodebaseRuntime IO`.
 badAskUnliftCodebaseRuntime ::
-  (MonadReader (Env.Env x) m, MonadUnliftIO m) =>
+  (MonadReader (Env.Env x) m, MonadUnliftIO m, Env.HasTags x) =>
   m (CodebaseRuntime (PG.Transaction Void) -> CodebaseRuntime IO)
 badAskUnliftCodebaseRuntime = do
   UnliftIO.UnliftIO toIO <- askUnliftIO
@@ -222,12 +222,12 @@ badAskUnliftCodebaseRuntime = do
         cachedEvalResult = toIO . PG.runTransaction . cachedEvalResult
       }
 
-runCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m) => CodebaseEnv -> CodebaseM Void a -> m a
+runCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => CodebaseEnv -> CodebaseM Void a -> m a
 runCodebaseTransaction codebaseEnv m = do
   either absurd id <$> tryRunCodebaseTransaction codebaseEnv m
 
 -- | Run a CodebaseM transaction using the specified mode.
-runCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM Void a -> m a
+runCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM Void a -> m a
 runCodebaseTransactionMode isoLevel rwmode codebaseEnv m = do
   either absurd id <$> tryRunCodebaseTransactionMode isoLevel rwmode codebaseEnv m
 
@@ -243,11 +243,11 @@ runCodebaseTransactionModeOrRespondError isoLevel mode codebaseEnv m = do
     Left e -> respondError e
     Right a -> pure a
 
-tryRunCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM e a -> m (Either e a)
+tryRunCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM e a -> m (Either e a)
 tryRunCodebaseTransactionMode isoLevel rwmode codebaseEnv m = do
   PG.tryRunTransactionMode isoLevel rwmode . codebaseMToTransaction codebaseEnv $ m
 
-tryRunCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m) => CodebaseEnv -> CodebaseM e a -> m (Either e a)
+tryRunCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => CodebaseEnv -> CodebaseM e a -> m (Either e a)
 tryRunCodebaseTransaction codebaseEnv m = do
   PG.tryRunTransaction . codebaseMToTransaction codebaseEnv $ m
 

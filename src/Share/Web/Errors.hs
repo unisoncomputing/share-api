@@ -90,9 +90,9 @@ instance (Show a, TL.KnownNat errStatus, TL.KnownSymbol errorMsg) => Loggable (S
   toLog (SimpleServerError err) =
     let severity =
           if
-              | status < 400 -> Info
-              | status < 500 -> UserFault
-              | otherwise -> Error
+            | status < 400 -> Info
+            | status < 500 -> UserFault
+            | otherwise -> Error
      in Logging.textLog (errMsg <> ": " <> tShow err)
           & withSeverity severity
     where
@@ -182,7 +182,7 @@ reportError e = do
   let (ErrorID errID, serverErr) = toServerError e
   env <- ask
   RequestCtx {pathInfo, rawURI} <- asks Env.ctx
-  reqTags <- getTags
+  reqTags <- liftIO $ getTags env
   let errLog@LogMsg {msg} = withTag ("error-id", errID) $ toLog e
   -- We emit a separate log message for each error, but it's also
   -- handy to have that data on the main log for the request.

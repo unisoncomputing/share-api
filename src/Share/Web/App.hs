@@ -22,10 +22,8 @@ import Servant
 import Servant.Server.Generic (AsServerT)
 import Share.App
 import Share.Env
-import Share.Env qualified as Env
 import Share.IDs (RequestId, UserId)
 import Share.Prelude
-import Share.Utils.Logging
 import UnliftIO.STM
 
 type WebApp = AppM RequestCtx
@@ -50,16 +48,6 @@ data RequestCtx = RequestCtx
     rawURI :: Maybe URI
   }
 
-instance MonadLogger WebApp where
-  logMsg msg = do
-    log <- asks Env.logger
-    currentTags <- getTags
-    msg <- pure $ msg {tags = tags msg `Map.union` currentTags}
-    minSeverity <- asks Env.minLogSeverity
-    when (severity msg >= minSeverity) $ do
-      timestamp <- asks timeCache >>= liftIO
-      liftIO . log . logFmtFormatter timestamp $ msg
-
 -- | Generate an empty request context
 freshRequestCtx :: (MonadIO m) => m RequestCtx
 freshRequestCtx = do
@@ -76,13 +64,16 @@ freshRequestCtx = do
         }
     )
 
--- | Get the tags associated with the current request.
-getTags :: (MonadReader (Env RequestCtx) m, MonadIO m) => m (Map Text Text)
-getTags = do
-  RequestCtx {reqTagsVar, localTags} <- asks ctx
-  reqTags <- liftIO $ readTVarIO reqTagsVar
-  -- local tags take precedence over request tags
-  pure $ localTags <> reqTags
+instance HasTags RequestCtx where
+  -- Get the tags associated with the current request.
+  getTags RequestCtx {reqTagsVar, localTags} = do
+    reqTags <- liftIO $ readTVarIO reqTagsVar
+    -- local tags take precedence over request tags
+    pure $ localTags <> reqTags
+  updateTags f reqCtx = do
+    tags <- getTags reqCtx
+    let newTags = f tags
+    pure $ reqCtx {localTags = newTags <> localTags reqCtx}
 
 -- | Add a tag to the current request. This tag will be used in logging and error reports
 addRequestTag :: (MonadReader (Env RequestCtx) m, MonadIO m) => Text -> Text -> m ()
