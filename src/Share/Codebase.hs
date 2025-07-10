@@ -17,9 +17,8 @@ module Share.Codebase
     codebaseOwner,
     CodebaseRuntime (..),
     codebaseEnv,
-    codebaseRuntime,
+    withCodebaseRuntime,
     codebaseRuntimeTransaction,
-    badAskUnliftCodebaseRuntime,
     codebaseForProjectBranch,
     codebaseLocationForUserCodebase,
     codebaseLocationForProjectBranchCodebase,
@@ -78,7 +77,6 @@ where
 
 import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Lens
-import Control.Monad.Morph (hoist)
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
@@ -128,7 +126,6 @@ import Unison.DataDeclaration qualified as V1
 import Unison.Hash (Hash)
 import Unison.Parser.Ann
 import Unison.Parser.Ann qualified as Ann
-import Unison.Prelude (askUnliftIO)
 import Unison.Reference (TermReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1
@@ -185,20 +182,22 @@ codebaseEnv !_authZReceipt codebaseLoc = do
   let codebaseOwner = Codebase.codebaseOwnerUserId codebaseLoc
    in CodebaseEnv {codebaseOwner}
 
--- | Construct a Runtime linked to a specific codebase.
+-- | Construct a Runtime linked to a specific codebase and transaction.
 -- Don't use the runtime for one codebase with another codebase.
-codebaseRuntime :: (MonadReader (Env.Env x) m, MonadUnliftIO m, Env.HasTags x) => CodebaseEnv -> m (CodebaseRuntime IO)
-codebaseRuntime codebase = do
-  unisonRuntime <- asks Env.sandboxedRuntime
-  rt <- liftIO (codebaseRuntimeTransaction unisonRuntime codebase)
-  unlift <- badAskUnliftCodebaseRuntime
-  pure (unlift rt)
+-- Don't use this runtime in any transaction other than the one where it's created.
+withCodebaseRuntime :: Runtime Symbol -> (forall s. CodebaseRuntime s IO -> CodebaseM Void r) -> CodebaseM Void r
+withCodebaseRuntime sandboxedRuntime f = do
+  codebaseEnv <- ask
+  rt <- PG.transactionUnsafeIO (codebaseRuntimeTransaction sandboxedRuntime codebaseEnv)
+  lift . PG.asUnliftIOTransaction $ do
+    UnliftIO.withRunInIO \toIO -> do
+      toIO . PG.UnliftIOTransaction . codebaseMToTransaction codebaseEnv $ f $ hoistCodebaseRuntime (toIO . PG.UnliftIOTransaction) rt
 
 -- | Ideally, we'd use this – a runtime with lookup actions in transaction, not IO. But that will require refactoring to
 -- the runtime interface in ucm, so we can't use it for now. That's bad: we end up unsafely running separate
 -- transactions for inner calls to 'codeLookup' / 'cachedEvalResult', which can lead to deadlock due to a starved
 -- connection pool.
-codebaseRuntimeTransaction :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime (PG.Transaction e))
+codebaseRuntimeTransaction :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime s (PG.Transaction e))
 codebaseRuntimeTransaction unisonRuntime CodebaseEnv {codebaseOwner} = do
   cacheVar <- newTVarIO (CodeLookupCache mempty mempty)
   pure
@@ -206,20 +205,6 @@ codebaseRuntimeTransaction unisonRuntime CodebaseEnv {codebaseOwner} = do
       { codeLookup = codeLookupForUser cacheVar codebaseOwner,
         cachedEvalResult = (fmap . fmap) Term.unannotate . loadCachedEvalResult codebaseOwner,
         unisonRuntime
-      }
-
--- Why bad: see above comment on `codebaseRuntimeTransaction`. We don't want to use a `CodebaseRuntime IO`, because it
--- will run every lookup in a separate transaction. But we can't use a `CodebaseRuntime Transaction` because we call
--- back into UCM library code that expects a `CodebaseRuntime IO`.
-badAskUnliftCodebaseRuntime ::
-  (MonadReader (Env.Env x) m, MonadUnliftIO m, Env.HasTags x) =>
-  m (CodebaseRuntime (PG.Transaction Void) -> CodebaseRuntime IO)
-badAskUnliftCodebaseRuntime = do
-  UnliftIO.UnliftIO toIO <- askUnliftIO
-  pure \rt@CodebaseRuntime {codeLookup, cachedEvalResult} ->
-    rt
-      { codeLookup = hoist (toIO . PG.runTransaction) codeLookup,
-        cachedEvalResult = toIO . PG.runTransaction . cachedEvalResult
       }
 
 runCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => CodebaseEnv -> CodebaseM Void a -> m a

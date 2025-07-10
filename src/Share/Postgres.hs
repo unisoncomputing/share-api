@@ -10,6 +10,7 @@
 module Share.Postgres
   ( -- * Types
     Transaction,
+    UnliftIOTransaction (..),
     Pipeline,
     T,
     Session (..),
@@ -127,7 +128,7 @@ newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT
 -- | A very annoying type we must define so that we can embed transactions in IO for the
 -- Unison Runtime. You really shouldn't use this unless you absolutely need the MonadUnliftIO
 -- class for a PG transaction.
-newtype UnliftIOTransaction a = UnliftIOTransaction (Transaction Void a)
+newtype UnliftIOTransaction a = UnliftIOTransaction {asUnliftIOTransaction :: Transaction Void a}
   deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger)
 
 instance MonadIO UnliftIOTransaction where
