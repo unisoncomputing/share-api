@@ -106,7 +106,7 @@ import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
 import Share.Web.App
-import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
+import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
 import UnliftIO qualified
 
@@ -123,6 +123,28 @@ instance Env.HasTags Tags where
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
 newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)}
   deriving (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger) via (Logging.LoggerT (ReaderT (Env.Env Tags) (ExceptT (TransactionError e) Hasql.Session)))
+
+-- | A very annoying type we must define so that we can embed transactions in IO for the
+-- Unison Runtime. You really shouldn't use this unless you absolutely need the MonadUnliftIO
+-- class for a PG transaction.
+newtype UnliftIOTransaction a = UnliftIOTransaction (Transaction Void a)
+  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger)
+
+instance MonadIO UnliftIOTransaction where
+  liftIO io = UnliftIOTransaction . Transaction $ Right <$> liftIO io
+
+instance MonadUnliftIO UnliftIOTransaction where
+  withRunInIO f = UnliftIOTransaction $ Transaction $ do
+    unliftIO <- UnliftIO.askUnliftIO
+    r <- UnliftIO.try $ liftIO $ f \(UnliftIOTransaction (Transaction m)) -> do
+      case unliftIO of
+        UnliftIO.UnliftIO toIO -> do
+          toIO m >>= \case
+            Left (Unrecoverable err) -> throwIO err
+            Right a -> pure a
+    case r of
+      Left err@(SomeServerError {}) -> pure (Left (Unrecoverable err))
+      Right b -> pure $ Right b
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err

@@ -39,6 +39,7 @@ import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
 import Unison.Syntax.NameSegment qualified as NameSegment
+import UnliftIO (MonadUnliftIO (..))
 
 -- Orphans for 'Hash'
 instance Hasql.EncodeValue Hash where
@@ -64,7 +65,7 @@ instance Hasql.DecodeValue Hash32 where
       -- We can trust that encoded values are valid,
       -- and skipping validation is a significant performance improvement
       <&> Hash32.unsafeFromBase32Hex
-        . Base32Hex.UnsafeFromText
+      . Base32Hex.UnsafeFromText
 
 instance FromHttpApiData Hash where
   parseUrlPiece txt =
@@ -251,3 +252,14 @@ instance Logging.Loggable Hasql.SessionError where
     where
       indent :: Text -> Text
       indent = Text.unlines . fmap ("    " <>) . Text.lines
+
+-- | See https://github.com/nikita-volkov/hasql/issues/144
+-- This instance won't be added upstream.
+instance MonadUnliftIO Hasql.Session where
+  withRunInIO inner = do
+    conn <- ask
+    res <- liftIO $ try $ inner $ \sess -> do
+      Hasql.run sess conn >>= either throwIO pure
+    case res of
+      Left e -> throwError e
+      Right a -> pure a
