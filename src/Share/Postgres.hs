@@ -99,6 +99,7 @@ import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Hasql
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Hasql
+import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Share.App
 import Share.Debug qualified as Debug
 import Share.Env qualified as Env
@@ -126,11 +127,14 @@ instance Env.HasTags Tags where
 newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)}
   deriving (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger) via (Logging.LoggerT (ReaderT (Env.Env Tags) (ExceptT (TransactionError e) Hasql.Session)))
 
+instance MonadTracer (Transaction e) where
+  getTracer = asks Env.tracer
+
 -- | A very annoying type we must define so that we can embed transactions in IO for the
 -- Unison Runtime. You really shouldn't use this unless you absolutely need the MonadUnliftIO
 -- class for a PG transaction.
 newtype UnliftIOTransaction e a = UnliftIOTransaction {asUnliftIOTransaction :: Transaction e a}
-  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger)
+  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger, MonadTracer)
 
 instance MonadIO (UnliftIOTransaction e) where
   liftIO io = UnliftIOTransaction . Transaction $ Right <$> liftIO io

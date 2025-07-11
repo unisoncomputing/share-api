@@ -14,6 +14,7 @@ import Crypto.Random.Types qualified as Cryptonite
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Database.Redis qualified as R
+import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Servant
 import Share.Env (Env (..))
 import Share.Env qualified as Env
@@ -38,6 +39,9 @@ instance (Env.HasTags ctx) => Logging.MonadLogger (AppM ctx) where
     env <- ask
     env' <- Env.updateTags (Map.union newTags) env
     AppM $ local (const env') m
+
+instance MonadTracer (AppM reqCtx) where
+  getTracer = asks Env.tracer
 
 runAppM :: Env reqCtx -> AppM reqCtx a -> IO a
 runAppM env (AppM m) = runReaderT m env
