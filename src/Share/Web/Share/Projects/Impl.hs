@@ -295,18 +295,16 @@ namespaceHashForBranchOrRelease authZReceipt Project {projectId, ownerUserId = p
       let causalId = Branch.causal branch
       let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId (Branch.contributorId branch)
       let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-      Codebase.codebaseMToTransaction codebase do
-        branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
-        pure (codebase, causalId, branchHashId)
+      branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+      pure (codebase, causalId, branchHashId)
   IDs.IsReleaseShortHand releaseShortHand -> do
     PG.runTransactionOrRespondError $ do
       release <- Q.releaseByProjectIdAndReleaseShortHand projectId releaseShortHand `whenNothingM` throwError (EntityMissing (ErrorID "release-not-found") ("Release not found: " <> IDs.toText @IDs.ReleaseShortHand releaseShortHand))
       let causalId = Release.squashedCausal release
       let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
       let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-      Codebase.codebaseMToTransaction codebase do
-        branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
-        pure (codebase, causalId, branchHashId)
+      branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+      pure (codebase, causalId, branchHashId)
 
 createProjectEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> CreateProjectRequest -> WebApp CreateProjectResponse
 createProjectEndpoint mayCaller userHandle projectSlug req = do

@@ -213,8 +213,7 @@ getTermDefinition (codebase, rt, bhId, name) = do
   (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
   let ppedBuilder deps = PPED.biasTo [name] <$> PPEPostgres.ppedForReferences namesPerspective deps
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  Codebase.codebaseMToTransaction codebase do
-    Definitions.termDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
+  Definitions.termDefinitionByName codebase ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width
     renderWidth = 80
@@ -238,10 +237,9 @@ getTypeDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, Branc
 getTypeDefinition (codebase, rt, bhId, name) = do
   let perspective = mempty
   (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
-  let ppedBuilder deps = (PPED.biasTo [name]) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+  let ppedBuilder deps = (PPED.biasTo [name]) <$> (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  Codebase.codebaseMToTransaction codebase do
-    Definitions.typeDefinitionByName ppedBuilder nameSearch renderWidth rt relocatedName
+  Definitions.typeDefinitionByName codebase ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width
     renderWidth = 80

@@ -1,6 +1,5 @@
 module Share.Codebase.Types
-  ( CodebaseM,
-    CodebaseEnv (..),
+  ( CodebaseEnv (..),
     CodebaseRuntime (..),
     CodebaseLocation (..),
     hoistCodebaseRuntime,
@@ -13,8 +12,6 @@ where
 
 import Control.Monad.Morph (MFunctor (..))
 import Share.IDs
-import Share.Postgres qualified as PG
-import Share.Prelude
 import Unison.Codebase.CodeLookup qualified as CL
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.Runtime qualified as Rt
@@ -48,9 +45,6 @@ hoistCodebaseRuntime f (CodebaseRuntime lookup eval runtime) =
       cachedEvalResult = \id -> f (eval id),
       unisonRuntime = runtime
     }
-
--- | A PG Transaction scoped to a specific user codebase.
-type CodebaseM e = ReaderT CodebaseEnv (PG.Transaction e)
 
 newtype CodebaseLocation = CodebaseLocation {codebaseOwnerUserId :: UserId}
   deriving stock (Eq, Ord, Show)

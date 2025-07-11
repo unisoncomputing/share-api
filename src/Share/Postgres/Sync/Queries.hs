@@ -22,7 +22,7 @@ import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Data.Vector qualified as Vector
 import Servant (ServerError (..), err500)
-import Share.Codebase.Types (CodebaseM)
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Codebase.Types qualified as Codebase
 import Share.IDs
 import Share.Postgres
@@ -79,27 +79,27 @@ instance Logging.Loggable SyncQError where
   toLog = Logging.withSeverity Logging.Error . Logging.showLog
 
 -- | Read an entity out of the database that we know is in main storage.
-expectEntity :: (HasCallStack) => Hash32 -> CodebaseM e (Share.Entity Text Hash32 Hash32)
-expectEntity hash = do
+expectEntity :: (HasCallStack, QueryM m) => Codebase.CodebaseEnv -> Hash32 -> m (Share.Entity Text Hash32 Hash32)
+expectEntity codebase hash = do
   expectEntityKindForHash hash >>= \case
     CausalEntity -> do
-      causalId <- CausalQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
+      causalId <- CausalQ.expectCausalIdByHash codebase (fromHash32 @CausalHash hash)
       Share.C <$> CausalQ.expectCausalEntity causalId
     NamespaceEntity -> do
-      bhId <- HashQ.expectBranchHashId (fromHash32 @BranchHash $ hash)
+      bhId <- HashQ.expectBranchHashId codebase (fromHash32 @BranchHash $ hash)
       Share.N <$> CausalQ.expectNamespaceEntity bhId
     TermEntity -> do
       componentHashId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
-      Share.TC <$> DefnQ.expectShareTermComponent componentHashId
+      Share.TC <$> DefnQ.expectShareTermComponent codebase componentHashId
     TypeEntity -> do
       componentHashId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
-      Share.DC <$> DefnQ.expectShareTypeComponent componentHashId
+      Share.DC <$> DefnQ.expectShareTypeComponent codebase componentHashId
     PatchEntity -> do
-      patchId <- HashQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
+      patchId <- HashQ.expectPatchIdsOf codebase id (fromHash32 @PatchHash hash)
       Share.P <$> PatchQ.expectPatchEntity patchId
 
 -- | Determine the kind of an arbitrary hash.
-expectEntityKindForHash :: (HasCallStack) => Hash32 -> CodebaseM e EntityKind
+expectEntityKindForHash :: (QueryM m, HasCallStack) => Hash32 -> m EntityKind
 expectEntityKindForHash h =
   do
     queryExpect1Row
@@ -117,17 +117,16 @@ expectEntityKindForHash h =
       (_, _, True, _, _) -> pure TermEntity
       (_, _, _, True, _) -> pure TypeEntity
       (_, _, _, _, True) -> pure PatchEntity
-      _ -> lift . unrecoverableError $ InternalServerError "expected-hash-not-found" (ExpectedHashNotFound h)
+      _ -> unrecoverableError $ InternalServerError "expected-hash-not-found" (ExpectedHashNotFound h)
 
 -- | Efficiently determine the location of a batch of entities.
-entityLocations :: EntityBunch Hash32 -> CodebaseM e (EntityBunch (Hash32, Maybe Share.EntityLocation))
-entityLocations sortedEntities = do
-  codebaseUserId <- asks Codebase.codebaseOwner
-  causalLocations <- getCausalLocations codebaseUserId (causals sortedEntities)
-  namespaceLocations <- getNamespaceLocations codebaseUserId (namespaces sortedEntities)
-  termLocations <- getTermLocations codebaseUserId (terms sortedEntities)
-  typeLocations <- getTypeLocations codebaseUserId (types sortedEntities)
-  patchLocations <- getPatchLocations codebaseUserId (patches sortedEntities)
+entityLocations :: forall m. (QueryM m) => CodebaseEnv -> EntityBunch Hash32 -> m (EntityBunch (Hash32, Maybe Share.EntityLocation))
+entityLocations (CodebaseEnv {codebaseOwner}) sortedEntities = do
+  causalLocations <- getCausalLocations codebaseOwner (causals sortedEntities)
+  namespaceLocations <- getNamespaceLocations codebaseOwner (namespaces sortedEntities)
+  termLocations <- getTermLocations codebaseOwner (terms sortedEntities)
+  typeLocations <- getTypeLocations codebaseOwner (types sortedEntities)
+  patchLocations <- getPatchLocations codebaseOwner (patches sortedEntities)
   pure
     EntityBunch
       { causals = causalLocations,
@@ -148,7 +147,7 @@ entityLocations sortedEntities = do
         (False, True) -> (hash, Just Share.EntityInTempStorage)
         (False, False) -> (hash, Nothing)
 
-    getCausalLocations :: UserId -> [Hash32] -> CodebaseM e [(Hash32, Maybe Share.EntityLocation)]
+    getCausalLocations :: UserId -> [Hash32] -> m [(Hash32, Maybe Share.EntityLocation)]
     getCausalLocations codebaseUserId causalHashes = do
       queryListRows @(Hash32, Bool, Bool)
         [sql|
@@ -169,7 +168,7 @@ entityLocations sortedEntities = do
           FROM entities
         |]
         <&> fmap (toEntityLocation codebaseUserId)
-    getNamespaceLocations :: UserId -> [Hash32] -> CodebaseM e [(Hash32, Maybe Share.EntityLocation)]
+    getNamespaceLocations :: UserId -> [Hash32] -> m [(Hash32, Maybe Share.EntityLocation)]
     getNamespaceLocations codebaseUserId namespaceHashes = do
       queryListRows @(Hash32, Bool, Bool)
         [sql|
@@ -191,7 +190,7 @@ entityLocations sortedEntities = do
           FROM entities
         |]
         <&> fmap (toEntityLocation codebaseUserId)
-    getTermLocations :: UserId -> [Hash32] -> CodebaseM e [(Hash32, Maybe Share.EntityLocation)]
+    getTermLocations :: UserId -> [Hash32] -> m [(Hash32, Maybe Share.EntityLocation)]
     getTermLocations codebaseUserId termHashes = do
       queryListRows @(Hash32, Bool, Bool)
         [sql|
@@ -214,7 +213,7 @@ entityLocations sortedEntities = do
           FROM entities
         |]
         <&> fmap (toEntityLocation codebaseUserId)
-    getTypeLocations :: UserId -> [Hash32] -> CodebaseM e [(Hash32, Maybe Share.EntityLocation)]
+    getTypeLocations :: UserId -> [Hash32] -> m [(Hash32, Maybe Share.EntityLocation)]
     getTypeLocations codebaseUserId typeHashes = do
       queryListRows @(Hash32, Bool, Bool)
         [sql|
@@ -237,7 +236,7 @@ entityLocations sortedEntities = do
           FROM entities
         |]
         <&> fmap (toEntityLocation codebaseUserId)
-    getPatchLocations :: UserId -> [Hash32] -> CodebaseM e [(Hash32, Maybe Share.EntityLocation)]
+    getPatchLocations :: UserId -> [Hash32] -> m [(Hash32, Maybe Share.EntityLocation)]
     getPatchLocations codebaseUserId patchHashes = do
       queryListRows @(Hash32, Bool, Bool)
         [sql|
@@ -262,9 +261,8 @@ entityLocations sortedEntities = do
 -- | Save a temp entity to the temp entities table, also tracking its missing dependencies.
 -- You can pass ALL the dependencies of the temp entity, the query will determine which ones
 -- are missing.
-saveTempEntities :: (Foldable f) => f (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e ()
-saveTempEntities entities = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+saveTempEntities :: (QueryM m, Foldable f) => CodebaseEnv -> f (Hash32, Share.Entity Text Hash32 Hash32) -> m ()
+saveTempEntities (CodebaseEnv {codebaseOwner}) entities = do
   let tempEntities =
         Foldable.toList entities <&> \(hash, entity) ->
           let te = Share.entityToTempEntity id entity
@@ -279,7 +277,7 @@ saveTempEntities entities = do
         SELECT * FROM ^{toTable tempEntitiesTable}
       )
       INSERT INTO temp_entity (user_id, hash, bytes, kind)
-        SELECT #{codebaseOwnerUserId}, hash, bytes, kind::entity_kind FROM temp_entities
+        SELECT #{codebaseOwner}, hash, bytes, kind::entity_kind FROM temp_entities
       ON CONFLICT DO NOTHING
     |]
   execute_
@@ -288,17 +286,16 @@ saveTempEntities entities = do
           SELECT * FROM ^{toTable dependenciesTable}
         )
         INSERT INTO temp_entity_missing_dependency (user_id, dependent, dependency)
-        SELECT #{codebaseOwnerUserId}, dependencies.dependent, dependencies.dependency
+        SELECT #{codebaseOwner}, dependencies.dependent, dependencies.dependency
           FROM dependencies
           -- Filter out any dependencies that we already have in main storage.
-          WHERE NOT have_hash_in_codebase(#{codebaseOwnerUserId}, dependencies.dependency)
+          WHERE NOT have_hash_in_codebase(#{codebaseOwner}, dependencies.dependency)
           ON CONFLICT DO NOTHING
     |]
 
 -- | Filter down the given hashes to ones which are ready to flush.
-filterForFlushableHashes :: Set Hash32 -> CodebaseM e (Set Hash32)
-filterForFlushableHashes hashesToCheck = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+filterForFlushableHashes :: (QueryM m) => CodebaseEnv -> Set Hash32 -> m (Set Hash32)
+filterForFlushableHashes (CodebaseEnv {codebaseOwner}) hashesToCheck = do
   queryListCol
     [sql|
     WITH hashes_to_check(hash) AS (
@@ -307,24 +304,23 @@ filterForFlushableHashes hashesToCheck = do
       SELECT hash FROM hashes_to_check
         WHERE NOT EXISTS(SELECT FROM temp_entity_missing_dependency missing_dep
                           WHERE missing_dep.dependent = hashes_to_check.hash
-                            AND missing_dep.user_id = #{codebaseOwnerUserId}
+                            AND missing_dep.user_id = #{codebaseOwner}
                         )
   |]
     <&> Set.fromList
 
 -- | Remove a single entity that's ready to flush from the temp entities table,
 -- and return it. If the provided hash isn't ready to flush, don't return anything.
-tryPopFlushableTempEntity :: Hash32 -> CodebaseM e (Maybe (Hash32, TempEntity))
-tryPopFlushableTempEntity hashToCheck = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+tryPopFlushableTempEntity :: (QueryA m) => CodebaseEnv -> Hash32 -> m (Maybe (Hash32, TempEntity))
+tryPopFlushableTempEntity (CodebaseEnv {codebaseOwner}) hashToCheck = do
   query1Row
     [sql|
     DELETE FROM temp_entity
-      WHERE temp_entity.user_id = #{codebaseOwnerUserId}
+      WHERE temp_entity.user_id = #{codebaseOwner}
         AND temp_entity.hash = #{hashToCheck}
         AND NOT EXISTS(SELECT FROM temp_entity_missing_dependency missing_dep
                           WHERE missing_dep.dependent = #{hashToCheck}
-                            AND missing_dep.user_id = #{codebaseOwnerUserId}
+                            AND missing_dep.user_id = #{codebaseOwner}
                         )
       RETURNING hash, kind, bytes
   |]
@@ -332,13 +328,12 @@ tryPopFlushableTempEntity hashToCheck = do
 
 -- | Delete missing-dependency rows for an entity which has been
 -- saved to main storage, returning the set of dependents.
-clearTempDependencies :: Hash32 -> CodebaseM e (Set Hash32)
-clearTempDependencies hash = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+clearTempDependencies :: (QueryA m) => CodebaseEnv -> Hash32 -> m (Set Hash32)
+clearTempDependencies (CodebaseEnv {codebaseOwner}) hash = do
   queryListCol @Hash32
     [sql|
     DELETE FROM temp_entity_missing_dependency dep
-      WHERE dep.user_id = #{codebaseOwnerUserId}
+      WHERE dep.user_id = #{codebaseOwner}
         AND dep.dependency = #{hash}
       RETURNING dependent
   |]
@@ -346,74 +341,74 @@ clearTempDependencies hash = do
 
 -- | Save a temp entity to main storage, and clear any missing dependency rows for it, and
 -- return the set of hashes which dependended on it and _might_ now be ready to flush.
-saveTempEntityInMain :: forall e. (HasCallStack) => Hash32 -> TempEntity -> CodebaseM e (Set Hash32)
-saveTempEntityInMain hash entity = do
+saveTempEntityInMain :: forall m. (HasCallStack, QueryM m) => Codebase.CodebaseEnv -> Hash32 -> TempEntity -> m (Set Hash32)
+saveTempEntityInMain codebase hash entity = do
   saveEntity entity
-  clearTempDependencies hash
+  clearTempDependencies codebase hash
   where
-    saveEntity :: TempEntity -> CodebaseM e ()
+    saveEntity :: TempEntity -> m ()
     saveEntity = \case
       Entity.TC (TermFormat.SyncTerm syncTermComponent) -> do
         doTermComponent entity syncTermComponent
       Entity.DC (DeclFormat.SyncDecl syncDecl) -> do
         doDeclComponent entity syncDecl
       Entity.N BranchFormat.SyncDiff {} ->
-        lift . unrecoverableError $ InternalServerError "namespace-diffs-not-supported" Unimplemented
+        unrecoverableError $ InternalServerError "namespace-diffs-not-supported" Unimplemented
       Entity.N (BranchFormat.SyncFull localIds bytes) -> doNamespace entity localIds bytes
-      Entity.P PatchFormat.SyncDiff {} -> lift . unrecoverableError $ InternalServerError "patch-diffs-not-supported" Unimplemented
+      Entity.P PatchFormat.SyncDiff {} -> unrecoverableError $ InternalServerError "patch-diffs-not-supported" Unimplemented
       Entity.P (PatchFormat.SyncFull localIds patchBytes) -> doPatch entity localIds patchBytes
       Entity.C (SqliteCausal.SyncCausalFormat {valueHash, parents}) -> doCausal entity valueHash parents
     doTermComponent ::
       TempEntity ->
       TermFormat.SyncLocallyIndexedComponent' Text Hash32 ->
-      CodebaseM e ()
+      m ()
     doTermComponent entity syncTermComponent = do
       let (TermFormat.SyncLocallyIndexedComponent termComponentElements) = syncTermComponent
       elementsWithDecodedType <-
         for termComponentElements \(localIds, termElementBytes) ->
           case S.decodeTermComponentElementType termElementBytes of
-            Left decodeErr -> lift . unrecoverableError $ InternalServerError "term-format-invalid" (InvalidTermComponentBytes $ from decodeErr)
+            Left decodeErr -> unrecoverableError $ InternalServerError "term-format-invalid" (InvalidTermComponentBytes $ from decodeErr)
             Right typ -> pure (localIds, TermComponentElementBytes termElementBytes, typ)
       componentWithIds <-
         ( Defn.ensureTextIdsOf (traversed . _1 . LocalIds.t_) elementsWithDecodedType
             >>= HashQ.ensureComponentHashIdsOf (traversed . _1 . LocalIds.h_ . hash32AsComponentHash_)
           )
           <&> Vector.toList
-      Defn.saveEncodedTermComponent componentHash (Just entity) componentWithIds
+      Defn.saveEncodedTermComponent codebase componentHash (Just entity) componentWithIds
     doDeclComponent ::
       TempEntity ->
       DeclFormat.SyncLocallyIndexedComponent' Text Hash32 ->
-      CodebaseM e ()
+      m ()
     doDeclComponent entity syncDecl = do
       declComponentElements <- case Decoders.unsyncDeclComponent syncDecl of
-        Left decodeErr -> lift . unrecoverableError $ InternalServerError "term-format-invalid" (InvalidTermComponentBytes decodeErr)
+        Left decodeErr -> unrecoverableError $ InternalServerError "term-format-invalid" (InvalidTermComponentBytes decodeErr)
         Right (DeclFormat.LocallyIndexedComponent elements) -> pure elements
       componentWithIds <-
         ( Defn.ensureTextIdsOf (traversed . _1 . LocalIds.t_) declComponentElements
             >>= HashQ.ensureComponentHashIdsOf (traversed . _1 . LocalIds.h_ . hash32AsComponentHash_)
           )
           <&> Vector.toList
-      Defn.saveTypeComponent componentHash (Just entity) componentWithIds
+      Defn.saveTypeComponent codebase componentHash (Just entity) componentWithIds
 
     doNamespace ::
       TempEntity ->
       BranchFormat.BranchLocalIds' Text Hash32 Hash32 (Hash32, Hash32) ->
       LocalBranchBytes ->
-      CodebaseM e ()
+      m ()
     doNamespace entity localIds bytes = do
       pgNamespace <-
         (expandNamespaceFormat localIds bytes)
           >>= Defn.ensureTextIdsOf BranchFull.t_
           >>= HashQ.expectComponentHashIdsOf (BranchFull.h_ . hash32AsComponentHash_)
-          >>= HashQ.expectPatchIdsOf (BranchFull.p_ . hash32AsPatchHash_)
-          >>= HashQ.expectCausalIdsOf (BranchFull.c_ . childHashT)
-      void $ CausalQ.savePgNamespace (Just entity) (Just (BranchHash . Hash32.toHash $ hash)) pgNamespace
+          >>= HashQ.expectPatchIdsOf codebase (BranchFull.p_ . hash32AsPatchHash_)
+          >>= HashQ.expectCausalIdsOf codebase (BranchFull.c_ . childHashT)
+      void $ CausalQ.savePgNamespace codebase (Just entity) (Just (BranchHash . Hash32.toHash $ hash)) pgNamespace
 
     doPatch ::
       TempEntity ->
       PatchFormat.PatchLocalIds' Text Hash32 Hash32 ->
       ByteString ->
-      CodebaseM e ()
+      m ()
     doPatch entity localIds patchBytes = do
       pgPatch <-
         expandPatchFormat localIds patchBytes
@@ -424,19 +419,19 @@ saveTempEntityInMain hash entity = do
           -- if for some reason they don't already exist.
           >>= HashQ.ensureComponentHashIdsOf (PatchFull.patchH_ . hash32AsComponentHash_)
           >>= HashQ.expectComponentHashIdsOf (PatchFull.patchO_ . hash32AsComponentHash_)
-      void $ PatchQ.savePatch (Just entity) (PatchHash . Hash32.toHash $ hash) pgPatch
+      void $ PatchQ.savePatch codebase (Just entity) (PatchHash . Hash32.toHash $ hash) pgPatch
 
     doCausal ::
       TempEntity ->
       Hash32 ->
       Vector.Vector Hash32 ->
-      CodebaseM e ()
+      m ()
     doCausal serialized valueHash parents = do
-      bhId <- HashQ.expectBranchHashId $ BranchHash (Hash32.toHash valueHash)
+      bhId <- HashQ.expectBranchHashId codebase $ BranchHash (Hash32.toHash valueHash)
       parentIds <-
-        HashQ.expectCausalIdsOf (traversed . hash32AsCausalHash_) parents
+        HashQ.expectCausalIdsOf codebase (traversed . hash32AsCausalHash_) parents
           <&> (Vector.toList >>> fmap snd >>> Set.fromList)
-      void $ CausalQ.saveCausal (Just serialized) (Just . CausalHash . Hash32.toHash $ hash) bhId parentIds
+      void $ CausalQ.saveCausal codebase (Just serialized) (Just . CausalHash . Hash32.toHash $ hash) bhId parentIds
 
     componentHash :: ComponentHash
     componentHash = ComponentHash . Hash32.toHash $ hash
@@ -448,16 +443,16 @@ saveTempEntityInMain hash entity = do
       (Ord text, Ord defn) =>
       (BranchFormat.BranchLocalIds' text defn patch child) ->
       BranchFormat.LocalBranchBytes ->
-      CodebaseM e (BranchFull.Branch' text defn patch child)
+      m (BranchFull.Branch' text defn patch child)
     expandNamespaceFormat localIds (BranchFormat.LocalBranchBytes bytes) = do
       case S.decodeNamespace bytes of
-        Left {} -> lift $ unrecoverableError $ InternalServerError "namespace-format-invalid" InvalidNamespaceBytes
+        Left {} -> unrecoverableError $ InternalServerError "namespace-format-invalid" InvalidNamespaceBytes
         Right localNamespace -> do
           pure $ BranchFormat.localToBranch localIds localNamespace
-    expandPatchFormat :: (Ord text, Ord hash, Ord defn) => PatchFormat.PatchLocalIds' text hash defn -> ByteString -> CodebaseM e (PatchFull.Patch' text hash defn)
+    expandPatchFormat :: (Ord text, Ord hash, Ord defn) => PatchFormat.PatchLocalIds' text hash defn -> ByteString -> m (PatchFull.Patch' text hash defn)
     expandPatchFormat patchLocalIds patchBytes = do
       case S.decodePatch patchBytes of
-        Left {} -> lift $ unrecoverableError $ InternalServerError "patch-format-invalid" InvalidPatchBytes
+        Left {} -> unrecoverableError $ InternalServerError "patch-format-invalid" InvalidPatchBytes
         Right localPatch -> do
           pure $ PatchFormat.localPatchToPatch' patchLocalIds localPatch
 
@@ -467,9 +462,8 @@ saveTempEntityInMain hash entity = do
 -- until we find the tips of the dependency graph. We then return the set of those
 -- dependencies which still need to be uploaded by the client, and the set which are ready to
 -- be flushed to main storage.
-elaborateHashes :: NESet Hash32 -> CodebaseM e (Maybe (NESet Hash32 {- needed from client -}), Maybe (NESet Hash32 {- ready to flush -}))
-elaborateHashes hashSet = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+elaborateHashes :: (QueryM m) => CodebaseEnv -> NESet Hash32 -> m (Maybe (NESet Hash32 {- needed from client -}), Maybe (NESet Hash32 {- ready to flush -}))
+elaborateHashes (CodebaseEnv {codebaseOwner}) hashSet = do
   rows <-
     queryListRows @(Hash32, Bool, Bool)
       [sql|
@@ -484,17 +478,17 @@ elaborateHashes hashSet = do
                 JOIN elaborated_dependency
                   ON temp_entity_missing_dependency.dependent = elaborated_dependency.hash
               WHERE
-                temp_entity_missing_dependency.user_id = #{codebaseOwnerUserId}
+                temp_entity_missing_dependency.user_id = #{codebaseOwner}
               )
             ), tagged_hashes (hash, in_temp, has_dependencies) AS (
               SELECT elaborated_dependency.hash,
                      EXISTS(SELECT FROM temp_entity
                             WHERE elaborated_dependency.hash = temp_entity.hash
-                              AND temp_entity.user_id = #{codebaseOwnerUserId}
+                              AND temp_entity.user_id = #{codebaseOwner}
                            ) AS in_temp,
                      EXISTS(SELECT FROM temp_entity_missing_dependency missing_dep
                                 WHERE missing_dep.dependent = elaborated_dependency.hash
-                                  AND missing_dep.user_id = #{codebaseOwnerUserId}
+                                  AND missing_dep.user_id = #{codebaseOwner}
                                ) AS has_dependencies
                 FROM elaborated_dependency
             ) SELECT tagged_hashes.hash, tagged_hashes.in_temp, tagged_hashes.has_dependencies
@@ -513,15 +507,14 @@ elaborateHashes hashSet = do
                 mempty
   pure $ (NESet.nonEmptySet neededHashes, NESet.nonEmptySet readyToFlushHashes)
 
-getEntitiesReadyToFlush :: CodebaseM e [Hash32]
-getEntitiesReadyToFlush = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+getEntitiesReadyToFlush :: (QueryA m) => CodebaseEnv -> m [Hash32]
+getEntitiesReadyToFlush (CodebaseEnv {codebaseOwner}) = do
   queryListCol
     [sql|
       SELECT hash FROM temp_entity
-        WHERE user_id = #{codebaseOwnerUserId}
+        WHERE user_id = #{codebaseOwner}
           AND NOT EXISTS(SELECT FROM temp_entity_missing_dependency missing_dep
                           WHERE missing_dep.dependent = temp_entity.hash
-                            AND missing_dep.user_id = #{codebaseOwnerUserId}
+                            AND missing_dep.user_id = #{codebaseOwner}
                         )
     |]

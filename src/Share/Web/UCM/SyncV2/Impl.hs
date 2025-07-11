@@ -86,10 +86,10 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
       pure q
     streamResults <- lift $ UnliftIO.toIO do
       Logging.logInfoText "Starting download entities stream"
-      Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-        (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
+      PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+        (_bhId, causalId) <- CausalQ.expectCausalIdsOf codebase id (hash32ToCausalHash causalHash)
         let knownCausalHashes = Set.map hash32ToCausalHash knownHashes
-        cursor <- SSQ.allSerializedDependenciesOfCausalCursor causalId knownCausalHashes
+        cursor <- SSQ.allSerializedDependenciesOfCausalCursor codebase causalId knownCausalHashes
         Cursor.foldBatched cursor batchSize \batch -> do
           let entityChunkBatch = batch <&> \(entityCBOR, hash) -> EntityC (EntityChunk {hash, entityCBOR})
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
@@ -110,9 +110,9 @@ causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {
     q <- UnliftIO.atomically $ STM.newTBMQueue 10
     streamResults <- lift $ UnliftIO.toIO do
       Logging.logInfoText "Starting causal dependencies stream"
-      Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase $ do
-        (_bhId, causalId) <- CausalQ.expectCausalIdsOf id (hash32ToCausalHash causalHash)
-        cursor <- SSQ.spineAndLibDependenciesOfCausalCursor causalId
+      PG.runTransactionMode PG.ReadCommitted PG.Read $ do
+        (_bhId, causalId) <- CausalQ.expectCausalIdsOf codebase id (hash32ToCausalHash causalHash)
+        cursor <- SSQ.spineAndLibDependenciesOfCausalCursor codebase causalId
         Cursor.foldBatched cursor batchSize \batch -> do
           let depBatch =
                 batch <&> \(causalHash, isCausalSpine, isLibRoot) ->

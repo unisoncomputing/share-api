@@ -11,8 +11,8 @@ import Servant
     (:>),
   )
 import Share.Backend qualified as Backend
-import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
+import Share.Postgres (QueryM)
 import Share.Postgres.IDs (CausalId)
 import Share.Prelude
 import U.Codebase.Branch (NamespaceStats (..))
@@ -155,11 +155,13 @@ backendListEntryToNamespaceObject ppe typeWidth = \case
     PatchObject . NamedPatch $ NameSegment.toEscapedText name
 
 serve ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   CausalId ->
   Maybe Path.Path ->
   Maybe Path.Path ->
-  CodebaseM e (Maybe NamespaceListing)
-serve rootCausalId mayRelativeTo mayNamespaceName = runMaybeT $ do
+  m (Maybe NamespaceListing)
+serve codebase rootCausalId mayRelativeTo mayNamespaceName = runMaybeT $ do
   -- Relative and Listing Path resolution
   --
   -- The full listing path is a combination of the relativeToPath (prefix) and the namespace path
@@ -176,7 +178,7 @@ serve rootCausalId mayRelativeTo mayNamespaceName = runMaybeT $ do
   let relativeToPath = fromMaybe mempty mayRelativeTo
   let namespacePath = fromMaybe mempty mayNamespaceName
   let path = relativeToPath <> namespacePath
-  listingCausal <- MaybeT $ Codebase.loadCausalNamespaceAtPath rootCausalId path
+  listingCausal <- MaybeT $ Codebase.loadCausalNamespaceAtPath codebase rootCausalId path
   listingBranch <- lift $ V2Causal.value listingCausal
   -- TODO: Currently the ppe is just used to render the types returned from the namespace
   -- listing, which are currently unused because we don't show types in the side-bar.
@@ -185,7 +187,7 @@ serve rootCausalId mayRelativeTo mayNamespaceName = runMaybeT $ do
   let shallowPPE = PPE.empty
   let listingFQN = Path.toText path
   let listingHash = v2CausalBranchToUnisonHash listingCausal
-  listingEntries <- lift $ Backend.lsBranch listingBranch
+  listingEntries <- lift $ Backend.lsBranch codebase listingBranch
   pure $ makeNamespaceListing shallowPPE listingFQN listingHash listingEntries
 
 makeNamespaceListing ::

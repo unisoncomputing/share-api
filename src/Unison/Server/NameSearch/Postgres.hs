@@ -25,7 +25,7 @@ import Unison.Referent qualified as V1Referent
 import Unison.Server.NameSearch (NameSearch (..), Search (..))
 import Unison.Server.SearchResult qualified as SR
 
-nameSearchForPerspective :: NamesPerspective -> NameSearch (PG.Transaction e)
+nameSearchForPerspective :: forall m. (PG.QueryM m) => NamesPerspective -> NameSearch m
 nameSearchForPerspective namesPerspective =
   NameSearch {typeSearch, termSearch}
   where
@@ -56,7 +56,7 @@ nameSearchForPerspective namesPerspective =
           matchesNamedRef = HQ'.matchesNamedReferent
         }
 
-    lookupNamesForTypes :: V1.Reference -> PG.Transaction e (Set (HQ'.HashQualified Name))
+    lookupNamesForTypes :: V1.Reference -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTypes ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.references1ToPGOf id ref
       names <- NLOps.typeNamesForRefWithinNamespace namesPerspective pgRef Nothing
@@ -64,7 +64,7 @@ nameSearchForPerspective namesPerspective =
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Reference.toShortHash ref))
         & Set.fromList
         & pure
-    lookupNamesForTerms :: V1Referent.Referent -> PG.Transaction e (Set (HQ'.HashQualified Name))
+    lookupNamesForTerms :: V1Referent.Referent -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTerms ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.referents1ToPGOf id ref
       names <- NLOps.termNamesForRefWithinNamespace namesPerspective pgRef Nothing
@@ -73,7 +73,7 @@ nameSearchForPerspective namesPerspective =
         & Set.fromList
         & pure
     -- Search the codebase for matches to the given hq name.
-    hqTermSearch :: HQ'.HashQualified Name -> PG.Transaction e (Set V1Referent.Referent)
+    hqTermSearch :: HQ'.HashQualified Name -> m (Set V1Referent.Referent)
     hqTermSearch hqName = do
       case hqName of
         HQ'.NameOnly name -> do
@@ -97,7 +97,7 @@ nameSearchForPerspective namesPerspective =
               else pure Nothing
 
     -- Search the codebase for matches to the given hq name.
-    hqTypeSearch :: HQ'.HashQualified Name -> PG.Transaction e (Set V1.Reference)
+    hqTypeSearch :: HQ'.HashQualified Name -> m (Set V1.Reference)
     hqTypeSearch hqName = do
       case hqName of
         HQ'.NameOnly name -> do

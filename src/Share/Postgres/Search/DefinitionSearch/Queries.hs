@@ -138,7 +138,7 @@ markRootAsIndexed rootBranchHashId = do
 
 -- | Save definition documents to be indexed for search.
 -- Returns errors related to invalid names for logging.
-insertDefinitionDocuments :: [DefinitionDocument Name (Name, ShortHash)] -> Transaction e ([Text])
+insertDefinitionDocuments :: (QueryM m) => [DefinitionDocument Name (Name, ShortHash)] -> m ([Text])
 insertDefinitionDocuments docs = pipelined $ do
   let (badNames, validNames) =
         docs

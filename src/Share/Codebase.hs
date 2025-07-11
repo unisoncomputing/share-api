@@ -5,14 +5,6 @@
 
 module Share.Codebase
   ( shorthashLength,
-    runCodebaseTransaction,
-    runCodebaseTransactionOrRespondError,
-    runCodebaseTransactionModeOrRespondError,
-    runCodebaseTransactionMode,
-    tryRunCodebaseTransaction,
-    tryRunCodebaseTransactionMode,
-    codebaseMToTransaction,
-    CodebaseM,
     CodebaseEnv,
     codebaseOwner,
     CodebaseRuntime (..),
@@ -86,10 +78,9 @@ import Servant.Server (err500)
 import Share.Branch (Branch (..))
 import Share.Codebase.Types
 import Share.Codebase.Types qualified as Codebase
-import Share.Env qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
-import Share.Postgres (unrecoverableError)
+import Share.Postgres (QueryA, QueryM, unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries (loadCausalNamespaceAtPath)
 import Share.Postgres.Causal.Queries qualified as CausalQ
@@ -206,38 +197,6 @@ codebaseRuntimeTransaction unisonRuntime CodebaseEnv {codebaseOwner} = do
         unisonRuntime
       }
 
-runCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => CodebaseEnv -> CodebaseM Void a -> m a
-runCodebaseTransaction codebaseEnv m = do
-  either absurd id <$> tryRunCodebaseTransaction codebaseEnv m
-
--- | Run a CodebaseM transaction using the specified mode.
-runCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM Void a -> m a
-runCodebaseTransactionMode isoLevel rwmode codebaseEnv m = do
-  either absurd id <$> tryRunCodebaseTransactionMode isoLevel rwmode codebaseEnv m
-
-runCodebaseTransactionOrRespondError :: (ToServerError e, Loggable e) => CodebaseEnv -> CodebaseM e a -> WebApp a
-runCodebaseTransactionOrRespondError codebaseEnv m = do
-  tryRunCodebaseTransaction codebaseEnv m >>= \case
-    Left e -> respondError e
-    Right a -> pure a
-
-runCodebaseTransactionModeOrRespondError :: (ToServerError e, Loggable e) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM e a -> WebApp a
-runCodebaseTransactionModeOrRespondError isoLevel mode codebaseEnv m = do
-  tryRunCodebaseTransactionMode isoLevel mode codebaseEnv m >>= \case
-    Left e -> respondError e
-    Right a -> pure a
-
-tryRunCodebaseTransactionMode :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => PG.IsolationLevel -> PG.Mode -> CodebaseEnv -> CodebaseM e a -> m (Either e a)
-tryRunCodebaseTransactionMode isoLevel rwmode codebaseEnv m = do
-  PG.tryRunTransactionMode isoLevel rwmode . codebaseMToTransaction codebaseEnv $ m
-
-tryRunCodebaseTransaction :: (MonadReader (Env.Env x) m, MonadIO m, Env.HasTags x) => CodebaseEnv -> CodebaseM e a -> m (Either e a)
-tryRunCodebaseTransaction codebaseEnv m = do
-  PG.tryRunTransaction . codebaseMToTransaction codebaseEnv $ m
-
-codebaseMToTransaction :: CodebaseEnv -> CodebaseM e a -> PG.Transaction e a
-codebaseMToTransaction codebaseEnv m = runReaderT m codebaseEnv
-
 -- | Wrap a response in caching.
 -- This combinator respects the cachability stored on the provided auth receipt.
 cachedCodebaseResponse ::
@@ -262,13 +221,12 @@ cachedCodebaseResponse authzReceipt codebaseOwner endpointName providedCachePara
     codebaseViewCacheKey = IDs.toText (codebaseOwnerUserId codebaseOwner)
 
 -- | Load a term and its type.
-loadTerm :: TermReferenceId -> CodebaseM e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
-loadTerm refId = do
-  codebaseUser <- asks codebaseOwner
-  lift $ loadTermForCodeLookup codebaseUser refId
+loadTerm :: (QueryM m) => CodebaseEnv -> TermReferenceId -> m (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+loadTerm (CodebaseEnv {codebaseOwner}) refId = do
+  loadTermForCodeLookup codebaseOwner refId
 
 -- | Load a term and its type.
-loadTermForCodeLookup :: UserId -> TermReferenceId -> PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+loadTermForCodeLookup :: (QueryM m) => UserId -> TermReferenceId -> m (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
 loadTermForCodeLookup codebaseUser refId@(Reference.Id h _) = runMaybeT $ do
   (v2Term, v2Type) <- MaybeT $ DefnQ.loadTerm codebaseUser refId
   convertTerm2to1 h v2Term v2Type
@@ -279,14 +237,14 @@ convertTerm2to1 h v2Term v2Type = do
   let v1Type = Cv.ttype2to1 v2Type
   pure (v1Term, v1Type)
 
-expectTerm :: TermReferenceId -> CodebaseM e (V1.Term Symbol Ann, V1.Type Symbol Ann)
-expectTerm refId = loadTerm refId `whenNothingM` lift (unrecoverableError (MissingTerm refId))
+expectTerm :: (QueryM m) => CodebaseEnv -> TermReferenceId -> m (V1.Term Symbol Ann, V1.Type Symbol Ann)
+expectTerm codebase refId = loadTerm codebase refId `whenNothingM` (unrecoverableError (MissingTerm refId))
 
 -- | Load the type of a term.
 -- Differs from `loadTerm` in that it can also return the type of builtins.
-loadTypeOfTerm :: V2.Reference -> CodebaseM e (Maybe (V1.Type Symbol Ann))
-loadTypeOfTerm r = case r of
-  Reference.DerivedId h -> fmap snd <$> loadTerm h
+loadTypeOfTerm :: (QueryM m) => CodebaseEnv -> V2.Reference -> m (Maybe (V1.Type Symbol Ann))
+loadTypeOfTerm codebase r = case r of
+  Reference.DerivedId h -> fmap snd <$> loadTerm codebase h
   r@Reference.Builtin {} -> do
     let builtinType =
           Map.lookup r Builtin.termRefTypes
@@ -296,21 +254,21 @@ loadTypeOfTerm r = case r of
   where
     builtinAnnotation = Ann.Intrinsic
 
-expectTypeOfTerm :: V2.Reference -> CodebaseM e (V1.Type Symbol Ann)
-expectTypeOfTerm r = loadTypeOfTerm r `whenNothingM` lift (unrecoverableError (MissingTypeForTerm r))
+expectTypeOfTerm :: (QueryM m) => CodebaseEnv -> V2.Reference -> m (V1.Type Symbol Ann)
+expectTypeOfTerm codebase r = loadTypeOfTerm codebase r `whenNothingM` (unrecoverableError (MissingTypeForTerm r))
 
-expectTypeOfTerms :: Traversal s t V2.Reference (V1.Type Symbol Ann) -> s -> CodebaseM e t
-expectTypeOfTerms trav s = do
-  s & trav %%~ expectTypeOfTerm
+expectTypeOfTerms :: (QueryM m) => CodebaseEnv -> Traversal s t V2.Reference (V1.Type Symbol Ann) -> s -> m t
+expectTypeOfTerms codebase trav s = do
+  s & trav %%~ expectTypeOfTerm codebase
 
-expectTypeOfReferent :: V2.Referent -> CodebaseM e (V1.Type Symbol Ann)
-expectTypeOfReferent = \case
-  V2.Ref r -> expectTypeOfTerm r
-  V2.Con r conId -> expectTypeOfConstructor r conId
+expectTypeOfReferent :: (QueryM m) => CodebaseEnv -> V2.Referent -> m (V1.Type Symbol Ann)
+expectTypeOfReferent codebase = \case
+  V2.Ref r -> expectTypeOfTerm codebase r
+  V2.Con r conId -> expectTypeOfConstructor codebase r conId
 
-expectTypeOfReferents :: Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> CodebaseM e t
-expectTypeOfReferents trav s = do
-  s & trav %%~ expectTypeOfReferent
+expectTypeOfReferents :: (QueryM m) => CodebaseEnv -> Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> m t
+expectTypeOfReferents codebase trav s = do
+  s & trav %%~ expectTypeOfReferent codebase
 
 expectDeclKind :: (PG.QueryM m) => Reference.TypeReference -> m CT.ConstructorType
 expectDeclKind r = loadDeclKind r `whenNothingM` unrecoverableError (DefnQ.missingDeclKindError r)
@@ -341,21 +299,20 @@ loadDeclKindsOf trav s =
           & DefnQ.loadDeclKindsOf (traversed . _Right)
       pure (fmap (either id id) xs)
 
-loadTypeDeclaration :: Reference.Id -> CodebaseM e (Maybe (V1.Decl Symbol Ann))
-loadTypeDeclaration refId = do
-  codebaseUser <- asks codebaseOwner
-  lift $ loadTypeDeclarationForCodeLookup codebaseUser refId
+loadTypeDeclaration :: (QueryM m) => CodebaseEnv -> Reference.Id -> m (Maybe (V1.Decl Symbol Ann))
+loadTypeDeclaration (CodebaseEnv {codebaseOwner}) refId = do
+  loadTypeDeclarationForCodeLookup codebaseOwner refId
 
-loadTypeDeclarationForCodeLookup :: UserId -> Reference.Id -> PG.Transaction e (Maybe (V1.Decl Symbol Ann))
+loadTypeDeclarationForCodeLookup :: (QueryM m) => UserId -> Reference.Id -> m (Maybe (V1.Decl Symbol Ann))
 loadTypeDeclarationForCodeLookup codebaseUser refId@(Reference.Id h _) =
   fmap (Cv.decl2to1 h) <$> DefnQ.loadDecl codebaseUser refId
 
-expectTypeDeclaration :: Reference.Id -> CodebaseM e (V1.Decl Symbol Ann)
-expectTypeDeclaration refId = loadTypeDeclaration refId `whenNothingM` lift (unrecoverableError (MissingDecl refId))
+expectTypeDeclaration :: (QueryM m) => CodebaseEnv -> Reference.Id -> m (V1.Decl Symbol Ann)
+expectTypeDeclaration codebase refId = loadTypeDeclaration codebase refId `whenNothingM` (unrecoverableError (MissingDecl refId))
 
 -- | Find all the term referents that match the given prefix.
 -- Includes decl constructors.
-termReferentsByShortHash :: ShortHash -> PG.Transaction e (Set V1.Referent)
+termReferentsByShortHash :: (QueryM m) => ShortHash -> m (Set V1.Referent)
 termReferentsByShortHash = \case
   ShortHash.Builtin b ->
     Builtin.intrinsicTermReferences
@@ -369,7 +326,7 @@ termReferentsByShortHash = \case
     constructorReferents <- DefnQ.constructorReferentsByPrefix prefix cycle cid
     pure $ termReferents <> constructorReferents
 
-typeReferencesByShortHash :: ShortHash -> PG.Transaction e (Set V1.Reference)
+typeReferencesByShortHash :: (QueryA m) => ShortHash -> m (Set V1.Reference)
 typeReferencesByShortHash = \case
   ShortHash.Builtin b ->
     Builtin.intrinsicTypeReferences
@@ -383,26 +340,28 @@ typeReferencesByShortHash = \case
 
 -- | Get the type of a referent.
 loadTypeOfReferent ::
+  (QueryM m) =>
+  CodebaseEnv ->
   V2.Referent ->
-  CodebaseM e (Maybe (V1.Type Symbol Ann))
-loadTypeOfReferent = \case
-  V2.Ref r -> loadTypeOfTerm r
-  V2.Con r conId -> loadTypeOfConstructor r conId
+  m (Maybe (V1.Type Symbol Ann))
+loadTypeOfReferent codebase = \case
+  V2.Ref r -> loadTypeOfTerm codebase r
+  V2.Con r conId -> loadTypeOfConstructor codebase r conId
 
 -- | Load the type of a constructor.
-loadTypeOfConstructor :: V2.TypeReference -> V2.ConstructorId -> CodebaseM e (Maybe (V1.Type Symbol Ann))
-loadTypeOfConstructor ref conId = case ref of
+loadTypeOfConstructor :: (QueryM m) => CodebaseEnv -> V2.TypeReference -> V2.ConstructorId -> m (Maybe (V1.Type Symbol Ann))
+loadTypeOfConstructor codebase ref conId = case ref of
   -- No constructors for builtin types.
   Reference.Builtin _txt -> pure Nothing
   Reference.DerivedId refId -> do
-    decl <- loadTypeDeclaration refId `whenNothingM` lift (unrecoverableError (MissingDecl refId))
+    decl <- loadTypeDeclaration codebase refId `whenNothingM` (unrecoverableError (MissingDecl refId))
     pure $ DD.typeOfConstructor (DD.asDataDecl decl) conId
 
-expectTypeOfConstructor :: V2.TypeReference -> V2.ConstructorId -> CodebaseM e (V1.Type Symbol Ann)
-expectTypeOfConstructor ref conId =
-  loadTypeOfConstructor ref conId >>= \case
+expectTypeOfConstructor :: (QueryM m) => CodebaseEnv -> V2.TypeReference -> V2.ConstructorId -> m (V1.Type Symbol Ann)
+expectTypeOfConstructor codebase ref conId =
+  loadTypeOfConstructor codebase ref conId >>= \case
     Just typ -> pure typ
-    Nothing -> lift (unrecoverableError (MissingTypeForConstructor ref conId))
+    Nothing -> (unrecoverableError (MissingTypeForConstructor ref conId))
 
 data CodeLookupCache = CodeLookupCache
   { termCache :: Map Reference.Id (V1.Term Symbol Ann, V1.Type Symbol Ann),
@@ -453,54 +412,55 @@ loadCachedEvalResult codebaseOwnerUserId ref@(Reference.Id h _) = runMaybeT do
   v2Term <- MaybeT $ DefnQ.loadCachedEvalResult codebaseOwnerUserId ref
   lift $ Cv.term2to1 h expectDeclKind v2Term
 
-saveCachedEvalResult :: Reference.Id -> V1.Term Symbol Ann -> CodebaseM e ()
-saveCachedEvalResult refId@(Reference.Id h _) term = do
+saveCachedEvalResult :: (QueryM m) => CodebaseEnv -> Reference.Id -> V1.Term Symbol Ann -> m ()
+saveCachedEvalResult codebase refId@(Reference.Id h _) term = do
   let v2Term = Cv.term1to2 h term
-  DefnQ.saveCachedEvalResult refId v2Term
+  DefnQ.saveCachedEvalResult codebase refId v2Term
 
-expectCausalIdByHash :: CausalHash -> CodebaseM e CausalId
-expectCausalIdByHash causalHash = do
-  codebaseOwnerUserId <- asks codebaseOwner
-  (CausalQ.loadCausalIdByHash causalHash) `whenNothingM` lift (unrecoverableError (MissingCausalForHash codebaseOwnerUserId causalHash))
+expectCausalIdByHash :: (QueryM m) => CodebaseEnv -> CausalHash -> m CausalId
+expectCausalIdByHash codebase@(CodebaseEnv {codebaseOwner}) causalHash = do
+  (CausalQ.loadCausalIdByHash codebase causalHash) `whenNothingM` (unrecoverableError (MissingCausalForHash codebaseOwner causalHash))
 
 -- | Sets the loose code root hash for a user and ensures the appropriate name lookup
 -- exists.
-setLooseCodeRoot :: UserId -> Maybe Text -> CausalId -> CodebaseM e ()
-setLooseCodeRoot caller description causalId = do
+setLooseCodeRoot :: (QueryM m) => CodebaseEnv -> UserId -> Maybe Text -> CausalId -> m ()
+setLooseCodeRoot codebase caller description causalId = do
   branchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id causalId
   nlReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
-  LCQ.setLooseCodeRoot nlReceipt caller description causalId
+  LCQ.setLooseCodeRoot codebase nlReceipt caller description causalId
 
 -- | Squash a causal and add the result to the codebase.
 -- Also adds a name lookup for the squashed branch hash.
 squashCausalAndAddToCodebase ::
+  (QueryM m) =>
+  CodebaseEnv ->
   CausalId ->
   -- Returns the new causal hash if successful, or Nothing if the source causal doesn't
   -- exist.
-  CodebaseM e (Maybe CausalId)
-squashCausalAndAddToCodebase causalId = runMaybeT $ do
+  m (Maybe CausalId)
+squashCausalAndAddToCodebase codebase causalId = runMaybeT $ do
   causalBranch <- MaybeT (CausalQ.loadCausalNamespace causalId)
-  (squashedCausalId, _squashedCausal) <- lift $ squashCausal causalBranch
+  (squashedCausalId, _squashedCausal) <- lift $ squashCausal codebase causalBranch
   squashedBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id squashedCausalId
-  lift . lift $ NLOps.ensureNameLookupForBranchId squashedBranchHashId
+  lift $ NLOps.ensureNameLookupForBranchId squashedBranchHashId
   pure squashedCausalId
 
 -- Recursively discards history, resulting in a namespace tree with only single a single
 -- Causal node at every level.
-squashCausal :: V2.CausalBranch (CodebaseM e) -> CodebaseM e (CausalId, V2.CausalBranch (CodebaseM e))
-squashCausal Causal.Causal {valueHash = unsquashedBranchHash, value} = do
+squashCausal :: (QueryM m) => CodebaseEnv -> V2.CausalBranch m -> m (CausalId, V2.CausalBranch m)
+squashCausal codebase (Causal.Causal {valueHash = unsquashedBranchHash, value}) = do
   mayCachedSquashResult <- runMaybeT $ do
-    causalId <- MaybeT (CausalQ.tryGetCachedSquashResult unsquashedBranchHash)
+    causalId <- MaybeT (CausalQ.tryGetCachedSquashResult codebase unsquashedBranchHash)
     fmap (causalId,) . MaybeT $ CausalQ.loadCausalNamespace causalId
   case mayCachedSquashResult of
     Just cb -> pure cb
     Nothing -> do
       branch@V2.Branch {children} <- value
-      squashedChildren <- traverse squashCausal children
+      squashedChildren <- traverse (squashCausal codebase) children
       let squashedBranchHead = branch {V2.children = snd <$> squashedChildren}
-      (squashedBranchHashId, squashedBranchHash) <- CausalQ.saveV2BranchShallow squashedBranchHead
+      (squashedBranchHashId, squashedBranchHash) <- CausalQ.saveV2BranchShallow codebase squashedBranchHead
       let ancestors = mempty
-      (squashedCausalId, squashedCausalHash) <- CausalQ.saveCausal Nothing Nothing squashedBranchHashId ancestors
+      (squashedCausalId, squashedCausalHash) <- CausalQ.saveCausal codebase Nothing Nothing squashedBranchHashId ancestors
       let squashedCausalBranch =
             Causal.Causal
               { causalHash = squashedCausalHash,

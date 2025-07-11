@@ -13,7 +13,8 @@ module Unison.Server.Share.RenderDoc where
 import Data.Set qualified as Set
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
-import Share.Codebase.Types (CodebaseM, CodebaseRuntime)
+import Share.Codebase.Types (CodebaseEnv (..), CodebaseRuntime)
+import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
@@ -36,29 +37,30 @@ import Unison.Util.Pretty (Width)
 --
 -- Requires Name Lookups, currently only usable on Share.
 findAndRenderDoc ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   Set NameSegment ->
   CodebaseRuntime s IO ->
   Path.Path ->
   CausalId ->
   Maybe Width ->
-  CodebaseM e (Maybe Doc)
-findAndRenderDoc docNames runtime namespacePath rootCausalId _mayWidth = runMaybeT do
+  m (Maybe Doc)
+findAndRenderDoc codebase@(CodebaseEnv {codebaseOwner}) docNames runtime namespacePath rootCausalId _mayWidth = runMaybeT do
   rootNamespaceHashId <- lift $ CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
-  namespaceCausal <- MaybeT $ CausalQ.loadCausalNamespaceAtPath rootCausalId namespacePath
+  namespaceCausal <- MaybeT $ CausalQ.loadCausalNamespaceAtPath codebase rootCausalId namespacePath
   shallowBranchAtNamespace <- lift $ V2Causal.value namespaceCausal
   docRef <- MaybeT . pure $ Backend.findDocInBranch docNames shallowBranchAtNamespace
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
   let cacheKey =
         Caching.CacheKey
           { cacheTopic = "findAndRenderDoc",
             key = [("namespacePath", tShow namespacePath), ("docRef", SH.toText $ Reference.toShortHash docRef)],
             rootCausalId = Just rootCausalId,
-            sandbox = Just codebaseOwnerUserId
+            sandbox = Just codebaseOwner
           }
 
   lift $ Caching.usingJSONCache cacheKey do
     namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootNamespaceHashId (coerce $ Path.toList namespacePath)
-    eDoc <- Backend.evalDocRef runtime docRef
+    eDoc <- Backend.evalDocRef codebase runtime docRef
     let docDeps = Doc.dependencies eDoc <> Set.singleton (LD.TermReference docRef)
     docPPE <- PostgresPPE.ppedForReferences namesPerspective docDeps
     pure $ Doc.renderDoc docPPE eDoc

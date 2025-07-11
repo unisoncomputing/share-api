@@ -22,7 +22,6 @@ import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, OccurrenceKind (..), TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
 import Share.BackgroundJobs.Workers (newWorker)
-import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
 import Share.IDs (ReleaseId, UserId)
 import Share.Metrics qualified as Metrics
@@ -154,13 +153,12 @@ syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
         let nlReceipt = NL.nameLookupReceipt namesPerspective
         let codebaseLoc = Codebase.codebaseLocationForProjectRelease codebaseOwner
         let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-        Codebase.codebaseMToTransaction codebase $ do
-          termsCursor <- lift $ NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
+        termsCursor <- NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
 
-          termErrs <- syncTerms namesPerspective rootBranchHashId termsCursor
-          typesCursor <- lift $ NLOps.projectTypesWithinRoot nlReceipt rootBranchHashId
-          typeErrs <- syncTypes namesPerspective rootBranchHashId typesCursor
-          pure (termErrs <> typeErrs)
+        termErrs <- syncTerms codebase namesPerspective rootBranchHashId termsCursor
+        typesCursor <- NLOps.projectTypesWithinRoot nlReceipt rootBranchHashId
+        typeErrs <- syncTypes codebase namesPerspective rootBranchHashId typesCursor
+        pure (termErrs <> typeErrs)
       True -> pure mempty
   -- Copy relevant index rows into the global search index as well
   for mayReleaseId (syncRelease rootBranchHashId)
@@ -179,11 +177,13 @@ syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do
   lift $ DDQ.copySearchDocumentsForRelease rootBranchHashId projectId releaseId
 
 syncTerms ::
+  (PG.QueryM m) =>
+  Codebase.CodebaseEnv ->
   NL.NamesPerspective ->
   BranchHashId ->
   Cursors.PGCursor (Name, Referent) ->
-  CodebaseM e ([DefnIndexingFailure], [Text])
-syncTerms namesPerspective rootBranchHashId termsCursor = do
+  m ([DefnIndexingFailure], [Text])
+syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
     (errs, refDocs) <-
       PG.timeTransaction "Building terms" $
@@ -194,7 +194,7 @@ syncTerms namesPerspective rootBranchHashId termsCursor = do
             ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
             )
           & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-            typ <- lift (Codebase.loadTypeOfReferent ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
+            typ <- lift (Codebase.loadTypeOfReferent codebase ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
             let displayName =
                   fqn
                     & Name.reverseSegments
@@ -228,7 +228,7 @@ syncTerms namesPerspective rootBranchHashId termsCursor = do
               for token \ref -> do
                 name <- PPE.types ppe ref
                 pure $ (HQ'.toName $ name, Reference.toShortHash ref)
-    badNames <- lift $ PG.timeTransaction "Inserting Docs" $ DDQ.insertDefinitionDocuments namedDocs
+    badNames <- PG.timeTransaction "Inserting Docs" $ DDQ.insertDefinitionDocuments namedDocs
     pure (errs, badNames)
 
 -- | Compute the search tokens for a term given its name, hash, and type signature
@@ -354,11 +354,13 @@ typeSigTokens typ =
           error "typeRefTokens: Found variable without corresponding Abs in type signature"
 
 syncTypes ::
+  (PG.QueryM m) =>
+  Codebase.CodebaseEnv ->
   NL.NamesPerspective ->
   BranchHashId ->
   Cursors.PGCursor (Name, TypeReference) ->
-  CodebaseM e ([DefnIndexingFailure], [Text])
-syncTypes namesPerspective rootBranchHashId typesCursor = do
+  m ([DefnIndexingFailure], [Text])
+syncTypes codebase namesPerspective rootBranchHashId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
     (errs, refDocs) <-
       types
@@ -371,10 +373,10 @@ syncTypes namesPerspective rootBranchHashId typesCursor = do
           (declTokens, declArity) <- case ref of
             Reference.Builtin _ -> pure (mempty, Arity 0)
             Reference.DerivedId refId -> do
-              decl <- lift (Codebase.loadTypeDeclaration refId) `whenNothingM` throwError (NoDeclForType fqn ref)
+              decl <- lift (Codebase.loadTypeDeclaration codebase refId) `whenNothingM` throwError (NoDeclForType fqn ref)
               pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
           let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
-          typeSummary <- lift $ Summary.typeSummaryForReference ref (Just fqn) Nothing
+          typeSummary <- lift $ Summary.typeSummaryForReference codebase ref (Just fqn) Nothing
           let sh = Reference.toShortHash ref
           let dd =
                 DefinitionDocument
@@ -398,7 +400,7 @@ syncTypes namesPerspective rootBranchHashId typesCursor = do
               for token \ref -> do
                 name <- PPE.types ppe ref
                 pure $ (HQ'.toName name, Reference.toShortHash ref)
-    badNames <- lift $ DDQ.insertDefinitionDocuments namedDocs
+    badNames <- DDQ.insertDefinitionDocuments namedDocs
     pure (errs, badNames)
 
 -- | Compute the search tokens for a type declaration.

@@ -18,9 +18,10 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty qualified as NESet
 import Share.Backend qualified as Backend
-import Share.Codebase (CodebaseM, CodebaseRuntime)
+import Share.Codebase (CodebaseEnv, CodebaseRuntime)
 import Share.Codebase qualified as Codebase
-import Share.Postgres qualified as PG
+import Share.Codebase.Types (CodebaseEnv (..))
+import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
@@ -67,6 +68,9 @@ import Unison.Util.Pretty (Width)
 
 -- | Renders a definition for the given name or hash alongside its documentation.
 definitionForHQName ::
+  forall m s.
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   -- | The path representing the user's current namesRoot.
   -- Searches will be limited to definitions within this path, and names will be relative to
   -- this path.
@@ -80,19 +84,18 @@ definitionForHQName ::
   CodebaseRuntime s IO ->
   -- | The name, hash, or both, of the definition to display.
   HQ.HashQualified Name ->
-  Codebase.CodebaseM e DefinitionDisplayResults
-definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+  m DefinitionDisplayResults
+definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
   let cacheKey =
         Caching.CacheKey
           { cacheTopic = "definitionForHQName",
             key = [("perspective", Path.toText perspective), ("suffixify", tShow $ suffixified (suffixifyBindings)), ("hqName", HQ.toText perspectiveQuery), ("width", tShow renderWidth)],
             rootCausalId = Just rootCausalId,
-            sandbox = Just codebaseOwnerUserId
+            sandbox = Just codebaseOwner
           }
   Caching.usingJSONCache cacheKey go
   where
-    go :: Codebase.CodebaseM e DefinitionDisplayResults
+    go :: m DefinitionDisplayResults
     go = do
       rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
       (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
@@ -104,18 +107,18 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
       -- `trunk` over those in other releases.
       -- ppe which returns names fully qualified to the current namesRoot,  not to the codebase root.
       let biases = maybeToList $ HQ.toName query
-      let ppedBuilder deps = (PPED.biasTo biases) <$> lift (PPEPostgres.ppedForReferences namesPerspective deps)
+      let ppedBuilder deps = (PPED.biasTo biases) <$> (PPEPostgres.ppedForReferences namesPerspective deps)
       let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-      dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery nameSearch [query]
+      dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery codebase nameSearch [query]
       let width = mayDefaultWidth renderWidth
-      let docResults :: Name -> Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
+      let docResults :: Name -> m [(HashQualifiedName, UnisonHash, Doc.Doc)]
           docResults name = do
             -- We need to re-lookup the names perspective here because the name we've found
             -- may now be in a lib.
             namesPerspective <- NameLookupOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (NL.nameToPathSegments name)
             let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-            docRefs <- Docs.docsForDefinitionName nameSearch name
-            renderDocRefs ppedBuilder width rt docRefs
+            docRefs <- Docs.docsForDefinitionName codebase nameSearch name
+            renderDocRefs codebase ppedBuilder width rt docRefs
 
       let drDeps = Backend.definitionResultsDependencies dr
       termAndTypePPED <- ppedBuilder drDeps
@@ -124,13 +127,13 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
         ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
           let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
           docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
-          lift $ Backend.mkTypeDefinition termAndTypePPED width ref docs tp
+          Backend.mkTypeDefinition termAndTypePPED width ref docs tp
       termDefinitions <-
         ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
           let referent = Referent.Ref reference
           let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
           docs <- maybe (pure []) docResults (HQ.toName hqTermName)
-          Backend.mkTermDefinition termAndTypePPED width reference docs trm
+          Backend.mkTermDefinition codebase termAndTypePPED width reference docs trm
       let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
           renderedDisplayTypes = Map.mapKeys Reference.toText typeDefinitions
           renderedMisses = fmap HQ.toText misses
@@ -141,14 +144,16 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
           renderedMisses
 
 renderDocRefs ::
-  PPEDBuilder (Codebase.CodebaseM e) ->
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
+  PPEDBuilder (m) ->
   Width ->
   CodebaseRuntime s IO ->
   [TermReference] ->
-  Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
-renderDocRefs _ppedBuilder _width _rt [] = pure []
-renderDocRefs ppedBuilder width rt docRefs = do
-  eDocs <- for docRefs \ref -> (ref,) <$> (Backend.evalDocRef rt ref)
+  m [(HashQualifiedName, UnisonHash, Doc.Doc)]
+renderDocRefs _codebase _ppedBuilder _width _rt [] = pure []
+renderDocRefs codebase ppedBuilder width rt docRefs = do
+  eDocs <- for docRefs \ref -> (ref,) <$> (Backend.evalDocRef codebase rt ref)
   let docDeps = foldMap (Doc.dependencies . snd) eDocs <> Set.fromList (LD.TermReference <$> docRefs)
   docsPPED <- ppedBuilder docDeps
   for eDocs \(ref, eDoc) -> do
@@ -161,17 +166,19 @@ type PPEDBuilder m = Set LD.LabeledDependency -> m PPED.PrettyPrintEnvDecl
 
 -- | Mirrors Backend.definitionsBySuffixes but without doing a suffix search.
 mkDefinitionsForQuery ::
-  NameSearch (PG.Transaction e) ->
+  (QueryM m) =>
+  CodebaseEnv ->
+  NameSearch m ->
   [HQ.HashQualified Name] ->
-  Codebase.CodebaseM e Backend.DefinitionResults
-mkDefinitionsForQuery nameSearch query = do
-  QueryResult misses results <- lift $ hqNameQuery nameSearch query
+  m Backend.DefinitionResults
+mkDefinitionsForQuery codebase nameSearch query = do
+  QueryResult misses results <- hqNameQuery nameSearch query
   -- todo: remember to replace this with getting components directly,
   -- and maybe even remove getComponentLength from Codebase interface altogether
-  terms <- Map.foldMapM (\ref -> (ref,) <$> Backend.displayTerm ref) (searchResultsToTermRefs results)
+  terms <- Map.foldMapM (\ref -> (ref,) <$> Backend.displayTerm codebase ref) (searchResultsToTermRefs results)
   types <- do
     typeRefs <- pure $ searchResultsToTypeRefs results
-    Map.foldMapM (\ref -> (ref,) <$> Backend.displayType ref) typeRefs
+    Map.foldMapM (\ref -> (ref,) <$> Backend.displayType codebase ref) typeRefs
   pure (Backend.DefinitionResults terms types misses)
   where
     searchResultsToTermRefs :: [SR.SearchResult] -> Set V1.Reference
@@ -191,35 +198,39 @@ mkDefinitionsForQuery nameSearch query = do
 -- Just Left means constructor
 -- Just Right means term
 termDisplayObjectByName ::
-  NameSearch (PG.Transaction e) ->
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
+  NameSearch m ->
   Name ->
-  CodebaseM e (Maybe (Either ConstructorReference (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann))))
-termDisplayObjectByName nameSearch name = runMaybeT do
-  refs <- lift . lift $ NameSearch.lookupRelativeHQRefs' (termSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
+  m (Maybe (Either ConstructorReference (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann))))
+termDisplayObjectByName codebase nameSearch name = runMaybeT do
+  refs <- lift $ NameSearch.lookupRelativeHQRefs' (termSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
   ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
   case ref of
-    Referent.Ref r -> Right . (r,) <$> lift (Backend.displayTerm r)
+    Referent.Ref r -> Right . (r,) <$> lift (Backend.displayTerm codebase r)
     Referent.Con r _ -> pure (Left r)
 
 -- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
 -- share among all of them, it would be more efficient than generating a PPED per definition.
 termDefinitionByName ::
-  PPEDBuilder (Codebase.CodebaseM e) ->
-  NameSearch (PG.Transaction e) ->
+  (QueryM m) =>
+  CodebaseEnv ->
+  PPEDBuilder m ->
+  NameSearch m ->
   Width ->
   CodebaseRuntime s IO ->
   Name ->
-  Codebase.CodebaseM e (Maybe (Either ConstructorReference TermDefinition))
-termDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT do
-  MaybeT (termDisplayObjectByName nameSearch name) >>= \case
+  m (Maybe (Either ConstructorReference TermDefinition))
+termDefinitionByName codebase ppedBuilder nameSearch width rt name = runMaybeT do
+  MaybeT (termDisplayObjectByName codebase nameSearch name) >>= \case
     Right (ref, displayObject) -> do
       let deps = termDisplayObjectLabeledDependencies ref displayObject
       pped <- lift $ ppedBuilder deps
       let biasedPPED = PPED.biasTo [name] pped
-      docRefs <- lift $ Docs.docsForDefinitionName nameSearch name
-      renderedDocs <- lift $ renderDocRefs ppedBuilder width rt docRefs
+      docRefs <- lift $ Docs.docsForDefinitionName codebase nameSearch name
+      renderedDocs <- lift $ renderDocRefs codebase ppedBuilder width rt docRefs
       let (_ref, syntaxDO) = Backend.termsToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
-      defn <- lift $ Backend.mkTermDefinition biasedPPED width ref renderedDocs (syntaxDO)
+      defn <- lift $ Backend.mkTermDefinition codebase biasedPPED width ref renderedDocs (syntaxDO)
       pure (Right defn)
     Left ref -> pure (Left ref)
 
@@ -229,30 +240,32 @@ termDisplayObjectLabeledDependencies termRef displayObject = do
     & bifoldMap (Type.labeledDependencies) (Term.labeledDependencies)
     & Set.insert (LD.TermReference termRef)
 
-typeDisplayObjectByName :: NameSearch (PG.Transaction e) -> Name -> CodebaseM e (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann)))
-typeDisplayObjectByName nameSearch name = runMaybeT do
-  refs <- lift . lift $ NameSearch.lookupRelativeHQRefs' (typeSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
+typeDisplayObjectByName :: (QueryM m) => Codebase.CodebaseEnv -> NameSearch m -> Name -> m (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann)))
+typeDisplayObjectByName codebase nameSearch name = runMaybeT do
+  refs <- lift $ NameSearch.lookupRelativeHQRefs' (typeSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
   ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
-  fmap (ref,) . lift $ Backend.displayType ref
+  fmap (ref,) . lift $ Backend.displayType codebase ref
 
 -- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
 -- share among all of them, it would be more efficient than generating a PPED per definition.
 typeDefinitionByName ::
-  PPEDBuilder (Codebase.CodebaseM e) ->
-  NameSearch (PG.Transaction e) ->
+  (QueryM m) =>
+  CodebaseEnv ->
+  PPEDBuilder m ->
+  NameSearch m ->
   Width ->
   CodebaseRuntime s IO ->
   Name ->
-  Codebase.CodebaseM e (Maybe TypeDefinition)
-typeDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT $ do
-  (ref, displayObject) <- MaybeT $ typeDisplayObjectByName nameSearch name
+  m (Maybe TypeDefinition)
+typeDefinitionByName codebase ppedBuilder nameSearch width rt name = runMaybeT $ do
+  (ref, displayObject) <- MaybeT $ typeDisplayObjectByName codebase nameSearch name
   let deps = typeDisplayObjectLabeledDependencies ref displayObject
   pped <- lift $ ppedBuilder deps
   let biasedPPED = PPED.biasTo [name] pped
-  docRefs <- lift $ Docs.docsForDefinitionName nameSearch name
-  renderedDocs <- lift $ renderDocRefs ppedBuilder width rt docRefs
+  docRefs <- lift $ Docs.docsForDefinitionName codebase nameSearch name
+  renderedDocs <- lift $ renderDocRefs codebase ppedBuilder width rt docRefs
   let (_ref, syntaxDO) = Backend.typesToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
-  lift . lift $ Backend.mkTypeDefinition biasedPPED width ref renderedDocs syntaxDO
+  lift $ Backend.mkTypeDefinition biasedPPED width ref renderedDocs syntaxDO
 
 typeDisplayObjectLabeledDependencies :: TypeReference -> DisplayObject () (DD.Decl Symbol Ann) -> Set LD.LabeledDependency
 typeDisplayObjectLabeledDependencies typeRef displayObject = do
@@ -260,9 +273,10 @@ typeDisplayObjectLabeledDependencies typeRef displayObject = do
     & foldMap (DD.labeledDeclDependenciesIncludingSelfAndFieldAccessors typeRef)
 
 hqNameQuery ::
-  NameSearch (PG.Transaction e) ->
+  (QueryM m) =>
+  NameSearch m ->
   [HQ.HashQualified Name] ->
-  PG.Transaction e QueryResult
+  m QueryResult
 hqNameQuery NameSearch {typeSearch, termSearch} hqs = do
   -- Split the query into hash-only and hash-qualified-name queries.
   let (hashes, hqnames) = partitionEithers (map HQ'.fromHQ hqs)

@@ -52,8 +52,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Servant (err500)
-import Share.Codebase.Types (CodebaseEnv (..), CodebaseM)
-import Share.Codebase.Types qualified as Codebase
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.IDs
 import Share.Postgres
 import Share.Postgres qualified as PG
@@ -137,7 +136,7 @@ instance Logging.Loggable DefinitionQueryError where
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
-loadTerm :: UserId -> TermReferenceId -> PG.Transaction e (Maybe (V2.Term Symbol, V2.Type Symbol))
+loadTerm :: (QueryM m) => UserId -> TermReferenceId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
 loadTerm userId refId = runMaybeT do
   termId <- MaybeT $ loadTermId refId
   MaybeT $ loadTermById userId termId
@@ -153,7 +152,7 @@ loadTermId (Reference.Id compHash (pgComponentIndex -> compIndex)) =
             AND term.component_index = #{compIndex}
       |]
 
-expectTermId :: QueryA m => TermReferenceId -> m TermId
+expectTermId :: (QueryA m) => TermReferenceId -> m TermId
 expectTermId refId =
   unrecoverableEitherMap
     ( \case
@@ -169,7 +168,7 @@ expectTerm userId refId = do
     Just term -> pure term
     Nothing -> unrecoverableError $ expectedTermError refId
 
-resolveComponentHash :: ComponentRef -> CodebaseM e (ComponentHash, ComponentHashId)
+resolveComponentHash :: (QueryM m) => ComponentRef -> m (ComponentHash, ComponentHashId)
 resolveComponentHash = \case
   This componentHash -> do
     componentHashId <- HashQ.ensureComponentHashId componentHash
@@ -180,25 +179,23 @@ resolveComponentHash = \case
   These componentHash componentHashId -> do
     pure (componentHash, componentHashId)
 
-loadTermComponent :: ComponentRef -> CodebaseM e (Maybe (NonEmpty (V2.Term Symbol, V2.Type Symbol)))
-loadTermComponent componentRef = runMaybeT $ do
-  codebaseOwnerUserId <- asks codebaseOwner
+loadTermComponent :: (QueryM m) => CodebaseEnv -> ComponentRef -> m (Maybe (NonEmpty (V2.Term Symbol, V2.Type Symbol)))
+loadTermComponent (CodebaseEnv {codebaseOwner}) componentRef = runMaybeT $ do
   (componentHash, componentHashId) <- lift $ resolveComponentHash componentRef
-  componentIndexes <- MaybeT . lift $ termComponentIndexes componentHashId
+  componentIndexes <- MaybeT $ termComponentIndexes componentHashId
   componentElements <- for componentIndexes \compIndex -> do
-    MaybeT . lift $ loadTerm codebaseOwnerUserId (Reference.Id (unComponentHash componentHash) compIndex)
+    MaybeT $ loadTerm codebaseOwner (Reference.Id (unComponentHash componentHash) compIndex)
   pure componentElements
 
-loadTypeComponent :: ComponentRef -> CodebaseM e (Maybe (NonEmpty (V2Decl.Decl Symbol)))
-loadTypeComponent componentRef = runMaybeT $ do
-  codebaseOwnerUserId <- asks codebaseOwner
+loadTypeComponent :: (QueryM m) => CodebaseEnv -> ComponentRef -> m (Maybe (NonEmpty (V2Decl.Decl Symbol)))
+loadTypeComponent (CodebaseEnv {codebaseOwner}) componentRef = runMaybeT $ do
   (componentHash, componentHashId) <- lift $ resolveComponentHash componentRef
-  componentIndexes <- MaybeT . lift $ typeComponentIndexes componentHashId
+  componentIndexes <- MaybeT $ typeComponentIndexes componentHashId
   componentElements <- for componentIndexes \compIndex -> do
-    MaybeT . lift $ loadDecl codebaseOwnerUserId (Reference.Id (unComponentHash componentHash) compIndex)
+    MaybeT $ loadDecl codebaseOwner (Reference.Id (unComponentHash componentHash) compIndex)
   pure componentElements
 
-termComponentIndexes :: ComponentHashId -> Transaction e (Maybe (NonEmpty V2Reference.Pos))
+termComponentIndexes :: (QueryM m) => ComponentHashId -> m (Maybe (NonEmpty V2Reference.Pos))
 termComponentIndexes componentHashId = do
   queryListCol
     [sql|
@@ -209,7 +206,7 @@ termComponentIndexes componentHashId = do
     <&> fmap unPgComponentIndex
     <&> NonEmpty.nonEmpty
 
-typeComponentIndexes :: ComponentHashId -> Transaction e (Maybe (NonEmpty V2Reference.Pos))
+typeComponentIndexes :: (QueryM m) => ComponentHashId -> m (Maybe (NonEmpty V2Reference.Pos))
 typeComponentIndexes componentHashId = do
   queryListCol
     [sql|
@@ -221,18 +218,19 @@ typeComponentIndexes componentHashId = do
     <&> NonEmpty.nonEmpty
 
 expectTermComponent ::
+  (QueryM m) =>
+  CodebaseEnv ->
   These ComponentHash ComponentHashId ->
-  CodebaseM e (NonEmpty (V2.Term Symbol, V2.Type Symbol))
-expectTermComponent componentRef = do
-  mayComponent <- loadTermComponent componentRef
+  m (NonEmpty (V2.Term Symbol, V2.Type Symbol))
+expectTermComponent codebase componentRef = do
+  mayComponent <- loadTermComponent codebase componentRef
   case mayComponent of
     Just component -> pure component
-    Nothing -> lift . unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentRef)
+    Nothing -> unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentRef)
 
 -- | Helper for loading term components efficiently for sync.
-expectShareTermComponent :: ComponentHashId -> CodebaseM e (Share.TermComponent Text Hash32)
-expectShareTermComponent componentHashId = do
-  codebaseOwnerUserId <- asks codebaseOwner
+expectShareTermComponent :: (QueryM m) => CodebaseEnv -> ComponentHashId -> m (Share.TermComponent Text Hash32)
+expectShareTermComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
   componentElements :: NonEmpty (TermId, LocalTermBytes) <-
     ( queryListRows
         [sql| SELECT term.id, bytes.bytes
@@ -240,7 +238,7 @@ expectShareTermComponent componentHashId = do
            LEFT JOIN sandboxed_terms sandboxed ON term.id = sandboxed.term_id
            LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
            WHERE term.component_hash_id = #{componentHashId}
-             AND sandboxed.user_id = #{codebaseOwnerUserId}
+             AND sandboxed.user_id = #{codebaseOwner}
            ORDER BY term.component_index ASC
       |]
         -- Ensure we get at least one index, and that we have bytes saved for each part of the
@@ -248,7 +246,7 @@ expectShareTermComponent componentHashId = do
         <&> checkElements
       )
       `whenNothingM` do
-        lift . unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound (That componentHashId))
+        unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound (That componentHashId))
   second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) ->
     (,bytes) <$> termLocalReferences termId
   where
@@ -258,9 +256,8 @@ expectShareTermComponent componentHashId = do
         >>= NonEmpty.nonEmpty
 
 -- | Helper for loading type components efficiently for sync.
-expectShareTypeComponent :: ComponentHashId -> CodebaseM e (Share.DeclComponent Text Hash32)
-expectShareTypeComponent componentHashId = do
-  codebaseOwnerUserId <- asks codebaseOwner
+expectShareTypeComponent :: (QueryM m) => CodebaseEnv -> ComponentHashId -> m (Share.DeclComponent Text Hash32)
+expectShareTypeComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
   componentElements :: NonEmpty (TypeId, LocalTypeBytes) <-
     ( queryListRows
         [sql| SELECT typ.id, bytes.bytes
@@ -268,7 +265,7 @@ expectShareTypeComponent componentHashId = do
            LEFT JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
            LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
            WHERE typ.component_hash_id = #{componentHashId}
-             AND sandboxed.user_id = #{codebaseOwnerUserId}
+             AND sandboxed.user_id = #{codebaseOwner}
            ORDER BY typ.component_index ASC
       |]
         -- Ensure we get at least one index, and that we have bytes saved for each part of the
@@ -276,7 +273,7 @@ expectShareTypeComponent componentHashId = do
         <&> checkElements
       )
       `whenNothingM` do
-        lift . unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound (That componentHashId))
+        unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound (That componentHashId))
   second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList <$> for componentElements \(typeId, LocalTypeBytes bytes) ->
     (,bytes) <$> typeLocalReferences typeId
   where
@@ -285,12 +282,12 @@ expectShareTypeComponent componentHashId = do
       sequenceAOf (traversed . _2) rows
         >>= NonEmpty.nonEmpty
 
-expectTypeComponent :: ComponentRef -> CodebaseM e (NonEmpty (V2Decl.Decl Symbol))
-expectTypeComponent componentRef = do
-  mayComponent <- loadTypeComponent componentRef
+expectTypeComponent :: (QueryM m) => CodebaseEnv -> ComponentRef -> m (NonEmpty (V2Decl.Decl Symbol))
+expectTypeComponent codebase componentRef = do
+  mayComponent <- loadTypeComponent codebase componentRef
   case mayComponent of
     Just component -> pure component
-    Nothing -> lift . unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentRef)
+    Nothing -> unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentRef)
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
@@ -310,7 +307,7 @@ loadTermById codebaseUser termId = do
     <$> loadTermComponentElementByTermId codebaseUser termId
     <*> termLocalReferences termId
 
-expectTermById :: QueryA m => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
+expectTermById :: (QueryA m) => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
 expectTermById userId refId termId =
   unrecoverableEitherMap
     ( \case
@@ -423,11 +420,11 @@ loadDecl codebaseUser refId = runMaybeT $ do
   let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
   pure $ s2cDecl localIds decl
 
-loadDeclByTypeComponentElementAndTypeId :: QueryA m => (TypeComponentElement, TypeId) -> m (V2.Decl Symbol)
+loadDeclByTypeComponentElementAndTypeId :: (QueryA m) => (TypeComponentElement, TypeId) -> m (V2.Decl Symbol)
 loadDeclByTypeComponentElementAndTypeId (TypeComponentElement decl, typeId) =
   typeLocalReferences typeId <&> \Share.LocalIds {texts, hashes} ->
     let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
-    in s2cDecl localIds decl
+     in s2cDecl localIds decl
 
 loadTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TypeReferenceId -> m (Maybe (TypeComponentElement, TypeId))
 loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgComponentIndex -> compIndex)) = do
@@ -443,7 +440,7 @@ loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgCompone
             AND typ.component_index = #{compIndex}
       |]
 
-expectTypeComponentElementAndTypeId :: QueryA m => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
+expectTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
 expectTypeComponentElementAndTypeId codebaseUser refId =
   unrecoverableEitherMap
     ( \case
@@ -502,7 +499,7 @@ s2cDecl (LocalIds.LocalIds {textLookup, defnLookup}) V2.DataDeclaration {declTyp
     substHash i = defnLookup ^?! ix (fromIntegral i)
 
 -- | Get the set of user-defined terms whose hash matches the given prefix.
-termReferencesByPrefix :: Text -> Maybe Word64 -> Transaction e (Set V1Reference.Id)
+termReferencesByPrefix :: (QueryA m) => Text -> Maybe Word64 -> m (Set V1Reference.Id)
 termReferencesByPrefix prefix mayComponentIndex =
   do
     let mayComponentIndex' = pgComponentIndex <$> mayComponentIndex
@@ -518,7 +515,7 @@ termReferencesByPrefix prefix mayComponentIndex =
     <&> Set.fromList
 
 -- | All type references whose hash matches the given prefix and optionally the provided component index.
-declReferencesByPrefix :: Text -> Maybe Word64 -> Transaction e (Set V1Reference.Id)
+declReferencesByPrefix :: (QueryA m) => Text -> Maybe Word64 -> m (Set V1Reference.Id)
 declReferencesByPrefix prefix mayComponentIndex = do
   let mayComponentIndex' = pgComponentIndex <$> mayComponentIndex
   queryListRows
@@ -534,10 +531,11 @@ declReferencesByPrefix prefix mayComponentIndex = do
 
 -- | All referents to type constructors whose hash matches the given prefix and optionally the provided component index and constructor index.
 constructorReferentsByPrefix ::
+  (QueryA m) =>
   Text ->
   Maybe V2Reference.Pos ->
   Maybe V2Decl.ConstructorId ->
-  Transaction e (Set V1Referent.Referent)
+  m (Set V1Referent.Referent)
 constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
   let mayComponentIndex' = pgComponentIndex <$> mayComponentIndex
   let mayConstructorIndex' = pgConstructorIndex <$> mayConstructorIndex
@@ -567,7 +565,7 @@ constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
 -- This is intentionally not in CodebaseM because this method is used to build the
 -- CodebaseEnv.
 loadCachedEvalResult :: (QueryM m) => UserId -> Reference.Id -> m (Maybe (V2.Term Symbol))
-loadCachedEvalResult codebaseOwnerUserId (Reference.Id hash compIndex) = runMaybeT do
+loadCachedEvalResult codebaseOwner (Reference.Id hash compIndex) = runMaybeT do
   let compIndex' = pgComponentIndex compIndex
   (evalResultId :: EvalResultId, EvalResultTerm term) <-
     MaybeT $
@@ -579,7 +577,7 @@ loadCachedEvalResult codebaseOwnerUserId (Reference.Id hash compIndex) = runMayb
       JOIN component_hashes hash ON result.component_hash_id = hash.id
       WHERE hash.base32 = #{hash}
         AND result.component_index = #{compIndex'}
-        AND sandboxed.user_id = #{codebaseOwnerUserId}
+        AND sandboxed.user_id = #{codebaseOwner}
     |]
   textLookup <-
     Vector.fromList
@@ -690,7 +688,7 @@ expectTextsOf trav =
       else pure results
 
 -- | Replace all references in a term with local references.
-localizeTerm :: V2.Term Symbol -> Transaction e (PgLocalIds, TermFormat.Term)
+localizeTerm :: (QueryM m) => V2.Term Symbol -> m (PgLocalIds, TermFormat.Term)
 localizeTerm tm = do
   let (localIds, tm', _typ) = runIdentity $ Util.c2xTerm Identity (Identity . ComponentHash) tm Nothing
   (localIds' :: PgLocalIds) <- HashQ.ensureComponentHashIdsOf LocalIds.h_ localIds >>= ensureTextIdsOf LocalIds.t_
@@ -698,10 +696,10 @@ localizeTerm tm = do
 
 -- | Replace all references in a term with local references.
 _localizeTermAndType ::
-  (HasCallStack) =>
+  (HasCallStack, QueryM m) =>
   V2.Term Symbol ->
   V2.Type Symbol ->
-  Transaction e (PgLocalIds, TermFormat.Term, TermFormat.Type)
+  m (PgLocalIds, TermFormat.Term, TermFormat.Type)
 _localizeTermAndType tm typ = do
   let (localIds, tm', typ') = case runIdentity (Util.c2xTerm Identity (Identity . ComponentHash) tm (Just typ)) of
         (_, _, Nothing) -> error "localizeTermAndType: Type is Nothing"
@@ -712,21 +710,20 @@ _localizeTermAndType tm typ = do
 -- | Save the result of an evaluation to the database.
 -- Note: this is sandboxed by user because the result may be a function containing local
 -- variable names.
-saveCachedEvalResult :: Reference.Id -> V2.Term Symbol -> CodebaseM e ()
-saveCachedEvalResult (Reference.Id resultHash compI) term = do
+saveCachedEvalResult :: forall m. (QueryM m) => CodebaseEnv -> Reference.Id -> V2.Term Symbol -> m ()
+saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash compI) term = do
   ensureEvalResult >>= \case
     (True, _) -> pure () -- Already saved.
     (False, evalResultId) -> doSave evalResultId
   where
-    doSave :: EvalResultId -> CodebaseM e ()
+    doSave :: EvalResultId -> m ()
     doSave evalResultId = do
-      codebaseOwnerUserId <- asks codebaseOwner
-      (LocalIds.LocalIds {textLookup, defnLookup}, dbTerm) <- lift $ localizeTerm term
+      (LocalIds.LocalIds {textLookup, defnLookup}, dbTerm) <- localizeTerm term
       resultBytesId <- ensureBytesIdsOf id (evalResultTermToByteString $ EvalResultTerm dbTerm)
       execute_
         [sql|
           INSERT INTO sandboxed_eval_result (user_id, eval_result_id, result_bytes_id)
-            VALUES (#{codebaseOwnerUserId}, #{evalResultId}, #{resultBytesId})
+            VALUES (#{codebaseOwner}, #{evalResultId}, #{resultBytesId})
         |]
 
       let textLocals = zip [0 :: Int32 ..] (Vector.toList textLookup)
@@ -752,7 +749,7 @@ saveCachedEvalResult (Reference.Id resultHash compI) term = do
               FROM values
         |]
     -- Ensure there's a row for this eval result, returning whether it already exists.
-    ensureEvalResult :: CodebaseM e (Bool, EvalResultId)
+    ensureEvalResult :: m (Bool, EvalResultId)
     ensureEvalResult = do
       resultHashId <- HashQ.ensureComponentHashId (ComponentHash resultHash)
       let compIndex = pgComponentIndex compI
@@ -775,18 +772,17 @@ saveCachedEvalResult (Reference.Id resultHash compI) term = do
 
 -- | Encode and save a term component to the database. See 'saveEncodedTermComponent' for a more
 -- efficient version if you've already got an encoded term component available.
-saveTermComponent :: ComponentHash -> [(PgLocalIds, TermFormat.Term, TermFormat.Type)] -> CodebaseM e ()
-saveTermComponent componentHash elements = do
+saveTermComponent :: (QueryM m) => CodebaseEnv -> ComponentHash -> [(PgLocalIds, TermFormat.Term, TermFormat.Type)] -> m ()
+saveTermComponent codebase componentHash elements = do
   let encodedElements =
         elements <&> \(localIds, trm, typ) ->
           (localIds, TermComponentElementBytes $ termComponentElementToByteString (TermComponentElement trm typ), typ)
-  saveEncodedTermComponent componentHash Nothing encodedElements
+  saveEncodedTermComponent codebase componentHash Nothing encodedElements
 
 -- | Save an already-encoded term component to the database. This is more efficient than
 -- 'saveTermComponent' in cases where you've already got a serialized term (like during sync).
-saveEncodedTermComponent :: ComponentHash -> Maybe TempEntity -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> CodebaseM e ()
-saveEncodedTermComponent componentHash maySerialized elements = do
-  codebaseOwnerUserId <- asks codebaseOwner
+saveEncodedTermComponent :: forall m. (QueryM m) => CodebaseEnv -> ComponentHash -> Maybe TempEntity -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> m ()
+saveEncodedTermComponent codebase@(CodebaseEnv {codebaseOwner}) componentHash maySerialized elements = do
   componentHashId <- HashQ.ensureComponentHashId componentHash
   let elementsTable = elements & imap \i _ -> pgComponentIndex $ fromIntegral @Int i
   mayTermIds :: Maybe (NE.NonEmpty TermId) <-
@@ -821,7 +817,7 @@ saveEncodedTermComponent componentHash maySerialized elements = do
         SELECT * FROM ^{toTable sandboxedTermBytesTable}
       )
       INSERT INTO sandboxed_terms (user_id, term_id, bytes_id)
-        SELECT #{codebaseOwnerUserId}, element.term_id, element.bytes_id
+        SELECT #{codebaseOwner}, element.term_id, element.bytes_id
           FROM elements element
     |]
   doSaveSerialized componentHashId
@@ -830,14 +826,14 @@ saveEncodedTermComponent componentHash maySerialized elements = do
       componentEntity <- case maySerialized of
         Just serialized -> pure serialized
         Nothing -> do
-          SyncCommon.entityToTempEntity id . Share.TC <$> expectShareTermComponent chId
+          SyncCommon.entityToTempEntity id . Share.TC <$> expectShareTermComponent codebase chId
       let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
-      saveSerializedComponent chId serializedEntity
+      saveSerializedComponent codebase chId serializedEntity
 
-    saveSharedTermAndLocalMappings :: ComponentHashId -> CodebaseM e (NE.NonEmpty TermId)
+    saveSharedTermAndLocalMappings :: ComponentHashId -> m (NE.NonEmpty TermId)
     saveSharedTermAndLocalMappings componentHashId = do
       let HashHandle {toReference = hashType} = v2HashHandle
-      elementsWithResolvedLocals <- lift $ resolveLocalIdsOf (traversed . _1) elements
+      elementsWithResolvedLocals <- resolveLocalIdsOf (traversed . _1) elements
       -- We need to save the shared terms for the first time.
       let termsTable :: [(PgComponentIndex, Maybe Text, Maybe ComponentHash, Maybe PgComponentIndex)]
           termsTable =
@@ -909,9 +905,8 @@ saveEncodedTermComponent componentHash maySerialized elements = do
         |]
       pure termIds
 
-saveTypeComponent :: ComponentHash -> Maybe TempEntity -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> CodebaseM e ()
-saveTypeComponent componentHash maySerialized elements = do
-  codebaseOwnerUserId <- asks codebaseOwner
+saveTypeComponent :: forall m. (QueryM m) => CodebaseEnv -> ComponentHash -> Maybe TempEntity -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> m ()
+saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerialized elements = do
   componentHashId <- HashQ.ensureComponentHashId componentHash
   let elementsTable = elements & imap \i _ -> fromIntegral @Int @Int32 i
   mayTypeIds :: Maybe (NE.NonEmpty TypeId) <-
@@ -945,7 +940,7 @@ saveTypeComponent componentHash maySerialized elements = do
         SELECT * FROM ^{toTable sandboxedTypesBytesTable}
       )
       INSERT INTO sandboxed_types (user_id, type_id, bytes_id)
-        SELECT #{codebaseOwnerUserId}, element.type_id, element.bytes_id
+        SELECT #{codebaseOwner}, element.type_id, element.bytes_id
           FROM elements element
     |]
   doSaveSerialized componentHashId
@@ -954,13 +949,13 @@ saveTypeComponent componentHash maySerialized elements = do
       componentEntity <- case maySerialized of
         Just serialized -> pure serialized
         Nothing -> do
-          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponent chId
+          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponent codebase chId
       let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
-      saveSerializedComponent chId serializedEntity
+      saveSerializedComponent codebase chId serializedEntity
 
-    saveConstructors :: [(TypeId, (PgLocalIds, DeclFormat.Decl Symbol))] -> CodebaseM e ()
+    saveConstructors :: [(TypeId, (PgLocalIds, DeclFormat.Decl Symbol))] -> m ()
     saveConstructors typeElements = do
-      typeElementsWithResolvedLocals <- lift $ resolveLocalIdsOf (traversed . _2 . _1) typeElements
+      typeElementsWithResolvedLocals <- resolveLocalIdsOf (traversed . _2 . _1) typeElements
       let HashHandle {toReferenceDecl = hashConstructorType} = v2HashHandle
       let constructorsTable :: [(TypeId, PgConstructorIndex, Maybe Text {- con type builtin -}, Maybe ComponentHash {- con type component hash -}, Maybe PgComponentIndex {- con type component index -})]
           constructorsTable =
@@ -995,7 +990,7 @@ saveTypeComponent componentHash maySerialized elements = do
               FROM elements
         |]
 
-    saveSharedTypeAndLocalMappings :: ComponentHashId -> CodebaseM e (NE.NonEmpty TypeId)
+    saveSharedTypeAndLocalMappings :: ComponentHashId -> m (NE.NonEmpty TypeId)
     saveSharedTypeAndLocalMappings componentHashId = do
       -- We need to save the shared types for the first time.
       let typesTable :: [(PgComponentIndex, DeclKindEnum, ModifierEnum)]
@@ -1064,7 +1059,7 @@ saveTypeComponent componentHash maySerialized elements = do
       pure typeIds
 
 -- | Efficiently resolve all pg Ids across selected Local Ids.
-resolveLocalIdsOf :: Traversal s t PgLocalIds ResolvedLocalIds -> s -> Transaction e t
+resolveLocalIdsOf :: (QueryM m) => Traversal s t PgLocalIds ResolvedLocalIds -> s -> m t
 resolveLocalIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \pgLocalIds -> do
@@ -1197,14 +1192,13 @@ typeTagsByReferencesOf trav s = do
       DefnTypes.Ability -> Tags.Ability
       DefnTypes.Data -> Tags.Data
 
-saveSerializedComponent :: ComponentHashId -> CBORBytes TempEntity -> CodebaseM e ()
-saveSerializedComponent chId (CBORBytes bytes) = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+saveSerializedComponent :: (QueryM m) => CodebaseEnv -> ComponentHashId -> CBORBytes TempEntity -> m ()
+saveSerializedComponent (CodebaseEnv {codebaseOwner}) chId (CBORBytes bytes) = do
   bytesId <- ensureBytesIdsOf id (BL.toStrict bytes)
   execute_
     [sql|
       INSERT INTO serialized_components (user_id, component_hash_id, bytes_id)
-        VALUES (#{codebaseOwnerUserId}, #{chId}, #{bytesId})
+        VALUES (#{codebaseOwner}, #{chId}, #{bytesId})
       ON CONFLICT DO NOTHING
     |]
 

@@ -41,8 +41,7 @@ import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Vector qualified as Vector
-import Share.Codebase.Types (CodebaseM)
-import Share.Codebase.Types qualified as Codebase
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.IDs (UserId)
 import Share.Postgres
 import Share.Postgres.Causal.Types
@@ -88,8 +87,8 @@ expectCausalNamespace causalId =
   loadCausalNamespace causalId
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal branch for hash:" <> tShow causalId)
 
-loadPgCausalNamespace :: (HasCallStack) => CausalId -> CodebaseM e (Maybe (PgCausalNamespace (CodebaseM e)))
-loadPgCausalNamespace causalId = runMaybeT $ do
+loadPgCausalNamespace :: forall m. (HasCallStack, QueryM m) => CodebaseEnv -> CausalId -> m (Maybe (PgCausalNamespace m))
+loadPgCausalNamespace codebase@(CodebaseEnv {codebaseOwner}) causalId = runMaybeT $ do
   branchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id causalId
   let namespace = expectPgNamespace branchHashId
   ancestors <- lift $ ancestorsByCausalId causalId
@@ -101,15 +100,14 @@ loadPgCausalNamespace causalId = runMaybeT $ do
         value = namespace
       }
   where
-    ancestorsByCausalId :: CausalId -> CodebaseM e ((Map CausalId (CodebaseM e (PgCausalNamespace (CodebaseM e)))))
+    ancestorsByCausalId :: CausalId -> m ((Map CausalId (m (PgCausalNamespace (m)))))
     ancestorsByCausalId causalId = do
       getAncestors
-        <&> fmap (\ancestorId -> (ancestorId, expectPgCausalNamespace ancestorId))
+        <&> fmap (\ancestorId -> (ancestorId, expectPgCausalNamespace codebase ancestorId))
         <&> Map.fromList
       where
-        getAncestors :: CodebaseM e [CausalId]
+        getAncestors :: m [CausalId]
         getAncestors = do
-          codebaseOwner <- asks Codebase.codebaseOwner
           queryListCol
             [sql| SELECT ca.ancestor_id
                     FROM causal_ancestors ca
@@ -118,9 +116,9 @@ loadPgCausalNamespace causalId = runMaybeT $ do
                       AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = ca.ancestor_id AND o.user_id = #{codebaseOwner})
             |]
 
-expectPgCausalNamespace :: (HasCallStack) => CausalId -> CodebaseM e (PgCausalNamespace (CodebaseM e))
-expectPgCausalNamespace causalId =
-  loadPgCausalNamespace causalId
+expectPgCausalNamespace :: (HasCallStack, QueryM m) => CodebaseEnv -> CausalId -> m (PgCausalNamespace (m))
+expectPgCausalNamespace codebase causalId =
+  loadPgCausalNamespace codebase causalId
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal branch for causal: " <> tShow causalId)
 
 loadCausalNamespace :: forall m. (QueryM m) => CausalId -> m (Maybe (CausalNamespace m))
@@ -153,9 +151,8 @@ loadCausalNamespace causalId = runMaybeT $ do
                     WHERE causal_id = #{causalId}
             |]
 
-expectNamespaceHashByCausalHash :: CausalHash -> CodebaseM e (BranchHash, BranchHashId)
-expectNamespaceHashByCausalHash causalHash = do
-  codebaseOwner <- asks Codebase.codebaseOwner
+expectNamespaceHashByCausalHash :: (QueryM m) => CodebaseEnv -> CausalHash -> m (BranchHash, BranchHashId)
+expectNamespaceHashByCausalHash (CodebaseEnv {codebaseOwner}) causalHash = do
   queryExpect1Row
     [sql| SELECT bh.base32, namespace_hash_id
             FROM causals
@@ -295,7 +292,7 @@ expectNamespace branchHashId = do
         (Nothing, Nothing, Just builtin) -> Reference.Builtin builtin
         _ -> error "Unexpected metadata format"
 
-expectPgNamespace :: BranchHashId -> CodebaseM e PgNamespace
+expectPgNamespace :: forall m. (QueryM m) => BranchHashId -> m PgNamespace
 expectPgNamespace branchHashId = do
   termsAndConstructors <- getTermsAndConstructors branchHashId >>= (traversed . traversed %%~ loadTermMetadata)
   types <- getTypes branchHashId >>= (traversed . traversed %%~ loadTypeMetadata)
@@ -309,7 +306,7 @@ expectPgNamespace branchHashId = do
         children = children
       }
   where
-    loadTermMetadata :: NamespaceTermMappingId -> CodebaseM e (BranchFull.MetadataSetFormat' TextId ComponentHashId)
+    loadTermMetadata :: NamespaceTermMappingId -> m (BranchFull.MetadataSetFormat' TextId ComponentHashId)
     loadTermMetadata mappingId = do
       queryListRows @(Reference' TextId ComponentHashId)
         [sql|
@@ -320,7 +317,7 @@ expectPgNamespace branchHashId = do
       |]
         <&> BranchFull.Inline . Set.fromList
 
-    loadTypeMetadata :: NamespaceTypeMappingId -> CodebaseM e (BranchFull.MetadataSetFormat' TextId ComponentHashId)
+    loadTypeMetadata :: NamespaceTypeMappingId -> m (BranchFull.MetadataSetFormat' TextId ComponentHashId)
     loadTypeMetadata mappingId =
       do
         queryListRows @(Reference' TextId ComponentHashId)
@@ -332,7 +329,7 @@ expectPgNamespace branchHashId = do
       |]
         <&> BranchFull.Inline . Set.fromList
 
-    getTermsAndConstructors :: BranchHashId -> CodebaseM e (Map TextId (Map (BranchFull.Referent'' TextId ComponentHashId) NamespaceTermMappingId))
+    getTermsAndConstructors :: BranchHashId -> m (Map TextId (Map (BranchFull.Referent'' TextId ComponentHashId) NamespaceTermMappingId))
     getTermsAndConstructors branchHashId = do
       queryListRows @(NamespaceTermMappingId, TextId, Maybe TextId, Maybe ComponentHashId, Maybe PgComponentIndex, Maybe PgConstructorIndex)
         [sql| SELECT mapping.id, mapping.name_segment_id, mapping.builtin_id, COALESCE(term.component_hash_id, constr_typ.component_hash_id), COALESCE(term.component_index, constr_typ.component_index), constr.constructor_index
@@ -358,7 +355,7 @@ expectPgNamespace branchHashId = do
           )
         <&> Map.fromListWith (Map.unionWithKey \ref a b -> if a == b then a else error ("expectPGNamespace: getTermsAndConstructors: Encountered different mapping ids for the same name and ref which shouldn't be possible: " <> show (ref, a, b)))
 
-    getTypes :: BranchHashId -> CodebaseM e (Map TextId (Map (TypeReference' TextId ComponentHashId) NamespaceTypeMappingId))
+    getTypes :: BranchHashId -> m (Map TextId (Map (TypeReference' TextId ComponentHashId) NamespaceTypeMappingId))
     getTypes branchHashId = do
       queryListRows @(NamespaceTypeMappingId, TextId, Maybe TextId, Maybe ComponentHashId, Maybe PgComponentIndex)
         [sql| SELECT mapping.id, name_segment.text, builtin.text, component_hashes.base32, component_index
@@ -382,7 +379,7 @@ expectPgNamespace branchHashId = do
           )
         <&> Map.fromListWith (Map.unionWithKey \ref a b -> if a == b then a else error ("expectPGNamespace: getTypes: Encountered different mapping ids for the same name and ref which shouldn't be possible: " <> show (ref, a, b)))
 
-    getPatches :: BranchHashId -> CodebaseM e (Map TextId PatchId)
+    getPatches :: BranchHashId -> m (Map TextId PatchId)
     getPatches branchHashId = do
       queryListRows
         [sql| SELECT mapping.name_segment_id, mapping.patch_id
@@ -395,7 +392,7 @@ expectPgNamespace branchHashId = do
           )
         <&> Map.fromList
 
-    getChildren :: BranchHashId -> CodebaseM e (Map TextId (BranchHashId, CausalId))
+    getChildren :: BranchHashId -> m (Map TextId (BranchHashId, CausalId))
     getChildren branchHashId = do
       childList <-
         queryListRows
@@ -411,9 +408,8 @@ expectPgNamespace branchHashId = do
 -- | Crawls the namespace tree to find the causal id mounted at a given path from the provided
 -- root causal.
 -- Returns Nothing if there's no causal at the provided path (or if the root causal doesn't exist)
-loadCausalIdAtPath :: (HasCallStack) => CausalId -> Path.Path -> CodebaseM e (Maybe CausalId)
-loadCausalIdAtPath rootCausalId path = runMaybeT $ do
-  codebaseOwner <- asks Codebase.codebaseOwner
+loadCausalIdAtPath :: (HasCallStack, QueryM m) => CodebaseEnv -> CausalId -> Path.Path -> m (Maybe CausalId)
+loadCausalIdAtPath (CodebaseEnv {codebaseOwner}) rootCausalId path = runMaybeT $ do
   let pathArray = Path.toList path
   MaybeT $
     -- Due to the way the function call works we'll always get one row, but the column might be NULL.
@@ -423,14 +419,16 @@ loadCausalIdAtPath rootCausalId path = runMaybeT $ do
         WHERE EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causal_id AND o.user_id = #{codebaseOwner})
     |]
 
-loadCausalNamespaceAtPath :: (HasCallStack) => CausalId -> Path.Path -> CodebaseM e (Maybe (CausalNamespace (CodebaseM e)))
-loadCausalNamespaceAtPath causalId path = do
-  causalId <- loadCausalIdAtPath causalId path
+loadCausalNamespaceAtPath :: (HasCallStack, QueryM m) => CodebaseEnv -> CausalId -> Path.Path -> m (Maybe (CausalNamespace (m)))
+loadCausalNamespaceAtPath codebase causalId path = do
+  causalId <- loadCausalIdAtPath codebase causalId path
   traverse expectCausalNamespace causalId
 
 -- | Given a namespace whose dependencies have all been pre-saved, save it to the database under the given hash.
 savePgNamespace ::
-  (HasCallStack) =>
+  forall m.
+  (HasCallStack, QueryM m) =>
+  CodebaseEnv ->
   -- | The pre-serialized namespace, if available. If Nothing it will be re-generated, which is slower.
   Maybe TempEntity ->
   -- Normally we'd prefer to always hash it ourselves, but there are some bad hashes in the wild
@@ -438,9 +436,8 @@ savePgNamespace ::
   -- it at that hash regardless of what the _actual_ hash is.
   Maybe BranchHash ->
   PgNamespace ->
-  CodebaseM e (BranchHashId, BranchHash)
-savePgNamespace maySerialized mayBh b@(BranchFull.Branch {terms, types, patches, children}) = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+  m (BranchHashId, BranchHash)
+savePgNamespace (CodebaseEnv {codebaseOwner}) maySerialized mayBh b@(BranchFull.Branch {terms, types, patches, children}) = do
   bh <- whenNothing mayBh $ hashPgNamespace b
   bhId <- HashQ.ensureBranchHashId bh
   queryExpect1Col [sql| SELECT EXISTS (SELECT FROM namespaces WHERE namespace_hash_id = #{bhId}) |] >>= \case
@@ -450,12 +447,12 @@ savePgNamespace maySerialized mayBh b@(BranchFull.Branch {terms, types, patches,
     True -> pure ()
   execute_
     [sql| INSERT INTO namespace_ownership (namespace_hash_id, user_id)
-                   VALUES (#{bhId}, #{codebaseOwnerUserId})
+                   VALUES (#{bhId}, #{codebaseOwner})
                    ON CONFLICT DO NOTHING
     |]
   pure (bhId, bh)
   where
-    doSaveSerialized :: BranchHashId -> CodebaseM e ()
+    doSaveSerialized :: BranchHashId -> m ()
     doSaveSerialized bhId = do
       nsEntity <- case maySerialized of
         Just serialized -> pure serialized
@@ -463,7 +460,7 @@ savePgNamespace maySerialized mayBh b@(BranchFull.Branch {terms, types, patches,
       let serializedNamespace = SyncV2.serialiseCBORBytes nsEntity
       saveSerializedNamespace bhId serializedNamespace
 
-    doSave :: BranchHashId -> CodebaseM e ()
+    doSave :: BranchHashId -> m ()
     doSave bhId = do
       -- Expand all term mappings into a list
       let termsWithMeta :: [(OrdBy, TextId, Maybe TextId, Maybe ComponentHashId, Maybe PgComponentIndex, Maybe PgConstructorIndex, (BranchFull.MetadataSetFormat' TextId ComponentHashId))]
@@ -655,7 +652,7 @@ saveSerializedNamespace bhId (CBORBytes bytes) = do
       ON CONFLICT DO NOTHING
     |]
 
-expectNamespaceEntity :: BranchHashId -> CodebaseM e (Sync.Namespace Text Hash32)
+expectNamespaceEntity :: (QueryM m) => BranchHashId -> m (Sync.Namespace Text Hash32)
 expectNamespaceEntity bhId = do
   v2Branch <- expectNamespace bhId
   second Hash32.fromHash <$> branchToEntity v2Branch
@@ -737,15 +734,17 @@ hashCausal branchHashId ancestorIds = do
   pure . CausalHash . H.contentHash $ hCausal
 
 saveCausal ::
+  forall m.
+  (QueryM m) =>
+  CodebaseEnv ->
   -- | The pre-serialized causal, if available. If Nothing it will be re-generated, which is slower.
   Maybe TempEntity ->
   Maybe CausalHash ->
   BranchHashId ->
   Set CausalId ->
-  CodebaseM e (CausalId, CausalHash)
-saveCausal maySerializedCausal mayCh bhId ancestorIds = do
+  m (CausalId, CausalHash)
+saveCausal (CodebaseEnv {codebaseOwner}) maySerializedCausal mayCh bhId ancestorIds = do
   ch <- maybe (hashCausal bhId ancestorIds) pure mayCh
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
   cId <-
     query1Col [sql| SELECT id FROM causals WHERE hash = #{ch} |] >>= \case
       Just cId -> pure cId
@@ -756,7 +755,7 @@ saveCausal maySerializedCausal mayCh bhId ancestorIds = do
   execute_
     [sql|
     INSERT INTO causal_ownership (user_id, causal_id)
-      VALUES (#{codebaseOwnerUserId}, #{cId})
+      VALUES (#{codebaseOwner}, #{cId})
       ON CONFLICT DO NOTHING
     |]
   pure (cId, ch)
@@ -800,7 +799,7 @@ saveSerializedCausal causalId (CBORBytes bytes) = do
       ON CONFLICT DO NOTHING
     |]
 
-expectCausalEntity :: (HasCallStack) => CausalId -> CodebaseM e (Sync.Causal Hash32)
+expectCausalEntity :: (HasCallStack, QueryM m) => CausalId -> m (Sync.Causal Hash32)
 expectCausalEntity causalId = do
   U.Causal {valueHash, parents} <- expectCausalNamespace causalId
   pure $
@@ -812,9 +811,8 @@ expectCausalEntity causalId = do
 
 -- | Get the ref to the result of squashing if we've squashed that ref in the past.
 -- Also adds the squash result to current codebase if we find it.
-tryGetCachedSquashResult :: BranchHash -> CodebaseM e (Maybe CausalId)
-tryGetCachedSquashResult branchHash = runMaybeT $ do
-  codebaseOwner <- asks Codebase.codebaseOwner
+tryGetCachedSquashResult :: (QueryM m) => CodebaseEnv -> BranchHash -> m (Maybe CausalId)
+tryGetCachedSquashResult (CodebaseEnv {codebaseOwner}) branchHash = runMaybeT $ do
   squashedCausalId <-
     MaybeT $
       query1Col
@@ -831,7 +829,7 @@ tryGetCachedSquashResult branchHash = runMaybeT $ do
   pure squashedCausalId
 
 -- | Caches the result of a squash.
-saveSquashResult :: BranchHash -> CausalId -> CodebaseM e ()
+saveSquashResult :: (QueryM m) => BranchHash -> CausalId -> m ()
 saveSquashResult unsquashedBranchHash squashedCausalHashId = do
   execute_
     [sql|
@@ -844,12 +842,12 @@ saveSquashResult unsquashedBranchHash squashedCausalHashId = do
 -- | Saves a namespace to the database, returning its hash and id.
 -- NOTE: This does not save the namespace's dependencies, or its children, the caller must
 -- ensure those are saved beforehand.
-saveV2BranchShallow :: V2.Branch (CodebaseM e) -> CodebaseM e (BranchHashId, BranchHash)
-saveV2BranchShallow v2Branch = do
+saveV2BranchShallow :: forall m. (QueryM m) => CodebaseEnv -> V2.Branch m -> m (BranchHashId, BranchHash)
+saveV2BranchShallow codebase v2Branch = do
   pgNamespace <- expectV2BranchDependencies v2Branch
-  savePgNamespace Nothing Nothing pgNamespace
+  savePgNamespace codebase Nothing Nothing pgNamespace
   where
-    expectV2BranchDependencies :: V2.Branch (CodebaseM e) -> CodebaseM e PgNamespace
+    expectV2BranchDependencies :: V2.Branch (m) -> m PgNamespace
     expectV2BranchDependencies V2.Branch {terms, types, patches, children} = do
       terms' <-
         terms
@@ -875,8 +873,8 @@ saveV2BranchShallow v2Branch = do
         & BranchFull.h_ %~ ComponentHash
         & Defn.ensureTextIdsOf BranchFull.t_
         >>= HashQ.ensureComponentHashIdsOf BranchFull.h_
-        >>= HashQ.expectPatchIdsOf BranchFull.p_
-        >>= HashQ.expectCausalIdsOf BranchFull.c_
+        >>= HashQ.expectPatchIdsOf codebase BranchFull.p_
+        >>= HashQ.expectCausalIdsOf codebase BranchFull.c_
 
     mdValuesToMetadataSetFormat :: V2.MdValues -> BranchFull.MetadataSetFormat' Text Hash
     mdValuesToMetadataSetFormat (V2.MdValues meta) = BranchFull.Inline meta
@@ -915,18 +913,16 @@ expectNamespaceStatsOf trav s =
 
 -- | Copy a causal and all its dependencies from one codebase to another.
 -- Make sure you've done some form of authorization check before calling this.
-importCausalIntoCodebase :: UserId -> CausalId -> CodebaseM e ()
-importCausalIntoCodebase fromCodebaseUserId causalId = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+importCausalIntoCodebase :: (QueryM m) => CodebaseEnv -> UserId -> CausalId -> m ()
+importCausalIntoCodebase (CodebaseEnv {codebaseOwner}) fromCodebaseUserId causalId = do
   execute_
     [sql|
-      SELECT copy_causal_into_codebase(#{causalId}, #{fromCodebaseUserId}, #{codebaseOwnerUserId})
+      SELECT copy_causal_into_codebase(#{causalId}, #{fromCodebaseUserId}, #{codebaseOwner})
     |]
 
 -- | Given a set of causals, import as many as possible from accessible releases.
-importAccessibleCausals :: Set (Hash32) -> CodebaseM e [(CausalId, UserId)]
-importAccessibleCausals causalHashes = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+importAccessibleCausals :: (QueryM m) => CodebaseEnv -> Set (Hash32) -> m [(CausalId, UserId)]
+importAccessibleCausals (CodebaseEnv {codebaseOwner}) causalHashes = do
   results <-
     whenNonEmpty causalHashes $
       queryListRows @(CausalId, UserId)
@@ -936,21 +932,21 @@ importAccessibleCausals causalHashes = do
               -- We can only import causals that already exist in the shared codebase.
               JOIN causals ON causal_hashes.hash = causals.hash
               -- Ignore any causals that the codebase owner already has.
-              WHERE NOT EXISTS (SELECT FROM causal_ownership co WHERE co.causal_id = causals.id AND co.user_id = #{codebaseOwnerUserId})
+              WHERE NOT EXISTS (SELECT FROM causal_ownership co WHERE co.causal_id = causals.id AND co.user_id = #{codebaseOwner})
             ), copyable_causals(causal_id, causal_hash, project_owner, created_at) AS (
                  SELECT cti.causal_id AS causal_id, cti.hash, project.owner_user_id, release.created_at
                    FROM causals_to_import cti
                      JOIN project_releases release ON release.squashed_causal_id = cti.causal_id
                      JOIN projects project ON project.id = release.project_id
                    -- The caller must have permission to the view the project containing the causal
-                   WHERE user_has_project_permission(#{codebaseOwnerUserId}, release.project_id, #{ProjectView})
+                   WHERE user_has_project_permission(#{codebaseOwner}, release.project_id, #{ProjectView})
                UNION ALL
                  SELECT cti.causal_id AS causal_id, cti.hash, project.owner_user_id, branch.created_at
                    FROM causals_to_import cti
                      JOIN project_branches branch ON branch.causal_id = cti.causal_id
                      JOIN projects project ON project.id = branch.project_id
                    -- The caller must have permission to the view the project containing the causal
-                   WHERE user_has_project_permission(#{codebaseOwnerUserId}, branch.project_id, #{ProjectView})
+                   WHERE user_has_project_permission(#{codebaseOwner}, branch.project_id, #{ProjectView})
             )
             -- Get only the first release (by created at) for each causal
             SELECT DISTINCT ON (copyable.causal_id) copyable.causal_id, copyable.project_owner
@@ -960,7 +956,7 @@ importAccessibleCausals causalHashes = do
         |]
   for_ results \case
     (causalId, owner) -> do
-      execute_ [sql| SELECT copy_causal_into_codebase(#{causalId}, #{owner}, #{codebaseOwnerUserId}) |]
+      execute_ [sql| SELECT copy_causal_into_codebase(#{causalId}, #{owner}, #{codebaseOwner}) |]
   pure results
 
 -- | Find the best common ancestor between two causals for diffs or merges.

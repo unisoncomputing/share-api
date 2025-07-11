@@ -219,7 +219,7 @@ createFromGithubUser !authzReceipt (GithubUser _githubHandle githubUserId avatar
             VALUES (#{githubUserId}, #{userId})
         |]
   let codebase = Codebase.codebaseEnv authzReceipt (Codebase.codebaseLocationForUserCodebase userId)
-  Codebase.codebaseMToTransaction codebase LCQ.initialize
+  LCQ.initialize codebase
   let visibility = UserPublic
   pure $
     User
