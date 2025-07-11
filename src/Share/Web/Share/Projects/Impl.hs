@@ -175,24 +175,19 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
           (,)
             <$> CausalQ.expectCausalHashesByIdsOf each (oldCausalId, newCausalId)
             <*> CausalQ.bestCommonAncestor oldCausalId newCausalId
-    badUnliftCodebaseRuntime <- Codebase.badAskUnliftCodebaseRuntime
     unisonRuntime <- asks Env.sandboxedRuntime
-    let makeRuntime :: Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)
-        makeRuntime codebase = do
-          runtime <- Codebase.codebaseRuntimeTransaction unisonRuntime codebase
-          pure (badUnliftCodebaseRuntime runtime)
     diff <-
       PG.runTransaction do
         ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
           Just diff -> pure (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
           Nothing -> do
-            oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
-            newRuntime <- PG.transactionUnsafeIO (makeRuntime newCodebase)
-            Diffs.computeAndStoreCausalDiff
-              authZReceipt
-              (oldCodebase, oldRuntime, oldCausalId)
-              (newCodebase, newRuntime, newCausalId)
-              maybeLcaCausalId
+            Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
+              Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
+                Diffs.computeAndStoreCausalDiff
+                  authZReceipt
+                  (oldCodebase, oldRuntime, oldCausalId)
+                  (newCodebase, newRuntime, newCausalId)
+                  maybeLcaCausalId
     pure
       ShareNamespaceDiffResponse
         { project = projectShortHand,

@@ -32,9 +32,9 @@ data CodebaseEnv = CodebaseEnv
   }
 
 -- | The runtime environment for a codebase transaction.
--- Includes a skolem type var to prevent the runtime from escaping the transaction its
+-- Includes a skolem scope type var to prevent the runtime from escaping the transaction its
 -- runtime was initialized with.
-data CodebaseRuntime s m = CodebaseRuntime
+data CodebaseRuntime scope m = CodebaseRuntime
   { codeLookup :: CL.CodeLookup Symbol m Ann,
     -- Function to look up cached evaluation results for the runtime.
     cachedEvalResult :: Reference.Id -> m (Maybe (Rt.Term Symbol)),

@@ -21,6 +21,8 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import System.Clock qualified as Clock
+import Unison.Codebase.Runtime (Runtime)
+import Unison.Symbol (Symbol)
 
 -- | Check every 10 minutes if we haven't heard on the notifications channel.
 -- Just in case we missed a notification.
@@ -30,21 +32,16 @@ maxPollingIntervalSeconds = 10 * 60
 worker :: Ki.Scope -> Background ()
 worker scope = do
   authZReceipt <- AuthZ.backgroundJobAuthZ
-  badUnliftCodebaseRuntime <- Codebase.badAskUnliftCodebaseRuntime
   unisonRuntime <- asks Env.sandboxedRuntime
-  let makeRuntime :: Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)
-      makeRuntime codebase = do
-        runtime <- Codebase.codebaseRuntimeTransaction unisonRuntime codebase
-        pure (badUnliftCodebaseRuntime runtime)
   newWorker scope "causal-diffs" $ forever do
     Notif.waitOnChannel Notif.CausalDiffChannel (maxPollingIntervalSeconds * 1000000)
-    processDiffs authZReceipt makeRuntime
+    processDiffs authZReceipt unisonRuntime
 
 -- Process diffs until we run out of them. We claim a diff in a transaction and compute the diff in the same
 -- transaction, with a row lock on the contribution id (which is skipped by other workers). There's therefore no chance
 -- that we claim a diff but fail to write the result of computing that diff back to the database.
-processDiffs :: AuthZ.AuthZReceipt -> (Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)) -> Background ()
-processDiffs authZReceipt makeRuntime = do
+processDiffs :: AuthZ.AuthZReceipt -> Runtime Symbol -> Background ()
+processDiffs authZReceipt unisonRuntime = do
   let loop :: Background ()
       loop = do
         result <-
@@ -53,7 +50,7 @@ processDiffs authZReceipt makeRuntime = do
               Nothing -> pure Nothing
               Just causalDiffInfo -> do
                 startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
-                result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt makeRuntime causalDiffInfo)
+                result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime causalDiffInfo)
                 DQ.deleteClaimedCausalDiff causalDiffInfo
                 pure (Just (causalDiffInfo, startTime, result))
         whenJust result \(CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}, startTime, result) -> do
@@ -79,22 +76,21 @@ processDiffs authZReceipt makeRuntime = do
 -- Returns whether or not we did any work.
 maybeComputeAndStoreCausalDiff ::
   AuthZ.AuthZReceipt ->
-  (Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)) ->
+  Runtime Symbol ->
   CausalDiffInfo ->
   PG.Transaction EntityMissing Bool
-maybeComputeAndStoreCausalDiff authZReceipt makeRuntime (CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}) = do
+maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime (CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}) = do
   bestCommonAncestorCausalId <- CausalQ.bestCommonAncestor fromCausalId toCausalId
   let fromCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForUserCodebase fromCodebaseOwner
   let toCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForUserCodebase toCodebaseOwner
   ContributionsQ.existsPrecomputedNamespaceDiff (fromCodebase, fromCausalId) (toCodebase, toCausalId) >>= \case
     True -> pure False
-    False -> do
-      fromRuntime <- PG.transactionUnsafeIO (makeRuntime fromCodebase)
-      toRuntime <- PG.transactionUnsafeIO (makeRuntime toCodebase)
-      _ <-
-        Diffs.computeAndStoreCausalDiff
-          authZReceipt
-          (fromCodebase, fromRuntime, fromCausalId)
-          (toCodebase, toRuntime, toCausalId)
-          bestCommonAncestorCausalId
-      pure True
+    False -> Codebase.withCodebaseRuntime fromCodebase unisonRuntime \fromRuntime -> do
+      Codebase.withCodebaseRuntime toCodebase unisonRuntime \toRuntime -> do
+        _ <-
+          Diffs.computeAndStoreCausalDiff
+            authZReceipt
+            (fromCodebase, fromRuntime, fromCausalId)
+            (toCodebase, toRuntime, toCausalId)
+            bestCommonAncestorCausalId
+        pure True

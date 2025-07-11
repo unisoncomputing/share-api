@@ -25,6 +25,7 @@ import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
 import Share.Codebase qualified as PG
 import Share.Contribution
+import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
@@ -359,16 +360,17 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
-      oldRuntime <- Codebase.codebaseRuntime oldCodebase
-      newRuntime <- Codebase.codebaseRuntime newCodebase
       termDiff <- do
+        unisonRuntime <- asks Env.sandboxedRuntime
         result <-
           PG.tryRunTransaction do
-            (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-            Diffs.diffTerms
-              authZReceipt
-              (oldCodebase, oldRuntime, oldBranchHashId, oldTermName)
-              (newCodebase, newRuntime, newBranchHashId, newTermName)
+            Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
+              Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
+                (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
+                Diffs.diffTerms
+                  authZReceipt
+                  (oldCodebase, oldRuntime, oldBranchHashId, oldTermName)
+                  (newCodebase, newRuntime, newBranchHashId, newTermName)
         case result of
           Left err -> respondError err
           -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
@@ -417,13 +419,14 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "contribution-diff-types" cacheKeys do
-      oldRuntime <- Codebase.codebaseRuntime oldCodebase
-      newRuntime <- Codebase.codebaseRuntime newCodebase
+      unisonRuntime <- asks Env.sandboxedRuntime
       typeDiff <-
         (either respondError pure =<<) do
           PG.tryRunTransaction do
-            (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-            Diffs.diffTypes authZReceipt (oldCodebase, oldRuntime, oldBranchHashId, oldTypeName) (newCodebase, newRuntime, newBranchHashId, newTypeName)
+            Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
+              Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
+                (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
+                Diffs.diffTypes authZReceipt (oldCodebase, oldRuntime, oldBranchHashId, oldTypeName) (newCodebase, newRuntime, newBranchHashId, newTypeName)
       pure $
         ShareTypeDiffResponse
           { project = projectShorthand,

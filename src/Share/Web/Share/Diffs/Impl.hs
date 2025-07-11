@@ -45,8 +45,8 @@ import Unison.Util.Pretty (Width)
 -- | Diff two causals and store the diff in the database.
 computeAndStoreCausalDiff ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime from IO, CausalId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, CausalId) ->
   Maybe CausalId ->
   PG.Transaction e (PreEncoded NamespaceDiffs.NamespaceDiffResult)
 computeAndStoreCausalDiff authZReceipt old@(oldCodebase, _, oldCausalId) new@(newCodebase, _, newCausalId) lca = do
@@ -63,8 +63,8 @@ computeAndStoreCausalDiff authZReceipt old@(oldCodebase, _, oldCausalId) new@(ne
 
 tryComputeCausalDiff ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, CausalId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime from IO, CausalId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, CausalId) ->
   Maybe CausalId ->
   PG.Transaction
     NamespaceDiffError
@@ -130,11 +130,11 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
   pure diff4
 
 computeUpdatedDefinitionDiffs ::
-  forall a b.
+  forall a b from to.
   (Ord a, Ord b) =>
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime from IO, BranchHashId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, BranchHashId) ->
   GNamespaceTreeDiff NameSegment a b Name Name Name Name ->
   PG.Transaction
     NamespaceDiffError
@@ -162,7 +162,7 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId
 
     renderDiffKind ::
       forall diff r x.
-      ((Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) -> PG.Transaction NamespaceDiffError (Maybe x)) ->
+      (forall s. (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction NamespaceDiffError (Maybe x)) ->
       DefinitionDiffKind r Name diff ->
       PG.Transaction NamespaceDiffError (DefinitionDiffKind r x diff)
     renderDiffKind getter = \case
@@ -193,8 +193,8 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId
 
 diffTerms ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime old IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, BranchHashId, Name) ->
   PG.Transaction NamespaceDiffError (Maybe TermDefinitionDiff)
 diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
   oldTerm <- getTermDefinition old `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
@@ -207,7 +207,7 @@ diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
     -- Just dropping them from the diff for now
     _ -> pure Nothing
 
-getTermDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) -> PG.Transaction e (Maybe (Either ConstructorReference TermDefinition))
+getTermDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction e (Maybe (Either ConstructorReference TermDefinition))
 getTermDefinition (codebase, rt, bhId, name) = do
   let perspective = mempty
   (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
@@ -221,8 +221,8 @@ getTermDefinition (codebase, rt, bhId, name) = do
 
 diffTypes ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime old IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, BranchHashId, Name) ->
   PG.Transaction NamespaceDiffError TypeDefinitionDiff
 diffTypes !_authZReceipt old@(_, _, _, oldTypeName) new@(_, _, _, newTypeName) = do
   oldType <-
@@ -234,7 +234,7 @@ diffTypes !_authZReceipt old@(_, _, _, oldTypeName) new@(_, _, _, newTypeName) =
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition oldType) (typeDefinition newType)
   pure $ TypeDefinitionDiff {left = oldType, right = newType, diff = typeDiffDisplayObject}
 
-getTypeDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime IO, BranchHashId, Name) -> PG.Transaction e (Maybe TypeDefinition)
+getTypeDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction e (Maybe TypeDefinition)
 getTypeDefinition (codebase, rt, bhId, name) = do
   let perspective = mempty
   (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId

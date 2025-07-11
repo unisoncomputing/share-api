@@ -77,7 +77,7 @@ definitionForHQName ::
   -- | Whether to suffixify bindings in the rendered syntax
   Suffixify ->
   -- | Runtime used to evaluate docs. This should be sandboxed if run on the server.
-  CodebaseRuntime IO ->
+  CodebaseRuntime s IO ->
   -- | The name, hash, or both, of the definition to display.
   HQ.HashQualified Name ->
   Codebase.CodebaseM e DefinitionDisplayResults
@@ -143,7 +143,7 @@ definitionForHQName perspective rootCausalId renderWidth suffixifyBindings rt pe
 renderDocRefs ::
   PPEDBuilder (Codebase.CodebaseM e) ->
   Width ->
-  CodebaseRuntime IO ->
+  CodebaseRuntime s IO ->
   [TermReference] ->
   Codebase.CodebaseM e [(HashQualifiedName, UnisonHash, Doc.Doc)]
 renderDocRefs _ppedBuilder _width _rt [] = pure []
@@ -207,7 +207,7 @@ termDefinitionByName ::
   PPEDBuilder (Codebase.CodebaseM e) ->
   NameSearch (PG.Transaction e) ->
   Width ->
-  CodebaseRuntime IO ->
+  CodebaseRuntime s IO ->
   Name ->
   Codebase.CodebaseM e (Maybe (Either ConstructorReference TermDefinition))
 termDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT do
@@ -241,7 +241,7 @@ typeDefinitionByName ::
   PPEDBuilder (Codebase.CodebaseM e) ->
   NameSearch (PG.Transaction e) ->
   Width ->
-  CodebaseRuntime IO ->
+  CodebaseRuntime s IO ->
   Name ->
   Codebase.CodebaseM e (Maybe TypeDefinition)
 typeDefinitionByName ppedBuilder nameSearch width rt name = runMaybeT $ do

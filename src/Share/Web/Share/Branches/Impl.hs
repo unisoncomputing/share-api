@@ -13,6 +13,7 @@ import Data.Time (UTCTime)
 import Servant
 import Share.Branch (Branch (..), branchCausals_)
 import Share.Codebase qualified as Codebase
+import Share.Env qualified as Env
 import Share.IDs (BranchId, BranchShortHand (..), ProjectBranchShortHand (..), ProjectShortHand (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
@@ -148,10 +149,12 @@ projectBranchDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-name" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt ->
+        Codebase.codebaseMToTransaction codebase $ do
+          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -174,10 +177,12 @@ projectBranchDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-hash" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt ->
+        Codebase.codebaseMToTransaction codebase $ do
+          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -270,11 +275,13 @@ projectBranchNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) use
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-namespaces-by-name" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
-      ND.namespaceDetails rt (fromMaybe mempty path) causalId renderWidth
-        `whenNothingM` throwError (EntityMissing (ErrorID "namespace-not-found") "Namespace not found")
+    PG.runTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt ->
+        Codebase.codebaseMToTransaction codebase $ do
+          ND.namespaceDetails rt (fromMaybe mempty path) causalId renderWidth
+            `whenNothingM` throwError (EntityMissing (ErrorID "namespace-not-found") "Namespace not found")
   where
     cacheParams = [IDs.toText projectBranchShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -294,14 +301,16 @@ getProjectBranchReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-project-branch-readme" cacheParams causalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      mayNamespaceDetails <- ND.namespaceDetails rt rootPath causalId Nothing
-      let mayReadme = do
-            NamespaceDetails {readme} <- mayNamespaceDetails
-            readme
-      pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          mayNamespaceDetails <- ND.namespaceDetails rt rootPath causalId Nothing
+          let mayReadme = do
+                NamespaceDetails {readme} <- mayNamespaceDetails
+                readme
+          pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
   where
     cacheParams = [IDs.toText projectBranchShortHand]
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
@@ -373,11 +382,13 @@ getProjectBranchDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUse
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams causalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      doc <- findAndRenderDoc docNames rt rootPath causalId Nothing
-      pure $ DocResponse {doc}
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          doc <- findAndRenderDoc docNames rt rootPath causalId Nothing
+          pure $ DocResponse {doc}
   where
     cacheParams = [IDs.toText projectBranchShortHand]
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
