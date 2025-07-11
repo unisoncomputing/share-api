@@ -17,7 +17,7 @@ import Unison.Server.Types
 import Unison.Util.Pretty (Width)
 
 namespaceDetails ::
-  CodebaseRuntime IO ->
+  CodebaseRuntime s IO ->
   Path.Path ->
   CausalId ->
   Maybe Width ->

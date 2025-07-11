@@ -3,6 +3,7 @@ module Share.Codebase.Types
     CodebaseEnv (..),
     CodebaseRuntime (..),
     CodebaseLocation (..),
+    hoistCodebaseRuntime,
     codebaseLocationForUserCodebase,
     codebaseLocationForProjectBranchCodebase,
     codebaseLocationForProjectRelease,
@@ -10,6 +11,7 @@ module Share.Codebase.Types
   )
 where
 
+import Control.Monad.Morph (MFunctor (..))
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -29,12 +31,23 @@ data CodebaseEnv = CodebaseEnv
   { codebaseOwner :: UserId
   }
 
-data CodebaseRuntime m = CodebaseRuntime
+-- | The runtime environment for a codebase transaction.
+-- Includes a skolem scope type var to prevent the runtime from escaping the transaction its
+-- runtime was initialized with.
+data CodebaseRuntime scope m = CodebaseRuntime
   { codeLookup :: CL.CodeLookup Symbol m Ann,
     -- Function to look up cached evaluation results for the runtime.
     cachedEvalResult :: Reference.Id -> m (Maybe (Rt.Term Symbol)),
     unisonRuntime :: Rt.Runtime Symbol
   }
+
+hoistCodebaseRuntime :: (Monad m) => (forall x. m x -> n x) -> CodebaseRuntime s m -> CodebaseRuntime s n
+hoistCodebaseRuntime f (CodebaseRuntime lookup eval runtime) =
+  CodebaseRuntime
+    { codeLookup = hoist f lookup,
+      cachedEvalResult = \id -> f (eval id),
+      unisonRuntime = runtime
+    }
 
 -- | A PG Transaction scoped to a specific user codebase.
 type CodebaseM e = ReaderT CodebaseEnv (PG.Transaction e)

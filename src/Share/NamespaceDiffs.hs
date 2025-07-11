@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 -- | Logic for computing the differerences between two namespaces,
 -- typically used when showing the differences caused by a contribution.
 module Share.NamespaceDiffs
@@ -103,6 +105,7 @@ data NamespaceDiffError
   | LibFoundAtUnexpectedPath Path
   | MissingEntityError EntityMissing
   deriving stock (Eq, Show)
+  deriving anyclass (Exception)
 
 instance ToServerError NamespaceDiffError where
   toServerError = \case

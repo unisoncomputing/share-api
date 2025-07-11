@@ -16,6 +16,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Prelude
+import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
 
@@ -46,12 +47,16 @@ usingJSONCache ::
   m v ->
   m v
 usingJSONCache ck action = do
-  getJSONCacheEntry ck >>= \case
-    Just v -> pure v
-    Nothing -> do
-      v <- action
-      putJSONCacheEntry ck v
-      pure v
+  -- Don't cache on local.
+  case Deployment.deployment of
+    Deployment.Local -> action
+    _ -> do
+      getJSONCacheEntry ck >>= \case
+        Just v -> pure v
+        Nothing -> do
+          v <- action
+          putJSONCacheEntry ck v
+          pure v
 
 data JSONCacheError
   = JSONCacheDecodingError CacheKey Text

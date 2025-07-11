@@ -37,7 +37,7 @@ import Unison.Util.Pretty (Width)
 -- Requires Name Lookups, currently only usable on Share.
 findAndRenderDoc ::
   Set NameSegment ->
-  CodebaseRuntime IO ->
+  CodebaseRuntime s IO ->
   Path.Path ->
   CausalId ->
   Maybe Width ->

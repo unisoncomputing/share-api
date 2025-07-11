@@ -10,6 +10,7 @@
 module Share.Postgres
   ( -- * Types
     Transaction,
+    UnliftIOTransaction (..),
     Pipeline,
     T,
     Session (..),
@@ -38,6 +39,7 @@ module Share.Postgres
     catchAllTransaction,
     unliftTransaction,
     runTransactionOrRespondError,
+    runTransactionModeOrRespondError,
     transaction,
     runSession,
     tryRunSession,
@@ -106,7 +108,7 @@ import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
 import Share.Web.App
-import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
+import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
 import UnliftIO qualified
 
@@ -123,6 +125,29 @@ instance Env.HasTags Tags where
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
 newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)}
   deriving (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger) via (Logging.LoggerT (ReaderT (Env.Env Tags) (ExceptT (TransactionError e) Hasql.Session)))
+
+-- | A very annoying type we must define so that we can embed transactions in IO for the
+-- Unison Runtime. You really shouldn't use this unless you absolutely need the MonadUnliftIO
+-- class for a PG transaction.
+newtype UnliftIOTransaction e a = UnliftIOTransaction {asUnliftIOTransaction :: Transaction e a}
+  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger)
+
+instance MonadIO (UnliftIOTransaction e) where
+  liftIO io = UnliftIOTransaction . Transaction $ Right <$> liftIO io
+
+instance (Exception e) => MonadUnliftIO (UnliftIOTransaction e) where
+  withRunInIO f = UnliftIOTransaction $ Transaction $ do
+    unliftIO <- UnliftIO.askUnliftIO
+    r <- UnliftIO.try $ liftIO $ f \(UnliftIOTransaction (Transaction m)) -> do
+      case unliftIO of
+        UnliftIO.UnliftIO toIO -> do
+          toIO m >>= \case
+            Left (Unrecoverable err) -> throwIO err
+            Left (Err e) -> throwIO e
+            Right a -> pure a
+    case r of
+      Left err@(SomeServerError {}) -> pure (Left (Unrecoverable err))
+      Right b -> pure $ Right b
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err
@@ -296,6 +321,9 @@ tryRunTransactionMode isoLevel mode t = tryRunSession (transaction isoLevel mode
 -- benefit in distinguishing transaction types.
 runTransactionOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => Transaction e a -> WebApp a
 runTransactionOrRespondError t = runSessionOrRespondError (writeTransaction t)
+
+runTransactionModeOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => IsolationLevel -> Mode -> Transaction e a -> WebApp a
+runTransactionModeOrRespondError isoLevel mode t = runSessionOrRespondError (transaction isoLevel mode t)
 
 -- | Unlift a transaction to run in IO.
 --

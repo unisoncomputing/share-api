@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -219,6 +220,7 @@ instance ToServerError (InternalServerError a) where
 
 data EntityMissing = EntityMissing {entityMissingErrorID :: ErrorID, errorMsg :: Text}
   deriving stock (Show, Eq, Ord)
+  deriving anyclass (Exception)
 
 instance Loggable EntityMissing where
   toLog EntityMissing {errorMsg} = withSeverity UserFault $ textLog errorMsg

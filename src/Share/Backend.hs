@@ -192,11 +192,11 @@ getTermTag r termType = do
     V2Referent.Con ref _ -> Just <$> Codebase.expectDeclKind ref
   pure $
     if
-        | isDoc -> Doc
-        | isTest -> Test
-        | Just CT.Effect <- constructorType -> Constructor Ability
-        | Just CT.Data <- constructorType -> Constructor Data
-        | otherwise -> Plain
+      | isDoc -> Doc
+      | isTest -> Test
+      | Just CT.Effect <- constructorType -> Constructor Ability
+      | Just CT.Data <- constructorType -> Constructor Data
+      | otherwise -> Plain
 
 getTypeTag ::
   (PG.QueryM m) =>
@@ -231,7 +231,7 @@ displayType = \case
     pure (UserObject decl)
 
 evalDocRef ::
-  Codebase.CodebaseRuntime IO ->
+  Codebase.CodebaseRuntime s IO ->
   V2.TermReference ->
   Codebase.CodebaseM e (Doc.EvaluatedDoc Symbol)
 evalDocRef (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do

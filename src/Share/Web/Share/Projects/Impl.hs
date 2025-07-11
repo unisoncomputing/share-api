@@ -175,24 +175,19 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
           (,)
             <$> CausalQ.expectCausalHashesByIdsOf each (oldCausalId, newCausalId)
             <*> CausalQ.bestCommonAncestor oldCausalId newCausalId
-    badUnliftCodebaseRuntime <- Codebase.badAskUnliftCodebaseRuntime
     unisonRuntime <- asks Env.sandboxedRuntime
-    let makeRuntime :: Codebase.CodebaseEnv -> IO (Codebase.CodebaseRuntime IO)
-        makeRuntime codebase = do
-          runtime <- Codebase.codebaseRuntimeTransaction unisonRuntime codebase
-          pure (badUnliftCodebaseRuntime runtime)
     diff <-
       PG.runTransaction do
         ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
           Just diff -> pure (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
           Nothing -> do
-            oldRuntime <- PG.transactionUnsafeIO (makeRuntime oldCodebase)
-            newRuntime <- PG.transactionUnsafeIO (makeRuntime newCodebase)
-            Diffs.computeAndStoreCausalDiff
-              authZReceipt
-              (oldCodebase, oldRuntime, oldCausalId)
-              (newCodebase, newRuntime, newCausalId)
-              maybeLcaCausalId
+            Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
+              Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
+                Diffs.computeAndStoreCausalDiff
+                  authZReceipt
+                  (oldCodebase, oldRuntime, oldCausalId)
+                  (newCodebase, newRuntime, newCausalId)
+                  maybeLcaCausalId
     pure
       ShareNamespaceDiffResponse
         { project = projectShortHand,
@@ -224,15 +219,17 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTermName, Name.toText newTermName]
+    unisonRuntime <- asks Env.sandboxedRuntime
     Caching.cachedResponse authZReceipt "project-diff-terms" cacheKeys do
-      oldRuntime <- Codebase.codebaseRuntime oldCodebase
-      newRuntime <- Codebase.codebaseRuntime newCodebase
-      termDiff <-
-        PG.tryRunTransaction (Diffs.diffTerms authZReceipt (oldCodebase, oldRuntime, oldBhId, oldTermName) (newCodebase, newRuntime, newBhId, newTermName)) >>= \case
-          Left err -> respondError err
-          -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
-          Right Nothing -> respondError (EntityMissing (ErrorID "term:missing") "Term not found")
-          Right (Just diff) -> pure diff
+      result <- PG.tryRunTransaction $ do
+        Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
+          Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
+            Diffs.diffTerms authZReceipt (oldCodebase, oldRuntime, oldBhId, oldTermName) (newCodebase, newRuntime, newBhId, newTermName)
+      termDiff <- case result of
+        Left err -> respondError err
+        -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
+        Right Nothing -> respondError (EntityMissing (ErrorID "term:missing") "Term not found")
+        Right (Just diff) -> pure diff
       pure $
         ShareTermDiffResponse
           { project = projectShortHand,
@@ -265,16 +262,18 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTypeName, Name.toText newTypeName]
+    unisonRuntime <- asks Env.sandboxedRuntime
     Caching.cachedResponse authZReceipt "project-diff-types" cacheKeys do
-      oldRuntime <- Codebase.codebaseRuntime oldCodebase
-      newRuntime <- Codebase.codebaseRuntime newCodebase
-      typeDiff <-
-        (either respondError pure =<<) do
-          PG.tryRunTransaction do
+      result <- PG.tryRunTransaction do
+        Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
+          Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
             Diffs.diffTypes
               authZReceipt
               (oldCodebase, oldRuntime, oldBhId, oldTypeName)
               (newCodebase, newRuntime, newBhId, newTypeName)
+      typeDiff <- case result of
+        Left err -> respondError err
+        Right diff -> pure diff
       pure $
         ShareTypeDiffResponse
           { project = projectShortHand,
