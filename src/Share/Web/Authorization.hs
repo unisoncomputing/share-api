@@ -329,7 +329,7 @@ writePath path = UserCodebaseWritePath (Path.toList path)
 -- Throws a permission failure if the causal is not accessible.
 assertCausalHashAccessibleFromRoot :: CausalId -> CausalId -> WebApp ()
 assertCausalHashAccessibleFromRoot rootCausalId targetCausalId = permissionGuard $ maybePermissionFailure (ProjectPermission $ AccessCausalHash rootCausalId targetCausalId) do
-  guardM . PG.runTransaction $ Q.causalIsInHistoryOf rootCausalId targetCausalId
+  guardM . lift . PG.runTransaction $ Q.causalIsInHistoryOf rootCausalId targetCausalId
 
 -- | This is deprecated, permissions are all done at the project level now.
 -- For back-compat, this simply checks whether the caller is the same as the target user.
@@ -400,7 +400,7 @@ checkProjectCreate reqUserId targetUserId = maybePermissionFailure (ProjectPermi
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
   where
     checkCreateInOrg userId = do
-      Org {orgId} <- guardMaybeM $ PG.runTransaction $ OrgQ.orgByUserId targetUserId
+      Org {orgId} <- guardMaybeM $ lift . PG.runTransaction $ OrgQ.orgByUserId targetUserId
       assertUserHasOrgPermission userId orgId AuthZ.OrgProjectCreate
 
 checkProjectUpdate :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure ())
@@ -535,7 +535,7 @@ checkRemoveProjectRoles reqUserId projectId =
 
 assertIsPremiumProject :: ProjectId -> MaybeT WebApp ()
 assertIsPremiumProject projectId = do
-  guardM $ PG.runTransaction $ PQ.isPremiumProject projectId
+  guardM $ lift . PG.runTransaction $ PQ.isPremiumProject projectId
 
 checkListReleasesForProject :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkListReleasesForProject reqUserId projectId =
@@ -658,12 +658,12 @@ assertUserHasOrgPermission reqUserId orgId rolePermission =
 
 assertUserHasOrgPermissionByOrgUser :: UserId -> UserId -> AuthZ.RolePermission -> MaybeT WebApp ()
 assertUserHasOrgPermissionByOrgUser reqUserId orgUserId rolePermission = do
-  Org {orgId} <- guardMaybeM $ PG.runTransaction $ OrgQ.orgByUserId orgUserId
+  Org {orgId} <- guardMaybeM $ lift . PG.runTransaction $ OrgQ.orgByUserId orgUserId
   assertUserHasOrgPermission reqUserId orgId rolePermission
 
 assertUserHasProjectPermission :: AuthZ.RolePermission -> Maybe UserId -> ProjectId -> MaybeT WebApp ()
 assertUserHasProjectPermission rolePermission mayReqUserId projId = do
-  guardM $ PG.runTransaction $ do
+  guardM $ lift . PG.runTransaction $ do
     Q.userHasProjectPermission mayReqUserId projId rolePermission
 
 assertUserIsSuperadmin :: UserId -> MaybeT WebApp ()
@@ -687,7 +687,7 @@ checkUserIsSuperadmin userId = do
 checkUserIsOrgMember :: UserId -> UserId -> MaybeT WebApp ()
 checkUserIsOrgMember reqUserId orgUserId = do
   guardM $
-    PG.runTransaction $
+    lift . PG.runTransaction $
       Q.isOrgMember reqUserId orgUserId
 
 checkCreateOrg :: UserId -> UserId -> Bool -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
