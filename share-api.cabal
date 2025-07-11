@@ -104,6 +104,8 @@ library
       Share.Project
       Share.Redis
       Share.Release
+      Share.Telemetry
+      Share.Telemetry.Setup
       Share.Ticket
       Share.User
       Share.UserProfile
@@ -263,6 +265,8 @@ library
     , hasql-pool
     , hedis
     , here
+    , hs-opentelemetry-instrumentation-wai
+    , hs-opentelemetry-sdk
     , http-api-data
     , http-client
     , http-client-tls
@@ -414,6 +418,8 @@ executable share-api
     , hasql-pool
     , hedis
     , here
+    , hs-opentelemetry-instrumentation-wai
+    , hs-opentelemetry-sdk
     , http-api-data
     , http-client
     , http-client-tls
