@@ -37,7 +37,6 @@ module Share.Postgres
     tryRunTransactionMode,
     catchTransaction,
     catchAllTransaction,
-    unliftTransaction,
     runTransactionOrRespondError,
     runTransactionModeOrRespondError,
     transaction,
@@ -46,7 +45,6 @@ module Share.Postgres
     runSessionOrRespondError,
     runSessionWithEnv,
     tryRunSessionWithEnv,
-    unliftSession,
     defaultIsolationLevel,
     pEitherMap,
     pFor,
@@ -83,14 +81,18 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Functor.Compose (Compose (..))
+import Data.HashMap.Lazy qualified as HM
 import Data.Kind (Type)
 import Data.Map qualified as Map
 import Data.Maybe
+import Data.Text qualified as Text
 import Data.Time.Clock (picosecondsToDiffTime)
 import Data.Time.Clock.System (getSystemTime, systemToTAITime)
 import Data.Time.Clock.TAI (diffAbsoluteTime)
 import Data.Vector (Vector)
 import Data.Void
+import GHC.Exception (SrcLoc (srcLocModule))
+import GHC.Stack qualified as Stack
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Interp
@@ -100,11 +102,12 @@ import Hasql.Session qualified as Hasql
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Hasql
 import OpenTelemetry.Trace.Monad (MonadTracer (..))
-import Share.App
+import Safe (headMay)
 import Share.Debug qualified as Debug
 import Share.Env qualified as Env
 import Share.Postgres.Orphans ()
 import Share.Prelude
+import Share.Telemetry qualified as Trace
 import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
@@ -112,6 +115,22 @@ import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
 import UnliftIO qualified
+
+-- | Returns the first non Postgres module in the call stack.
+getExternalCallsite :: (HasCallStack) => Maybe (String, Stack.SrcLoc)
+getExternalCallsite = headMay $ dropWhile (\(_, Stack.SrcLoc {srcLocModule}) -> srcLocModule == thisModuleName) (Stack.getCallStack Stack.callStack)
+
+-- | Returns the loc of when we entered the Postgres module.
+_getModuleEntrypoint :: (HasCallStack) => Maybe (String, Stack.SrcLoc)
+_getModuleEntrypoint = headMay $ takeWhile (\(_, Stack.SrcLoc {srcLocModule}) -> srcLocModule /= thisModuleName) (reverse $ Stack.getCallStack Stack.callStack)
+  where
+
+thisModuleName :: (HasCallStack) => String
+thisModuleName =
+  Stack.getCallStack Stack.callStack
+    & headMay
+    & fromMaybe (error "getModuleEntrypoint: no module name found in call stack")
+    & \(_, Stack.SrcLoc {srcLocModule}) -> srcLocModule
 
 data TransactionError e
   = Unrecoverable SomeServerError
@@ -287,6 +306,22 @@ transactionStatement :: a -> Hasql.Statement a b -> Transaction e b
 transactionStatement v stmt = Transaction do
   Right <$> (lift . lift $ (Session.statement v stmt))
 
+spanInfo :: (HasCallStack) => (Maybe Text, Trace.AttributeMap)
+spanInfo =
+  ( funcName,
+    HM.fromList $
+      [ ("loc.callSite", maybe "<unknown-callsite>" (Trace.toAttribute . prettySrcLoc) postgresFuncLoc)
+      ]
+  )
+  where
+    postgresFuncLoc = getExternalCallsite
+    -- If we don't have a call site, we just use the default name.
+    funcName = Text.pack . fst <$> postgresFuncLoc
+
+prettySrcLoc :: (String, SrcLoc) -> Text
+prettySrcLoc (funcName, Stack.SrcLoc {Stack.srcLocFile, Stack.srcLocStartLine}) =
+  Text.intercalate " : " [Text.pack funcName, Text.pack srcLocFile, tShow srcLocStartLine]
+
 -- | Run a read-only transaction within a session
 readTransaction :: Transaction e a -> Session e a
 readTransaction t = transaction defaultIsolationLevel Read t
@@ -303,20 +338,20 @@ writeTransaction t = transaction defaultIsolationLevel ReadWrite t
 --
 -- Uses a Write transaction for simplicity since there's not much
 -- benefit in distinguishing transaction types.
-runTransaction :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Transaction Void a -> m a
+runTransaction :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Transaction Void a -> m a
 runTransaction t = runSession (writeTransaction t)
 
-runTransactionMode :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => IsolationLevel -> Mode -> Transaction Void a -> m a
+runTransactionMode :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => IsolationLevel -> Mode -> Transaction Void a -> m a
 runTransactionMode isoLevel mode t = runSession (transaction isoLevel mode t)
 
 -- | Run a transaction in the App monad, returning an Either error.
 --
 -- Uses a Write transaction for simplicity since there's not much
 -- benefit in distinguishing transaction types.
-tryRunTransaction :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Transaction e a -> m (Either e a)
+tryRunTransaction :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Transaction e a -> m (Either e a)
 tryRunTransaction t = tryRunSession (writeTransaction t)
 
-tryRunTransactionMode :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => IsolationLevel -> Mode -> Transaction e a -> m (Either e a)
+tryRunTransactionMode :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => IsolationLevel -> Mode -> Transaction e a -> m (Either e a)
 tryRunTransactionMode isoLevel mode t = tryRunSession (transaction isoLevel mode t)
 
 -- | Run a transaction in the App monad, responding to the request with an error if it fails.
@@ -329,36 +364,23 @@ runTransactionOrRespondError t = runSessionOrRespondError (writeTransaction t)
 runTransactionModeOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => IsolationLevel -> Mode -> Transaction e a -> WebApp a
 runTransactionModeOrRespondError isoLevel mode t = runSessionOrRespondError (transaction isoLevel mode t)
 
--- | Unlift a transaction to run in IO.
---
--- Uses a Write transaction for simplicity since there's not much
--- benefit in distinguishing transaction types.
-unliftTransaction :: (Env.HasTags ctx) => Transaction e a -> AppM ctx (IO (Either e a))
-unliftTransaction t = unliftSession (writeTransaction t)
-
 -- | Run a session in the App monad without any errors.
-runSession :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Session Void a -> m a
+runSession :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Session Void a -> m a
 runSession t = either absurd id <$> tryRunSession t
 
 -- | Run a session in the App monad, returning an Either error.
-tryRunSession :: (MonadReader (Env.Env ctx) m, MonadIO m, HasCallStack, Env.HasTags ctx) => Session e a -> m (Either e a)
+tryRunSession :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Session e a -> m (Either e a)
 tryRunSession s = do
   env <- ask
-  liftIO $ tryRunSessionWithEnv env s
-
--- | Unlift a session to run in IO.
-unliftSession :: (Env.HasTags ctx) => Session e a -> AppM ctx (IO (Either e a))
-unliftSession s = do
-  env <- ask
-  pure $ tryRunSessionWithEnv env s
+  tryRunSessionWithEnv env s
 
 -- | Manually run an unfailing session using the connection pool from the provided env.
-runSessionWithEnv :: (HasCallStack, Env.HasTags ctx) => Env.Env ctx -> Session Void a -> IO a
+runSessionWithEnv :: (HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session Void a -> m a
 runSessionWithEnv env s = either absurd id <$> tryRunSessionWithEnv env s
 
 -- | Manually run a session, using the connection pool from the provided env, returning an Either error.
-tryRunSessionWithEnv :: (HasCallStack, Env.HasTags ctx) => Env.Env ctx -> Session e a -> IO (Either e a)
-tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = do
+tryRunSessionWithEnv :: (HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session e a -> m (Either e a)
+tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = flip runReaderT env $ Trace.withSpan entryPointName spanTags $ do
   tags <- Env.getTags env
   let ioSession =
         s
@@ -370,6 +392,14 @@ tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logg
     Right (Left (Unrecoverable e)) -> throwIO e
     Right (Left (Err e)) -> pure (Left e)
     Right (Right a) -> pure (Right a)
+  where
+    postgresFuncLoc = getExternalCallsite
+    entryPointName = Text.pack $ maybe "transaction" fst postgresFuncLoc
+    spanTags :: Trace.AttributeMap
+    spanTags =
+      HM.fromList $
+        [ ("loc.callSite", maybe "<unknown-callsite>" (Trace.toAttribute . prettySrcLoc) postgresFuncLoc)
+        ]
 
 -- | Run a session in the App monad, responding to the request with an error if it fails.
 runSessionOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => Session e a -> WebApp a
