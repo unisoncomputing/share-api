@@ -37,9 +37,9 @@ where
 import Control.Lens hiding ((??))
 import Data.List qualified as List
 import Data.Map qualified as Map
-import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseRuntime (CodebaseRuntime, cachedEvalResult))
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Conversions (namespaceStatsPgToV2)
 import Share.Postgres.Causal.Queries qualified as CausalQ
@@ -90,6 +90,7 @@ import Unison.Util.SyntaxText qualified as UST
 import Unison.Var (Var)
 
 mkTypeDefinition ::
+  (QueryM m) =>
   PPED.PrettyPrintEnvDecl ->
   Width ->
   Reference ->
@@ -97,7 +98,7 @@ mkTypeDefinition ::
   DisplayObject
     (AnnotatedText (UST.Element Reference))
     (AnnotatedText (UST.Element Reference)) ->
-  PG.Transaction e TypeDefinition
+  m TypeDefinition
 mkTypeDefinition pped width r docs tp = do
   let bn = Backend.bestNameForType @Symbol (PPED.suffixifiedPPE pped) width r
   tag <- getTypeTag r
@@ -112,6 +113,8 @@ mkTypeDefinition pped width r docs tp = do
     fqnPPE = PPED.unsuffixifiedPPE pped
 
 mkTermDefinition ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   PPED.PrettyPrintEnvDecl ->
   Width ->
   Reference ->
@@ -119,12 +122,12 @@ mkTermDefinition ::
   DisplayObject
     (AnnotatedText (UST.Element Reference))
     (AnnotatedText (UST.Element Reference)) ->
-  Codebase.CodebaseM e TermDefinition
-mkTermDefinition termPPED width r docs tm = do
+  m TermDefinition
+mkTermDefinition codebase termPPED width r docs tm = do
   let referent = V2Referent.Ref r
-  termType <- Codebase.expectTypeOfTerm r
+  termType <- Codebase.expectTypeOfTerm codebase r
   let bn = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE termPPED) width (Referent.Ref r)
-  tag <- lift $ getTermTag referent termType
+  tag <- getTermTag referent termType
   mk termType bn tag
   where
     fqnTermPPE = PPED.unsuffixifiedPPE termPPED
@@ -208,8 +211,8 @@ getTypeTag r = do
     Just CT.Data -> Data
     Just CT.Effect -> Ability
 
-displayTerm :: Reference -> Codebase.CodebaseM e (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann))
-displayTerm = \case
+displayTerm :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann))
+displayTerm codebase = \case
   ref@(Reference.Builtin _) -> do
     pure case Map.lookup ref B.termRefTypes of
       -- This would be better as a `MissingBuiltin` constructor; `MissingObject` is kind of being
@@ -217,58 +220,64 @@ displayTerm = \case
       Nothing -> MissingObject $ Reference.toShortHash ref
       Just typ -> BuiltinObject (mempty <$ typ)
   Reference.DerivedId rid -> do
-    (term, ty) <- Codebase.expectTerm rid
+    (term, ty) <- Codebase.expectTerm codebase rid
     pure case term of
       V1Term.Ann' _ _ -> UserObject term
       -- manually annotate if necessary
       _ -> UserObject (V1Term.ann (ABT.annotation term) term ty)
 
-displayType :: Reference -> Codebase.CodebaseM e (DisplayObject () (DD.Decl Symbol Ann))
-displayType = \case
+displayType :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObject () (DD.Decl Symbol Ann))
+displayType codebase = \case
   Reference.Builtin _ -> pure (BuiltinObject ())
   Reference.DerivedId rid -> do
-    decl <- Codebase.expectTypeDeclaration rid
+    decl <- Codebase.expectTypeDeclaration codebase rid
     pure (UserObject decl)
 
 evalDocRef ::
+  forall m s.
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   Codebase.CodebaseRuntime s IO ->
   V2.TermReference ->
-  Codebase.CodebaseM e (Doc.EvaluatedDoc Symbol)
-evalDocRef (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
+  m (Doc.EvaluatedDoc Symbol)
+evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
   let tm = Term.ref () termRef
   Doc.evalDoc terms typeOf eval decls tm
   where
-    terms :: Reference -> Codebase.CodebaseM e (Maybe (V1.Term Symbol ()))
+    terms :: Reference -> m (Maybe (V1.Term Symbol ()))
     terms termRef@(Reference.Builtin _) = pure (Just (Term.ref () termRef))
     terms (Reference.DerivedId termRef) =
-      fmap (Term.unannotate . fst) <$> (Codebase.loadTerm termRef)
+      fmap (Term.unannotate . fst) <$> (Codebase.loadTerm codebase termRef)
 
-    typeOf :: Referent.Referent -> Codebase.CodebaseM e (Maybe (V1.Type Symbol ()))
-    typeOf termRef = fmap void <$> Codebase.loadTypeOfReferent (Cv.referent1to2 termRef)
+    typeOf :: Referent.Referent -> m (Maybe (V1.Type Symbol ()))
+    typeOf termRef = fmap void <$> Codebase.loadTypeOfReferent codebase (Cv.referent1to2 termRef)
 
-    eval :: V1.Term Symbol a -> Codebase.CodebaseM e (Maybe (V1.Term Symbol ()))
+    eval :: V1.Term Symbol a -> m (Maybe (V1.Term Symbol ()))
     eval (Term.amap (const mempty) -> tm) = do
       -- We use an empty ppe for evalutation, it's only used for adding additional context to errors.
       let evalPPE = PPE.empty
-      termRef <- fmap eitherToMaybe . lift . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE unisonRuntime tm
+      termRef <- fmap eitherToMaybe . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE unisonRuntime tm
       case termRef of
         -- don't cache when there were decompile errors
         Just (errs, tmr) | null errs -> do
           Codebase.saveCachedEvalResult
+            codebase
             (Hashing.hashClosedTerm tm)
             (Term.amap (const mempty) tmr)
         _ -> pure ()
       pure $ termRef <&> Term.amap (const mempty) . snd
 
-    decls :: Reference -> Codebase.CodebaseM e (Maybe (DD.Decl Symbol ()))
-    decls (Reference.DerivedId typeRef) = fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclaration typeRef)
+    decls :: Reference -> m (Maybe (DD.Decl Symbol ()))
+    decls (Reference.DerivedId typeRef) = fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclaration codebase typeRef)
     decls _ = pure Nothing
 
 -- | Find all definitions and children reachable from the given 'V2Branch.Branch',
 lsBranch ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   V2Branch.Branch n ->
-  CodebaseM e [Backend.ShallowListEntry Symbol Ann]
-lsBranch b0 = do
+  m [Backend.ShallowListEntry Symbol Ann]
+lsBranch codebase b0 = do
   let flattenTypeRefs :: Map NameSegment (Map ref v) -> [(ref, NameSegment)]
       flattenTypeRefs m =
         m
@@ -278,7 +287,7 @@ lsBranch b0 = do
     V2Branch.terms b0
       & itoListOf (itraversed <. folding Map.keys)
       & fmap (\(ns, r) -> (r, r, ns))
-      & Codebase.expectTypeOfReferents (traversed . _2)
+      & Codebase.expectTypeOfReferents codebase (traversed . _2)
 
   termEntries <- for termsWithTypes $ \(r, typ, ns) -> do
     Backend.ShallowTermEntry <$> termListEntry typ (ExactName ns r)
@@ -305,12 +314,14 @@ lsBranch b0 = do
       ++ patchEntries
 
 typeDeclHeader ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   PPE.PrettyPrintEnv ->
   Reference ->
-  CodebaseM e (DisplayObject Syntax.SyntaxText Syntax.SyntaxText)
-typeDeclHeader ppe r = case Reference.toId r of
+  m (DisplayObject Syntax.SyntaxText Syntax.SyntaxText)
+typeDeclHeader codebase ppe r = case Reference.toId r of
   Just rid ->
-    Codebase.loadTypeDeclaration rid <&> \case
+    Codebase.loadTypeDeclaration codebase rid <&> \case
       Nothing -> DisplayObject.MissingObject (Reference.toShortHash r)
       Just decl ->
         DisplayObject.UserObject $

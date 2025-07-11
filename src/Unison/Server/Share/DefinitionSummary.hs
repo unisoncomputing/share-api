@@ -18,8 +18,7 @@ where
 
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
-import Share.Codebase.Types (CodebaseM)
-import Share.Postgres (unrecoverableError)
+import Share.Postgres (QueryM, unrecoverableError)
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
@@ -45,28 +44,31 @@ import Unison.Type qualified as Type
 import Unison.Util.Pretty (Width)
 
 serveTermSummary ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   Referent ->
   Maybe Name ->
   CausalId ->
   Maybe Path.Path ->
   Maybe Width ->
-  CodebaseM e TermSummary
-serveTermSummary referent mayName rootCausalId relativeTo mayWidth = do
+  m TermSummary
+serveTermSummary codebase referent mayName rootCausalId relativeTo mayWidth = do
   rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
   let v2Referent = CV.referent1to2 referent
   sig <-
-    Codebase.loadTypeOfReferent v2Referent
+    Codebase.loadTypeOfReferent codebase v2Referent
       `whenNothingM` unrecoverableError (MissingSignatureForTerm $ V2Referent.toReference v2Referent)
   termSummaryForReferent v2Referent sig mayName rootBranchHashId relativeTo mayWidth
 
 termSummaryForReferent ::
+  (QueryM m) =>
   V2Referent.Referent ->
   Type.Type Symbol Ann ->
   Maybe Name ->
   BranchHashId ->
   Maybe Path.Path ->
   Maybe Width ->
-  CodebaseM e TermSummary
+  m TermSummary
 termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayWidth = do
   let shortHash = V2Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
@@ -88,23 +90,27 @@ termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayW
         else UserObject sig
 
 serveTypeSummary ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   Reference ->
   Maybe Name ->
   Maybe Width ->
-  CodebaseM e TypeSummary
-serveTypeSummary reference mayName mayWidth = do
-  typeSummaryForReference reference mayName mayWidth
+  m TypeSummary
+serveTypeSummary codebase reference mayName mayWidth = do
+  typeSummaryForReference codebase reference mayName mayWidth
 
 typeSummaryForReference ::
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
   Reference ->
   Maybe Name ->
   Maybe Width ->
-  CodebaseM e TypeSummary
-typeSummaryForReference reference mayName mayWidth = do
+  m TypeSummary
+typeSummaryForReference codebase reference mayName mayWidth = do
   let shortHash = Reference.toShortHash reference
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   tag <- Backend.getTypeTag reference
-  displayDecl <- Backend.displayType reference
+  displayDecl <- Backend.displayType codebase reference
   let syntaxHeader = Backend.typeToSyntaxHeader width displayName displayDecl
   pure $
     TypeSummary

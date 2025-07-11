@@ -133,14 +133,14 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
       maySquashedBranchHead <-
         if includeSquashedHead
           then do
-            Codebase.runCodebaseTransactionMode PG.RepeatableRead PG.ReadWrite codebaseEnv $ do
-              maySquashedCausalId <- Codebase.squashCausalAndAddToCodebase causalId
+            PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
+              maySquashedCausalId <- Codebase.squashCausalAndAddToCodebase codebaseEnv causalId
               -- Join in the hash
               for maySquashedCausalId \cid -> (cid,) <$> HashQ.expectCausalHashesByIdsOf id cid
           else pure Nothing
       pure (causalId, maySquashedBranchHead)
     Right Release {squashedCausal = squashedCausalId} -> do
-      Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebaseEnv $ do
+      PG.runTransactionMode PG.ReadCommitted PG.Read $ do
         squashedCausalHash <- HashQ.expectCausalHashesByIdsOf id squashedCausalId
         pure (squashedCausalId, Just (squashedCausalId, squashedCausalHash))
 
@@ -150,7 +150,7 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
     Nothing -> pure ()
     Just callerUserId -> lift $ for_ causalIdsToImport (importCausalToCallerCodebase authZReceipt codebaseOwnerUserId callerUserId)
 
-  branchHeadHash <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebaseEnv $ do
+  branchHeadHash <- PG.runTransactionMode PG.ReadCommitted PG.Read $ do
     branchHeadHash <- HashQ.expectCausalHashesByIdsOf id branchHead
     pure branchHeadHash
   signedBranchHead <- lift $ HashJWT.signHashForUser mayCallerUserId (causalHashToHash32 branchHeadHash)
@@ -205,8 +205,8 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
         let destCodebaseLoc = Codebase.codebaseLocationForUserCodebase destinationUserId
         let codebaseEnv = Codebase.codebaseEnv authZReceipt destCodebaseLoc
         Logging.logInfoText $ "Importing causal " <> tShow causalId <> " from user " <> tShow fromUserId <> "to user " <> tShow destinationUserId
-        Codebase.runCodebaseTransactionMode PG.RepeatableRead PG.ReadWrite codebaseEnv $ do
-          Codebase.importCausalIntoCodebase fromUserId causalId
+        PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
+          Codebase.importCausalIntoCodebase codebaseEnv fromUserId causalId
       where
         errHandler :: UnliftIO.SomeException -> WebApp ()
         errHandler e = Errors.reportError $ Errors.InternalServerError "background-import-error" e
@@ -260,7 +260,7 @@ createProjectBranch
 
       -- Mitigation for the sync bug where sometimes causals get stuck in temp.
       branchCausalId <- (lift $ SyncQ.ensureCausalIsFlushed codebase branchCausalHash) `whenNothingM` throwError (UCMProjects.CreateProjectBranchResponseMissingCausalHash (causalHashToHash32 branchCausalHash))
-      nameLookupReceipt <- lift . Codebase.runCodebaseTransactionMode PG.RepeatableRead PG.ReadWrite codebase $ do
+      nameLookupReceipt <- lift . PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
         bhId <- HashQ.expectNamespaceIdsByCausalIdsOf id branchCausalId
         NLOps.ensureNameLookupForBranchId bhId
       signedBranchHead <- lift $ HashJWT.signHashForUser (Just callerUserId) (causalHashToHash32 branchCausalHash)
@@ -295,9 +295,9 @@ createProjectRelease callerUserId projectId unsquashedCausalHash releaseName = t
   -- Mitigation for the sync bug where sometimes causals get stuck in temp.
   unsquashedCausalId <- lift (SyncQ.ensureCausalIsFlushed codebase unsquashedCausalHash) `whenNothingM` throwError (UCMProjects.CreateProjectBranchResponseMissingCausalHash (causalHashToHash32 unsquashedCausalHash))
   squashResult :: Either (InternalServerError Text) (NameLookupReceipt, CausalId, CausalHash) <-
-    lift . Codebase.tryRunCodebaseTransactionMode PG.RepeatableRead PG.ReadWrite codebase $ do
+    lift . PG.tryRunTransactionMode PG.RepeatableRead PG.ReadWrite $ do
       squashedCausalId <-
-        Codebase.squashCausalAndAddToCodebase unsquashedCausalId
+        Codebase.squashCausalAndAddToCodebase codebase unsquashedCausalId
           `whenNothingM` do
             throwError (InternalServerError @Text "squash-failed" "Failed to squash causal on release publish")
       squashedNamespaceHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id squashedCausalId
@@ -359,8 +359,7 @@ setProjectBranchHead callerUserId projectId branchId mayOldCausalHash newCausalH
     -- Refetch the branch now that we're ready to update so we know its in the same transaction.
     Branch {causal = currentCausalId} <- Q.branchById Q.ExcludeDeleted branchId `orThrow` UCMProjects.SetProjectBranchHeadResponseNotFound (UCMProjects.NotFound "Branch not found")
     currentCausalHash <- CausalQ.expectCausalHashesByIdsOf id currentCausalId
-    mayOldCausal <- Codebase.codebaseMToTransaction codebase $ do
-      for mayOldCausalHash \oldCausalHash -> (oldCausalHash,) <$> Codebase.expectCausalIdByHash oldCausalHash
+    mayOldCausal <- for mayOldCausalHash \oldCausalHash -> (oldCausalHash,) <$> Codebase.expectCausalIdByHash codebase oldCausalHash
     case mayOldCausal of
       Just (expectedCausalHash, expectedCausalId)
         | expectedCausalId /= currentCausalId -> throwError $ UCMProjects.SetProjectBranchHeadResponseExpectedCausalHashMismatch (causalHashToHash32 expectedCausalHash) (causalHashToHash32 currentCausalHash)

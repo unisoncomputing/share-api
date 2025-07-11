@@ -124,8 +124,8 @@ projectReleaseBrowseEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle p
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-browse" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
-      NL.serve releaseHead relativeTo namespace `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
+    PG.runTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite $ do
+      NL.serve codebase releaseHead relativeTo namespace `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
 
@@ -151,8 +151,7 @@ projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-name" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        Codebase.codebaseMToTransaction codebase $ do
-          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
+        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -180,8 +179,7 @@ projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-hash" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        Codebase.codebaseMToTransaction codebase $ do
-          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
+        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -204,8 +202,8 @@ projectReleaseTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-term-summary" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      serveTermSummary ref mayName releaseHead relativeTo renderWidth
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      serveTermSummary codebase ref mayName releaseHead relativeTo renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -228,8 +226,8 @@ projectReleaseTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-type-summary" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      serveTypeSummary ref mayName renderWidth
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      serveTypeSummary codebase ref mayName renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -253,8 +251,8 @@ projectReleaseFindEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle pro
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-    Fuzzy.serveFuzzyFind isInScratch searchDependencies releaseHead relativeTo limit renderWidth query
+  PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+    Fuzzy.serveFuzzyFind codebase isInScratch searchDependencies releaseHead relativeTo limit renderWidth query
   where
     isInScratch = False
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -279,8 +277,7 @@ projectReleaseNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-namespaces-by-name" cacheParams releaseHead $ do
     PG.runTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite $ do
       Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        Codebase.codebaseMToTransaction codebase $ do
-          ND.namespaceDetails rt (fromMaybe mempty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
+        ND.namespaceDetails codebase rt (fromMaybe mempty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
   where
     cacheParams = [IDs.toText projectReleaseShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -323,12 +320,11 @@ getProjectReleaseReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandl
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-project-release-doc" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        Codebase.codebaseMToTransaction codebase $ do
-          mayNamespaceDetails <- ND.namespaceDetails rt rootPath releaseHead Nothing
-          let mayReadme = do
-                NamespaceDetails {readme} <- mayNamespaceDetails
-                readme
-          pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
+        mayNamespaceDetails <- ND.namespaceDetails codebase rt rootPath releaseHead Nothing
+        let mayReadme = do
+              NamespaceDetails {readme} <- mayNamespaceDetails
+              readme
+        pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
   where
     cacheParams = [IDs.toText projectReleaseShortHand]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -362,9 +358,8 @@ getProjectReleaseDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUs
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        Codebase.codebaseMToTransaction codebase $ do
-          doc <- findAndRenderDoc docNames rt rootPath releaseHead Nothing
-          pure $ DocResponse {doc}
+        doc <- findAndRenderDoc codebase docNames rt rootPath releaseHead Nothing
+        pure $ DocResponse {doc}
   where
     cacheParams = [IDs.toText projectReleaseShortHand]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -439,18 +434,18 @@ createRelease session userHandle projectSlug CreateReleaseRequest {releaseVersio
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   -- Mitigation for the sync bug where sometimes causals get stuck in temp.
   SyncQ.ensureCausalIsFlushed codebase unsquashedCausalHash
-  (nlReceipt, squashedCausalId, unsquashedCausalId) <- Codebase.runCodebaseTransactionOrRespondError codebase $ do
-    unsquashedCausalId <- Codebase.expectCausalIdByHash unsquashedCausalHash
+  (nlReceipt, squashedCausalId, unsquashedCausalId) <- PG.runTransactionOrRespondError $ do
+    unsquashedCausalId <- Codebase.expectCausalIdByHash codebase unsquashedCausalHash
     unsquashedBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id unsquashedCausalId
     nlReceipt <- NLOps.ensureNameLookupForBranchId unsquashedBranchHashId
     squashedCausalId <-
-      ( Codebase.squashCausalAndAddToCodebase unsquashedCausalId
+      ( Codebase.squashCausalAndAddToCodebase codebase unsquashedCausalId
           `whenNothingM` do
             throwSomeServerError (InternalServerError @Text "squash-failed" "Failed to squash causal on release publish")
         )
     pure (nlReceipt, squashedCausalId, unsquashedCausalId)
   -- Separate transaction to ensure squashing and name lookups make progress even on failure.
-  Codebase.runCodebaseTransactionOrRespondError codebase $ do
+  PG.runTransactionOrRespondError $ do
     release <- ReleaseOps.createRelease nlReceipt projectId releaseVersion squashedCausalId unsquashedCausalId callerUserId
     releaseWithHandles <- forOf releaseUsers_ release \userId -> (fmap User.handle <$> UserQ.userByUserId userId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandles

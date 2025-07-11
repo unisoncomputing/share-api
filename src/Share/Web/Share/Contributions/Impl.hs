@@ -23,7 +23,6 @@ import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
 import Share.Branch (Branch (..))
 import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
-import Share.Codebase qualified as PG
 import Share.Contribution
 import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle)
@@ -292,10 +291,10 @@ contributionDiffEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHandle pr
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
   let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
   let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-  oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
-    lift $ Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
-  newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
-    lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+  (oldPBSH, newPBSH) <- PG.runTransactionOrRespondError $ do
+    oldPBSH <- Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+    newPBSH <- Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    pure (oldPBSH, newPBSH)
 
   let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newCausalId, Caching.causalIdCacheKey oldCausalId]
   Caching.conditionallyCachedResponse authZReceipt "contribution-diff" cacheKeys do
@@ -353,10 +352,10 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
     let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-    oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
-      lift $ Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
-    newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
-      lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    (oldPBSH, newPBSH) <- PG.runTransactionOrRespondError $ do
+      oldPBSH <- Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+      newPBSH <- Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+      pure (oldPBSH, newPBSH)
     let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTermName, Name.toText newTermName]
     Caching.cachedResponse authZReceipt "contribution-diff-terms" cacheKeys do
@@ -412,10 +411,10 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
     authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkContributionDiffRead mayCallerUserId projectId
     let oldCodebase = Codebase.codebaseForProjectBranch authZReceipt project oldBranch
     let newCodebase = Codebase.codebaseForProjectBranch authZReceipt project newBranch
-    oldPBSH <- Codebase.runCodebaseTransactionOrRespondError oldCodebase $ do
-      lift $ Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
-    newPBSH <- Codebase.runCodebaseTransactionOrRespondError newCodebase $ do
-      lift $ Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+    (oldPBSH, newPBSH) <- PG.runTransactionOrRespondError $ do
+      oldPBSH <- Q.projectBranchShortHandByBranchId oldBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Target branch not found")
+      newPBSH <- Q.projectBranchShortHandByBranchId newBranchId `whenNothingM` throwError (EntityMissing (ErrorID "branch:missing") "Source branch not found")
+      pure (oldPBSH, newPBSH)
     let oldCausalId = fromMaybe oldBranchCausalId bestCommonAncestorCausalId
     let cacheKeys = [IDs.toText contributionId, IDs.toText newPBSH, IDs.toText oldPBSH, Caching.causalIdCacheKey newBranchCausalId, Caching.causalIdCacheKey oldCausalId, Name.toText oldTypeName, Name.toText newTypeName]
     Caching.cachedResponse authZReceipt "contribution-diff-types" cacheKeys do
@@ -471,7 +470,7 @@ mergeContributionEndpoint session userHandle projectSlug contributionNumber (AtK
         newNamespaceId <- CausalQ.expectNamespaceIdsByCausalIdsOf id sourceBranch.causal
         nlReceipt <- NL.ensureNameLookupForBranchId newNamespaceId
         let projectCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForProjectBranchCodebase project.ownerUserId targetBranch.contributorId
-        PG.codebaseMToTransaction projectCodebase $ Codebase.importCausalIntoCodebase (Branch.branchCodebaseUser sourceBranch) sourceBranch.causal
+        Codebase.importCausalIntoCodebase projectCodebase (Branch.branchCodebaseUser sourceBranch) sourceBranch.causal
         BranchQ.setBranchCausalHash nlReceipt description callerUserId targetBranch.branchId sourceBranch.causal
         -- Update any affected contributions to reflect the result of updating this branch.
         MergeDetection.updateContributionsFromBranchUpdate callerUserId targetBranch.branchId

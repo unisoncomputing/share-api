@@ -24,8 +24,9 @@ import Servant
     (:>),
   )
 import Share.Backend qualified as Backend
+import Share.Codebase (CodebaseEnv)
 import Share.Codebase qualified as Codebase
-import Share.Codebase.Types (CodebaseM)
+import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
@@ -103,6 +104,9 @@ instance ToJSON FoundResult where
     FoundTypeResult ft -> object ["tag" Aeson..= String "FoundTypeResult", "contents" Aeson..= ft]
 
 serveFuzzyFind ::
+  forall m.
+  (QueryM m) =>
+  CodebaseEnv ->
   -- | Whether the root is a scratch root
   Bool ->
   -- | Whether to search in dependencies
@@ -112,8 +116,8 @@ serveFuzzyFind ::
   Maybe Int ->
   Maybe Width ->
   Text ->
-  CodebaseM e [(Alignment, FoundResult)]
-serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit typeWidth query = fromMaybeT (pure []) do
+  m [(Alignment, FoundResult)]
+serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayLimit typeWidth query = fromMaybeT (pure []) do
   bhId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausal
   namesPerspective@NameLookups.NamesPerspective {pathToMountedNameLookup = PathSegments pathToPerspective} <- NameLookupOps.namesPerspectiveForRootAndPath bhId (coerce $ Path.toList perspective)
   -- If were browsing at a scratch root we need to include one level of dependencies even if
@@ -173,7 +177,7 @@ serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit type
   (join <$> traverse (lift . loadEntry includeDependencies bhId namesPerspective) alignments)
   where
     limit = fromMaybe 10 mayLimit
-    loadEntry :: Bool -> BranchHashId -> NameLookups.NamesPerspective -> (PathSegments, Alignment, Text, [Backend.FoundRef]) -> CodebaseM e [(Alignment, FoundResult)]
+    loadEntry :: Bool -> BranchHashId -> NameLookups.NamesPerspective -> (PathSegments, Alignment, Text, [Backend.FoundRef]) -> m [(Alignment, FoundResult)]
     loadEntry includeDependencies bhId searchPerspective (pathToMatch, a, n, refs) = do
       namesPerspective <-
         -- If we're including dependencies we need to ensure each match's type signature is
@@ -189,7 +193,7 @@ serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit type
         for refs $
           \case
             Backend.FoundTermRef r -> do
-              typ <- Codebase.expectTypeOfReferent (Cv.referent1to2 r)
+              typ <- Codebase.expectTypeOfReferent codebase (Cv.referent1to2 r)
               Left . (r,) <$> Backend.termListEntry typ (ExactName (NameSegment n) (Cv.referent1to2 r))
             Backend.FoundTypeRef r ->
               Right . (r,) <$> Backend.typeListEntry (ExactName (NameSegment n) r)
@@ -210,7 +214,7 @@ serveFuzzyFind inScratch searchDependencies rootCausal perspective mayLimit type
           let namedType = Backend.typeEntryToNamedType typeEntry
           -- Use the name from the search here rather than the pretty printer best-name
           let typeName = (Name.toText $ HQ'.toName $ UBackend.typeEntryHQName typeEntry)
-          typeHeader <- Backend.typeDeclHeader ppe r
+          typeHeader <- Backend.typeDeclHeader codebase ppe r
           let ft = FoundType typeName typeHeader namedType
           pure (a, FoundTypeResult ft)
 

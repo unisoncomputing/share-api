@@ -4,8 +4,7 @@ module Share.Web.UCM.SyncV2.Queries
   )
 where
 
-import Control.Monad.Reader
-import Share.Codebase (CodebaseM, codebaseOwner)
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres
 import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as PGCursor
@@ -17,9 +16,8 @@ import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
 
-allSerializedDependenciesOfCausalCursor :: CausalId -> Set CausalHash -> CodebaseM e (PGCursor (CBORBytes TempEntity, Hash32))
-allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
-  ownerUserId <- asks codebaseOwner
+allSerializedDependenciesOfCausalCursor :: (QueryM m) => CodebaseEnv -> CausalId -> Set CausalHash -> m (PGCursor (CBORBytes TempEntity, Hash32))
+allSerializedDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid exceptCausalHashes = do
   -- Create a temp table for storing the dependencies we know the calling client already has.
   execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
@@ -66,7 +64,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
             SELECT causal.id, causal.hash, causal.namespace_hash_id
             FROM causals causal
                 WHERE causal.id = #{cid}
-                  AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = causal.id)
+                  AND EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{codebaseOwner} AND co.causal_id = causal.id)
                   AND NOT EXISTS (SELECT FROM except_causals ec WHERE ec.causal_id = causal.id)
             UNION
             -- This nested CTE is required because RECURSIVE CTEs can't refer
@@ -184,7 +182,7 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
         )
            (SELECT bytes.bytes, ch.base32, cd.depth
              FROM transitive_components tc
-               JOIN serialized_components sc ON sc.user_id = #{ownerUserId} AND tc.component_hash_id = sc.component_hash_id
+               JOIN serialized_components sc ON sc.user_id = #{codebaseOwner} AND tc.component_hash_id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_hashes ch ON tc.component_hash_id = ch.id
                LEFT JOIN component_depth cd ON ch.id = cd.component_hash_id
@@ -222,9 +220,8 @@ allSerializedDependenciesOfCausalCursor cid exceptCausalHashes = do
         Just _ -> (bytes, hash)
     )
 
-spineAndLibDependenciesOfCausalCursor :: CausalId -> CodebaseM e (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
-spineAndLibDependenciesOfCausalCursor cid = do
-  ownerUserId <- asks codebaseOwner
+spineAndLibDependenciesOfCausalCursor :: (QueryM m) => CodebaseEnv -> CausalId -> m (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
+spineAndLibDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid = do
   libSegmentTextId <- query1Col @Int64 [sql| SELECT text.id FROM text WHERE content_hash = text_hash('lib') |]
   PGCursor.newRowCursor
     "causal_dependencies"
@@ -234,7 +231,7 @@ spineAndLibDependenciesOfCausalCursor cid = do
       -- which is what we want in this case.
       -- Perhaps we can use a proper order-by on causal depth once that's available.
       SELECT ch.causal_id, ROW_NUMBER() OVER () FROM causal_history(#{cid}) AS ch
-        WHERE EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{ownerUserId} AND co.causal_id = #{cid})
+        WHERE EXISTS (SELECT FROM causal_ownership co WHERE co.user_id = #{codebaseOwner} AND co.causal_id = #{cid})
     ), lib_deps(causal_id, ord) AS (
       SELECT DISTINCT ON (lib_dep.child_causal_id) lib_dep.child_causal_id, cs.ord
       FROM causal_spine cs

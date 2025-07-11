@@ -24,7 +24,6 @@ import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Servant
 import Share.App
-import Share.Codebase (CodebaseM)
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseEnv)
 import Share.Env qualified as Env
@@ -129,9 +128,9 @@ getCausalHashByPathEndpoint callerUserId (GetCausalHashByPathRequest sharePath) 
         Left {} -> throwError (GetCausalHashByPathNoReadPermission sharePath)
         Right authZReceipt -> do
           let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-          lift . Codebase.runCodebaseTransaction codebase $ do
-            (codebaseLooseCodeRootCausalId, _) <- Codebase.expectLooseCodeRoot
-            Codebase.loadCausalNamespaceAtPath codebaseLooseCodeRootCausalId localPath
+          lift . PG.runTransaction $ do
+            (codebaseLooseCodeRootCausalId, _) <- Codebase.expectLooseCodeRoot codebase
+            Codebase.loadCausalNamespaceAtPath codebase codebaseLooseCodeRootCausalId localPath
     case mayCausalAtPath of
       Nothing -> pure (GetCausalHashByPathSuccess Nothing)
       Just causalAtPath -> do
@@ -183,7 +182,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
       HashJWT.verifyHashJWT mayUserId hashJWT >>= \case
         Left ae -> respondError ae
         Right HashJWTClaims {hash} -> do
-          entity <- Codebase.runCodebaseTransaction codebase $ SyncQ.expectEntity hash
+          entity <- PG.runTransaction $ SyncQ.expectEntity codebase hash
           pure (hash, entity)
 
 uploadEntitiesEndpoint :: UserId -> UploadEntitiesRequest -> WebApp UploadEntitiesResponse
@@ -240,18 +239,18 @@ insertEntitiesToCodebase codebase entities = do
 
   -- First import as many entities as possible from other codebases accessible to the caller.
   -- This is safe to run as a separate transaction.
-  imported <- Codebase.runCodebaseTransaction codebase $ directlyImportDependencies entityBunch
+  imported <- PG.runTransaction $ directlyImportDependencies codebase entityBunch
   for_ imported \(causalId, userId) -> do
     Logging.logInfoText $ "Imported causal " <> tShow causalId <> " from user " <> tShow userId <> " to user " <> tShow (Codebase.codebaseOwner codebase)
-  result <- Codebase.tryRunCodebaseTransaction codebase $ do
-    locations <- entityLocations (fst <$> entityBunch)
+  result <- PG.tryRunTransaction $ do
+    locations <- entityLocations codebase (fst <$> entityBunch)
     let (hashesAlreadyInTemp, _hashesInMain, unsavedHashes) = partitionLocations locations
     let unsavedEntities = unsavedHashes <&> \hash -> (hash, NEMap.toMap entities ^?! ix hash)
-    mayErrs <- lift . PG.transactionUnsafeIO $ batchValidateEntities maxParallelismPerUploadRequest isComponentHashMismatchAllowedIO isCausalHashMismatchAllowedIO unsavedEntities
+    mayErrs <- PG.transactionUnsafeIO $ batchValidateEntities maxParallelismPerUploadRequest isComponentHashMismatchAllowedIO isCausalHashMismatchAllowedIO unsavedEntities
     case mayErrs of
       Nothing -> pure ()
       Just (err :| _errs) -> throwError err
-    SyncQ.saveTempEntities unsavedEntities
+    SyncQ.saveTempEntities codebase unsavedEntities
     let hashesNowInTemp = Set.fromList (fst <$> Foldable.toList unsavedEntities) <> (Set.fromList . Foldable.toList $ hashesAlreadyInTemp)
     pure hashesNowInTemp
 
@@ -276,7 +275,7 @@ insertEntitiesToCodebase codebase entities = do
       --
       -- TODO: Ensure we don't loop so long that we time-out.
       let flushLoop = do
-            (mayNeededHashes, mayReadyToFlush) <- Codebase.runCodebaseTransaction codebase $ SyncQ.elaborateHashes hashesNowInTemp
+            (mayNeededHashes, mayReadyToFlush) <- PG.runTransaction $ SyncQ.elaborateHashes codebase hashesNowInTemp
             case mayReadyToFlush of
               Just readyToFlush -> do
                 flushTempEntities codebase readyToFlush
@@ -313,24 +312,24 @@ insertEntitiesToCodebase codebase entities = do
 -- Ideally we wouldn't need this, but it's easy enough to add and addresses this problem.
 ensureCausalIsFlushed :: (Env.HasTags r) => CodebaseEnv -> CausalHash -> AppM r (Maybe CausalId)
 ensureCausalIsFlushed codebase causalHash = do
-  Codebase.runCodebaseTransaction codebase (CausalQ.loadCausalIdByHash causalHash) >>= \case
+  PG.runTransaction (CausalQ.loadCausalIdByHash codebase causalHash) >>= \case
     Just cid -> pure (Just cid)
     -- It's possible we have the causal in temp storage but just not flushed, so we'll try to flush it.
     Nothing -> do
-      (_mayNeededHashes, mayReadyToFlush) <- Codebase.runCodebaseTransaction codebase $ SyncQ.elaborateHashes (NESet.singleton (into @Hash32 causalHash))
+      (_mayNeededHashes, mayReadyToFlush) <- PG.runTransaction $ SyncQ.elaborateHashes codebase (NESet.singleton (into @Hash32 causalHash))
       case mayReadyToFlush of
         Just readyToFlush -> do
           flushTempEntities codebase readyToFlush
         Nothing -> pure ()
-      Codebase.runCodebaseTransaction codebase (CausalQ.loadCausalIdByHash causalHash)
+      PG.runTransaction (CausalQ.loadCausalIdByHash codebase causalHash)
 
 -- | Import as many entities as possible from other codebases accessible to the caller,
 -- returning any dependencies we were NOT able to import.
-directlyImportDependencies :: EntityBunch (Hash32, Share.Entity Text Hash32 Hash32) -> CodebaseM e [(CausalId, UserId)]
-directlyImportDependencies EntityBunch {namespaces, causals} = do
+directlyImportDependencies :: (PG.QueryM m) => CodebaseEnv -> EntityBunch (Hash32, Share.Entity Text Hash32 Hash32) -> m [(CausalId, UserId)]
+directlyImportDependencies codebase EntityBunch {namespaces, causals} = do
   -- We don't care which children we imported or not, if we imported any of them, we'll
   -- automatically filter them out when checking missing dependencies.
-  CausalQ.importAccessibleCausals (Set.fromList importableChildren <> importableCausals)
+  CausalQ.importAccessibleCausals codebase (Set.fromList importableChildren <> importableCausals)
   where
     importableChildren =
       namespaces & foldMap \case
@@ -368,11 +367,11 @@ flushTempEntities codebase hashesToCheck = do
   newMaybeFlushableHashes <-
     -- TODO: We still get a lot of PG serialization failures from this block :'(
     for (Foldable.toList hashesToCheck) \hashToCheck -> do
-      Codebase.runCodebaseTransaction codebase $ do
-        SyncQ.tryPopFlushableTempEntity hashToCheck >>= \case
+      PG.runTransaction $ do
+        SyncQ.tryPopFlushableTempEntity codebase hashToCheck >>= \case
           Nothing -> pure mempty
           Just (hash, te) -> do
-            SyncQ.saveTempEntityInMain hash te
+            SyncQ.saveTempEntityInMain codebase hash te
   case NESet.nonEmptySet (fold newMaybeFlushableHashes) of
     Nothing -> pure ()
     Just nonEmptyNewMaybeFlushableHashes -> flushTempEntities codebase nonEmptyNewMaybeFlushableHashes

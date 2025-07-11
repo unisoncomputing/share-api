@@ -41,7 +41,7 @@ where
 
 import Control.Lens
 import Data.Text qualified as Text
-import Share.Codebase.Types (CodebaseM)
+import Share.Codebase.Types (CodebaseEnv (CodebaseEnv))
 import Share.Codebase.Types qualified as Codebase
 import Share.Postgres
 import Share.Postgres.IDs
@@ -149,10 +149,9 @@ expectPatchHashesOf trav = do
       then error "expectPatchHashesOf: Missing expected patch hash"
       else pure results
 
-expectPatchIdsOf :: (HasCallStack) => Traversal s t PatchHash PatchId -> s -> CodebaseM e t
-expectPatchIdsOf trav = do
+expectPatchIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t PatchHash PatchId -> s -> m t
+expectPatchIdsOf (CodebaseEnv {codebaseOwner}) trav = do
   unsafePartsOf trav %%~ \hashes -> do
-    codebaseOwner <- asks Codebase.codebaseOwner
     let numberedHashes = zip [0 :: Int32 ..] hashes
     results :: [PatchId] <-
       queryListCol
@@ -179,9 +178,8 @@ ensureBranchHashId branchHash = do
     Just hashId -> pure hashId
     Nothing -> queryExpect1Col [sql|INSERT INTO branch_hashes (base32) VALUES (#{branchHash}) RETURNING id|]
 
-loadBranchHashId :: BranchHash -> CodebaseM e (Maybe BranchHashId)
-loadBranchHashId branchHash = do
-  codebaseOwner <- asks Codebase.codebaseOwner
+loadBranchHashId :: (QueryM m) => CodebaseEnv -> BranchHash -> m (Maybe BranchHashId)
+loadBranchHashId (CodebaseEnv {codebaseOwner}) branchHash = do
   query1Col
     [sql|
     SELECT bh.id FROM branch_hashes bh
@@ -193,9 +191,9 @@ loadBranchHashId branchHash = do
       )
     |]
 
-expectBranchHashId :: (HasCallStack) => BranchHash -> CodebaseM e BranchHashId
-expectBranchHashId branchHash = do
-  loadBranchHashId branchHash >>= \case
+expectBranchHashId :: (QueryM m, HasCallStack) => CodebaseEnv -> BranchHash -> m BranchHashId
+expectBranchHashId codebase branchHash = do
+  loadBranchHashId codebase branchHash >>= \case
     Just hashId -> pure hashId
     Nothing -> unrecoverableError $ EntityMissing "missing-namespace-for-hash" ("Namespace not found for hash: " <> into @Text branchHash)
 
@@ -268,10 +266,9 @@ expectCausalAndBranchHashesOf = expectCausalHashesOfG id
 expectCausalHashesByIdsOf :: (HasCallStack, QueryA m) => Traversal s t CausalId CausalHash -> s -> m t
 expectCausalHashesByIdsOf = expectCausalHashesOfG snd
 
-expectCausalIdsOf :: (HasCallStack) => Traversal s t CausalHash (BranchHashId, CausalId) -> s -> CodebaseM e t
-expectCausalIdsOf trav = do
+expectCausalIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t CausalHash (BranchHashId, CausalId) -> s -> m t
+expectCausalIdsOf (CodebaseEnv {codebaseOwner}) trav = do
   unsafePartsOf trav %%~ \hashes -> do
-    codebaseOwnerId <- asks Codebase.codebaseOwner
     let numberedHashes = zip [0 :: Int32 ..] hashes
     results :: [(BranchHashId, CausalId)] <-
       queryListRows
@@ -286,7 +283,7 @@ expectCausalIdsOf trav = do
           WHERE EXISTS (
             SELECT FROM causal_ownership co
               WHERE co.causal_id = causal.id
-                AND co.user_id = #{codebaseOwnerId}
+                AND co.user_id = #{codebaseOwner}
           )
         ORDER BY hashes.ord ASC
       |]
@@ -332,24 +329,22 @@ expectNamespaceHashesByNamespaceHashIdsOf trav s = do
         then unrecoverableError . MissingExpectedEntity $ "expectNamespaceHashesByNamespaceHashIdsOf: Expected to get the same number of results as namespace hash ids. " <> tShow namespaceHashIds
         else pure results
 
-loadCausalIdByHash :: CausalHash -> Codebase.CodebaseM e (Maybe CausalId)
-loadCausalIdByHash causalHash = do
-  codebaseOwner <- asks Codebase.codebaseOwner
+loadCausalIdByHash :: (QueryM m) => CodebaseEnv -> CausalHash -> m (Maybe CausalId)
+loadCausalIdByHash (CodebaseEnv {codebaseOwner}) causalHash = do
   query1Col
     [sql| SELECT causals.id FROM causals
             WHERE causals.hash = #{causalHash}
               AND EXISTS (SELECT FROM causal_ownership o WHERE o.causal_id = causals.id AND o.user_id = #{codebaseOwner})
     |]
 
-expectCausalIdByHash :: (HasCallStack) => CausalHash -> Codebase.CodebaseM e CausalId
-expectCausalIdByHash causalHash = do
-  loadCausalIdByHash causalHash
+expectCausalIdByHash :: (HasCallStack, QueryM m) => CodebaseEnv -> CausalHash -> m CausalId
+expectCausalIdByHash codebase causalHash = do
+  loadCausalIdByHash codebase causalHash
     `whenNothingM` unrecoverableError (MissingExpectedEntity $ "Expected causal id for hash: " <> tShow causalHash)
 
 -- | Computes the summary digest of a component within the given user's codebase.
-expectComponentSummaryDigest :: (HasCallStack) => ComponentHashId -> CodebaseM e ComponentSummaryDigest
-expectComponentSummaryDigest componentHashId = do
-  codebaseOwner <- asks Codebase.codebaseOwner
+expectComponentSummaryDigest :: (HasCallStack, QueryM m) => CodebaseEnv -> ComponentHashId -> m ComponentSummaryDigest
+expectComponentSummaryDigest (CodebaseEnv {codebaseOwner}) componentHashId = do
   queryExpect1Col
     [sql|
     SELECT compute_component_summary_digest(#{codebaseOwner}, #{componentHashId})

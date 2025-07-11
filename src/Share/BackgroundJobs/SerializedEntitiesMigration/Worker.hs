@@ -5,7 +5,6 @@ import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.SerializedEntitiesMigration.Queries qualified as Q
 import Share.BackgroundJobs.Workers (newWorker)
-import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres
 import Share.Postgres qualified as PG
@@ -48,11 +47,10 @@ processEntities !_authZReceipt = do
     Q.claimEntity >>= \case
       Nothing -> pure Nothing
       Just (hash32, codebaseUserId) -> do
-        let codebaseEnv = CodebaseEnv codebaseUserId
-        Codebase.codebaseMToTransaction codebaseEnv $ do
-          entity <- SQ.expectEntity hash32
-          let tempEntity = SyncCommon.entityToTempEntity id entity
-          saveUnsandboxedSerializedEntities hash32 tempEntity
+        let codebase = CodebaseEnv codebaseUserId
+        entity <- SQ.expectEntity codebase hash32
+        let tempEntity = SyncCommon.entityToTempEntity id entity
+        saveUnsandboxedSerializedEntities codebase hash32 tempEntity
         pure (Just hash32)
   case mayHash of
     Just _hash -> do
@@ -67,34 +65,33 @@ processComponents !_authZReceipt = do
     Q.claimComponent >>= \case
       Nothing -> pure False
       Just (componentHashId, userId) -> do
-        let codebaseEnv = CodebaseEnv userId
-        Codebase.codebaseMToTransaction codebaseEnv $ do
-          hash32 <- (Hash32.fromHash . unComponentHash) <$> HQ.expectComponentHashesOf id componentHashId
-          entity <- SQ.expectEntity hash32
-          componentSummaryDigest <- HQ.expectComponentSummaryDigest componentHashId
-          let tempEntity = SyncCommon.entityToTempEntity id entity
-          let (SyncV2.CBORBytes bytes) = SyncV2.serialiseCBORBytes tempEntity
-          bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
-          execute_
-            [sql|
-                INSERT INTO component_summary_digests_to_serialized_component_bytes_hash (component_hash_id, component_summary_digest, serialized_component_bytes_id)
-                  VALUES (#{componentHashId}, #{componentSummaryDigest}, #{bytesId})
-                  ON CONFLICT DO NOTHING
-                |]
-          pure True
+        let codebase = CodebaseEnv userId
+        hash32 <- (Hash32.fromHash . unComponentHash) <$> HQ.expectComponentHashesOf id componentHashId
+        entity <- SQ.expectEntity codebase hash32
+        componentSummaryDigest <- HQ.expectComponentSummaryDigest codebase componentHashId
+        let tempEntity = SyncCommon.entityToTempEntity id entity
+        let (SyncV2.CBORBytes bytes) = SyncV2.serialiseCBORBytes tempEntity
+        bytesId <- DefnQ.ensureBytesIdsOf id (BL.toStrict bytes)
+        execute_
+          [sql|
+              INSERT INTO component_summary_digests_to_serialized_component_bytes_hash (component_hash_id, component_summary_digest, serialized_component_bytes_id)
+                VALUES (#{componentHashId}, #{componentSummaryDigest}, #{bytesId})
+                ON CONFLICT DO NOTHING
+              |]
+        pure True
 
-saveUnsandboxedSerializedEntities :: Hash32 -> TempEntity -> Codebase.CodebaseM e ()
-saveUnsandboxedSerializedEntities hash entity = do
+saveUnsandboxedSerializedEntities :: (QueryM m) => CodebaseEnv -> Hash32 -> TempEntity -> m ()
+saveUnsandboxedSerializedEntities codebase hash entity = do
   let serialised = SyncV2.serialiseCBORBytes entity
   case entity of
     Entity.TC {} -> error "Unexpected term component"
     Entity.DC {} -> error "Unexpected decl component"
     Entity.P {} -> do
-      patchId <- HQ.expectPatchIdsOf id (fromHash32 @PatchHash hash)
+      patchId <- HQ.expectPatchIdsOf codebase id (fromHash32 @PatchHash hash)
       PQ.saveSerializedPatch patchId serialised
     Entity.C {} -> do
-      cId <- CQ.expectCausalIdByHash (fromHash32 @CausalHash hash)
+      cId <- CQ.expectCausalIdByHash codebase (fromHash32 @CausalHash hash)
       CQ.saveSerializedCausal cId serialised
     Entity.N {} -> do
-      bhId <- HQ.expectBranchHashId (fromHash32 @BranchHash hash)
+      bhId <- HQ.expectBranchHashId codebase (fromHash32 @BranchHash hash)
       CQ.saveSerializedNamespace bhId serialised

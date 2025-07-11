@@ -7,10 +7,9 @@ module Share.Postgres.LooseCode.Queries
   )
 where
 
-import Share.Codebase.Types (CodebaseM)
-import Share.Codebase.Types qualified as Codebase
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.IDs
-import Share.Postgres (unrecoverableError)
+import Share.Postgres (QueryM, unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Causal.Queries qualified as HashQ
@@ -23,16 +22,15 @@ import U.Codebase.Sqlite.Branch.Full qualified as BranchFull
 -- | Initialize a user's loose code root if it doesn't already exist.
 --
 -- The caller must ensure the Causal Hash is in the user's codebase.
-ensureLooseCodeRootHash :: CausalId -> CodebaseM e ()
-ensureLooseCodeRootHash causalId = do
-  ownerUserId <- asks Codebase.codebaseOwner
-  loadLooseCodeRoot >>= \case
+ensureLooseCodeRootHash :: (QueryM m) => CodebaseEnv -> CausalId -> m ()
+ensureLooseCodeRootHash codebase@(CodebaseEnv {codebaseOwner}) causalId = do
+  loadLooseCodeRoot codebase >>= \case
     Just _ ->
       -- A root hash for this codebase already exists.
       pure ()
     Nothing -> do
-      PG.execute_ (updateReflogSQL ownerUserId)
-      PG.execute_ (setRootSQL ownerUserId)
+      PG.execute_ (updateReflogSQL codebaseOwner)
+      PG.execute_ (setRootSQL codebaseOwner)
   where
     description :: Text
     description = "Created"
@@ -60,34 +58,31 @@ ensureLooseCodeRootHash causalId = do
               VALUES (#{ownerUserId}, #{causalId})
           |]
 
-loadLooseCodeRoot :: CodebaseM e (Maybe (CausalId, CausalHash))
-loadLooseCodeRoot = do
-  userId <- asks Codebase.codebaseOwner
+loadLooseCodeRoot :: (QueryM m) => CodebaseEnv -> m (Maybe (CausalId, CausalHash))
+loadLooseCodeRoot (CodebaseEnv {codebaseOwner}) = do
   PG.query1Row
     [PG.sql|
         SELECT causal.id, causal.hash
         FROM loose_code_roots lcr
         JOIN causals causal ON lcr.causal_id = causal.id
-        WHERE lcr.user_id = #{userId}
+        WHERE lcr.user_id = #{codebaseOwner}
       |]
 
-expectLooseCodeRoot :: CodebaseM e (CausalId, CausalHash)
-expectLooseCodeRoot = do
-  userId <- asks Codebase.codebaseOwner
-  loadLooseCodeRoot >>= \case
-    Nothing -> lift . unrecoverableError . InternalServerError @Text "missing-loose-code-root" $ "Missing loose code root for user: " <> tShow userId
+expectLooseCodeRoot :: (QueryM m) => CodebaseEnv -> m (CausalId, CausalHash)
+expectLooseCodeRoot codebase@(CodebaseEnv {codebaseOwner}) = do
+  loadLooseCodeRoot codebase >>= \case
+    Nothing -> unrecoverableError . InternalServerError @Text "missing-loose-code-root" $ "Missing loose code root for user: " <> tShow codebaseOwner
     Just h -> pure h
 
 -- | Set a user's loose code root and update the reflog.
-setLooseCodeRoot :: NameLookupReceipt -> UserId -> Maybe Text -> CausalId -> CodebaseM e ()
-setLooseCodeRoot !_nlReceipt callerUserId description newCausalId = do
-  codebaseOwnerUserId <- asks Codebase.codebaseOwner
+setLooseCodeRoot :: (QueryM m) => CodebaseEnv -> NameLookupReceipt -> UserId -> Maybe Text -> CausalId -> m ()
+setLooseCodeRoot codebase@(CodebaseEnv {codebaseOwner}) !_nlReceipt callerUserId description newCausalId = do
   newCausalHash <- HashQ.expectCausalHashesByIdsOf id newCausalId
   -- Seems redundant, but ensures the codebase actually contains the causal we're about to
   -- set.
-  _ <- HashQ.expectCausalIdByHash newCausalHash
-  PG.execute_ (updateReflogSQL codebaseOwnerUserId)
-  PG.execute_ (setRootSQL codebaseOwnerUserId)
+  _ <- HashQ.expectCausalIdByHash codebase newCausalHash
+  PG.execute_ (updateReflogSQL codebaseOwner)
+  PG.execute_ (setRootSQL codebaseOwner)
   where
     updateReflogSQL codebaseOwnerUserId =
       [PG.sql|
@@ -117,8 +112,8 @@ setLooseCodeRoot !_nlReceipt callerUserId description newCausalId = do
           |]
 
 -- | Initializes a codebase for a new user
-initialize :: CodebaseM e ()
-initialize = do
-  (emptyBhId, _) <- CausalQ.savePgNamespace Nothing Nothing BranchFull.emptyBranch
-  (cid, _causalHash) <- CausalQ.saveCausal Nothing Nothing emptyBhId mempty
-  ensureLooseCodeRootHash cid
+initialize :: (QueryM m) => CodebaseEnv -> m ()
+initialize codebase = do
+  (emptyBhId, _) <- CausalQ.savePgNamespace codebase Nothing Nothing BranchFull.emptyBranch
+  (cid, _causalHash) <- CausalQ.saveCausal codebase Nothing Nothing emptyBhId mempty
+  ensureLooseCodeRootHash codebase cid

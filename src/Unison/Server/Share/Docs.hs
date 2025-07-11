@@ -4,6 +4,7 @@ module Unison.Server.Share.Docs (docsForDefinitionName) where
 
 import Control.Lens qualified as Cons
 import Share.Codebase qualified as Codebase
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Web.Errors (SomeServerError)
@@ -26,20 +27,23 @@ import Unison.Util.Monoid (foldMapM)
 -- Fetch the docs associated with the given name.
 -- Returns all references with a Doc type which are at the name provided, or at '<name>.doc'.
 docsForDefinitionName ::
-  NameSearch (PG.Transaction e) ->
+  forall m.
+  (QueryM m) =>
+  Codebase.CodebaseEnv ->
+  NameSearch m ->
   Name ->
-  Codebase.CodebaseM e [TermReference]
-docsForDefinitionName (NameSearch {termSearch}) name = do
+  m [TermReference]
+docsForDefinitionName codebase (NameSearch {termSearch}) name = do
   let potentialDocNames = [name, name Cons.:> NameSegment "doc"]
   refs <-
     potentialDocNames & foldMapM \name ->
-      lift $ lookupRelativeHQRefs' termSearch ExactName (HQ'.NameOnly name)
+      lookupRelativeHQRefs' termSearch ExactName (HQ'.NameOnly name)
   filterForDocs (toList refs)
   where
-    filterForDocs :: [V1Referent.Referent] -> Codebase.CodebaseM e [TermReference]
+    filterForDocs :: [V1Referent.Referent] -> m [TermReference]
     filterForDocs rs = do
       rts <- fmap join . for rs $ \case
         V1Referent.Ref r ->
-          maybe [] (pure . (r,)) <$> Codebase.loadTypeOfTerm r
+          maybe [] (pure . (r,)) <$> Codebase.loadTypeOfTerm codebase r
         _ -> pure []
       pure [r | (r, t) <- rts, Typechecker.isSubtype t (Type.ref mempty DD.doc2Ref)]
