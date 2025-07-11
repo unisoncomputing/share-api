@@ -132,14 +132,14 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
     Left Branch {causal = causalId} -> do
       maySquashedBranchHead <-
         if includeSquashedHead
-          then do
+          then lift $ do
             PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
               maySquashedCausalId <- Codebase.squashCausalAndAddToCodebase codebaseEnv causalId
               -- Join in the hash
               for maySquashedCausalId \cid -> (cid,) <$> HashQ.expectCausalHashesByIdsOf id cid
           else pure Nothing
       pure (causalId, maySquashedBranchHead)
-    Right Release {squashedCausal = squashedCausalId} -> do
+    Right Release {squashedCausal = squashedCausalId} -> lift $ do
       PG.runTransactionMode PG.ReadCommitted PG.Read $ do
         squashedCausalHash <- HashQ.expectCausalHashesByIdsOf id squashedCausalId
         pure (squashedCausalId, Just (squashedCausalId, squashedCausalHash))
@@ -150,7 +150,7 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
     Nothing -> pure ()
     Just callerUserId -> lift $ for_ causalIdsToImport (importCausalToCallerCodebase authZReceipt codebaseOwnerUserId callerUserId)
 
-  branchHeadHash <- PG.runTransactionMode PG.ReadCommitted PG.Read $ do
+  branchHeadHash <- lift $ PG.runTransactionMode PG.ReadCommitted PG.Read $ do
     branchHeadHash <- HashQ.expectCausalHashesByIdsOf id branchHead
     pure branchHeadHash
   signedBranchHead <- lift $ HashJWT.signHashForUser mayCallerUserId (causalHashToHash32 branchHeadHash)
