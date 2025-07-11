@@ -15,6 +15,7 @@ import Control.Monad.Trans.Maybe
 import Data.Set qualified as Set
 import Servant
 import Share.Codebase qualified as Codebase
+import Share.Env qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
@@ -146,10 +147,12 @@ projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-name" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -172,10 +175,13 @@ projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   let query = HQ.HashOnly shortHash
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-hash" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -268,10 +274,13 @@ projectReleaseNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectReleaseRead callerUserId projectId
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-namespaces-by-name" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
-      ND.namespaceDetails rt (fromMaybe mempty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
+    PG.runTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          ND.namespaceDetails rt (fromMaybe mempty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
   where
     cacheParams = [IDs.toText projectReleaseShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -310,14 +319,16 @@ getProjectReleaseReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandl
   let rootPath = mempty
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-project-release-doc" cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      mayNamespaceDetails <- ND.namespaceDetails rt rootPath releaseHead Nothing
-      let mayReadme = do
-            NamespaceDetails {readme} <- mayNamespaceDetails
-            readme
-      pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          mayNamespaceDetails <- ND.namespaceDetails rt rootPath releaseHead Nothing
+          let mayReadme = do
+                NamespaceDetails {readme} <- mayNamespaceDetails
+                readme
+          pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
   where
     cacheParams = [IDs.toText projectReleaseShortHand]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -347,11 +358,13 @@ getProjectReleaseDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUs
   let rootPath = mempty
   let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams releaseHead $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      doc <- findAndRenderDoc docNames rt rootPath releaseHead Nothing
-      pure $ DocResponse {doc}
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          doc <- findAndRenderDoc docNames rt rootPath releaseHead Nothing
+          pure $ DocResponse {doc}
   where
     cacheParams = [IDs.toText projectReleaseShortHand]
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}

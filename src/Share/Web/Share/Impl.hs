@@ -13,6 +13,7 @@ import Servant
 import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types qualified as Codebase
+import Share.Env qualified as Env
 import Share.IDs (BranchOrReleaseShortHand (..), TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT
@@ -153,11 +154,13 @@ definitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle name
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
   let query = name
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-name" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
     cacheParams = [HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
@@ -183,11 +186,13 @@ definitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle refe
   let query = HQ.HashOnly shortHash
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-hash" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          ShareBackend.definitionForHQName (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
     cacheParams = [toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
@@ -282,11 +287,13 @@ namespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle (from
   let codebaseLoc = Codebase.codebaseLocationForUserCodebase codebaseOwnerUserId
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner path
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "namespaces-by-name" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite codebase $ do
-      ND.namespaceDetails rt path rootCausalId renderWidth `whenNothingM` throwError (EntityMissing (ErrorID "no-namespace") $ "No namespace found at " <> Path.toText path)
+    PG.runTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          ND.namespaceDetails rt path rootCausalId renderWidth `whenNothingM` throwError (EntityMissing (ErrorID "no-namespace") $ "No namespace found at " <> Path.toText path)
   where
     cacheParams = [tShow path]
 
@@ -332,15 +339,17 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
   let path = Codebase.publicRoot
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner path
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-  rt <- Codebase.codebaseRuntime codebase
+  unisonRuntime <- asks Env.sandboxedRuntime
   (rootCausalId, _rootCausalHash) <- Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.Read codebase Codebase.expectLooseCodeRoot
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-user-readme" cacheParams rootCausalId $ do
-    Codebase.runCodebaseTransactionMode PG.ReadCommitted PG.ReadWrite codebase $ do
-      mayNamespaceDetails <- ND.namespaceDetails rt path rootCausalId Nothing
-      let mayReadme = do
-            NamespaceDetails {readme} <- mayNamespaceDetails
-            readme
-      pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      Codebase.withCodebaseRuntime codebase unisonRuntime \rt -> do
+        Codebase.codebaseMToTransaction codebase $ do
+          mayNamespaceDetails <- ND.namespaceDetails rt path rootCausalId Nothing
+          let mayReadme = do
+                NamespaceDetails {readme} <- mayNamespaceDetails
+                readme
+          pure $ ReadmeResponse {readMe = mayReadme, markdownReadMe = MD.toText . MD.toMarkdown <$> mayReadme}
   where
     cacheParams = [IDs.toText userHandle]
 
