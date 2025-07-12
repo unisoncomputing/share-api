@@ -17,8 +17,9 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
+import Share.Telemetry qualified as Trace
 import Share.Utils.Logging qualified as Logging
-import Share.Utils.Tags (MonadTags (..))
+import Share.Utils.Tags (MonadTags (..), Tags)
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
@@ -46,23 +47,17 @@ processDiffs :: AuthZ.AuthZReceipt -> Runtime Symbol -> Background ()
 processDiffs authZReceipt unisonRuntime = do
   let loop :: Background ()
       loop = do
-        result <-
+        result <- Trace.withSpan "causal-diff-computation" mempty $
           PG.runTransactionMode PG.RepeatableRead PG.ReadWrite do
             DQ.claimCausalDiff >>= \case
               Nothing -> pure Nothing
-              Just causalDiffInfo -> do
+              Just causalDiffInfo -> withTags (causalDiffTags causalDiffInfo) do
                 startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
                 result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime causalDiffInfo)
                 DQ.deleteClaimedCausalDiff causalDiffInfo
                 pure (Just (causalDiffInfo, startTime, result))
-        whenJust result \(CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}, startTime, result) -> do
-          let tags =
-                Map.fromList
-                  [ ("from-causal-id", IDs.toText fromCausalId),
-                    ("to-causal-id", IDs.toText toCausalId),
-                    ("from-codebase-owner", IDs.toText fromCodebaseOwner),
-                    ("to-codebase-owner", IDs.toText toCodebaseOwner)
-                  ]
+        whenJust result \(cdi, startTime, result) -> do
+          let tags = causalDiffTags cdi
           withTags tags do
             case result of
               Left err -> reportError err
@@ -74,6 +69,15 @@ processDiffs authZReceipt unisonRuntime = do
                     & Logging.logMsg
           loop
   loop
+  where
+    causalDiffTags :: CausalDiffInfo -> Tags
+    causalDiffTags CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner} =
+      Map.fromList $
+        [ ("from-causal-id", IDs.toText fromCausalId),
+          ("to-causal-id", IDs.toText toCausalId),
+          ("from-codebase-owner", IDs.toText fromCodebaseOwner),
+          ("to-codebase-owner", IDs.toText toCodebaseOwner)
+        ]
 
 -- Check whether a causal diff has already been computed, and if it hasn't, compute and store it. Otherwise, do nothing.
 -- Returns whether or not we did any work.

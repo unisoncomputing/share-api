@@ -7,7 +7,6 @@ module Share
   )
 where
 
-import OpenTelemetry.Instrumentation.Wai (newOpenTelemetryWaiMiddleware)
 import Control.Monad.Except
 import Control.Monad.Random (randomIO)
 import Control.Monad.Reader
@@ -33,6 +32,7 @@ import Network.Wai.Internal qualified as Wai
 import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.Gzip qualified as Gzip
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
+import OpenTelemetry.Instrumentation.Wai (newOpenTelemetryWaiMiddleware)
 import Servant
 import Share.App
 import Share.BackgroundJobs qualified as BackgroundJobs
@@ -129,10 +129,10 @@ mkShareServer env = do
           & requestIDMiddleware
           & requestMetricsMiddleware Web.api
           & metricsMiddleware
-          & openTelemetryMiddleware
           & skipOnLocal corsMiddleware
           & Gzip.gzip gzipSettings
           & reqLoggerMiddleware
+          & openTelemetryMiddleware
   pure waiApp
   where
     gzipSettings =
