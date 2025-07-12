@@ -12,6 +12,3 @@ startWorkers scope = do
   DefnSearch.worker scope
   ContributionDiffs.worker scope
   Webhooks.worker scope
-
--- Temporary disable background diff jobs until the new diffing logic is done.
--- SerializedEntitiesMigration.worker scope
