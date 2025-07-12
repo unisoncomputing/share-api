@@ -29,6 +29,7 @@ import Share.Env qualified as Env
 import Share.Postgres qualified as PG
 import Share.Postgres.Metrics.Queries qualified as Q
 import Share.Prelude
+import Share.Telemetry qualified as Trace
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Servant.PathInfo (HasPathInfo, normalizePath)
 import System.Clock (Clock (..), diffTimeSpec, toNanoSecs)
@@ -78,7 +79,7 @@ serveMetricsMiddleware env = do
     refreshGauges getMetrics
     Prom.prometheus prometheusSettings app req handleResponse
   where
-    runPG = PG.runSessionWithEnv env . PG.transaction PG.ReadCommitted PG.Read
+    runPG = Trace.runTracerT (Env.tracer env) . PG.runSessionWithEnv env . PG.transaction PG.ReadCommitted PG.Read
     prometheusSettings =
       Prom.def
         { Prom.prometheusEndPoint = ["metrics"],

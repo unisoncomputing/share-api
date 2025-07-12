@@ -7,6 +7,7 @@ module Share
   )
 where
 
+import OpenTelemetry.Instrumentation.Wai (newOpenTelemetryWaiMiddleware)
 import Control.Monad.Except
 import Control.Monad.Random (randomIO)
 import Control.Monad.Reader
@@ -116,6 +117,7 @@ mkShareServer env = do
   reqTagsKey <- Vault.newKey
   let reqLoggerMiddleware = mkReqLogger reqTagsKey (Env.timeCache env) (Env.logger env)
   metricsMiddleware <- serveMetricsMiddleware env
+  openTelemetryMiddleware <- newOpenTelemetryWaiMiddleware
   let appCtx :: (Context '[Cookies.CookieSettings, JWT.JWTSettings])
       appCtx = Env.cookieSettings env :. Env.jwtSettings env :. EmptyContext
   let ctx :: Context (AuthCheckCtx .++ '[Cookies.CookieSettings, JWT.JWTSettings])
@@ -127,6 +129,7 @@ mkShareServer env = do
           & requestIDMiddleware
           & requestMetricsMiddleware Web.api
           & metricsMiddleware
+          & openTelemetryMiddleware
           & skipOnLocal corsMiddleware
           & Gzip.gzip gzipSettings
           & reqLoggerMiddleware

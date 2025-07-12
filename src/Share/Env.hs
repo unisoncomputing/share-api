@@ -9,6 +9,7 @@ import Database.Redis qualified as R
 import Hasql.Pool qualified as Hasql
 import Network.HTTP.Client qualified as HTTPClient
 import Network.URI (URI)
+import OpenTelemetry.Trace qualified as Trace
 import Servant.Client qualified as S
 import Share.JWT qualified as JWT
 import Share.Prelude
@@ -58,7 +59,9 @@ data Env ctx = Env
     -- E.g. sync can parallelize signing/verifying JWTs or run multiple transactions against
     -- PG. If this goes too high we can end up tanking Share.
     maxParallelismPerDownloadRequest :: Int,
-    maxParallelismPerUploadRequest :: Int
+    maxParallelismPerUploadRequest :: Int,
+    -- OpenTelemetry tracing
+    tracer :: Trace.Tracer
   }
   deriving (Functor)
 

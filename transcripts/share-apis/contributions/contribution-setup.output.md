@@ -18,9 +18,7 @@ term = "start"
 ``` ucm
 bca-updates/main> add
 
-  ⍟ I've added these definitions:
-
-    term : ##Text
+  Done.
 
 bca-updates/main> push @transcripts/bca-updates/main
 
