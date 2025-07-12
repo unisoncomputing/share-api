@@ -37,6 +37,7 @@ import Share.Postgres.Search.DefinitionSearch.Queries qualified as DDQ
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Release (Release (..))
+import Share.Telemetry (withSpan)
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (SomeServerError)
@@ -86,58 +87,68 @@ worker scope = do
   newWorker scope "search:defn-sync" $ forever do
     Notif.waitOnChannel Notif.DefinitionSyncChannel (maxPollingIntervalSeconds * 1000000)
     processReleases authZReceipt
-  where
-    processReleases authZReceipt = do
-      (errs, badNames, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
-        mayUnsynced <- DDQ.claimUnsynced
-        case mayUnsynced of
-          Nothing -> pure (mempty, mempty, Nothing)
-          Just (mayReleaseId, branchHashId, userId) -> do
-            result <-
-              PG.catchAllTransaction (syncRoot authZReceipt (mayReleaseId, branchHashId, userId)) >>= \case
-                Right (syncErrors, badNames)
-                  | null syncErrors -> do
-                      DDQ.deleteClaimed branchHashId
-                      pure (syncErrors, badNames, Just (mayReleaseId, branchHashId, userId))
-                  | otherwise -> do
-                      DDQ.markAsFailed branchHashId (Text.intercalate "," (tShow <$> syncErrors))
-                      pure (syncErrors, badNames, Just (mayReleaseId, branchHashId, userId))
-                Left (PG.Unrecoverable catastrophicError) -> do
-                  DDQ.markAsFailed branchHashId (tShow catastrophicError)
-                  pure ([CatastrophicError catastrophicError], mempty, Nothing)
-            pure result
-      case (errs, mayProcessedRelease) of
-        -- No errors and no release processed, just return and we'll wait for the next thing
-        -- to hit the queue.
-        (_, Nothing) -> pure ()
-        -- Errors occurred, log them then continue processing.
-        (errs@(_ : _), Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
-          let msg =
-                Logging.textLog ("Definition sync errors: " <> Text.intercalate "," (tShow <$> errs))
-                  & Logging.withSeverity Logging.Error
-                  & Logging.withTag ("release-id", tShow mayReleaseId)
-                  & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
-                  & Logging.withTag ("codebase-owner", tShow codebaseOwner)
-          Logging.logMsg msg
-          for_ errs reportError
-        -- No errors, but we processed a release, log that.
-        ([], Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
-          for_ badNames \badName -> do
-            let msg =
-                  Logging.textLog ("Definition sync found bad name: " <> badName)
-                    & Logging.withSeverity Logging.Error
-                    & Logging.withTag ("release-id", tShow mayReleaseId)
-                    & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
-                    & Logging.withTag ("codebase-owner", tShow codebaseOwner)
-            Logging.logMsg msg
 
-          Logging.textLog ("Built definition search index for rootBranchHashId: " <> tShow rootBranchHashId <> " for codebaseOwner: " <> tShow codebaseOwner <> " and releaseId: " <> tShow mayReleaseId)
-            & Logging.withTag ("release-id", tShow mayReleaseId)
-            & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
-            & Logging.withTag ("codebase-owner", tShow codebaseOwner)
-            & Logging.withSeverity Logging.Info
-            & Logging.logMsg
-          processReleases authZReceipt
+processReleases :: AuthZ.AuthZReceipt -> Background ()
+processReleases authZReceipt = do
+  processRelease authZReceipt >>= \case
+    -- If we processed a release, continue processing releases.
+    True -> processReleases authZReceipt
+    -- If we didn't process a release, just wait for the next notification.
+    False -> pure ()
+
+processRelease :: AuthZ.AuthZReceipt -> Background Bool
+processRelease authZReceipt = withSpan "background:definition-sync:process-release" mempty do
+  (errs, badNames, mayProcessedRelease) <- Metrics.recordDefinitionSearchIndexDuration $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
+    mayUnsynced <- DDQ.claimUnsynced
+    case mayUnsynced of
+      Nothing -> pure (mempty, mempty, Nothing)
+      Just (mayReleaseId, branchHashId, userId) -> do
+        result <-
+          PG.catchAllTransaction (syncRoot authZReceipt (mayReleaseId, branchHashId, userId)) >>= \case
+            Right (syncErrors, badNames)
+              | null syncErrors -> do
+                  DDQ.deleteClaimed branchHashId
+                  pure (syncErrors, badNames, Just (mayReleaseId, branchHashId, userId))
+              | otherwise -> do
+                  DDQ.markAsFailed branchHashId (Text.intercalate "," (tShow <$> syncErrors))
+                  pure (syncErrors, badNames, Just (mayReleaseId, branchHashId, userId))
+            Left (PG.Unrecoverable catastrophicError) -> do
+              DDQ.markAsFailed branchHashId (tShow catastrophicError)
+              pure ([CatastrophicError catastrophicError], mempty, Nothing)
+        pure result
+  case (errs, mayProcessedRelease) of
+    -- No errors and no release processed, just return and we'll wait for the next thing
+    -- to hit the queue.
+    (_, Nothing) -> pure False
+    -- Errors occurred, log them then continue processing.
+    (errs@(_ : _), Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
+      let msg =
+            Logging.textLog ("Definition sync errors: " <> Text.intercalate "," (tShow <$> errs))
+              & Logging.withSeverity Logging.Error
+              & Logging.withTag ("release-id", tShow mayReleaseId)
+              & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
+              & Logging.withTag ("codebase-owner", tShow codebaseOwner)
+      Logging.logMsg msg
+      for_ errs reportError
+      pure True
+    -- No errors, but we processed a release, log that.
+    ([], Just (mayReleaseId, rootBranchHashId, codebaseOwner)) -> do
+      for_ badNames \badName -> do
+        let msg =
+              Logging.textLog ("Definition sync found bad name: " <> badName)
+                & Logging.withSeverity Logging.Error
+                & Logging.withTag ("release-id", tShow mayReleaseId)
+                & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
+                & Logging.withTag ("codebase-owner", tShow codebaseOwner)
+        Logging.logMsg msg
+
+      Logging.textLog ("Built definition search index for rootBranchHashId: " <> tShow rootBranchHashId <> " for codebaseOwner: " <> tShow codebaseOwner <> " and releaseId: " <> tShow mayReleaseId)
+        & Logging.withTag ("release-id", tShow mayReleaseId)
+        & Logging.withTag ("root-branch-hash-id", tShow rootBranchHashId)
+        & Logging.withTag ("codebase-owner", tShow codebaseOwner)
+        & Logging.withSeverity Logging.Info
+        & Logging.logMsg
+      pure True
 
 syncRoot ::
   AuthZ.AuthZReceipt ->

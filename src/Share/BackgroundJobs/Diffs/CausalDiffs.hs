@@ -45,30 +45,36 @@ worker scope = do
 -- that we claim a diff but fail to write the result of computing that diff back to the database.
 processDiffs :: AuthZ.AuthZReceipt -> Runtime Symbol -> Background ()
 processDiffs authZReceipt unisonRuntime = do
-  let loop :: Background ()
-      loop = do
-        result <- Trace.withSpan "causal-diff-computation" mempty $
-          PG.runTransactionMode PG.RepeatableRead PG.ReadWrite do
-            DQ.claimCausalDiff >>= \case
-              Nothing -> pure Nothing
-              Just causalDiffInfo -> withTags (causalDiffTags causalDiffInfo) do
-                startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
-                result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime causalDiffInfo)
-                DQ.deleteClaimedCausalDiff causalDiffInfo
-                pure (Just (causalDiffInfo, startTime, result))
-        whenJust result \(cdi, startTime, result) -> do
-          let tags = causalDiffTags cdi
-          withTags tags do
-            case result of
-              Left err -> reportError err
-              Right didWork -> do
-                when didWork do
-                  liftIO (Metrics.recordCausalDiffDuration startTime)
-                  Logging.textLog "Computed causal diff"
-                    & Logging.withSeverity Logging.Info
-                    & Logging.logMsg
-          loop
-  loop
+  processDiff authZReceipt unisonRuntime >>= \case
+    True -> processDiffs authZReceipt unisonRuntime
+    False -> pure ()
+
+-- | Process a diff, then return whether or not we did any work.
+processDiff :: AuthZ.AuthZReceipt -> Runtime Symbol -> Background Bool
+processDiff authZReceipt unisonRuntime = do
+  result <- Trace.withSpan "background:causal-diffs:process-diff" mempty $
+    PG.runTransactionMode PG.RepeatableRead PG.ReadWrite do
+      DQ.claimCausalDiff >>= \case
+        Nothing -> pure Nothing
+        Just causalDiffInfo -> withTags (causalDiffTags causalDiffInfo) do
+          startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
+          result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime causalDiffInfo)
+          DQ.deleteClaimedCausalDiff causalDiffInfo
+          pure (Just (causalDiffInfo, startTime, result))
+  case result of
+    Nothing -> pure False
+    Just (cdi, startTime, result) -> do
+      let tags = causalDiffTags cdi
+      withTags tags do
+        case result of
+          Left err -> reportError err
+          Right didWork -> do
+            when didWork do
+              liftIO (Metrics.recordCausalDiffDuration startTime)
+              Logging.textLog "Computed causal diff"
+                & Logging.withSeverity Logging.Info
+                & Logging.logMsg
+      pure True
   where
     causalDiffTags :: CausalDiffInfo -> Tags
     causalDiffTags CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner} =
