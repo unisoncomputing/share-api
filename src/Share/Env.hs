@@ -1,6 +1,7 @@
+{-# LANGUAGE DataKinds #-}
+
 module Share.Env
   ( Env (..),
-    HasTags (..),
   )
 where
 
@@ -15,6 +16,7 @@ import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Utils.Logging.Types qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
+import Share.Utils.Tags (HasTags (..))
 import System.Log.FastLogger (FormattedTime, LogStr)
 import System.Log.Raven.Types (SentryService)
 import Unison.Codebase.Runtime (Runtime)
@@ -63,19 +65,8 @@ data Env ctx = Env
     -- OpenTelemetry tracing
     tracer :: Trace.Tracer
   }
-  deriving (Functor)
-
--- | A Class for different request contexts to expose their tags.
-class HasTags ctx where
-  getTags :: (MonadIO m) => ctx -> m (Map Text Text)
-  updateTags :: (MonadIO m) => (Map Text Text -> Map Text Text) -> ctx -> m ctx
+  deriving (Functor, Generic)
 
 instance (HasTags ctx) => HasTags (Env ctx) where
-  getTags env = getTags (ctx env)
-  updateTags f env = do
-    ctx' <- updateTags f (ctx env)
-    pure $ env {ctx = ctx'}
-
-instance HasTags () where
-  getTags _ = pure mempty
-  updateTags _ _ = pure ()
+  getTags = getTags . ctx
+  addTags newTags env = env {ctx = addTags newTags (ctx env)}

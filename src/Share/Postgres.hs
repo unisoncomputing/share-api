@@ -105,7 +105,6 @@ import OpenTelemetry.Trace qualified as Trace
 import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Safe (headMay)
 import Share.Debug qualified as Debug
-import Share.Env (HasTags)
 import Share.Env qualified as Env
 import Share.Postgres.Orphans ()
 import Share.Prelude
@@ -113,6 +112,8 @@ import Share.Telemetry qualified as Trace
 import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
+import Share.Utils.Tags (HasTags (..), MonadTags (..))
+import Share.Utils.Tags qualified as Tags
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
@@ -140,9 +141,9 @@ data TransactionError e
 
 newtype Tags = Tags (Map Text Text)
 
-instance Env.HasTags Tags where
-  getTags (Tags tags) = pure tags
-  updateTags f (Tags tags) = pure (Tags (f tags))
+instance HasTags Tags where
+  getTags (Tags tags) = pure $ tags
+  addTags newTags (Tags tags) = Tags (tags <> newTags)
 
 data TransactionCtx = TransactionCtx
   { tags :: Tags,
@@ -151,14 +152,20 @@ data TransactionCtx = TransactionCtx
   }
 
 instance HasTags TransactionCtx where
-  getTags TransactionCtx {tags} = Env.getTags tags
-  updateTags f TransactionCtx {tags, numQueriesVar} = do
-    newTags <- Env.updateTags f tags
-    pure TransactionCtx {tags = newTags, numQueriesVar}
+  getTags TransactionCtx {tags} = getTags tags
+  addTags newTags TransactionCtx {tags = Tags tags, numQueriesVar} =
+    TransactionCtx {tags = Tags (addTags tags newTags), numQueriesVar}
 
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
 newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env TransactionCtx) Hasql.Session) (Either (TransactionError e) a)}
-  deriving (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), Logging.MonadLogger) via (Logging.LoggerT (ReaderT (Env.Env TransactionCtx) (ExceptT (TransactionError e) Hasql.Session)))
+  deriving
+    (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), Logging.MonadLogger)
+    via (Logging.LoggerT (ReaderT (Env.Env TransactionCtx) (ExceptT (TransactionError e) Hasql.Session)))
+
+instance MonadTags (Transaction e) where
+  askTags = ask >>= transactionUnsafeIO . getTags
+  withTags newTags (Transaction t) = Transaction $ do
+    local (addTags newTags) t
 
 instance MonadTracer (Transaction e) where
   getTracer = asks Env.tracer
@@ -277,7 +284,7 @@ transaction isoLevel mode (Transaction t) = Session do
         case res of
           Nothing -> do
             lift . lift $ rollbackSession
-            Logging.withTags (Map.singleton "transaction-retry" "true") loop
+            local (addTags $ Map.singleton "transaction-retry" "true") loop
           Just res -> pure res
   coerce loop
   where
@@ -321,7 +328,7 @@ transactionStatement v stmt = Transaction do
   env <- ask
   let nqVar = numQueriesVar . Env.ctx $ env
   liftIO $ UnliftIO.atomically $ UnliftIO.modifyTVar' nqVar (+ 1)
-  Right <$> (lift . lift $ Trace.runTracerT (Env.tracer env) $ flip runReaderT env $ Trace.withSpan (fromMaybe "transactionStatement" mayFuncName) spanTags $ (lift . lift $ Session.statement v stmt))
+  Right <$> (lift . lift $ Tags.runTagT env $ Trace.runTracerT (Env.tracer env) $ flip runReaderT env $ Trace.withSpan (fromMaybe "transactionStatement" mayFuncName) spanTags $ (lift . lift . lift $ Session.statement v stmt))
   where
     (mayFuncName, spanTags) = spanInfo
 
@@ -357,20 +364,20 @@ writeTransaction t = transaction defaultIsolationLevel ReadWrite t
 --
 -- Uses a Write transaction for simplicity since there's not much
 -- benefit in distinguishing transaction types.
-runTransaction :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Transaction Void a -> m a
+runTransaction :: (MonadReader (Env.Env ctx) m, HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => Transaction Void a -> m a
 runTransaction t = runSession (writeTransaction t)
 
-runTransactionMode :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => IsolationLevel -> Mode -> Transaction Void a -> m a
+runTransactionMode :: (MonadReader (Env.Env ctx) m, HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => IsolationLevel -> Mode -> Transaction Void a -> m a
 runTransactionMode isoLevel mode t = runSession (transaction isoLevel mode t)
 
 -- | Run a transaction in the App monad, returning an Either error.
 --
 -- Uses a Write transaction for simplicity since there's not much
 -- benefit in distinguishing transaction types.
-tryRunTransaction :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Transaction e a -> m (Either e a)
+tryRunTransaction :: (MonadReader (Env.Env ctx) m, HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => Transaction e a -> m (Either e a)
 tryRunTransaction t = tryRunSession (writeTransaction t)
 
-tryRunTransactionMode :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => IsolationLevel -> Mode -> Transaction e a -> m (Either e a)
+tryRunTransactionMode :: (MonadReader (Env.Env ctx) m, HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => IsolationLevel -> Mode -> Transaction e a -> m (Either e a)
 tryRunTransactionMode isoLevel mode t = tryRunSession (transaction isoLevel mode t)
 
 -- | Run a transaction in the App monad, responding to the request with an error if it fails.
@@ -384,23 +391,23 @@ runTransactionModeOrRespondError :: (HasCallStack, ToServerError e, Loggable e) 
 runTransactionModeOrRespondError isoLevel mode t = runSessionOrRespondError (transaction isoLevel mode t)
 
 -- | Run a session in the App monad without any errors.
-runSession :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Session Void a -> m a
+runSession :: (MonadReader (Env.Env ctx) m, HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => Session Void a -> m a
 runSession t = either absurd id <$> tryRunSession t
 
 -- | Run a session in the App monad, returning an Either error.
-tryRunSession :: (MonadReader (Env.Env ctx) m, HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Session e a -> m (Either e a)
+tryRunSession :: (MonadReader (Env.Env ctx) m, HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => Session e a -> m (Either e a)
 tryRunSession s = do
   env <- ask
   tryRunSessionWithEnv env s
 
 -- | Manually run an unfailing session using the connection pool from the provided env.
-runSessionWithEnv :: (HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session Void a -> m a
+runSessionWithEnv :: (HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session Void a -> m a
 runSessionWithEnv env s = either absurd id <$> tryRunSessionWithEnv env s
 
 -- | Manually run a session, using the connection pool from the provided env, returning an Either error.
-tryRunSessionWithEnv :: (HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session e a -> m (Either e a)
+tryRunSessionWithEnv :: (HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session e a -> m (Either e a)
 tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = flip runReaderT env $ Trace.withSpan' entryPointName spanTags $ \span -> do
-  tags <- Env.getTags env
+  tags <- askTags
   numQueriesVar <- liftIO $ UnliftIO.newTVarIO 0
   let transactionContext =
         TransactionCtx

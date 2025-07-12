@@ -1,11 +1,12 @@
 module Share.BackgroundJobs.Diffs.CausalDiffs (worker) where
 
 import Control.Lens
+import Data.Map qualified as Map
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Diffs.Queries qualified as DQ
 import Share.BackgroundJobs.Diffs.Types (CausalDiffInfo (..))
 import Share.BackgroundJobs.Errors (reportError)
-import Share.BackgroundJobs.Monad (Background, withTags)
+import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase qualified as Codebase
 import Share.Env qualified as Env
@@ -17,6 +18,7 @@ import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Tags (MonadTags (..))
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
@@ -55,11 +57,12 @@ processDiffs authZReceipt unisonRuntime = do
                 pure (Just (causalDiffInfo, startTime, result))
         whenJust result \(CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}, startTime, result) -> do
           let tags =
-                [ ("from-causal-id", IDs.toText fromCausalId),
-                  ("to-causal-id", IDs.toText toCausalId),
-                  ("from-codebase-owner", IDs.toText fromCodebaseOwner),
-                  ("to-codebase-owner", IDs.toText toCodebaseOwner)
-                ]
+                Map.fromList
+                  [ ("from-causal-id", IDs.toText fromCausalId),
+                    ("to-causal-id", IDs.toText toCausalId),
+                    ("from-codebase-owner", IDs.toText fromCodebaseOwner),
+                    ("to-codebase-owner", IDs.toText toCodebaseOwner)
+                  ]
           withTags tags do
             case result of
               Left err -> reportError err

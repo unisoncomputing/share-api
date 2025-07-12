@@ -31,6 +31,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.User (User (..))
+import Share.Utils.Tags (HasTags)
 import Share.Utils.URI (URIParam (..), uriToText)
 import Share.Web.UI.Links qualified as Links
 import UnliftIO (SomeException)
@@ -47,7 +48,7 @@ data Author = Author
   }
   deriving (Show, Eq, Ord)
 
-authorFromUserId :: (Env.HasTags reqCtx) => UserId -> AppM reqCtx Author
+authorFromUserId :: (HasTags reqCtx) => UserId -> AppM reqCtx Author
 authorFromUserId userId = do
   User {avatar_url = avatarUrl, user_name, handle} <- PG.runTransaction $ UsersQ.expectUser userId
   authorLink <- Links.userProfilePage handle

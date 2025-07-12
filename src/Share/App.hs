@@ -20,25 +20,24 @@ import Share.Env (Env (..))
 import Share.Env qualified as Env
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Tags (HasTags (..), MonadTags (..))
 
 newtype AppM reqCtx a = AppM {_unAppM :: ReaderT (Env reqCtx) IO a}
   deriving newtype (Functor, Applicative, Monad, MonadReader (Env reqCtx), MonadRandom, MonadIO, MonadUnliftIO)
 
-instance (Env.HasTags ctx) => Logging.MonadLogger (AppM ctx) where
+instance (HasTags ctx) => MonadTags (AppM ctx) where
+  askTags = ask >>= getTags
+  withTags newTags = local (\env -> env {ctx = addTags newTags $ Env.ctx env})
+
+instance (HasTags ctx) => Logging.MonadLogger (AppM ctx) where
   logMsg msg = do
     log <- asks Env.logger
-    ctx <- asks ctx
-    currentTags <- liftIO $ Env.getTags ctx
+    currentTags <- askTags
     msg <- pure $ msg {Logging.tags = Logging.tags msg `Map.union` currentTags}
     minSeverity <- asks Env.minLogSeverity
     when (Logging.severity msg >= minSeverity) $ do
       timestamp <- asks timeCache >>= liftIO
       liftIO . log . Logging.logFmtFormatter timestamp $ msg
-
-  withTags newTags (AppM m) = do
-    env <- ask
-    env' <- Env.updateTags (Map.union newTags) env
-    AppM $ local (const env') m
 
 instance MonadTracer (AppM reqCtx) where
   getTracer = asks Env.tracer

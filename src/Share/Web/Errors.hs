@@ -62,6 +62,7 @@ import Share.OAuth.Types (AuthenticationRequest (..), RedirectReceiverErr (..))
 import Share.Prelude
 import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Tags (askTags)
 import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
 import Unison.Server.Backend qualified as Backend
@@ -183,7 +184,7 @@ reportError e = do
   let (ErrorID errID, serverErr) = toServerError e
   env <- ask
   RequestCtx {pathInfo, rawURI} <- asks Env.ctx
-  reqTags <- liftIO $ getTags env
+  reqTags <- askTags
   let errLog@LogMsg {msg} = withTag ("error-id", errID) $ toLog e
   -- We emit a separate log message for each error, but it's also
   -- handy to have that data on the main log for the request.
