@@ -49,7 +49,7 @@ computeAndStoreCausalDiff ::
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, CausalId) ->
   Maybe CausalId ->
   PG.Transaction e (PreEncoded NamespaceDiffs.NamespaceDiffResult)
-computeAndStoreCausalDiff authZReceipt old@(oldCodebase, _, oldCausalId) new@(newCodebase, _, newCausalId) lca = do
+computeAndStoreCausalDiff authZReceipt old@(oldCodebase, _, oldCausalId) new@(newCodebase, _, newCausalId) lca = PG.transactionSpan "computeAndStoreCausalDiff" mempty do
   result <-
     PG.catchTransaction (tryComputeCausalDiff authZReceipt old new lca) <&> \case
       Right diff -> NamespaceDiffs.NamespaceDiffResult'Ok diff
@@ -77,19 +77,19 @@ tryComputeCausalDiff ::
         TypeDefinitionDiff
         BranchHash
     )
-tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = do
+tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = PG.transactionSpan "tryComputeCausalDiff" mempty do
   -- Ensure name lookups for the things we're diffing.
   let getBranch :: CausalId -> PG.Transaction NamespaceDiffError (BranchHashId, NameLookupReceipt)
       getBranch causalId = do
         branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
         nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
         pure (branchHashId, nameLookupReceipt)
-  (oldBranchHashId, oldBranchNLReceipt) <- getBranch oldCausalId
-  (newBranchHashId, newBranchNLReceipt) <- getBranch newCausalId
+  (oldBranchHashId, oldBranchNLReceipt) <- PG.transactionSpan "getOldBranch" mempty $ getBranch oldCausalId
+  (newBranchHashId, newBranchNLReceipt) <- PG.transactionSpan "getNewBranch" mempty $ getBranch newCausalId
   (maybeLcaBranchHashId, maybeLcaBranchNLReceipt) <-
     case maybeLcaCausalId of
       Just lcaCausalId -> do
-        (lcaBranchHashId, lcaBranchNLReceipt) <- getBranch lcaCausalId
+        (lcaBranchHashId, lcaBranchNLReceipt) <- PG.transactionSpan "getNewBranch" mempty $ getBranch lcaCausalId
         pure (Just lcaBranchHashId, Just lcaBranchNLReceipt)
       Nothing -> pure (Nothing, Nothing)
   -- Do the initial 3-way namespace diff
@@ -99,7 +99,7 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
       TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
       TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
   -- Resolve the term referents to tag + hash
-  diff1 <-
+  diff1 <- PG.transactionSpan "hydrate-diff1" mempty $ do
     diff0
       & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
         %%~ \refs -> do
@@ -107,26 +107,29 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
           pure $ zip termTags (refs <&> Referent.toShortHash)
   -- Resolve the type references to tag + hash
   diff2 <-
-    diff1
-      & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
-        %%~ \refs -> do
-          typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-          pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+    PG.transactionSpan "hydrate-diff2" mempty $
+      diff1
+        & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
+          %%~ \refs -> do
+            typeTags <- Codebase.typeTagsByReferencesOf traversed refs
+            pure $ zip typeTags (refs <&> V2Reference.toShortHash)
   -- Resolve libdeps branch hash ids to branch hashes
   diff3 <-
-    HashQ.expectNamespaceHashesByNamespaceHashIdsOf
-      (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . traversed)
-      diff2
+    PG.transactionSpan "hydrate-diff3" mempty $
+      HashQ.expectNamespaceHashesByNamespaceHashIdsOf
+        (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . traversed)
+        diff2
   -- Resolve the actual term/type definitions. Use the LCA as the "old" (because that's what we're rendering the
   -- diff relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we
   -- won't have anything classified as an "update" in this case so it doesn't really matter).
   diff4 <-
-    diff3
-      & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
-        %%~ computeUpdatedDefinitionDiffs
-          authZReceipt
-          (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
-          (newCodebase, newRuntime, newBranchHashId)
+    PG.transactionSpan "hydrate-diff4" mempty $
+      diff3
+        & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
+          %%~ computeUpdatedDefinitionDiffs
+            authZReceipt
+            (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
+            (newCodebase, newRuntime, newBranchHashId)
   pure diff4
 
 computeUpdatedDefinitionDiffs ::
@@ -139,20 +142,20 @@ computeUpdatedDefinitionDiffs ::
   PG.Transaction
     NamespaceDiffError
     (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
-computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId) (toCodebase, toRuntime, toBHId) diff0 = do
-  diff1 <-
+computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId) (toCodebase, toRuntime, toBHId) diff0 = PG.transactionSpan "computeUpdatedDefinitionDiffs" mempty $ do
+  diff1 <- PG.transactionSpan "termDiffs" mempty $ do
     NamespaceDiffs.witherNamespaceTreeDiffTermDiffs
       (\name -> diffTerms authZReceipt (fromCodebase, fromRuntime, fromBHId, name) (toCodebase, toRuntime, toBHId, name))
       diff0
-  diff2 <-
+  diff2 <- PG.transactionSpan "termDiffKinds" mempty $ do
     NamespaceDiffs.witherNamespaceTreeTermDiffKinds
       (fmap throwAwayConstructorDiffs . renderDiffKind getTermDefinition)
       diff1
-  diff3 <-
+  diff3 <- PG.transactionSpan "typeDiffs" mempty $ do
     NamespaceDiffs.namespaceTreeDiffTypeDiffs_
       (\name -> diffTypes authZReceipt (fromCodebase, fromRuntime, fromBHId, name) (toCodebase, toRuntime, toBHId, name))
       diff2
-  diff4 <-
+  diff4 <- PG.transactionSpan "typeDiffKinds" mempty $ do
     NamespaceDiffs.namespaceTreeTypeDiffKinds_
       (renderDiffKind getTypeDefinition)
       diff3

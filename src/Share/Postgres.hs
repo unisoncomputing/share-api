@@ -73,7 +73,7 @@ module Share.Postgres
 
     -- * Debugging and observability
     timeTransaction,
-    withSpanTransaction,
+    transactionSpan,
   )
 where
 
@@ -116,7 +116,6 @@ import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
 import Share.Utils.Tags (HasTags (..), MonadTags (..))
-import Share.Utils.Tags qualified as Tags
 import Share.Web.App
 import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
@@ -685,8 +684,8 @@ catchAllTransaction (Transaction t) = Transaction do
     Right a -> pure (Right $ Right a)
 
 -- | Allows tracking a span in a transaction.
-withSpanTransaction :: (HasCallStack, MonadTracer m, MonadTags m, QueryM m) => Text -> HM.HashMap Text Trace.Attribute -> m a -> m a
-withSpanTransaction name spanTags action = do
+transactionSpan :: (HasCallStack, MonadTracer m, MonadTags m, QueryM m) => Text -> HM.HashMap Text Trace.Attribute -> m a -> m a
+transactionSpan name spanTags action = do
   tags <- askTags
   let (_mayFuncName, callSiteInfo) = spanInfo
   let spanAttributes = spanTags <> callSiteInfo <> HM.fromList (Map.toList (Trace.toAttribute <$> tags))

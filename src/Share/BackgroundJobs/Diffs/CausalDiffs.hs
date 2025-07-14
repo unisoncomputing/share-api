@@ -92,7 +92,7 @@ maybeComputeAndStoreCausalDiff ::
   Runtime Symbol ->
   CausalDiffInfo ->
   PG.Transaction EntityMissing Bool
-maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime (CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}) = do
+maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime (CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}) = PG.transactionSpan "maybeComputeAndStoreCausalDiff" mempty $ do
   bestCommonAncestorCausalId <- CausalQ.bestCommonAncestor fromCausalId toCausalId
   let fromCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForUserCodebase fromCodebaseOwner
   let toCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForUserCodebase toCodebaseOwner

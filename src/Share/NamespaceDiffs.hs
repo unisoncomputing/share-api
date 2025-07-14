@@ -765,7 +765,7 @@ computeThreeWayNamespaceDiff ::
   TwoOrThreeWay BranchHashId ->
   TwoOrThreeWay NameLookupReceipt ->
   PG.Transaction NamespaceDiffError (GNamespaceAndLibdepsDiff NameSegment Referent Reference Name Name Name Name BranchHashId)
-computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = do
+computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = PG.transactionSpan "computeThreeWayNamespaceDiff" mempty $ do
   -- Load a flat definitions names (no lib) for Alice/Bob/LCA
   defnsNames3 :: TwoOrThreeWay Names <-
     sequence (NL.projectNamesWithoutLib <$> nameLookupReceipts3 <*> branchHashIds3)
@@ -812,12 +812,12 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           (Map Name)
           (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
           (TypeReferenceId, Decl Symbol Ann)
-      ) <- do
+      ) <- PG.transactionSpan "hydratedDefns3" mempty do
     let hydrateTerms ::
           UserId ->
           BiMultimap Referent Name ->
           PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
-        hydrateTerms codebaseUser termReferents = do
+        hydrateTerms codebaseUser termReferents = PG.transactionSpan "hydrateTerms" mempty do
           let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
           termIds <-
             PG.pFor termReferenceIds \refId ->
@@ -833,7 +833,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           UserId ->
           BiMultimap TypeReference Name ->
           PG.Transaction e (Map Name (TypeReferenceId, Decl Symbol Ann))
-        hydrateTypes codebaseUser typeReferences = do
+        hydrateTypes codebaseUser typeReferences = PG.transactionSpan "hydrateTypes" mempty do
           let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
           typeIds <-
             PG.pFor typeReferenceIds \refId ->
