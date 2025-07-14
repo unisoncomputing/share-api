@@ -323,14 +323,12 @@ rollback :: e -> Transaction e x
 rollback e = Transaction do
   pure (Left (Err e))
 
-transactionStatement :: (HasCallStack) => a -> Hasql.Statement a b -> Transaction e b
+transactionStatement :: a -> Hasql.Statement a b -> Transaction e b
 transactionStatement v stmt = Transaction do
   env <- ask
   let nqVar = numQueriesVar . Env.ctx $ env
   liftIO $ UnliftIO.atomically $ UnliftIO.modifyTVar' nqVar (+ 1)
-  Right <$> (lift . lift $ Tags.runTagT env $ Trace.runTracerT (Env.tracer env) $ flip runReaderT env $ Trace.withSpan (fromMaybe "transactionStatement" mayFuncName) spanTags $ (lift . lift . lift $ Session.statement v stmt))
-  where
-    (mayFuncName, spanTags) = spanInfo
+  Right <$> (lift . lift $ (Session.statement v stmt))
 
 spanInfo :: (HasCallStack) => (Maybe Text, Trace.AttributeMap)
 spanInfo =
