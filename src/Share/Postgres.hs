@@ -101,9 +101,11 @@ import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Hasql
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Hasql
+import OpenTelemetry.Trace qualified as Trace
 import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Safe (headMay)
 import Share.Debug qualified as Debug
+import Share.Env (HasTags)
 import Share.Env qualified as Env
 import Share.Postgres.Orphans ()
 import Share.Prelude
@@ -142,9 +144,21 @@ instance Env.HasTags Tags where
   getTags (Tags tags) = pure tags
   updateTags f (Tags tags) = pure (Tags (f tags))
 
+data TransactionCtx = TransactionCtx
+  { tags :: Tags,
+    -- Track the umber of queries run within a transaction for span metadata
+    numQueriesVar :: UnliftIO.TVar Int
+  }
+
+instance HasTags TransactionCtx where
+  getTags TransactionCtx {tags} = Env.getTags tags
+  updateTags f TransactionCtx {tags, numQueriesVar} = do
+    newTags <- Env.updateTags f tags
+    pure TransactionCtx {tags = newTags, numQueriesVar}
+
 -- | A transaction that may fail with an error 'e' (or throw an unrecoverable error)
-newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)}
-  deriving (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger) via (Logging.LoggerT (ReaderT (Env.Env Tags) (ExceptT (TransactionError e) Hasql.Session)))
+newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT (Env.Env TransactionCtx) Hasql.Session) (Either (TransactionError e) a)}
+  deriving (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), Logging.MonadLogger) via (Logging.LoggerT (ReaderT (Env.Env TransactionCtx) (ExceptT (TransactionError e) Hasql.Session)))
 
 instance MonadTracer (Transaction e) where
   getTracer = asks Env.tracer
@@ -153,7 +167,7 @@ instance MonadTracer (Transaction e) where
 -- Unison Runtime. You really shouldn't use this unless you absolutely need the MonadUnliftIO
 -- class for a PG transaction.
 newtype UnliftIOTransaction e a = UnliftIOTransaction {asUnliftIOTransaction :: Transaction e a}
-  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), Logging.MonadLogger, MonadTracer)
+  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), Logging.MonadLogger, MonadTracer)
 
 instance MonadIO (UnliftIOTransaction e) where
   liftIO io = UnliftIOTransaction . Transaction $ Right <$> liftIO io
@@ -204,8 +218,8 @@ pFor_ f p = pipelined $ for_ f p
 type T = Transaction Void
 
 -- | A session that may fail with an error 'e'
-newtype Session e a = Session {_unSession :: Logging.LoggerT (ReaderT (Env.Env Tags) (ExceptT (TransactionError e) Hasql.Session)) a}
-  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env Tags), MonadIO, Logging.MonadLogger, MonadError (TransactionError e))
+newtype Session e a = Session {_unSession :: Logging.LoggerT (ReaderT (Env.Env TransactionCtx) (ExceptT (TransactionError e) Hasql.Session)) a}
+  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), MonadIO, Logging.MonadLogger, MonadError (TransactionError e))
 
 data PostgresError
   = PostgresError (Pool.UsageError)
@@ -240,7 +254,7 @@ data IsolationLevel
 -- | Run a transaction in a session
 transaction :: forall e a. IsolationLevel -> Mode -> Transaction e a -> Session e a
 transaction isoLevel mode (Transaction t) = Session do
-  let loop :: Logging.LoggerT (ReaderT (Env.Env Tags) Session.Session) (Either (TransactionError e) a)
+  let loop :: Logging.LoggerT (ReaderT (Env.Env TransactionCtx) Session.Session) (Either (TransactionError e) a)
       loop = do
         lift . lift $ beginTransaction isoLevel mode
         res <- catchError (Just <$> mayCommit t) \case
@@ -267,7 +281,7 @@ transaction isoLevel mode (Transaction t) = Session do
           Just res -> pure res
   coerce loop
   where
-    mayCommit :: Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a) -> Logging.LoggerT (ReaderT (Env.Env Tags) Hasql.Session) (Either (TransactionError e) a)
+    mayCommit :: Logging.LoggerT (ReaderT (Env.Env TransactionCtx) Hasql.Session) (Either (TransactionError e) a) -> Logging.LoggerT (ReaderT (Env.Env TransactionCtx) Hasql.Session) (Either (TransactionError e) a)
     mayCommit m =
       m >>= \case
         Left err -> do
@@ -304,7 +318,12 @@ rollback e = Transaction do
 
 transactionStatement :: a -> Hasql.Statement a b -> Transaction e b
 transactionStatement v stmt = Transaction do
-  Right <$> (lift . lift $ (Session.statement v stmt))
+  env <- ask
+  let nqVar = numQueriesVar . Env.ctx $ env
+  liftIO $ UnliftIO.atomically $ UnliftIO.modifyTVar' nqVar (+ 1)
+  Right <$> (lift . lift $ Trace.runTracerT (Env.tracer env) $ flip runReaderT env $ Trace.withSpan (fromMaybe "transactionStatement" mayFuncName) spanTags $ (lift . lift $ Session.statement v stmt))
+  where
+    (mayFuncName, spanTags) = spanInfo
 
 spanInfo :: (HasCallStack) => (Maybe Text, Trace.AttributeMap)
 spanInfo =
@@ -380,14 +399,23 @@ runSessionWithEnv env s = either absurd id <$> tryRunSessionWithEnv env s
 
 -- | Manually run a session, using the connection pool from the provided env, returning an Either error.
 tryRunSessionWithEnv :: (HasCallStack, Env.HasTags ctx, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session e a -> m (Either e a)
-tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = flip runReaderT env $ Trace.withSpan entryPointName spanTags $ do
+tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = flip runReaderT env $ Trace.withSpan' entryPointName spanTags $ \span -> do
   tags <- Env.getTags env
+  numQueriesVar <- liftIO $ UnliftIO.newTVarIO 0
+  let transactionContext =
+        TransactionCtx
+          { tags = Tags tags,
+            numQueriesVar
+          }
   let ioSession =
         s
           & Logging.runLoggerT minLogSeverity logger tags timeCache
-          & flip runReaderT (env $> Tags tags)
+          & flip runReaderT (env $> transactionContext)
           & runExceptT
-  liftIO (Pool.use pool ioSession) >>= \case
+  result <- liftIO (Pool.use pool ioSession)
+  nq <- UnliftIO.readTVarIO $ numQueriesVar
+  Trace.addAttribute span "numQueries" (Trace.toAttribute nq)
+  case result of
     Left err -> throwIO . someServerError $ PostgresError err
     Right (Left (Unrecoverable e)) -> throwIO e
     Right (Left (Err e)) -> pure (Left e)

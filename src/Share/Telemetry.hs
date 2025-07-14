@@ -1,5 +1,6 @@
 module Share.Telemetry
   ( withSpan,
+    withSpan',
     TracerT (..),
     runTracerT,
     AttributeMap,
@@ -20,8 +21,8 @@ import UnliftIO
 
 type AttributeMap = HM.HashMap Text Trace.Attribute
 
-withSpan :: (MonadUnliftIO m, TraceM.MonadTracer m, HasTags ctx, MonadReader ctx m) => Text -> AttributeMap -> m a -> m a
-withSpan name spanTags action = do
+withSpan' :: (MonadUnliftIO m, TraceM.MonadTracer m, HasTags ctx, MonadReader ctx m) => Text -> AttributeMap -> (Trace.Span -> m a) -> m a
+withSpan' name spanTags action = do
   tags <- ask >>= Env.getTags
   let spanAttributes = spanTags <> HM.fromList (Map.toList (Trace.toAttribute <$> tags))
   let spanArguments =
@@ -31,7 +32,11 @@ withSpan name spanTags action = do
             links = [],
             startTime = Nothing -- This will be set automatically
           }
-  TraceM.inSpan name spanArguments $ action
+  TraceM.inSpan'' name spanArguments $ action
+
+withSpan :: (MonadUnliftIO m, TraceM.MonadTracer m, HasTags ctx, MonadReader ctx m) => Text -> AttributeMap -> m a -> m a
+withSpan name spanTags action =
+  withSpan' name spanTags $ \_ -> action
 
 -- | Helper for adding MonadTracer.
 newtype TracerT m a = TracerT
