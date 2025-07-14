@@ -317,20 +317,7 @@ loadTermsByIdsOf codebaseUser trav s = do
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
 loadTermById :: (QueryA m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTermById codebaseUser termId = do
-  ( \maybeTermComponentElement Share.LocalIds {texts, hashes} ->
-      maybeTermComponentElement <&> \(TermComponentElement trm typ) ->
-        s2cTermWithType
-          ( LocalIds.LocalIds
-              { textLookup = Vector.fromList texts,
-                defnLookup = Vector.fromList hashes
-              },
-            trm,
-            typ
-          )
-    )
-    <$> loadTermComponentElementByTermId codebaseUser termId
-    <*> termLocalReferences termId
+loadTermById codebaseUser termId = loadTermsByIdsOf codebaseUser id termId
 
 expectTermById :: (QueryA m) => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
 expectTermById userId refId termId =
@@ -355,17 +342,6 @@ expectTermById userId refId termId =
 --           (termId, Nothing) -> Left (expectedTermError termId)
 --           (_termId, Just t) -> Right t
 
-loadTermComponentElementByTermId :: (QueryA m) => UserId -> TermId -> m (Maybe TermComponentElement)
-loadTermComponentElementByTermId codebaseUser termId =
-  query1Col
-    [sql|
-        SELECT bytes.bytes
-          FROM sandboxed_terms sandboxed
-            JOIN bytes ON sandboxed.bytes_id = bytes.id
-            WHERE sandboxed.user_id = #{codebaseUser}
-              AND sandboxed.term_id = #{termId}
-      |]
-
 loadTermComponentElementByTermIdsOf ::
   (QueryA m) =>
   UserId ->
@@ -385,7 +361,7 @@ loadTermComponentElementByTermIdsOf codebaseUser trav s = do
             LEFT JOIN sandboxed_terms sandboxed ON sandboxed.term_id = term_ids.term_id
             LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
           WHERE sandboxed.user_id = #{codebaseUser}
-          ORDER BY new_terms.ord ASC
+          ORDER BY term_ids.ord ASC
       |]
 
 termLocalReferences :: (QueryA m) => TermId -> m (Share.LocalIds Text ComponentHash)
