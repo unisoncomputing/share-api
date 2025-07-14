@@ -44,6 +44,43 @@ import Unison.Util.Monoid qualified as Monoid
 
 -- | Get the list of term names and suffixifications for a given Referent within a given namespace.
 -- Considers one level of dependencies, but not transitive dependencies.
+termNamesForRefsWithinNamespaceOf ::
+  (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
+termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix trav s = do
+  s & unsafePartsOf trav \refs -> do
+    let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64)]
+        refsTable =
+          zip [0 :: Int32 ..] refs <&> \(ord, ref) ->
+            let (refBuiltin, refComponentHash, refComponentIndex, refConstructorIndex) = referentFields ref
+             in (ord, refBuiltin, refComponentHash, refComponentIndex, refConstructorIndex)
+    PG.queryListCol @[NameWithSuffix]
+      [PG.sql|
+        WITH refs(ord, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index) AS (
+          SELECT * FROM ^{PG.toTable refsTable}
+        )
+        SELECT array_agg((reversed_name, suffixified_name):: ORDER BY length(reversed_name) ASC) AS ref_names
+          FROM refs
+          CROSS JOIN LATERAL
+            term_names_for_ref_within_namespace(
+              #{bhId},
+              #{namespacePrefix},
+              refs.referent_builtin,
+              refs.referent_component_hash_id,
+              refs.referent_component_index,
+              refs.referent_constructor_index,
+              #{reversedNamePrefix}
+            ) 
+          GROUP BY refs.ord
+          ORDER BY refs.ord ASC
+      |]
+  where
+    namespacePrefix = toNamespacePrefix namespaceRoot
+    reversedNamePrefix = case maySuffix of
+      Just suffix -> toReversedNamePrefix suffix
+      Nothing -> ""
+
+-- | Get the list of term names and suffixifications for a given Referent within a given namespace.
+-- Considers one level of dependencies, but not transitive dependencies.
 termNamesForRefWithinNamespace :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> PGReferent -> Maybe ReversedName -> m [(ReversedName, ReversedName)]
 termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuffix = do
   let namespacePrefix = toNamespacePrefix namespaceRoot
