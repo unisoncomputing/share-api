@@ -68,6 +68,7 @@ dependencies:
 - http-media
 - http-types
 - hs-opentelemetry-sdk
+- hs-opentelemetry-api
 - hs-opentelemetry-instrumentation-wai
 - jose
 - ki-unlifted

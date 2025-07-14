@@ -266,6 +266,7 @@ library
     , hasql-pool
     , hedis
     , here
+    , hs-opentelemetry-api
     , hs-opentelemetry-instrumentation-wai
     , hs-opentelemetry-sdk
     , http-api-data
@@ -419,6 +420,7 @@ executable share-api
     , hasql-pool
     , hedis
     , here
+    , hs-opentelemetry-api
     , hs-opentelemetry-instrumentation-wai
     , hs-opentelemetry-sdk
     , http-api-data
