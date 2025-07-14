@@ -2,7 +2,7 @@ module Share.Postgres.NameLookups.Ops
   ( namesPerspectiveForRootAndPath,
     relocateToNameRoot,
     fuzzySearchDefinitions,
-    termNamesForRefWithinNamespace,
+    termNamesForRefsWithinNamespaceOf,
     typeNamesForRefWithinNamespace,
     termRefsForExactName,
     typeRefsForExactName,
@@ -141,11 +141,15 @@ fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHas
     typeNames <- pgTypeNames & CV.referencesPGTo2Of (traversed . _2 . traversed)
     pure (termNames, typeNames)
 
--- | Get the list of (fqn, suffixified) names for a given Referent.
-termNamesForRefWithinNamespace :: (PG.QueryM m) => NamesPerspective -> PGReferent -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
-termNamesForRefWithinNamespace NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} ref maySuffix = do
-  NameLookupQ.termNamesForRefWithinNamespace nameLookupReceipt nameLookupBranchHashId mempty ref maySuffix
-    <&> fmap (first $ prefixReversedName pathToMountedNameLookup)
+termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
+termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} trav s = do
+  s
+    & unsafePartsOf trav %%~ \refs -> do
+      NameLookupQ.termNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty Nothing traversed refs
+        <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
+          ( prefixReversedName pathToMountedNameLookup reversedName,
+            suffixifiedName
+          )
 
 -- | Get the list of (fqn, suffixified) names for a given Reference.
 typeNamesForRefWithinNamespace :: (PG.QueryM m) => NamesPerspective -> PGReference -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]

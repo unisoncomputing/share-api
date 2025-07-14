@@ -4,6 +4,7 @@
 
 module Share.Postgres.NameLookups.Queries
   ( termNamesForRefWithinNamespace,
+    termNamesForRefsWithinNamespaceOf,
     typeNamesForRefWithinNamespace,
     termRefsForExactName,
     typeRefsForExactName,
