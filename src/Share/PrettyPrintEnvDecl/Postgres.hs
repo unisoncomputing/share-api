@@ -26,6 +26,7 @@ ppedForReferences namesPerspective refs = do
       & CV.labeledDependencies1ToPG
       & fmap catMaybes -- Filter out any missing components
       & fmap List.partitionEithers
+      & PG.pipelined
   termNames <- concat <$> termNamesOf traversed pgRefTerms
   typeNames <- concat <$> traverse typeName pgRefTypes
   pure $ ppedFromNamesWithSuffixes termNames typeNames
