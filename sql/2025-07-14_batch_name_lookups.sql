@@ -28,8 +28,8 @@ CREATE OR REPLACE FUNCTION term_names_for_ref_within_namespace(
   arg_namespace_prefix text,
   arg_referent_builtin text,
   arg_referent_component_hash_id integer,
-  arg_referent_component_index integer,
-  arg_referent_constructor_index integer,
+  arg_referent_component_index bigint,
+  arg_referent_constructor_index bigint,
   arg_reversed_name_prefix text
 ) RETURNS TABLE (
   reversed_name text,
@@ -38,10 +38,10 @@ CREATE OR REPLACE FUNCTION term_names_for_ref_within_namespace(
 DECLARE
   names name_with_suffix[];
 BEGIN
-  SELECT array_agg(ROW(reversed_name, suffixified_name)::name_with_suffix) INTO names
+  SELECT array_agg(ROW(names.reversed_name, names.suffixified_name)::name_with_suffix) INTO names
         FROM (
-          SELECT reversed_name, suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, '', ROW(scoped_term_name_lookup.*)) AS suffixified_name
-            FROM scoped_term_name_lookup
+          SELECT stnl.reversed_name, suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, '', ROW(stnl.*)) AS suffixified_name
+            FROM scoped_term_name_lookup stnl
           WHERE root_branch_hash_id = arg_bh_id
                 -- This may seem overly verbose, but it nudges the query planner to use the
                 -- correct partial index, which is keyed on whether the refBuiltin is null or not.
@@ -58,7 +58,7 @@ BEGIN
                   )
                 )
                 AND namespace LIKE like_escape(arg_namespace_prefix) || '%'
-                AND reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%'
+                AND stnl.reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%'
           UNION ALL
           SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name, suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, mount.reversed_mount_path, ROW(names.*)) AS suffixified_name
           FROM name_lookup_mounts mount
@@ -77,9 +77,8 @@ BEGIN
                     AND referent_builtin = arg_referent_builtin
                   )
                 )
-                AND reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%'
-        ) AS names
-        ORDER BY length(reversed_name) ASC;
+                AND names.reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%'
+        ) AS names;
 
   IF names IS NOT NULL AND array_length(names, 1) > 0 THEN
     RETURN QUERY 
