@@ -67,7 +67,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTerms :: V1Referent.Referent -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTerms ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.referents1ToPGOf id ref
-      names <- NLOps.termNamesForRefWithinNamespace namesPerspective pgRef Nothing
+      names <- NLOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Referent.toShortHash ref))
         & Set.fromList
@@ -89,7 +89,7 @@ nameSearchForPerspective namesPerspective =
           termRefsPG <- catMaybes <$> CV.referents1ToPGOf traversed termRefsV1
           fmap Set.fromList . forMaybe (zip termRefsV1 termRefsPG) $ \(termRef, pgTermRef) -> do
             matches <-
-              NLOps.termNamesForRefWithinNamespace namesPerspective pgTermRef (Just . coerce $ Name.reverseSegments name)
+              NLOps.termNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) id pgTermRef
                 <&> fmap fst -- Only need the fqn
                 -- Return a valid ref if at least one match was found.
             if any (\n -> coerce (Name.reverseSegments fqn) == n) matches

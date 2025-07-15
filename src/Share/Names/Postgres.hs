@@ -31,7 +31,7 @@ namesForReferences namesPerspective refs = do
     namesForReference :: Either (V1.Referent, PGReferent) (V1.Reference, PGReference) -> m ([(Name, V1.Referent)], [(Name, V1.Reference)])
     namesForReference = \case
       Left (ref, pgref) -> do
-        termNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective id pgref
+        termNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing id pgref
         let termNames' = termNames <&> \(fqn, _suffixed) -> (fqn, ref)
         pure $ (termNames', [])
       Right (ref, pgref) -> do

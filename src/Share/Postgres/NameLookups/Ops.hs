@@ -141,11 +141,11 @@ fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHas
     typeNames <- pgTypeNames & CV.referencesPGTo2Of (traversed . _2 . traversed)
     pure (termNames, typeNames)
 
-termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
-termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} trav s = do
+termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
+termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
-      NameLookupQ.termNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty Nothing traversed refs
+      NameLookupQ.termNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix traversed refs
         <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
           ( prefixReversedName pathToMountedNameLookup reversedName,
             suffixifiedName

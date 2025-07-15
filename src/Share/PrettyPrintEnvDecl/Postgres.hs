@@ -36,7 +36,7 @@ ppedForReferences namesPerspective refs = do
         & unsafePartsOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           termNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
-            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective traversed pgRefs
+            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing traversed pgRefs
           pure $ do
             ((ref, _pgRef), names) <- zip refs termNames
             pure $ do
