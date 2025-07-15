@@ -2,11 +2,11 @@
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Share.Postgres.Definitions.Queries
-  ( loadTerm,
-    loadTermsByIdsOf,
-    expectTerm,
-    expectTermId,
-    expectTermById,
+  ( loadTermsByIdsOf,
+    loadTermsByRefIdsOf,
+    expectTermsByIdsOf,
+    expectTermsByRefIdsOf,
+    expectTermIdsByRefIdsOf,
     saveTermComponent,
     saveEncodedTermComponent,
     loadTermComponent,
@@ -136,22 +136,24 @@ instance Logging.Loggable DefinitionQueryError where
       Logging.textLog ("Expected type component not found: " <> tShow componentRef)
         & Logging.withSeverity Logging.Error
 
--- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
--- Lookup.
-loadTerm :: (QueryM m) => UserId -> TermReferenceId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTerm userId refId = runMaybeT do
-  termId <- MaybeT $ loadTermId refId
-  MaybeT $ loadTermById userId termId
-
-loadTermId :: (QueryA m) => TermReferenceId -> m (Maybe TermId)
-loadTermId (Reference.Id compHash (pgComponentIndex -> compIndex)) =
-  query1Col
-    [sql|
-      SELECT term.id
-        FROM terms term
-          JOIN component_hashes ON term.component_hash_id = component_hashes.id
-          WHERE component_hashes.base32 = #{compHash}
-            AND term.component_index = #{compIndex}
+loadTermIdsByRefIdsOf :: (QueryA m, HasCallStack) => Traversal s t TermReferenceId (Maybe TermId) -> s -> m t
+loadTermIdsByRefIdsOf trav s = do
+  s
+    & asListOf trav %%~ \refIds -> do
+      let refsTable :: [(OrdBy, Hash, PgComponentIndex)]
+          refsTable =
+            ordered refIds
+              <&> \(ord, (Reference.Id compHash (pgComponentIndex -> compIndex))) -> (ord, compHash, compIndex)
+      queryListCol @(Maybe TermId)
+        [sql|
+        WITH ref_ids(ord, comp_hash, comp_index) AS(
+          SELECT t.ord, t.comp_hash, t.comp_index FROM ^{toTable refsTable} AS t(ord, comp_hash, comp_index)
+        )
+        SELECT term.id
+          FROM ref_ids
+            LEFT JOIN component_hashes ch ON ch.base32 = ref_ids.comp_hash
+            LEFT JOIN terms term ON (term.component_hash_id = ch.id AND term.component_index = ref_ids.comp_index)
+        ORDER BY ref_ids.ord ASC
       |]
 
 expectTermId :: (QueryA m) => TermReferenceId -> m TermId
@@ -229,6 +231,23 @@ expectTermComponent codebase componentRef = do
   case mayComponent of
     Just component -> pure component
     Nothing -> unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentRef)
+expectTermIdsByRefIdsOf :: (QueryA m) => Traversal s t TermReferenceId TermId -> s -> m t
+expectTermIdsByRefIdsOf trav s =
+  s
+    & asListOf trav %%~ \refIds -> do
+      loadTermIdsByRefIdsOf traversed refIds
+        & unrecoverableEitherMap
+          ( \results ->
+              for (zip refIds results) \case
+                (refId, Nothing) -> Left (expectedTermError $ Right refId)
+                (_refId, Just termId) -> Right termId
+          )
+
+expectTermsByRefIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
+expectTermsByRefIdsOf codebase trav s = do
+  s & asListOf trav \termRefs -> do
+    termIds <- expectTermIdsByRefIdsOf traversed termRefs
+    expectTermsByIdsOf codebase traversed termIds
 
 -- | Helper for loading term components efficiently for sync.
 expectShareTermComponent :: (QueryM m) => CodebaseEnv -> ComponentHashId -> m (Share.TermComponent Text Hash32)
@@ -294,14 +313,14 @@ expectTypeComponent codebase componentRef = do
 -- | Batch load terms by ids.
 loadTermsByIdsOf ::
   (QueryA m, HasCallStack) =>
-  UserId ->
+  CodebaseEnv ->
   Traversal s t TermId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
   s ->
   m t
-loadTermsByIdsOf codebaseUser trav s = do
+loadTermsByIdsOf codebase trav s = do
   s & asListOf trav \termIds -> do
     zipWith combine
-      <$> (loadTermComponentElementByTermIdsOf codebaseUser traversed termIds)
+      <$> (loadTermComponentElementByTermIdsOf codebase traversed termIds)
       <*> (termLocalReferencesOf traversed termIds)
   where
     combine maybeTermComponentElement (Share.LocalIds {texts, hashes}) =
@@ -315,33 +334,28 @@ loadTermsByIdsOf codebaseUser trav s = do
             typ
           )
 
--- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
--- Lookup.
-loadTermById :: (QueryA m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTermById codebaseUser termId = loadTermsByIdsOf codebaseUser id termId
+-- | Load a batch of terms by their RefIds.
+loadTermsByRefIdsOf ::
+  (QueryM m, HasCallStack) =>
+  CodebaseEnv ->
+  Traversal s t TermReferenceId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
+  s ->
+  m t
+loadTermsByRefIdsOf codebase trav s = do
+  s & asListOf trav \termRefs -> do
+    termIds <- loadTermIdsByRefIdsOf traversed termRefs
+    terms <- loadTermsByIdsOf codebase (traversed . _Just) termIds
+    -- Flatten the nested maybes.
+    pure $ fmap join terms
 
-expectTermById :: (QueryA m) => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
-expectTermById userId refId termId =
-  unrecoverableEitherMap
-    ( \case
-        Nothing -> Left (expectedTermError refId)
-        Just term -> Right term
-    )
-    (loadTermById userId termId)
-
--- expectTermsByIdsOf ::
---   (QueryA m) =>
---   UserId ->
---   Traversal s t TermId (V2.Term Symbol, V2.Type Symbol) ->
---   s ->
---   m t
--- expectTermsByIdsOf codebaseUser trav s = do
---   s & asListOf trav \termIds -> do
---     loadTermsByIdsOf codebaseUser traversed termIds
---       & unrecoverableEitherMap \results ->
---         for (zip termIds results) \case
---           (termId, Nothing) -> Left (expectedTermError termId)
---           (_termId, Just t) -> Right t
+expectTermsByIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TermId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
+expectTermsByIdsOf codebase trav s = do
+  s & asListOf trav \termIds -> do
+    loadTermsByIdsOf codebase traversed termIds
+      & unrecoverableEitherMap \results ->
+        for (zip termIds results) \case
+          (termId, Nothing) -> Left (expectedTermError (Left termId))
+          (_termId, Just t) -> Right t
 
 loadTermComponentElementByTermIdsOf ::
   (QueryA m, HasCallStack) =>
