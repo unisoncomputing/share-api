@@ -439,28 +439,38 @@ loadDeclByTypeComponentElementAndTypeId (TypeComponentElement decl, typeId) =
     let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
      in s2cDecl localIds decl
 
-loadTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TypeReferenceId -> m (Maybe (TypeComponentElement, TypeId))
-loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgComponentIndex -> compIndex)) = do
-  query1Row
-    [sql|
-      SELECT bytes.bytes, typ.id
-        FROM types typ
-          JOIN component_hashes ON typ.component_hash_id = component_hashes.id
-          JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
-          JOIN bytes ON sandboxed.bytes_id = bytes.id
-          WHERE sandboxed.user_id = #{codebaseUser}
-            AND component_hashes.base32 = #{compHash}
-            AND typ.component_index = #{compIndex}
-      |]
+loadTypeComponentElementsAndTypeIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TypeReferenceId (Maybe (TypeComponentElement, TypeId)) -> s -> m t
+loadTypeComponentElementsAndTypeIdsOf (CodebaseEnv codebaseUser) trav s = do
+  s
+    & asListOf trav %%~ \refs -> do
+      let refsTable =
+            refs
+              & ordered
+              <&> \(ord, Reference.Id compHash compIndex) -> (ord, compHash, (pgComponentIndex compIndex))
+      queryListRows @(Maybe TypeComponentElement, Maybe TypeId)
+        [sql|
+        WITH ref_ids(ord, comp_hash, comp_index) AS (
+          SELECT t.ord, t.comp_hash, t.comp_index FROM ^{toTable refsTable} AS t(ord, comp_hash, comp_index)
+        ) SELECT bytes.bytes, typ.id
+            FROM ref_ids
+              LEFT JOIN component_hashes ch ON ref_ids.comp_hash = ch.base32
+              LEFT JOIN types typ ON (typ.component_index = ref_ids.comp_index AND typ.component_hash_id = ch.id)
+              LEFT JOIN sandboxed_types sandboxed ON (typ.id = sandboxed.type_id AND sandboxed.user_id = #{codebaseUser})
+              LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
+            ORDER BY ref_ids.ord ASC
+        |]
+        <&> fmap \(element, typeId) -> liftA2 (,) element typeId
 
-expectTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
-expectTypeComponentElementAndTypeId codebaseUser refId =
-  unrecoverableEitherMap
-    ( \case
-        Nothing -> Left (expectedTypeError $ Right refId)
-        Just decl -> Right decl
-    )
-    (loadTypeComponentElementAndTypeId codebaseUser refId)
+expectTypeComponentElementsAndTypeIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TypeReferenceId (TypeComponentElement, TypeId) -> s -> m t
+expectTypeComponentElementsAndTypeIdsOf codebase trav s =
+  s
+    & asListOf trav %%~ \refs -> do
+      unrecoverableEitherMap
+        ( \elems -> for (zip refs elems) \case
+            (refId, Nothing) -> Left (expectedTypeError $ Right refId)
+            (_, Just decl) -> Right decl
+        )
+        (loadTypeComponentElementsAndTypeIdsOf codebase traversed refs)
 
 typeLocalReferences :: (QueryA m) => TypeId -> m (Share.LocalIds Text ComponentHash)
 typeLocalReferences typeId =
