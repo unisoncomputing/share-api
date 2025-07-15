@@ -42,6 +42,7 @@ import Share.Notifications.Webhooks.Secrets qualified as Webhooks
 import Share.Postgres qualified as PG
 import Share.Postgres.Notifications qualified as Notif
 import Share.Prelude
+import Share.Telemetry (withSpan)
 import Share.Ticket (displayTicketStatus)
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam (..))
@@ -99,35 +100,41 @@ worker scope = do
   newWorker scope "notifications:webhooks" $ forever do
     Notif.waitOnChannel Notif.WebhooksChannel (maxPollingIntervalSeconds * 1000000)
     processWebhooks authZReceipt
-  where
-    processWebhooks :: AuthZ.AuthZReceipt -> Background ()
-    processWebhooks authZReceipt = do
-      toIO <- UnliftIO.askRunInIO
-      -- Need to unlift so we can use this in transactions
-      let tryWebhookIO eventData webhookId = toIO $ tryWebhook eventData webhookId
-      mayResult <- Metrics.recordWebhookSendingDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ runMaybeT $ do
-        webhookInfo@(eventId, webhookId) <- MaybeT WQ.getUnsentWebhook
-        mayErr <- lift $ attemptWebhookSend authZReceipt tryWebhookIO eventId webhookId
-        pure (mayErr, webhookInfo)
-      case mayResult of
-        Just (Just err, _) -> do
-          case err of
-            WebhookSecretFetchError {} -> reportError err
-            _ -> Logging.logErrorText $ "Webhook send errors: " <> tShow err
-          -- If we got an error, we can retry it.
-          -- TODO: Add some sort of backoff?
-          processWebhooks authZReceipt
-        (Just (Nothing, (eventId, webhookId))) -> do
-          Logging.textLog ("Webhook sent successfully: " <> Text.pack (show webhookId))
-            & Logging.withTag ("webhook_id", tShow webhookId)
-            & Logging.withTag ("event_id", tShow eventId)
-            & Logging.withSeverity Logging.Info
-            & Logging.logMsg
-          -- Keep processing releases until we run out of them.
-          processWebhooks authZReceipt
-        Nothing -> do
-          -- No webhooks ready to try at the moment, we can wait till more are available.
-          pure ()
+
+processWebhooks :: AuthZ.AuthZReceipt -> Background ()
+processWebhooks authZReceipt = do
+  processWebhook authZReceipt >>= \case
+    True -> processWebhooks authZReceipt
+    False -> pure ()
+
+processWebhook :: AuthZ.AuthZReceipt -> Background Bool
+processWebhook authZReceipt = withSpan "background:webhooks:process-webhook" mempty $ do
+  toIO <- UnliftIO.askRunInIO
+  -- Need to unlift so we can use this in transactions
+  let tryWebhookIO eventData webhookId = toIO $ tryWebhook eventData webhookId
+  mayResult <- Metrics.recordWebhookSendingDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ runMaybeT $ do
+    webhookInfo@(eventId, webhookId) <- MaybeT WQ.getUnsentWebhook
+    mayErr <- lift $ attemptWebhookSend authZReceipt tryWebhookIO eventId webhookId
+    pure (mayErr, webhookInfo)
+  case mayResult of
+    Just (Just err, _) -> do
+      case err of
+        WebhookSecretFetchError {} -> reportError err
+        _ -> Logging.logErrorText $ "Webhook send errors: " <> tShow err
+      -- If we got an error, we can retry it.
+      -- TODO: Add some sort of backoff?
+      pure True
+    (Just (Nothing, (eventId, webhookId))) -> do
+      Logging.textLog ("Webhook sent successfully: " <> Text.pack (show webhookId))
+        & Logging.withTag ("webhook_id", tShow webhookId)
+        & Logging.withTag ("event_id", tShow eventId)
+        & Logging.withSeverity Logging.Info
+        & Logging.logMsg
+      -- Keep processing releases until we run out of them.
+      pure True
+    Nothing -> do
+      -- No webhooks ready to try at the moment, we can wait till more are available.
+      pure False
 
 --
 webhookTimeout :: HTTPClient.ResponseTimeout

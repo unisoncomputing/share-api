@@ -43,6 +43,7 @@ import Share.Project (Project (..))
 import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant (parseParam)
+import Share.Utils.Tags (HasTags)
 import Share.Web.App
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
@@ -226,7 +227,7 @@ uploadEntitiesEndpoint callingUserId (UploadEntitiesRequest {repoInfo, entities}
 -- | Insert entities to the user's codebase (either temp storage or main), returning the hashes of any missing dependencies
 -- we still need from the client.
 insertEntitiesToCodebase ::
-  (Env.HasTags r) =>
+  (HasTags r) =>
   CodebaseEnv ->
   NEMap Hash32 (Sync.Entity Text Hash32 Hash32) ->
   AppM r (Either Sync.EntityValidationError (Maybe (NESet Hash32)))
@@ -310,7 +311,7 @@ insertEntitiesToCodebase codebase entities = do
 -- There's a bug somewhere in sync where sometimes entities that are ready to flush get stuck
 -- in temp, and this can also happen if certain requests get interrupted.
 -- Ideally we wouldn't need this, but it's easy enough to add and addresses this problem.
-ensureCausalIsFlushed :: (Env.HasTags r) => CodebaseEnv -> CausalHash -> AppM r (Maybe CausalId)
+ensureCausalIsFlushed :: (HasTags r) => CodebaseEnv -> CausalHash -> AppM r (Maybe CausalId)
 ensureCausalIsFlushed codebase causalHash = do
   PG.runTransaction (CausalQ.loadCausalIdByHash codebase causalHash) >>= \case
     Just cid -> pure (Just cid)
@@ -359,7 +360,7 @@ groupEntities = foldMap
 --
 -- Keep flushing to a fixed point (i.e. until we have no remaining entities that lack
 -- missing dependencies)
-flushTempEntities :: (Env.HasTags r) => CodebaseEnv -> NESet Hash32 -> AppM r ()
+flushTempEntities :: (HasTags r) => CodebaseEnv -> NESet Hash32 -> AppM r ()
 flushTempEntities codebase hashesToCheck = do
   -- This is designed so that if multiple requests are working at once, they can
   -- all make progress using short transactions without accidentally working on the same

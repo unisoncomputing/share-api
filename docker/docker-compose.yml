@@ -95,12 +95,13 @@ services:
       - USER_SECRETS_VAULT_MOUNT=secret # A default mount in dev vault
       - SHARE_GITHUB_CLIENTID=invalid
       - SHARE_GITHUB_CLIENT_SECRET=invalid
-
-    links:
-      - redis
-      - postgres
-      - vault
-      - http-echo
+      - OTEL_SERVICE_NAME=share-api
+      - OTEL_SERVICE_VERSION=local
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=share-api,service.version=local,deployment.environment=local
+      - OTEL_TRACES_SAMPLER=traceidratio
+      - OTEL_TRACES_SAMPLER_ARG=1.0
 
   http-echo:
     image: 'mendhak/http-https-echo:36'
@@ -111,5 +112,28 @@ services:
     ports:
       - "9999:9999"
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zpages extension
+
+    depends_on:
+      - jaeger
+
+  jaeger:
+      image: cr.jaegertracing.io/jaegertracing/jaeger:2.8.0
+      ports:
+        - 16686:16686  # Jaeger UI
+
+      environment:
+        - COLLECTOR_OTLP_ENABLED=true
 # volumes:
 #   postgresVolume:

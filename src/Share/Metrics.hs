@@ -15,6 +15,7 @@ module Share.Metrics
   )
 where
 
+import Control.Lens
 import Data.Ratio ((%))
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -29,8 +30,11 @@ import Share.Env qualified as Env
 import Share.Postgres qualified as PG
 import Share.Postgres.Metrics.Queries qualified as Q
 import Share.Prelude
+import Share.Telemetry qualified as Trace
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Servant.PathInfo (HasPathInfo, normalizePath)
+import Share.Utils.Tags (HasTags (..))
+import Share.Utils.Tags qualified as Tags
 import System.Clock (Clock (..), diffTimeSpec, toNanoSecs)
 import System.Clock qualified as Clock
 import UnliftIO qualified
@@ -68,7 +72,7 @@ data SlowChangingMetrics = SlowChangingMetrics
   }
 
 -- | Serves the app's prometheus metrics at `/metrics`
-serveMetricsMiddleware :: (Env.HasTags x) => Env.Env x -> IO Wai.Middleware
+serveMetricsMiddleware :: (HasTags x) => Env.Env x -> IO Wai.Middleware
 serveMetricsMiddleware env = do
   Prom.register Prom.ghcMetrics
   getMetrics <- atMostOnceEveryInterval metricUpdateInterval $ do
@@ -78,7 +82,13 @@ serveMetricsMiddleware env = do
     refreshGauges getMetrics
     Prom.prometheus prometheusSettings app req handleResponse
   where
-    runPG = PG.runSessionWithEnv env . PG.transaction PG.ReadCommitted PG.Read
+    runPG pg = do
+      tags <- getTags env
+      pg
+        & PG.transaction PG.ReadCommitted PG.Read
+        & PG.runSessionWithEnv env
+        & Trace.runTracerT (Env.tracer env)
+        & Tags.runTagT tags
     prometheusSettings =
       Prom.def
         { Prom.prometheusEndPoint = ["metrics"],

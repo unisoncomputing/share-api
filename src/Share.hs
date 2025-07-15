@@ -32,6 +32,7 @@ import Network.Wai.Internal qualified as Wai
 import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.Gzip qualified as Gzip
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
+import OpenTelemetry.Instrumentation.Wai (newOpenTelemetryWaiMiddleware)
 import Servant
 import Share.App
 import Share.BackgroundJobs qualified as BackgroundJobs
@@ -116,6 +117,7 @@ mkShareServer env = do
   reqTagsKey <- Vault.newKey
   let reqLoggerMiddleware = mkReqLogger reqTagsKey (Env.timeCache env) (Env.logger env)
   metricsMiddleware <- serveMetricsMiddleware env
+  openTelemetryMiddleware <- newOpenTelemetryWaiMiddleware
   let appCtx :: (Context '[Cookies.CookieSettings, JWT.JWTSettings])
       appCtx = Env.cookieSettings env :. Env.jwtSettings env :. EmptyContext
   let ctx :: Context (AuthCheckCtx .++ '[Cookies.CookieSettings, JWT.JWTSettings])
@@ -130,6 +132,7 @@ mkShareServer env = do
           & skipOnLocal corsMiddleware
           & Gzip.gzip gzipSettings
           & reqLoggerMiddleware
+          & openTelemetryMiddleware
   pure waiApp
   where
     gzipSettings =

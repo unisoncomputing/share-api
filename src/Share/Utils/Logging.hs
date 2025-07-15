@@ -37,9 +37,8 @@ module Share.Utils.Logging
   )
 where
 
-import Control.Monad.Except (ExceptT, MonadError, catchError, mapExceptT)
+import Control.Monad.Except (ExceptT, MonadError, catchError)
 import Control.Monad.Reader
-import Control.Monad.Trans.Maybe (mapMaybeT)
 import Data.Char qualified as Char
 import Data.Map qualified as Map
 import Data.Text qualified as Text
@@ -54,6 +53,7 @@ import Share.Prelude
 import Share.Utils.Deployment (deployment)
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging.Types as X
+import Share.Utils.Tags (MonadTags)
 import System.Log.FastLogger qualified as FL
 import Unison.Server.Backend qualified as Backend
 import Unison.Sync.Types qualified as Sync
@@ -66,7 +66,7 @@ import Prelude hiding (log)
 type Logger = FL.LogStr -> IO ()
 
 newtype LoggerT m a = LoggerT {unLoggerT :: ReaderT (Logger, IO FL.FormattedTime, Severity, Map Text Text) m a}
-  deriving newtype (Functor, Applicative, Monad, MonadIO)
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadTags)
 
 deriving instance (MonadUnliftIO m) => MonadUnliftIO (LoggerT m)
 
@@ -74,8 +74,6 @@ instance MonadTrans LoggerT where
   lift = LoggerT . lift
 
 instance (MonadIO m) => MonadLogger (LoggerT m) where
-  withTags newTags (LoggerT m) = LoggerT $ do
-    local (\(logger, getTime, minSeverity, tags) -> (logger, getTime, minSeverity, newTags `Map.union` tags)) m
   logMsg msg = LoggerT $ do
     (logger, getTime, minSeverity, tags') <- ask
     when (severity msg >= minSeverity) . liftIO $ do
@@ -138,19 +136,15 @@ instance Loggable OAuth2Error where
 
 class (Monad m) => MonadLogger m where
   logMsg :: LogMsg -> m ()
-  withTags :: Map Text Text -> m a -> m a
 
 instance (MonadLogger m) => MonadLogger (ReaderT r m) where
   logMsg = lift . logMsg
-  withTags tags m = mapReaderT (withTags tags) m
 
 instance (MonadLogger m) => MonadLogger (ExceptT e m) where
   logMsg = lift . logMsg
-  withTags tags m = mapExceptT (withTags tags) m
 
 instance (MonadLogger m) => MonadLogger (MaybeT m) where
   logMsg = lift . logMsg
-  withTags tags m = mapMaybeT (withTags tags) m
 
 textLog :: Text -> LogMsg
 textLog msg =

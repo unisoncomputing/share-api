@@ -5,6 +5,7 @@ module Env
   )
 where
 
+import qualified Share.Telemetry.Setup as Telemetry
 import Data.ByteString.Char8 qualified as BS
 import Data.Char
 import Data.Char qualified as Char
@@ -145,19 +146,20 @@ withEnv action = do
   -- We use a zero-width-space to separate log-lines on ingestion, this allows us to use newlines for
   -- formatting, but without affecting log-grouping.
   let zeroWidthSpace = "\x200B"
-  FL.withFastLogger (FL.LogStderr FL.defaultBufSize) $ \logger -> do
-    action $ Env {logger = (logger . (\msg -> zeroWidthSpace <> msg <> "\n")), ..}
-  where
-    readPort p = pure $ maybeToRight "SHARE_PORT was not a number" (readMaybe p)
-    nonEmptyTextParser :: Text -> String -> IO (Either String Text)
-    nonEmptyTextParser varName = \case
-      "" -> pure . Left . Text.unpack $ "Expected a value for env var " <> varName <> ", but got an empty string"
-      str -> pure . Right $ Text.pack str
+  Telemetry.withTracer commitHash \tracer -> do
+    FL.withFastLogger (FL.LogStderr FL.defaultBufSize) $ \logger -> do
+      action $ Env {logger = (logger . (\msg -> zeroWidthSpace <> msg <> "\n")), ..}
+    where
+      readPort p = pure $ maybeToRight "SHARE_PORT was not a number" (readMaybe p)
+      nonEmptyTextParser :: Text -> String -> IO (Either String Text)
+      nonEmptyTextParser varName = \case
+        "" -> pure . Left . Text.unpack $ "Expected a value for env var " <> varName <> ", but got an empty string"
+        str -> pure . Right $ Text.pack str
 
-    parseBaseUrl :: String -> IO (Either String ServantClient.BaseUrl)
-    parseBaseUrl str = do
-      u <- ServantClient.parseBaseUrl str
-      pure $ Right u
+      parseBaseUrl :: String -> IO (Either String ServantClient.BaseUrl)
+      parseBaseUrl str = do
+        u <- ServantClient.parseBaseUrl str
+        pure $ Right u
 
 -- | Parse an environment variable, but only if it exists.
 maybeEnv :: String -> (String -> IO (Either String a)) -> IO (Maybe a)

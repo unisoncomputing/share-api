@@ -1,0 +1,50 @@
+module Share.Telemetry
+  ( withSpan,
+    withSpan',
+    TracerT (..),
+    runTracerT,
+    AttributeMap,
+    Trace.toAttribute,
+  )
+where
+
+import Control.Monad.Reader (MonadReader (..), MonadTrans, ReaderT (..))
+import Data.HashMap.Lazy qualified as HM
+import Data.Map qualified as Map
+import Data.Text (Text)
+import OpenTelemetry.Trace qualified as Trace
+import OpenTelemetry.Trace.Monad (MonadTracer)
+import OpenTelemetry.Trace.Monad qualified as TraceM
+import Share.Utils.Tags (MonadTags (..))
+import UnliftIO
+
+type AttributeMap = HM.HashMap Text Trace.Attribute
+
+withSpan' :: (MonadUnliftIO m, TraceM.MonadTracer m, MonadTags m) => Text -> AttributeMap -> (Trace.Span -> m a) -> m a
+withSpan' name spanTags action = do
+  tags <- askTags
+  let spanAttributes = spanTags <> HM.fromList (Map.toList (Trace.toAttribute <$> tags))
+  let spanArguments =
+        Trace.SpanArguments
+          { kind = Trace.Server,
+            attributes = spanAttributes,
+            links = [],
+            startTime = Nothing -- This will be set automatically
+          }
+  TraceM.inSpan'' name spanArguments $ action
+
+withSpan :: (MonadUnliftIO m, TraceM.MonadTracer m, MonadTags m) => Text -> AttributeMap -> m a -> m a
+withSpan name spanTags action =
+  withSpan' name spanTags $ \_ -> action
+
+-- | Helper for adding MonadTracer.
+newtype TracerT m a = TracerT
+  { unTracerT :: ReaderT Trace.Tracer m a
+  }
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadUnliftIO, MonadTrans, MonadTags)
+
+runTracerT :: Trace.Tracer -> TracerT m a -> m a
+runTracerT tracer (TracerT action) = runReaderT action tracer
+
+instance (Monad m) => MonadTracer (TracerT m) where
+  getTracer = TracerT $ ask

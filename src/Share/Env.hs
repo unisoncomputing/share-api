@@ -1,6 +1,5 @@
 module Share.Env
   ( Env (..),
-    HasTags (..),
   )
 where
 
@@ -9,11 +8,13 @@ import Database.Redis qualified as R
 import Hasql.Pool qualified as Hasql
 import Network.HTTP.Client qualified as HTTPClient
 import Network.URI (URI)
+import OpenTelemetry.Trace qualified as Trace
 import Servant.Client qualified as S
 import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Utils.Logging.Types qualified as Logging
 import Share.Utils.Servant.Cookies qualified as Cookies
+import Share.Utils.Tags (HasTags (..))
 import System.Log.FastLogger (FormattedTime, LogStr)
 import System.Log.Raven.Types (SentryService)
 import Unison.Codebase.Runtime (Runtime)
@@ -58,21 +59,12 @@ data Env ctx = Env
     -- E.g. sync can parallelize signing/verifying JWTs or run multiple transactions against
     -- PG. If this goes too high we can end up tanking Share.
     maxParallelismPerDownloadRequest :: Int,
-    maxParallelismPerUploadRequest :: Int
+    maxParallelismPerUploadRequest :: Int,
+    -- OpenTelemetry tracing
+    tracer :: Trace.Tracer
   }
-  deriving (Functor)
-
--- | A Class for different request contexts to expose their tags.
-class HasTags ctx where
-  getTags :: (MonadIO m) => ctx -> m (Map Text Text)
-  updateTags :: (MonadIO m) => (Map Text Text -> Map Text Text) -> ctx -> m ctx
+  deriving (Functor, Generic)
 
 instance (HasTags ctx) => HasTags (Env ctx) where
-  getTags env = getTags (ctx env)
-  updateTags f env = do
-    ctx' <- updateTags f (ctx env)
-    pure $ env {ctx = ctx'}
-
-instance HasTags () where
-  getTags _ = pure mempty
-  updateTags _ _ = pure ()
+  getTags = getTags . ctx
+  addTags newTags env = env {ctx = addTags newTags (ctx env)}
