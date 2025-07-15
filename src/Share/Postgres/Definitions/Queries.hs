@@ -418,9 +418,8 @@ loadDeclKindsOf trav s =
           )
           SELECT kind
             FROM ref_ids
-              LEFT JOIN types typ ON typ.component_index = ref_ids.comp_index
-              LEFT JOIN component_hashes ON typ.component_hash_id = component_hashes.id
-              WHERE component_hashes.base32 = ref_ids.comp_hash
+              LEFT JOIN component_hashes ch ON ch.base32 = ref_ids.comp_hash
+              LEFT JOIN types typ ON typ.component_index = ref_ids.comp_index AND typ.component_hash_id = ch.id
             ORDER BY ref_ids.ord
     |]
         <&> (fmap . fmap) declKindEnumToConstructorType
