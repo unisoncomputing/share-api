@@ -5,6 +5,7 @@
 module Share.Postgres.NameLookups.Queries
   ( termNamesForRefsWithinNamespaceOf,
     typeNamesForRefsWithinNamespaceOf,
+    ShouldSuffixify (..),
     termRefsForExactName,
     typeRefsForExactName,
     fuzzySearchTerms,
@@ -42,11 +43,15 @@ import Unison.Name (Name)
 import Unison.Referent qualified as V1
 import Unison.Util.Monoid qualified as Monoid
 
+data ShouldSuffixify = Suffixify | NoSuffixify
+
 -- | Get the list of term names and suffixifications for a given Referent within a given namespace.
 -- Considers one level of dependencies, but not transitive dependencies.
+--
+-- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
 termNamesForRefsWithinNamespaceOf ::
-  (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
-termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix trav s = do
+  (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
+termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
   s & unsafePartsOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64)]
         refsTable =
@@ -65,17 +70,21 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
           FROM term_names_for_ref_within_namespace(
             #{bhId},
             #{namespacePrefix},
+            #{reversedNamePrefix},
+            #{shouldSuffixifyArg},
             refs.referent_builtin,
             refs.referent_component_hash_id,
             refs.referent_component_index,
-            refs.referent_constructor_index,
-            #{reversedNamePrefix}
+            refs.referent_constructor_index
           ) AS names(reversed_name, suffixified_name)
         ) AS ref_names
         FROM refs
         ORDER BY refs.ord ASC
       |]
   where
+    shouldSuffixifyArg = case shouldSuffixify of
+      Suffixify -> True
+      NoSuffixify -> False
     namespacePrefix = toNamespacePrefix namespaceRoot
     reversedNamePrefix = case maySuffix of
       Just suffix -> toReversedNamePrefix suffix
@@ -83,8 +92,10 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
 
 -- | Get the list of type names for a given Reference within a given namespace.
 -- Considers one level of dependencies, but not transitive dependencies.
-typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
-typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix trav s = do
+--
+-- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
+typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
   s & unsafePartsOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64)]
         refsTable =
@@ -103,16 +114,20 @@ typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
           FROM type_names_for_ref_within_namespace(
             #{bhId},
             #{namespacePrefix},
+            #{reversedNamePrefix},
+            #{shouldSuffixifyArg},
             refs.reference_builtin,
             refs.reference_component_hash_id,
-            refs.reference_component_index,
-            #{reversedNamePrefix}
+            refs.reference_component_index
           ) AS names(reversed_name, suffixified_name)
         ) AS ref_names
         FROM refs
         ORDER BY refs.ord ASC
       |]
   where
+    shouldSuffixifyArg = case shouldSuffixify of
+      Suffixify -> True
+      NoSuffixify -> False
     namespacePrefix = toNamespacePrefix namespaceRoot
     reversedNamePrefix = case maySuffix of
       Just suffix -> toReversedNamePrefix suffix

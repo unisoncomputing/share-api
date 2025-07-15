@@ -7,6 +7,7 @@ import Data.Set qualified as Set
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Queries (ShouldSuffixify (..))
 import Share.Postgres.NameLookups.Types (NamesPerspective)
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Postgres.Refs.Types
@@ -37,7 +38,7 @@ ppedForReferences namesPerspective refs = do
         & unsafePartsOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           termNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
-            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing traversed pgRefs
+            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing Suffixify traversed pgRefs
           pure $ do
             ((ref, _pgRef), names) <- zip refs termNames
             pure $ do
@@ -49,7 +50,7 @@ ppedForReferences namesPerspective refs = do
         & unsafePartsOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           typeNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
-            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing traversed pgRefs
+            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing Suffixify traversed pgRefs
           pure $ do
             ((ref, _pgRef), names) <- zip refs typeNames
             pure $ do

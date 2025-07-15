@@ -26,6 +26,7 @@ import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Conversions qualified as CV
+import Share.Postgres.NameLookups.Queries (ShouldSuffixify)
 import Share.Postgres.NameLookups.Queries qualified as NameLookupQ
 import Share.Postgres.NameLookups.Queries qualified as Q
 import Share.Postgres.NameLookups.Types
@@ -141,22 +142,25 @@ fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHas
     typeNames <- pgTypeNames & CV.referencesPGTo2Of (traversed . _2 . traversed)
     pure (termNames, typeNames)
 
-termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
-termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix trav s = do
+-- | Get the list of (fqn, suffixified) names for a given Referent.
+-- If 'shouldSuffixify' is 'NoSuffixify', the suffixified name will be the same as the fqn.
+termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
+termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix shouldSuffixify trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
-      NameLookupQ.termNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix traversed refs
+      NameLookupQ.termNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix shouldSuffixify traversed refs
         <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
           ( prefixReversedName pathToMountedNameLookup reversedName,
             suffixifiedName
           )
 
 -- | Get the list of (fqn, suffixified) names for a given Reference.
-typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> Traversal s t PGReference [(ReversedName, ReversedName)] -> s -> m t
-typeNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix trav s = do
+-- If 'shouldSuffixify' is 'NoSuffixify', the suffixified name will be the same as the fqn.
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [(ReversedName, ReversedName)] -> s -> m t
+typeNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix shouldSuffixify trav s = do
   s
     & unsafePartsOf trav %%~ \refs -> do
-      NameLookupQ.typeNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix traversed refs
+      NameLookupQ.typeNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix shouldSuffixify traversed refs
         <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
           ( prefixReversedName pathToMountedNameLookup reversedName,
             suffixifiedName

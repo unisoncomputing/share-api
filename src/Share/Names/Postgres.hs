@@ -7,6 +7,7 @@ import Data.Set qualified as Set
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Queries (ShouldSuffixify (NoSuffixify))
 import Share.Postgres.NameLookups.Types (NamesPerspective)
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Postgres.Refs.Types
@@ -31,14 +32,13 @@ namesForReferences namesPerspective refs = do
   typeNames <- concat <$> typeNamesOf traversed pgRefTypes
   pure $ Names.fromTermsAndTypes termNames typeNames
   where
-    -- TODO: Can probably speed this up by skipping suffixification.
     typeNamesOf :: Traversal s t (V1.Reference, PGReference) [(Name, V1.Reference)] -> s -> m t
     typeNamesOf trav s = do
       s
         & unsafePartsOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           typeNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
-            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing traversed pgRefs
+            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify traversed pgRefs
           pure $ do
             ((ref, _pgRef), names) <- zip refs typeNames
             pure $ do
@@ -51,7 +51,7 @@ namesForReferences namesPerspective refs = do
         & unsafePartsOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           termNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
-            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing traversed pgRefs
+            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify traversed pgRefs
           pure $ do
             ((ref, _pgRef), names) <- zip refs termNames
             pure $ do

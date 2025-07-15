@@ -10,6 +10,7 @@ import Share.Codebase qualified as Codebase
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops as NLOps
+import Share.Postgres.NameLookups.Queries (ShouldSuffixify (NoSuffixify))
 import Share.Postgres.NameLookups.Types
 import Share.Prelude
 import Unison.Codebase.Path qualified as Path
@@ -59,7 +60,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTypes :: V1.Reference -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTypes ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.references1ToPGOf id ref
-      names <- NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing id pgRef
+      names <- NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Reference.toShortHash ref))
         & Set.fromList
@@ -67,7 +68,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTerms :: V1Referent.Referent -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTerms ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.referents1ToPGOf id ref
-      names <- NLOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing id pgRef
+      names <- NLOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Referent.toShortHash ref))
         & Set.fromList
@@ -88,7 +89,7 @@ nameSearchForPerspective namesPerspective =
             Set.toList <$> Codebase.termReferentsByShortHash sh
           termRefsPG <- catMaybes <$> CV.referents1ToPGOf traversed termRefsV1
           names <-
-            NLOps.termNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) traversed termRefsPG
+            NLOps.termNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) NoSuffixify traversed termRefsPG
               <&> (fmap . fmap) fst -- Only need the fqn
           zip termRefsV1 names
             & mapMaybe
@@ -116,7 +117,7 @@ nameSearchForPerspective namesPerspective =
           typeRefs <- Set.toList <$> Codebase.typeReferencesByShortHash sh
           typeRefsPG <- catMaybes <$> CV.references1ToPGOf traversed typeRefs
           names <-
-            NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) traversed typeRefsPG
+            NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) NoSuffixify traversed typeRefsPG
               <&> (fmap . fmap) fst -- Only need the fqn
           zip typeRefs names
             & mapMaybe

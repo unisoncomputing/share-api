@@ -26,11 +26,12 @@ $$ LANGUAGE sql STABLE;
 CREATE OR REPLACE FUNCTION term_names_for_ref_within_namespace(
   arg_bh_id integer,
   arg_namespace_prefix text,
+  arg_reversed_name_prefix text,
+  arg_should_suffixify boolean,
   arg_referent_builtin text,
   arg_referent_component_hash_id integer,
   arg_referent_component_index bigint,
-  arg_referent_constructor_index bigint,
-  arg_reversed_name_prefix text
+  arg_referent_constructor_index bigint
 ) RETURNS TABLE (
   reversed_name text,
   suffixified_name text
@@ -40,7 +41,11 @@ DECLARE
 BEGIN
   SELECT array_agg(ROW(names.reversed_name, names.suffixified_name)::name_with_suffix) INTO names
         FROM (
-          SELECT stnl.reversed_name, suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, '', ROW(stnl.*)) AS suffixified_name
+          SELECT stnl.reversed_name,
+                 CASE
+                   WHEN arg_should_suffixify THEN suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, '', ROW(stnl.*))
+                   ELSE stnl.reversed_name
+                 END AS suffixified_name
             FROM scoped_term_name_lookup stnl
           WHERE root_branch_hash_id = arg_bh_id
                 -- This may seem overly verbose, but it nudges the query planner to use the
@@ -81,8 +86,8 @@ BEGIN
         ) AS names;
 
   IF names IS NOT NULL AND array_length(names, 1) > 0 THEN
-    RETURN QUERY 
-      SELECT n.reversed_name, n.suffixified_name 
+    RETURN QUERY
+      SELECT n.reversed_name, n.suffixified_name
       FROM unnest(names) AS n(reversed_name, suffixified_name);
   ELSE
     RETURN QUERY
@@ -110,10 +115,11 @@ $$ LANGUAGE plpgsql STABLE;
 CREATE OR REPLACE FUNCTION type_names_for_ref_within_namespace(
   arg_bh_id integer,
   arg_namespace_prefix text,
+  arg_reversed_name_prefix text,
+  arg_should_suffixify boolean,
   arg_reference_builtin text,
   arg_reference_component_hash_id integer,
-  arg_reference_component_index bigint,
-  arg_reversed_name_prefix text
+  arg_reference_component_index bigint
 ) RETURNS TABLE (
   reversed_name text,
   suffixified_name text
@@ -123,7 +129,11 @@ DECLARE
 BEGIN
   SELECT array_agg(ROW(names.reversed_name, names.suffixified_name)::name_with_suffix) INTO names
         FROM (
-          SELECT stnl.reversed_name, suffixify_type_fqn(arg_bh_id, arg_namespace_prefix, '', ROW(stnl.*)) AS suffixified_name
+          SELECT stnl.reversed_name,
+          CASE
+            WHEN arg_should_suffixify THEN suffixify_type_fqn(arg_bh_id, arg_namespace_prefix, '', ROW(stnl.*))
+            ELSE stnl.reversed_name
+          END AS suffixified_name
             FROM scoped_type_name_lookup stnl
           WHERE root_branch_hash_id = arg_bh_id
                 -- This may seem overly verbose, but it nudges the query planner to use the
@@ -161,8 +171,8 @@ BEGIN
         ) AS names;
 
   IF names IS NOT NULL AND array_length(names, 1) > 0 THEN
-    RETURN QUERY 
-      SELECT n.reversed_name, n.suffixified_name 
+    RETURN QUERY
+      SELECT n.reversed_name, n.suffixified_name
       FROM unnest(names) AS n(reversed_name, suffixified_name);
   ELSE
     RETURN QUERY
