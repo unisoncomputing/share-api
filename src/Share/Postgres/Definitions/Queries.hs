@@ -2,11 +2,11 @@
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Share.Postgres.Definitions.Queries
-  ( loadTerm,
-    loadTermsByIdsOf,
-    expectTerm,
-    expectTermId,
-    expectTermById,
+  ( loadTermsByIdsOf,
+    loadTermsByRefIdsOf,
+    expectTermsByIdsOf,
+    expectTermsByRefIdsOf,
+    expectTermIdsByRefIdsOf,
     saveTermComponent,
     saveEncodedTermComponent,
     loadTermComponent,
@@ -64,7 +64,7 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Share.Utils.Postgres (OrdBy, RawBytes (..))
+import Share.Utils.Postgres (OrdBy, RawBytes (..), ordered)
 import Share.Web.Errors (ErrorID (..), InternalServerError (InternalServerError), ToServerError (..))
 import U.Codebase.Decl qualified as Decl
 import U.Codebase.Decl qualified as V2 hiding (Type)
@@ -108,9 +108,9 @@ type PgLocalIds = LocalIds.LocalIds' TextId ComponentHashId
 type ComponentRef = These ComponentHash ComponentHashId
 
 data DefinitionQueryError
-  = ExpectedTermNotFound TermReferenceId
+  = ExpectedTermNotFound (Either TermId TermReferenceId)
   | ExpectedTermComponentNotFound ComponentRef
-  | ExpectedTypeNotFound TypeReferenceId
+  | ExpectedTypeNotFound (Either TypeId TypeReferenceId)
   | ExpectedTypeComponentNotFound ComponentRef
   deriving stock (Show)
 
@@ -136,39 +136,44 @@ instance Logging.Loggable DefinitionQueryError where
       Logging.textLog ("Expected type component not found: " <> tShow componentRef)
         & Logging.withSeverity Logging.Error
 
--- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
--- Lookup.
-loadTerm :: (QueryM m) => UserId -> TermReferenceId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTerm userId refId = runMaybeT do
-  termId <- MaybeT $ loadTermId refId
-  MaybeT $ loadTermById userId termId
-
-loadTermId :: (QueryA m) => TermReferenceId -> m (Maybe TermId)
-loadTermId (Reference.Id compHash (pgComponentIndex -> compIndex)) =
-  query1Col
-    [sql|
-      SELECT term.id
-        FROM terms term
-          JOIN component_hashes ON term.component_hash_id = component_hashes.id
-          WHERE component_hashes.base32 = #{compHash}
-            AND term.component_index = #{compIndex}
+loadTermIdsByRefIdsOf :: (QueryA m, HasCallStack) => Traversal s t TermReferenceId (Maybe TermId) -> s -> m t
+loadTermIdsByRefIdsOf trav s = do
+  s
+    & asListOf trav %%~ \refIds -> do
+      let refsTable :: [(OrdBy, Hash, PgComponentIndex)]
+          refsTable =
+            ordered refIds
+              <&> \(ord, (Reference.Id compHash (pgComponentIndex -> compIndex))) -> (ord, compHash, compIndex)
+      queryListCol @(Maybe TermId)
+        [sql|
+        WITH ref_ids(ord, comp_hash, comp_index) AS(
+          SELECT t.ord, t.comp_hash, t.comp_index FROM ^{toTable refsTable} AS t(ord, comp_hash, comp_index)
+        )
+        SELECT term.id
+          FROM ref_ids
+            LEFT JOIN terms term ON term.component_index = ref_ids.comp_index
+            LEFT JOIN component_hashes ON term.component_hash_id = component_hashes.id
+          WHERE component_hashes.base32 = ref_ids.comp_hash
+        ORDER BY ref_ids.ord ASC
       |]
 
-expectTermId :: (QueryA m) => TermReferenceId -> m TermId
-expectTermId refId =
-  unrecoverableEitherMap
-    ( \case
-        Nothing -> Left (expectedTermError refId)
-        Just termId -> Right termId
-    )
-    (loadTermId refId)
+expectTermIdsByRefIdsOf :: (QueryA m) => Traversal s t TermReferenceId TermId -> s -> m t
+expectTermIdsByRefIdsOf trav s =
+  s
+    & asListOf trav %%~ \refIds -> do
+      loadTermIdsByRefIdsOf traversed refIds
+        & unrecoverableEitherMap
+          ( \results ->
+              for (zip refIds results) \case
+                (refId, Nothing) -> Left (expectedTermError $ Right refId)
+                (_refId, Just termId) -> Right termId
+          )
 
-expectTerm :: UserId -> Reference.Id -> PG.Transaction e (V2.Term Symbol, V2.Type Symbol)
-expectTerm userId refId = do
-  mayTerm <- loadTerm userId refId
-  case mayTerm of
-    Just term -> pure term
-    Nothing -> unrecoverableError $ expectedTermError refId
+expectTermsByRefIdsOf :: (HasCallStack, QueryA m) => UserId -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
+expectTermsByRefIdsOf codebaseUser trav s = do
+  s & asListOf trav \termRefs -> do
+    termIds <- expectTermIdsByRefIdsOf traversed termRefs
+    expectTermsByIdsOf codebaseUser traversed termIds
 
 resolveComponentHash :: (QueryM m) => ComponentRef -> m (ComponentHash, ComponentHashId)
 resolveComponentHash = \case
@@ -315,33 +320,28 @@ loadTermsByIdsOf codebaseUser trav s = do
             typ
           )
 
--- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
--- Lookup.
-loadTermById :: (QueryA m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTermById codebaseUser termId = loadTermsByIdsOf codebaseUser id termId
+-- | Load a batch of terms by their RefIds.
+loadTermsByRefIdsOf ::
+  (QueryA m, HasCallStack) =>
+  UserId ->
+  Traversal s t TermReferenceId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
+  s ->
+  m t
+loadTermsByRefIdsOf codebaseUser trav s = do
+  s & asListOf trav \termRefs -> do
+    termIds <- loadTermIdsByRefIdsOf traversed termRefs
+    terms <- loadTermsByIdsOf codebaseUser (traversed . _Just) termIds
+    -- Flatten the nested maybes.
+    pure $ fmap join terms
 
-expectTermById :: (QueryA m) => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
-expectTermById userId refId termId =
-  unrecoverableEitherMap
-    ( \case
-        Nothing -> Left (expectedTermError refId)
-        Just term -> Right term
-    )
-    (loadTermById userId termId)
-
--- expectTermsByIdsOf ::
---   (QueryA m) =>
---   UserId ->
---   Traversal s t TermId (V2.Term Symbol, V2.Type Symbol) ->
---   s ->
---   m t
--- expectTermsByIdsOf codebaseUser trav s = do
---   s & asListOf trav \termIds -> do
---     loadTermsByIdsOf codebaseUser traversed termIds
---       & unrecoverableEitherMap \results ->
---         for (zip termIds results) \case
---           (termId, Nothing) -> Left (expectedTermError termId)
---           (_termId, Just t) -> Right t
+expectTermsByIdsOf :: (QueryA m) => UserId -> Traversal s t TermId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
+expectTermsByIdsOf userId trav s = do
+  s & asListOf trav \termIds -> do
+    loadTermsByIdsOf userId traversed termIds
+      & unrecoverableEitherMap \results ->
+        for (zip termIds results) \case
+          (termId, Nothing) -> Left (expectedTermError (Left termId))
+          (_termId, Just t) -> Right t
 
 loadTermComponentElementByTermIdsOf ::
   (QueryA m, HasCallStack) =>
@@ -533,7 +533,7 @@ expectTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TermReferenceId -
 expectTypeComponentElementAndTypeId codebaseUser refId =
   unrecoverableEitherMap
     ( \case
-        Nothing -> Left (expectedTypeError refId)
+        Nothing -> Left (expectedTypeError $ Right refId)
         Just decl -> Right decl
     )
     (loadTypeComponentElementAndTypeId codebaseUser refId)
@@ -571,7 +571,7 @@ expectDecl codebaseUser refId = do
   mayDecl <- loadDecl codebaseUser refId
   case mayDecl of
     Just decl -> pure decl
-    Nothing -> unrecoverableError $ InternalServerError "expected-decl" (ExpectedTermNotFound refId)
+    Nothing -> unrecoverableError $ InternalServerError "expected-decl" (expectedTermError $ Right refId)
 
 s2cDecl :: ResolvedLocalIds -> DeclFormat.Decl Symbol -> (V2.Decl Symbol)
 s2cDecl (LocalIds.LocalIds {textLookup, defnLookup}) V2.DataDeclaration {declType, modifier, bound, constructorTypes} =
@@ -1291,11 +1291,11 @@ saveSerializedComponent (CodebaseEnv {codebaseOwner}) chId (CBORBytes bytes) = d
       ON CONFLICT DO NOTHING
     |]
 
-expectedTermError :: TermReferenceId -> InternalServerError DefinitionQueryError
+expectedTermError :: Either TermId TermReferenceId -> InternalServerError DefinitionQueryError
 expectedTermError refId =
   InternalServerError "expected-term" (ExpectedTermNotFound refId)
 
-expectedTypeError :: TypeReferenceId -> InternalServerError DefinitionQueryError
+expectedTypeError :: Either TypeId TypeReferenceId -> InternalServerError DefinitionQueryError
 expectedTypeError refId =
   InternalServerError "expected-type" (ExpectedTypeNotFound refId)
 
