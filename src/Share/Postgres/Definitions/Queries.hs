@@ -64,7 +64,7 @@ import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Share.Utils.Postgres (OrdBy, RawBytes (..))
+import Share.Utils.Postgres (OrdBy, RawBytes (..), ordered)
 import Share.Web.Errors (ErrorID (..), InternalServerError (InternalServerError), ToServerError (..))
 import U.Codebase.Decl qualified as Decl
 import U.Codebase.Decl qualified as V2 hiding (Type)
@@ -108,10 +108,10 @@ type PgLocalIds = LocalIds.LocalIds' TextId ComponentHashId
 type ComponentRef = These ComponentHash ComponentHashId
 
 data DefinitionQueryError
-  = ExpectedTermNotFound TermReferenceId
-  | ExpectedTermComponentNotFound ComponentRef
-  | ExpectedTypeNotFound TypeReferenceId
-  | ExpectedTypeComponentNotFound ComponentRef
+  = ExpectedTermNotFound (Either TermId TermReferenceId)
+  | ExpectedTermComponentNotFound ComponentHashId
+  | ExpectedTypeNotFound (Either TypeId TypeReferenceId)
+  | ExpectedTypeComponentNotFound ComponentHashId
   deriving stock (Show)
 
 instance ToServerError DefinitionQueryError where
@@ -267,7 +267,7 @@ expectShareTermComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
         <&> checkElements
       )
       `whenNothingM` do
-        unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound (That componentHashId))
+        unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentHashId)
   second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) ->
     (,bytes) <$> termLocalReferences termId
   where
@@ -359,11 +359,11 @@ expectTermsByIdsOf codebase trav s = do
 
 loadTermComponentElementByTermIdsOf ::
   (QueryA m, HasCallStack) =>
-  UserId ->
+  CodebaseEnv ->
   Traversal s t TermId (Maybe TermComponentElement) ->
   s ->
   m t
-loadTermComponentElementByTermIdsOf codebaseUser trav s = do
+loadTermComponentElementByTermIdsOf CodebaseEnv {codebaseOwner} trav s = do
   s & asListOf trav \termIds -> do
     let numberedTermIds = zip [0 :: Int32 ..] termIds
     queryListCol
