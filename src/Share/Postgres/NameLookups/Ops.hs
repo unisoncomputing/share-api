@@ -2,8 +2,8 @@ module Share.Postgres.NameLookups.Ops
   ( namesPerspectiveForRootAndPath,
     relocateToNameRoot,
     fuzzySearchDefinitions,
-    termNamesForRefWithinNamespace,
-    typeNamesForRefWithinNamespace,
+    termNamesForRefsWithinNamespaceOf,
+    typeNamesForRefsWithinNamespaceOf,
     termRefsForExactName,
     typeRefsForExactName,
     checkBranchHashNameLookupExists,
@@ -26,6 +26,7 @@ import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Conversions qualified as CV
+import Share.Postgres.NameLookups.Queries (ShouldSuffixify)
 import Share.Postgres.NameLookups.Queries qualified as NameLookupQ
 import Share.Postgres.NameLookups.Queries qualified as Q
 import Share.Postgres.NameLookups.Types
@@ -142,16 +143,28 @@ fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHas
     pure (termNames, typeNames)
 
 -- | Get the list of (fqn, suffixified) names for a given Referent.
-termNamesForRefWithinNamespace :: (PG.QueryM m) => NamesPerspective -> PGReferent -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
-termNamesForRefWithinNamespace NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} ref maySuffix = do
-  NameLookupQ.termNamesForRefWithinNamespace nameLookupReceipt nameLookupBranchHashId mempty ref maySuffix
-    <&> fmap (first $ prefixReversedName pathToMountedNameLookup)
+-- If 'shouldSuffixify' is 'NoSuffixify', the suffixified name will be the same as the fqn.
+termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
+termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix shouldSuffixify trav s = do
+  s
+    & unsafePartsOf trav %%~ \refs -> do
+      NameLookupQ.termNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix shouldSuffixify traversed refs
+        <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
+          ( prefixReversedName pathToMountedNameLookup reversedName,
+            suffixifiedName
+          )
 
 -- | Get the list of (fqn, suffixified) names for a given Reference.
-typeNamesForRefWithinNamespace :: (PG.QueryM m) => NamesPerspective -> PGReference -> Maybe ReversedName -> m [(ReversedName {- fqn -}, ReversedName {- suffixified -})]
-typeNamesForRefWithinNamespace NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} ref maySuffix = do
-  NameLookupQ.typeNamesForRefWithinNamespace nameLookupReceipt nameLookupBranchHashId mempty ref maySuffix
-    <&> fmap (first $ prefixReversedName pathToMountedNameLookup)
+-- If 'shouldSuffixify' is 'NoSuffixify', the suffixified name will be the same as the fqn.
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [(ReversedName, ReversedName)] -> s -> m t
+typeNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix shouldSuffixify trav s = do
+  s
+    & unsafePartsOf trav %%~ \refs -> do
+      NameLookupQ.typeNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix shouldSuffixify traversed refs
+        <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
+          ( prefixReversedName pathToMountedNameLookup reversedName,
+            suffixifiedName
+          )
 
 -- | Helper for findings refs by name within the correct mounted indexes.
 refsForExactName ::

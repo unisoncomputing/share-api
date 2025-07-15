@@ -1,7 +1,9 @@
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Share.Postgres.Definitions.Queries
   ( loadTerm,
+    loadTermsByIdsOf,
     expectTerm,
     expectTermId,
     expectTermById,
@@ -289,11 +291,20 @@ expectTypeComponent codebase componentRef = do
     Just component -> pure component
     Nothing -> unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentRef)
 
--- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
--- Lookup.
-loadTermById :: (QueryA m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
-loadTermById codebaseUser termId = do
-  ( \maybeTermComponentElement Share.LocalIds {texts, hashes} ->
+-- | Batch load terms by ids.
+loadTermsByIdsOf ::
+  (QueryA m, HasCallStack) =>
+  UserId ->
+  Traversal s t TermId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
+  s ->
+  m t
+loadTermsByIdsOf codebaseUser trav s = do
+  s & unsafePartsOf trav \termIds -> do
+    zipWith combine
+      <$> (loadTermComponentElementByTermIdsOf codebaseUser traversed termIds)
+      <*> (termLocalReferencesOf traversed termIds)
+  where
+    combine maybeTermComponentElement (Share.LocalIds {texts, hashes}) =
       maybeTermComponentElement <&> \(TermComponentElement trm typ) ->
         s2cTermWithType
           ( LocalIds.LocalIds
@@ -303,9 +314,11 @@ loadTermById codebaseUser termId = do
             trm,
             typ
           )
-    )
-    <$> loadTermComponentElementByTermId codebaseUser termId
-    <*> termLocalReferences termId
+
+-- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
+-- Lookup.
+loadTermById :: (QueryA m) => UserId -> TermId -> m (Maybe (V2.Term Symbol, V2.Type Symbol))
+loadTermById codebaseUser termId = loadTermsByIdsOf codebaseUser id termId
 
 expectTermById :: (QueryA m) => UserId -> TermReferenceId -> TermId -> m (V2.Term Symbol, V2.Type Symbol)
 expectTermById userId refId termId =
@@ -316,15 +329,40 @@ expectTermById userId refId termId =
     )
     (loadTermById userId termId)
 
-loadTermComponentElementByTermId :: (QueryA m) => UserId -> TermId -> m (Maybe TermComponentElement)
-loadTermComponentElementByTermId codebaseUser termId =
-  query1Col
-    [sql|
+-- expectTermsByIdsOf ::
+--   (QueryA m) =>
+--   UserId ->
+--   Traversal s t TermId (V2.Term Symbol, V2.Type Symbol) ->
+--   s ->
+--   m t
+-- expectTermsByIdsOf codebaseUser trav s = do
+--   s & unsafePartsOf trav \termIds -> do
+--     loadTermsByIdsOf codebaseUser traversed termIds
+--       & unrecoverableEitherMap \results ->
+--         for (zip termIds results) \case
+--           (termId, Nothing) -> Left (expectedTermError termId)
+--           (_termId, Just t) -> Right t
+
+loadTermComponentElementByTermIdsOf ::
+  (QueryA m, HasCallStack) =>
+  UserId ->
+  Traversal s t TermId (Maybe TermComponentElement) ->
+  s ->
+  m t
+loadTermComponentElementByTermIdsOf codebaseUser trav s = do
+  s & unsafePartsOf trav \termIds -> do
+    let numberedTermIds = zip [0 :: Int32 ..] termIds
+    queryListCol
+      [sql|
+        WITH term_ids(ord, term_id) AS (
+              SELECT * FROM ^{toTable numberedTermIds}
+        )
         SELECT bytes.bytes
-          FROM sandboxed_terms sandboxed
-            JOIN bytes ON sandboxed.bytes_id = bytes.id
-            WHERE sandboxed.user_id = #{codebaseUser}
-              AND sandboxed.term_id = #{termId}
+          FROM term_ids
+            LEFT JOIN sandboxed_terms sandboxed ON sandboxed.term_id = term_ids.term_id
+            LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
+          WHERE sandboxed.user_id = #{codebaseUser}
+          ORDER BY term_ids.ord ASC
       |]
 
 termLocalReferences :: (QueryA m) => TermId -> m (Share.LocalIds Text ComponentHash)
@@ -332,6 +370,17 @@ termLocalReferences termId =
   Share.LocalIds
     <$> termLocalTextReferences termId
     <*> termLocalComponentReferences termId
+
+termLocalReferencesOf ::
+  (QueryA m, HasCallStack) =>
+  Traversal s t TermId (Share.LocalIds Text ComponentHash) ->
+  s ->
+  m t
+termLocalReferencesOf trav s = do
+  s & unsafePartsOf trav \termIds -> do
+    zipWith Share.LocalIds
+      <$> termLocalTextReferencesOf traversed termIds
+      <*> termLocalComponentReferencesOf traversed termIds
 
 termLocalTextReferences :: (QueryA m) => TermId -> m [Text]
 termLocalTextReferences termId =
@@ -344,6 +393,23 @@ termLocalTextReferences termId =
           ORDER BY local_index ASC
       |]
 
+termLocalTextReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [Text] -> s -> m t
+termLocalTextReferencesOf trav s = do
+  s & unsafePartsOf trav \termIds -> do
+    let numberedTermIds = zip [0 :: Int32 ..] termIds
+    queryListCol @[Text]
+      [sql|
+        WITH term_ids(ord, term_id) AS (
+            SELECT * FROM ^{toTable numberedTermIds}
+        )
+        SELECT array_agg(text.text ORDER BY text_refs.local_index ASC) as text_array
+        FROM term_ids
+            JOIN term_local_text_references text_refs ON text_refs.term_id = term_ids.term_id
+            JOIN text ON text_refs.text_id = text.id
+        GROUP BY term_ids.ord
+        ORDER BY term_ids.ord ASC
+      |]
+
 termLocalComponentReferences :: (QueryA m) => TermId -> m [ComponentHash]
 termLocalComponentReferences termId =
   queryListCol
@@ -353,6 +419,23 @@ termLocalComponentReferences termId =
           JOIN component_hashes ON term_local_component_references.component_hash_id = component_hashes.id
         WHERE term_id = #{termId}
           ORDER BY local_index ASC
+      |]
+
+termLocalComponentReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [ComponentHash] -> s -> m t
+termLocalComponentReferencesOf trav s = do
+  s & unsafePartsOf trav \termIds -> do
+    let numberedTermIds = zip [0 :: Int32 ..] termIds
+    queryListCol @[ComponentHash]
+      [sql|
+        WITH term_ids(ord, term_id) AS (
+            SELECT * FROM ^{toTable numberedTermIds}
+        )
+        SELECT array_agg(component_hashes.base32 ORDER BY local_refs.local_index ASC) as component_hash_array
+        FROM term_ids
+            JOIN term_local_component_references local_refs ON local_refs.term_id = term_ids.term_id
+            JOIN component_hashes ON local_refs.component_hash_id = component_hashes.id
+        GROUP BY term_ids.ord
+        ORDER BY term_ids.ord ASC
       |]
 
 s2cTermWithType :: (ResolvedLocalIds, TermFormat.Term, TermFormat.Type) -> (V2.Term Symbol, V2.Type Symbol)
@@ -390,7 +473,7 @@ resolveConstructorTypeLocalIds (LocalIds.LocalIds {textLookup, defnLookup}) =
 loadDeclKind :: (PG.QueryA m) => TypeReferenceId -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: (PG.QueryA m) => Traversal s t TypeReferenceId (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryA m, HasCallStack) => Traversal s t TypeReferenceId (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refIds -> do
@@ -609,7 +692,7 @@ ensureTextIds = ensureTextIdsOf traversed
 
 -- | Efficiently saves all Text's focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureTextIdsOf :: (QueryM m) => Traversal s t Text TextId -> s -> m t
+ensureTextIdsOf :: (QueryM m, HasCallStack) => Traversal s t Text TextId -> s -> m t
 ensureTextIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \texts -> do
@@ -641,7 +724,7 @@ ensureBytesIds = ensureBytesIdsOf traversed
 
 -- | Efficiently saves all bytestrings focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureBytesIdsOf :: (QueryM m) => Traversal s t BS.ByteString BytesId -> s -> m t
+ensureBytesIdsOf :: (QueryM m, HasCallStack) => Traversal s t BS.ByteString BytesId -> s -> m t
 ensureBytesIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \bytestrings -> do
@@ -668,7 +751,7 @@ ensureBytesIdsOf trav s = do
         else pure results
 
 -- | Efficiently loads Texts for all TextIds focused by the provided traversal.
-expectTextsOf :: (QueryM m) => Traversal s t TextId Text -> s -> m t
+expectTextsOf :: (QueryM m, HasCallStack) => Traversal s t TextId Text -> s -> m t
 expectTextsOf trav =
   unsafePartsOf trav %%~ \textIds -> do
     let numberedTextIds = zip [0 :: Int32 ..] textIds
@@ -1059,7 +1142,7 @@ saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerial
       pure typeIds
 
 -- | Efficiently resolve all pg Ids across selected Local Ids.
-resolveLocalIdsOf :: (QueryM m) => Traversal s t PgLocalIds ResolvedLocalIds -> s -> m t
+resolveLocalIdsOf :: (QueryM m, HasCallStack) => Traversal s t PgLocalIds ResolvedLocalIds -> s -> m t
 resolveLocalIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \pgLocalIds -> do

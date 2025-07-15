@@ -1,11 +1,13 @@
 module Share.PrettyPrintEnvDecl.Postgres (ppedForReferences) where
 
 import Control.Lens
+import Data.Either qualified as List
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Queries (ShouldSuffixify (..))
 import Share.Postgres.NameLookups.Types (NamesPerspective)
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Postgres.Refs.Types
@@ -20,23 +22,40 @@ import Unison.Referent qualified as V1
 
 ppedForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledDependency -> m PPED.PrettyPrintEnvDecl
 ppedForReferences namesPerspective refs = do
-  withPGRefs <-
+  (pgRefTerms, pgRefTypes) <-
     Set.toList refs
       & CV.labeledDependencies1ToPG
       & fmap catMaybes -- Filter out any missing components
-  (termNames, typeNames) <- foldMapM namesForReference withPGRefs
+      & fmap List.partitionEithers
+      & PG.pipelined
+  termNames <- concat <$> termNamesOf traversed pgRefTerms
+  typeNames <- concat <$> typeNamesOf traversed pgRefTypes
   pure $ ppedFromNamesWithSuffixes termNames typeNames
   where
-    namesForReference :: Either (V1.Referent, PGReferent) (V1.Reference, PGReference) -> m ([(Name, Name, V1.Referent)], [(Name, Name, V1.Reference)])
-    namesForReference = \case
-      Left (ref, pgref) -> do
-        termNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.termNamesForRefWithinNamespace namesPerspective pgref Nothing
-        let termNames' = termNames <&> \(fqn, suffixed) -> (fqn, suffixed, ref)
-        pure $ (termNames', [])
-      Right (ref, pgref) -> do
-        typeNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.typeNamesForRefWithinNamespace namesPerspective pgref Nothing
-        let typeNames' = typeNames <&> \(fqn, suffixed) -> (fqn, suffixed, ref)
-        pure $ ([], typeNames')
+    termNamesOf :: Traversal s t (V1.Referent, PGReferent) [(Name, Name, V1.Referent)] -> s -> m t
+    termNamesOf trav s =
+      s
+        & unsafePartsOf trav %%~ \refs -> do
+          let pgRefs = snd <$> refs
+          termNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
+            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing Suffixify traversed pgRefs
+          pure $ do
+            ((ref, _pgRef), names) <- zip refs termNames
+            pure $ do
+              (fqn, suffixed) <- names
+              pure $ (NameLookups.reversedNameToName fqn, NameLookups.reversedNameToName suffixed, ref)
+    typeNamesOf :: Traversal s t (V1.Reference, PGReference) [(Name, Name, V1.Reference)] -> s -> m t
+    typeNamesOf trav s =
+      s
+        & unsafePartsOf trav %%~ \refs -> do
+          let pgRefs = snd <$> refs
+          typeNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
+            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing Suffixify traversed pgRefs
+          pure $ do
+            ((ref, _pgRef), names) <- zip refs typeNames
+            pure $ do
+              (fqn, suffixed) <- names
+              pure $ (NameLookups.reversedNameToName fqn, NameLookups.reversedNameToName suffixed, ref)
 
 -- | Given a list of (fqn, suffixified, ref), return a PrettyPrintEnvDecl
 -- Note: this type of PPE does not (yet) support hash qualifying conflicted names, because this

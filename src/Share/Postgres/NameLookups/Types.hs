@@ -3,6 +3,7 @@
 module Share.Postgres.NameLookups.Types
   ( NamesPerspective (..),
     ReversedName (..),
+    NameWithSuffix (..),
     ReversedPath (..),
     PathSegments (..),
     NamedRef (..),
@@ -29,6 +30,8 @@ import Data.List.Extra qualified as List
 import Data.List.NonEmpty.Extra qualified as NonEmpty
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as Decoders
+import Hasql.Interpolate qualified as Hasql
+import Hasql.Interpolate qualified as Interp
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (BranchHashId, ComponentHashId)
 import Share.Postgres.Refs.Types
@@ -72,6 +75,27 @@ data NamesPerspective = NamesPerspective
     nameLookupReceipt :: NameLookupReceipt
   }
   deriving (Eq, Show)
+
+data NameWithSuffix = NameWithSuffix
+  { reversedName :: ReversedName,
+    suffixifiedName :: ReversedName
+  }
+  deriving stock (Eq, Ord, Show)
+
+instance PG.DecodeValue NameWithSuffix where
+  decodeValue = Decoders.composite nameWithSuffixComposite
+
+nameWithSuffixComposite :: Decoders.Composite NameWithSuffix
+nameWithSuffixComposite = do
+  reversedName <- Decoders.field $ Interp.decodeField
+  suffixifiedName <- Decoders.field $ Interp.decodeField
+  pure NameWithSuffix {..}
+
+instance PG.DecodeRow NameWithSuffix where
+  decodeRow = do
+    reversedName <- PG.decodeField
+    suffixifiedName <- PG.decodeField
+    pure NameWithSuffix {..}
 
 newtype ReversedName = ReversedName (NonEmpty Text)
   deriving stock (Eq, Ord, Show)
