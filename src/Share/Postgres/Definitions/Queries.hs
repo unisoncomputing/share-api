@@ -9,8 +9,6 @@ module Share.Postgres.Definitions.Queries
     expectTermIdsByRefIdsOf,
     saveTermComponent,
     saveEncodedTermComponent,
-    loadTermComponent,
-    expectTermComponent,
     termTagsByReferentsOf,
     typeTagsByReferencesOf,
     loadTypeComponent,
@@ -298,9 +296,8 @@ loadTermComponentElementByTermIdsOf CodebaseEnv {codebaseOwner} trav s = do
         )
         SELECT bytes.bytes
           FROM term_ids
-            LEFT JOIN sandboxed_terms sandboxed ON sandboxed.term_id = term_ids.term_id
+            LEFT JOIN sandboxed_terms sandboxed ON (sandboxed.term_id = term_ids.term_id AND sandboxed.user_id = #{codebaseOwner})
             LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
-          WHERE sandboxed.user_id = #{codebaseUser}
           ORDER BY term_ids.ord ASC
       |]
 
