@@ -59,7 +59,7 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
         WITH refs(ord, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index) AS (
           SELECT * FROM ^{PG.toTable refsTable}
         )
-        SELECT array_agg((reversed_name, suffixified_name):: ORDER BY length(reversed_name) ASC) AS ref_names
+        SELECT array_agg((reversed_name, suffixified_name) ORDER BY length(reversed_name) ASC) AS ref_names
           FROM refs
           CROSS JOIN LATERAL
             term_names_for_ref_within_namespace(
