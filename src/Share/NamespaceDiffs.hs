@@ -48,6 +48,7 @@ import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
 import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
+import Data.Semialign qualified as Align
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
@@ -819,14 +820,11 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
         hydrateTerms codebaseUser termReferents = PG.transactionSpan "hydrateTerms" mempty do
           let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
-          termIds <-
-            PG.pFor termReferenceIds \refId ->
-              (refId,) <$> DefnsQ.expectTermId refId
-          v2Terms <-
-            PG.pFor termIds \(refId, termId) ->
-              (refId,) <$> DefnsQ.expectTermById codebaseUser refId termId
+          v2Terms <- DefnsQ.expectTermsByRefIdsOf codebaseUser traversed termReferenceIds
+          let v2TermsWithRef = Align.zip termReferenceIds v2Terms
           v1Terms <-
-            for v2Terms \(refId, (term, typ)) ->
+            -- TODO: Batchify this
+            for v2TermsWithRef \(refId, (term, typ)) ->
               (refId,) <$> Codebase.convertTerm2to1 (Reference.idToHash refId) term typ
           pure v1Terms
         hydrateTypes ::

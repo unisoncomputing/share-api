@@ -233,6 +233,7 @@ loadTermForCodeLookup codebaseUser refId@(Reference.Id h _) = runMaybeT $ do
 
 convertTerm2to1 :: (PG.QueryM m) => Hash -> V2.Term.Term V2.Symbol -> V2.Term.Type V2.Symbol -> m (V1.Term Symbol Ann, V1.Type Symbol Ann)
 convertTerm2to1 h v2Term v2Type = do
+  -- TODO: batchify this so we're not making a separate query for every decl!
   v1Term <- Cv.term2to1 h expectDeclKind v2Term
   let v1Type = Cv.ttype2to1 v2Type
   pure (v1Term, v1Type)
