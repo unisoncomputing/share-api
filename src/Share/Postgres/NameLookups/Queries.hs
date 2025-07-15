@@ -3,9 +3,8 @@
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Share.Postgres.NameLookups.Queries
-  ( termNamesForRefWithinNamespace,
-    termNamesForRefsWithinNamespaceOf,
-    typeNamesForRefWithinNamespace,
+  ( termNamesForRefsWithinNamespaceOf,
+    typeNamesForRefsWithinNamespaceOf,
     termRefsForExactName,
     typeRefsForExactName,
     fuzzySearchTerms,
@@ -82,163 +81,42 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
       Just suffix -> toReversedNamePrefix suffix
       Nothing -> ""
 
--- | Get the list of term names and suffixifications for a given Referent within a given namespace.
--- Considers one level of dependencies, but not transitive dependencies.
-termNamesForRefWithinNamespace :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> PGReferent -> Maybe ReversedName -> m [(ReversedName, ReversedName)]
-termNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuffix = do
-  let namespacePrefix = toNamespacePrefix namespaceRoot
-  let reversedNamePrefix = case maySuffix of
-        Just suffix -> toReversedNamePrefix suffix
-        Nothing -> ""
-  directNames <-
-    PG.queryListRows
-      [PG.sql|
-        SELECT reversed_name, suffixified_name FROM (
-          SELECT reversed_name, suffixify_term_fqn(#{bhId}, #{namespacePrefix}, '', ROW(scoped_term_name_lookup.*)) AS suffixified_name
-            FROM scoped_term_name_lookup
-          WHERE root_branch_hash_id = #{bhId}
-                -- This may seem overly verbose, but it nudges the query planner to use the
-                -- correct partial index, which is keyed on whether the refBuiltin is null or not.
-                AND (
-                  (#{refBuiltin} IS NULL
-                      AND referent_builtin IS NULL
-                      AND referent_component_hash_id = #{refComponentHash}
-                      AND referent_component_index = #{refComponentIndex}
-                      AND referent_constructor_index IS NOT DISTINCT FROM #{refConstructorIndex}
-                  )
-                  OR
-                  ( #{refBuiltin} IS NOT NULL
-                    AND referent_builtin = #{refBuiltin}
-                  )
-                )
-                AND namespace LIKE like_escape(#{namespacePrefix}) || '%'
-                AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
-          UNION ALL
-          SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name, suffixify_term_fqn(#{bhId}, #{namespacePrefix}, mount.reversed_mount_path, ROW(names.*)) AS suffixified_name
-          FROM name_lookup_mounts mount
-            INNER JOIN scoped_term_name_lookup names ON names.root_branch_hash_id = mount.mounted_root_branch_hash_id
-          WHERE mount.parent_root_branch_hash_id = #{bhId}
-                AND mount.mount_path LIKE like_escape(#{namespacePrefix}) || '%'
-                AND (
-                  (#{refBuiltin} IS NULL
-                      AND referent_builtin IS NULL
-                      AND referent_component_hash_id = #{refComponentHash}
-                      AND referent_component_index = #{refComponentIndex}
-                      AND referent_constructor_index IS NOT DISTINCT FROM #{refConstructorIndex}
-                  )
-                  OR
-                  ( #{refBuiltin} IS NOT NULL
-                    AND referent_builtin = #{refBuiltin}
-                  )
-                )
-                AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
-        ) AS names
-        ORDER BY length(reversed_name) ASC
-        |]
-  -- If we don't find a name in the name lookup, expand the search to recursively include transitive deps
-  -- and just return the first one we find.
-  if null directNames
-    then do
-      PG.queryListRows
-        [PG.sql|
-        ^{transitiveDependenciesSql bhId}
-        SELECT (reversed_name || reversed_mount_path) AS reversed_name, suffixify_term_fqn(#{bhId}, #{namespacePrefix}, reversed_mount_path, ROW(scoped_term_name_lookup.*)) AS suffixified_name
-          FROM transitive_dependency_mounts
-            INNER JOIN scoped_term_name_lookup
-              ON scoped_term_name_lookup.root_branch_hash_id = transitive_dependency_mounts.root_branch_hash_id
-        WHERE (
-                (#{refBuiltin} IS NULL
-                    AND referent_builtin IS NULL
-                    AND referent_component_hash_id = #{refComponentHash}
-                    AND referent_component_index = #{refComponentIndex}
-                    AND referent_constructor_index IS NOT DISTINCT FROM #{refConstructorIndex}
-                )
-                OR
-                ( #{refBuiltin} IS NOT NULL
-                  AND referent_builtin = #{refBuiltin}
-                )
-              ) AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
-        LIMIT 1
-      |]
-    else pure directNames
-  where
-    (refBuiltin, refComponentHash, refComponentIndex, refConstructorIndex) = referentFields ref
-
 -- | Get the list of type names for a given Reference within a given namespace.
 -- Considers one level of dependencies, but not transitive dependencies.
-typeNamesForRefWithinNamespace :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> PGReference -> Maybe ReversedName -> m [(ReversedName, ReversedName)]
-typeNamesForRefWithinNamespace !_nameLookupReceipt bhId namespaceRoot ref maySuffix = do
-  let namespacePrefix = toNamespacePrefix namespaceRoot
-  let reversedNamePrefix = case maySuffix of
-        Just suffix -> toReversedNamePrefix suffix
-        Nothing -> ""
-  directNames <-
-    PG.queryListRows
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
+typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix trav s = do
+  s & unsafePartsOf trav \refs -> do
+    let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64)]
+        refsTable =
+          zip [0 :: Int32 ..] refs <&> \(ord, ref) ->
+            let (refBuiltin, refComponentHash, refComponentIndex) = referenceFields ref
+             in (ord, refBuiltin, refComponentHash, refComponentIndex)
+    PG.queryListCol @[NameWithSuffix]
       [PG.sql|
-        SELECT reversed_name, suffixified_name FROM (
-          SELECT reversed_name, suffixify_type_fqn(#{bhId}, #{namespacePrefix}, '', ROW(scoped_type_name_lookup.*)) AS suffixified_name
-            FROM scoped_type_name_lookup
-          WHERE root_branch_hash_id = #{bhId}
-                AND (
-                  (#{refBuiltin} IS NULL
-                      AND reference_builtin IS NULL
-                      AND reference_component_hash_id = #{refComponentHash}
-                      AND reference_component_index = #{refComponentIndex}
-                  )
-                  OR
-                  ( #{refBuiltin} IS NOT NULL
-                    AND reference_builtin = #{refBuiltin}
-                  )
-                )
-                AND namespace LIKE like_escape(#{namespacePrefix}) || '%'
-                AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
-          UNION ALL
-          SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name, suffixify_type_fqn(#{bhId}, #{namespacePrefix}, mount.reversed_mount_path, ROW(names.*)) AS suffixified_name
-          FROM name_lookup_mounts mount
-            INNER JOIN scoped_type_name_lookup names ON names.root_branch_hash_id = mount.mounted_root_branch_hash_id
-          WHERE mount.parent_root_branch_hash_id = #{bhId}
-                AND mount.mount_path LIKE like_escape(#{namespacePrefix}) || '%'
-                AND (
-                  (#{refBuiltin} IS NULL
-                      AND reference_builtin IS NULL
-                      AND reference_component_hash_id = #{refComponentHash}
-                      AND reference_component_index = #{refComponentIndex}
-                  )
-                  OR
-                  ( #{refBuiltin} IS NOT NULL
-                    AND reference_builtin = #{refBuiltin}
-                  )
-                ) AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
-        ) AS names
-        ORDER BY length(reversed_name) ASC
-        |]
-  -- If we don't find a name in the name lookup, expand the search to recursively include transitive deps
-  -- and just return the first one we find.
-  if null directNames
-    then
-      PG.queryListRows
-        [PG.sql|
-        ^{transitiveDependenciesSql bhId}
-        SELECT (reversed_name || reversed_mount_path) AS reversed_name, suffixify_type_fqn(#{bhId}, #{namespacePrefix}, reversed_mount_path, ROW(scoped_type_name_lookup.*)) AS suffixified_name
-          FROM transitive_dependency_mounts
-            INNER JOIN scoped_type_name_lookup
-              ON scoped_type_name_lookup.root_branch_hash_id = transitive_dependency_mounts.root_branch_hash_id
-        WHERE (
-                (#{refBuiltin} IS NULL
-                    AND reference_builtin IS NULL
-                    AND reference_component_hash_id = #{refComponentHash}
-                    AND reference_component_index = #{refComponentIndex}
-                )
-                OR
-                ( #{refBuiltin} IS NOT NULL
-                  AND reference_builtin = #{refBuiltin}
-                )
-              ) AND reversed_name LIKE like_escape(#{reversedNamePrefix}) || '%'
-        LIMIT 1
-          |]
-    else pure directNames
+        WITH refs(ord, reference_builtin, reference_component_hash_id, reference_component_index) AS (
+          SELECT * FROM ^{PG.toTable refsTable}
+        )
+        SELECT (
+          -- Need COALESCE because array_agg will return NULL rather than the empty array
+          -- if there are no results.
+          SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
+          FROM type_names_for_ref_within_namespace(
+            #{bhId},
+            #{namespacePrefix},
+            refs.reference_builtin,
+            refs.reference_component_hash_id,
+            refs.reference_component_index,
+            #{reversedNamePrefix}
+          ) AS names(reversed_name, suffixified_name)
+        ) AS ref_names
+        FROM refs
+        ORDER BY refs.ord ASC
+      |]
   where
-    (refBuiltin, refComponentHash, refComponentIndex) = referenceFields ref
+    namespacePrefix = toNamespacePrefix namespaceRoot
+    reversedNamePrefix = case maySuffix of
+      Just suffix -> toReversedNamePrefix suffix
+      Nothing -> ""
 
 -- | Brings into scope the transitive_dependency_mounts CTE table, which contains all transitive deps of the given root, but does NOT include the direct dependencies.
 -- @transitive_dependency_mounts(root_branch_hash_id, reversed_mount_path)@

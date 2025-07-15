@@ -28,15 +28,22 @@ namesForReferences namesPerspective refs = do
       & PG.pipelined
 
   termNames <- concat <$> termNamesOf traversed pgRefTerms
-  typeNames <- concat <$> traverse typeNamesForReference pgRefTypes
+  typeNames <- concat <$> typeNamesOf traversed pgRefTypes
   pure $ Names.fromTermsAndTypes termNames typeNames
   where
     -- TODO: Can probably speed this up by skipping suffixification.
-    typeNamesForReference :: (V1.Reference, PGReference) -> m [(Name, V1.Reference)]
-    typeNamesForReference (ref, pgref) = do
-      typeNames <- fmap (bothMap NameLookups.reversedNameToName) <$> NameLookupOps.typeNamesForRefWithinNamespace namesPerspective pgref Nothing
-      let typeNames' = typeNames <&> \(fqn, _suffixed) -> (fqn, ref)
-      pure $ typeNames'
+    typeNamesOf :: Traversal s t (V1.Reference, PGReference) [(Name, V1.Reference)] -> s -> m t
+    typeNamesOf trav s = do
+      s
+        & unsafePartsOf trav %%~ \refs -> do
+          let pgRefs = snd <$> refs
+          typeNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
+            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing traversed pgRefs
+          pure $ do
+            ((ref, _pgRef), names) <- zip refs typeNames
+            pure $ do
+              (fqn, _suffixed) <- names
+              pure $ (NameLookups.reversedNameToName fqn, ref)
 
     termNamesOf :: Traversal s t (V1.Referent, PGReferent) [(Name, V1.Referent)] -> s -> m t
     termNamesOf trav s =

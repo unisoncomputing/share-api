@@ -59,7 +59,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTypes :: V1.Reference -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTypes ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.references1ToPGOf id ref
-      names <- NLOps.typeNamesForRefWithinNamespace namesPerspective pgRef Nothing
+      names <- NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Reference.toShortHash ref))
         & Set.fromList
@@ -87,14 +87,19 @@ nameSearchForPerspective namesPerspective =
           termRefsV1 <-
             Set.toList <$> Codebase.termReferentsByShortHash sh
           termRefsPG <- catMaybes <$> CV.referents1ToPGOf traversed termRefsV1
-          fmap Set.fromList . forMaybe (zip termRefsV1 termRefsPG) $ \(termRef, pgTermRef) -> do
-            matches <-
-              NLOps.termNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) id pgTermRef
-                <&> fmap fst -- Only need the fqn
-                -- Return a valid ref if at least one match was found.
-            if any (\n -> coerce (Name.reverseSegments fqn) == n) matches
-              then pure (Just termRef)
-              else pure Nothing
+          names <-
+            NLOps.termNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) traversed termRefsPG
+              <&> (fmap . fmap) fst -- Only need the fqn
+          zip termRefsV1 names
+            & mapMaybe
+              ( \(termRef, matches) ->
+                  -- Return a valid ref if at least one match was found.
+                  if any (\n -> ReversedName (coerce @(NonEmpty NameSegment) @(NonEmpty Text) $ Name.reverseSegments fqn) == n) matches
+                    then (Just termRef)
+                    else Nothing
+              )
+            & Set.fromList
+            & pure
 
     -- Search the codebase for matches to the given hq name.
     hqTypeSearch :: HQ'.HashQualified Name -> m (Set V1.Reference)
@@ -109,15 +114,20 @@ nameSearchForPerspective namesPerspective =
         HQ'.HashQualified name sh -> do
           let fqn = fullyQualifyName name
           typeRefs <- Set.toList <$> Codebase.typeReferencesByShortHash sh
-          pgTypeRefs <- catMaybes <$> CV.references1ToPGOf traversed typeRefs
-          fmap Set.fromList . forMaybe (zip typeRefs pgTypeRefs) $ \(typeRef, pgTypeRef) -> do
-            matches <-
-              NLOps.typeNamesForRefWithinNamespace namesPerspective pgTypeRef (Just . coerce $ Name.reverseSegments name)
-                <&> fmap fst -- Only need the fqn
-                -- Return a valid ref if at least one match was found.
-            if any (\n -> coerce (Name.reverseSegments fqn) == n) matches
-              then pure (Just typeRef)
-              else pure Nothing
+          typeRefsPG <- catMaybes <$> CV.references1ToPGOf traversed typeRefs
+          names <-
+            NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) traversed typeRefsPG
+              <&> (fmap . fmap) fst -- Only need the fqn
+          zip typeRefs names
+            & mapMaybe
+              ( \(typeRef, matches) ->
+                  -- Return a valid ref if at least one match was found.
+                  if any (\n -> ReversedName (coerce @(NonEmpty NameSegment) @(NonEmpty Text) $ Name.reverseSegments fqn) == n) matches
+                    then Just typeRef
+                    else Nothing
+              )
+            & Set.fromList
+            & pure
 
     reversedSegmentsToName :: ReversedName -> Name
     reversedSegmentsToName = Name.fromReverseSegments . coerce
