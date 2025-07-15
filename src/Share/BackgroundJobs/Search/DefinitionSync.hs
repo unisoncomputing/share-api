@@ -205,7 +205,8 @@ syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
             ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
             )
           & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-            typ <- lift (Codebase.loadTypeOfReferent codebase ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
+            -- TODO: properly batchify this
+            typ <- lift (Codebase.loadTypesOfReferentsOf codebase id ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
             let displayName =
                   fqn
                     & Name.reverseSegments
@@ -213,6 +214,7 @@ syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
                     & \case
                       (ns :| rest) -> ns :| take 1 rest
                     & Name.fromReverseSegments
+            -- TODO: batchify this
             termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) rootBranchHashId Nothing Nothing
             let sh = Referent.toShortHash ref
             let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
@@ -384,7 +386,8 @@ syncTypes codebase namesPerspective rootBranchHashId typesCursor = do
           (declTokens, declArity) <- case ref of
             Reference.Builtin _ -> pure (mempty, Arity 0)
             Reference.DerivedId refId -> do
-              decl <- lift (Codebase.loadTypeDeclaration codebase refId) `whenNothingM` throwError (NoDeclForType fqn ref)
+              -- TODO: batchify this
+              decl <- lift (Codebase.loadTypeDeclarationsByRefIdsOf codebase id refId) `whenNothingM` throwError (NoDeclForType fqn ref)
               pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
           let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
           typeSummary <- lift $ Summary.typeSummaryForReference codebase ref (Just fqn) Nothing

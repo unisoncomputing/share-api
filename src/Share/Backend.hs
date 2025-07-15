@@ -125,7 +125,8 @@ mkTermDefinition ::
   m TermDefinition
 mkTermDefinition codebase termPPED width r docs tm = do
   let referent = V2Referent.Ref r
-  termType <- Codebase.expectTypeOfTerm codebase r
+  -- TODO: batchify this properly
+  termType <- Codebase.expectTypesOfTermsOf codebase id r
   let bn = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE termPPED) width (Referent.Ref r)
   tag <- getTermTag referent termType
   mk termType bn tag
@@ -150,6 +151,7 @@ termListEntry ::
   ExactName NameSegment V2Referent.Referent ->
   m (Backend.TermEntry Symbol Ann)
 termListEntry typ (ExactName nameSegment ref) = do
+  -- TODO: batchify this properly
   tag <- getTermTag ref typ
   pure $
     Backend.TermEntry
@@ -167,6 +169,7 @@ typeListEntry ::
   ExactName NameSegment Reference ->
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
+  -- TODO: batchify this properly
   tag <- getTypeTag ref
   pure $
     Backend.TypeEntry
@@ -192,7 +195,9 @@ getTermTag r termType = do
   let isTest = Typechecker.isEqual termType (Decls.testResultListType mempty)
   constructorType <- case r of
     V2Referent.Ref {} -> pure Nothing
-    V2Referent.Con ref _ -> Just <$> Codebase.expectDeclKind ref
+    V2Referent.Con ref _ ->
+      -- TODO: batchify this properly
+      Just <$> Codebase.expectDeclKindsOf id ref
   pure $
     if
       | isDoc -> Doc
@@ -206,7 +211,8 @@ getTypeTag ::
   Reference.TypeReference ->
   m TypeTag
 getTypeTag r = do
-  Codebase.loadDeclKind r <&> \case
+  -- TODO: batchify this properly
+  Codebase.loadDeclKindsOf id r <&> \case
     Nothing -> Data
     Just CT.Data -> Data
     Just CT.Effect -> Ability
@@ -220,7 +226,8 @@ displayTerm codebase = \case
       Nothing -> MissingObject $ Reference.toShortHash ref
       Just typ -> BuiltinObject (mempty <$ typ)
   Reference.DerivedId rid -> do
-    (term, ty) <- Codebase.expectTerm codebase rid
+    -- TODO: batchify this properly
+    (term, ty) <- Codebase.expectTermsByRefIdsOf codebase id rid
     pure case term of
       V1Term.Ann' _ _ -> UserObject term
       -- manually annotate if necessary
@@ -230,7 +237,8 @@ displayType :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObje
 displayType codebase = \case
   Reference.Builtin _ -> pure (BuiltinObject ())
   Reference.DerivedId rid -> do
-    decl <- Codebase.expectTypeDeclaration codebase rid
+    -- TODO: batchify this properly
+    decl <- Codebase.expectTypeDeclarationsByRefIdsOf codebase id rid
     pure (UserObject decl)
 
 evalDocRef ::
@@ -242,15 +250,19 @@ evalDocRef ::
   m (Doc.EvaluatedDoc Symbol)
 evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
   let tm = Term.ref () termRef
+  -- TODO: batchify evalDoc.
   Doc.evalDoc terms typeOf eval decls tm
   where
     terms :: Reference -> m (Maybe (V1.Term Symbol ()))
     terms termRef@(Reference.Builtin _) = pure (Just (Term.ref () termRef))
     terms (Reference.DerivedId termRef) =
-      fmap (Term.unannotate . fst) <$> (Codebase.loadTerm codebase termRef)
+      -- TODO: batchify properly
+      fmap (Term.unannotate . fst) <$> (Codebase.loadTermAndTypeByRefIdsOf codebase id termRef)
 
     typeOf :: Referent.Referent -> m (Maybe (V1.Type Symbol ()))
-    typeOf termRef = fmap void <$> Codebase.loadTypeOfReferent codebase (Cv.referent1to2 termRef)
+    typeOf termRef =
+      -- TODO: batchify properly
+      fmap void <$> Codebase.loadTypesOfReferentsOf codebase id (Cv.referent1to2 termRef)
 
     eval :: V1.Term Symbol a -> m (Maybe (V1.Term Symbol ()))
     eval (Term.amap (const mempty) -> tm) = do
@@ -268,7 +280,9 @@ evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntim
       pure $ termRef <&> Term.amap (const mempty) . snd
 
     decls :: Reference -> m (Maybe (DD.Decl Symbol ()))
-    decls (Reference.DerivedId typeRef) = fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclaration codebase typeRef)
+    decls (Reference.DerivedId typeRef) =
+      -- TODO: batchify properly
+      fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclarationsByRefIdsOf codebase id typeRef)
     decls _ = pure Nothing
 
 -- | Find all definitions and children reachable from the given 'V2Branch.Branch',
@@ -287,7 +301,7 @@ lsBranch codebase b0 = do
     V2Branch.terms b0
       & itoListOf (itraversed <. folding Map.keys)
       & fmap (\(ns, r) -> (r, r, ns))
-      & Codebase.expectTypeOfReferents codebase (traversed . _2)
+      & Codebase.expectTypesOfReferentsOf codebase (traversed . _2)
 
   termEntries <- for termsWithTypes $ \(r, typ, ns) -> do
     Backend.ShallowTermEntry <$> termListEntry typ (ExactName ns r)
@@ -313,6 +327,7 @@ lsBranch codebase b0 = do
       ++ branchEntries
       ++ patchEntries
 
+-- TODO: batchify this
 typeDeclHeader ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
@@ -321,7 +336,7 @@ typeDeclHeader ::
   m (DisplayObject Syntax.SyntaxText Syntax.SyntaxText)
 typeDeclHeader codebase ppe r = case Reference.toId r of
   Just rid ->
-    Codebase.loadTypeDeclaration codebase rid <&> \case
+    Codebase.loadTypeDeclarationsByRefIdsOf codebase id rid <&> \case
       Nothing -> DisplayObject.MissingObject (Reference.toShortHash r)
       Just decl ->
         DisplayObject.UserObject $

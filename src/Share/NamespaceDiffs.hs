@@ -48,12 +48,12 @@ import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
 import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
+import Data.Semialign qualified as Align
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
 import Servant (err400, err404, err500)
 import Share.Codebase qualified as Codebase
-import Share.IDs (UserId)
 import Share.Names.Postgres qualified as PGNames
 import Share.Postgres qualified as PG
 import Share.Postgres.Definitions.Queries qualified as DefnsQ
@@ -814,36 +814,26 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           (TypeReferenceId, Decl Symbol Ann)
       ) <- PG.transactionSpan "hydratedDefns3" mempty do
     let hydrateTerms ::
-          UserId ->
+          Codebase.CodebaseEnv ->
           BiMultimap Referent Name ->
           PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
-        hydrateTerms codebaseUser termReferents = PG.transactionSpan "hydrateTerms" mempty do
+        hydrateTerms codebase termReferents = PG.transactionSpan "hydrateTerms" mempty do
           let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
-          termIds <-
-            PG.pFor termReferenceIds \refId ->
-              (refId,) <$> DefnsQ.expectTermId refId
-          v2Terms <-
-            PG.pFor termIds \(refId, termId) ->
-              (refId,) <$> DefnsQ.expectTermById codebaseUser refId termId
-          v1Terms <-
-            for v2Terms \(refId, (term, typ)) ->
-              (refId,) <$> Codebase.convertTerm2to1 (Reference.idToHash refId) term typ
-          pure v1Terms
+          v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed termReferenceIds
+          let v2TermsWithRef = Align.zip termReferenceIds v2Terms
+          let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, ((Reference.idToHash refId), term, typ))
+          Codebase.convertTerms2to1Of (traversed . _2) refHashes
         hydrateTypes ::
-          UserId ->
+          Codebase.CodebaseEnv ->
           BiMultimap TypeReference Name ->
           PG.Transaction e (Map Name (TypeReferenceId, Decl Symbol Ann))
-        hydrateTypes codebaseUser typeReferences = PG.transactionSpan "hydrateTypes" mempty do
+        hydrateTypes codebase typeReferences = PG.transactionSpan "hydrateTypes" mempty do
           let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
-          typeIds <-
-            PG.pFor typeReferenceIds \refId ->
-              (refId,) <$> DefnsQ.expectTypeComponentElementAndTypeId codebaseUser refId
-          v1Decls <-
-            PG.pFor typeIds \(refId, typeId) ->
-              DefnsQ.loadDeclByTypeComponentElementAndTypeId typeId <&> \v2Decl ->
-                let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
-                 in (refId, v1Decl)
-          pure v1Decls
+          typeIdsWithComponents <- Align.zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
+          DefnsQ.loadDeclByTypeComponentElementAndTypeId (traversed . _2) typeIdsWithComponents
+            <&> fmap \(refId, v2Decl) ->
+              let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
+               in (refId, v1Decl)
         f ::
           Codebase.CodebaseEnv ->
           Defns (BiMultimap Referent Name) (BiMultimap TypeReference Name) ->
@@ -854,9 +844,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
                 (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
                 (TypeReferenceId, Decl Symbol Ann)
             )
-        f codebaseEnv =
-          let codebaseUser = Codebase.codebaseOwner codebaseEnv
-           in bitraverse (hydrateTerms codebaseUser) (hydrateTypes codebaseUser)
+        f codebaseEnv = bitraverse (hydrateTerms codebaseEnv) (hydrateTypes codebaseEnv)
 
     let -- Here we assume that the LCA is in the same codebase as Alice.
         codebaseEnvs3 :: ThreeWay Codebase.CodebaseEnv

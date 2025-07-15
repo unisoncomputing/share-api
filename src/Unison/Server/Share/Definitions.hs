@@ -111,23 +111,28 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
       let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
       dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery codebase nameSearch [query]
       let width = mayDefaultWidth renderWidth
+      -- TODO: properly batchify this
       let docResults :: Name -> m [(HashQualifiedName, UnisonHash, Doc.Doc)]
           docResults name = do
             -- We need to re-lookup the names perspective here because the name we've found
             -- may now be in a lib.
             namesPerspective <- NameLookupOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (NL.nameToPathSegments name)
             let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-            docRefs <- Docs.docsForDefinitionName codebase nameSearch name
+            -- TODO: properly batchify this
+            docRefs <- Docs.docsForDefinitionNamesOf codebase nameSearch id name
+            -- TODO: properly batchify this
             renderDocRefs codebase ppedBuilder width rt docRefs
 
       let drDeps = Backend.definitionResultsDependencies dr
       termAndTypePPED <- ppedBuilder drDeps
       let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
+      -- TODO: properly batchify this
       typeDefinitions <-
         ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
           let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
           docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
           Backend.mkTypeDefinition termAndTypePPED width ref docs tp
+      -- TODO: properly batchify this
       termDefinitions <-
         ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
           let referent = Referent.Ref reference
@@ -227,9 +232,12 @@ termDefinitionByName codebase ppedBuilder nameSearch width rt name = runMaybeT d
       let deps = termDisplayObjectLabeledDependencies ref displayObject
       pped <- lift $ ppedBuilder deps
       let biasedPPED = PPED.biasTo [name] pped
-      docRefs <- lift $ Docs.docsForDefinitionName codebase nameSearch name
+      -- TODO: properly batchify this
+      docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase nameSearch id name
+      -- TODO: properly batchify this
       renderedDocs <- lift $ renderDocRefs codebase ppedBuilder width rt docRefs
       let (_ref, syntaxDO) = Backend.termsToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
+      -- TODO: properly batchify this
       defn <- lift $ Backend.mkTermDefinition codebase biasedPPED width ref renderedDocs (syntaxDO)
       pure (Right defn)
     Left ref -> pure (Left ref)
@@ -262,7 +270,7 @@ typeDefinitionByName codebase ppedBuilder nameSearch width rt name = runMaybeT $
   let deps = typeDisplayObjectLabeledDependencies ref displayObject
   pped <- lift $ ppedBuilder deps
   let biasedPPED = PPED.biasTo [name] pped
-  docRefs <- lift $ Docs.docsForDefinitionName codebase nameSearch name
+  docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase nameSearch id name
   renderedDocs <- lift $ renderDocRefs codebase ppedBuilder width rt docRefs
   let (_ref, syntaxDO) = Backend.typesToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
   lift $ Backend.mkTypeDefinition biasedPPED width ref renderedDocs syntaxDO
