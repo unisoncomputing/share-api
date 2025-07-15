@@ -16,7 +16,7 @@ services:
     volumes:
       - ../sql:/docker-entrypoint-initdb.d
       # Optionally persist the data between container invocations
-      - postgresVolume:/var/lib/postgresql/data
+      # - postgresVolume:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
     command: postgres -c config_file=/etc/postgresql/postgresql.conf # -c log_statement=all
 
@@ -135,5 +135,5 @@ services:
 
       environment:
         - COLLECTOR_OTLP_ENABLED=true
-volumes:
-  postgresVolume:
+# volumes:
+#   postgresVolume:
