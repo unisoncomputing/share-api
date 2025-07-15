@@ -86,10 +86,10 @@ BEGIN
       FROM unnest(names) AS n(reversed_name, suffixified_name);
   ELSE
     RETURN QUERY
-      SELECT (reversed_name || reversed_mount_path) AS reversed_name, suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, reversed_mount_path, ROW(scoped_term_name_lookup.*)) AS suffixified_name
+      SELECT (stnl.reversed_name || reversed_mount_path) AS reversed_name, suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, reversed_mount_path, ROW(stnl.*)) AS suffixified_name
         FROM transitive_dependency_mounts(arg_bh_id)
-          INNER JOIN scoped_term_name_lookup
-            ON scoped_term_name_lookup.root_branch_hash_id = transitive_dependency_mounts.root_branch_hash_id
+          INNER JOIN scoped_term_name_lookup stnl
+            ON stnl.root_branch_hash_id = transitive_dependency_mounts.root_branch_hash_id
       WHERE (
               (arg_referent_builtin IS NULL
                   AND referent_builtin IS NULL
@@ -101,7 +101,7 @@ BEGIN
               ( arg_referent_builtin IS NOT NULL
                 AND referent_builtin = arg_referent_builtin
               )
-            ) AND reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%'
+            ) AND stnl.reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%'
       LIMIT 1;
   END IF;
 END;

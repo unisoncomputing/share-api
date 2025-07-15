@@ -59,20 +59,22 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
         WITH refs(ord, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index) AS (
           SELECT * FROM ^{PG.toTable refsTable}
         )
-        SELECT array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC) AS ref_names
-          FROM refs
-          CROSS JOIN LATERAL
-            term_names_for_ref_within_namespace(
-              #{bhId},
-              #{namespacePrefix},
-              refs.referent_builtin,
-              refs.referent_component_hash_id,
-              refs.referent_component_index,
-              refs.referent_constructor_index,
-              #{reversedNamePrefix}
-            ) AS names(reversed_name, suffixified_name)
-          GROUP BY refs.ord
-          ORDER BY refs.ord ASC
+        SELECT (
+          -- Need COALESCE because array_agg will return NULL rather than the empty array
+          -- if there are no results.
+          SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
+          FROM term_names_for_ref_within_namespace(
+            #{bhId},
+            #{namespacePrefix},
+            refs.referent_builtin,
+            refs.referent_component_hash_id,
+            refs.referent_component_index,
+            refs.referent_constructor_index,
+            #{reversedNamePrefix}
+          ) AS names(reversed_name, suffixified_name)
+        ) AS ref_names
+        FROM refs
+        ORDER BY refs.ord ASC
       |]
   where
     namespacePrefix = toNamespacePrefix namespaceRoot

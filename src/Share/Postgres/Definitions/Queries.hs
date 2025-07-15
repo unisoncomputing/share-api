@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Share.Postgres.Definitions.Queries
   ( loadTerm,
@@ -292,7 +293,7 @@ expectTypeComponent codebase componentRef = do
 
 -- | Batch load terms by ids.
 loadTermsByIdsOf ::
-  (QueryA m) =>
+  (QueryA m, HasCallStack) =>
   UserId ->
   Traversal s t TermId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
   s ->
@@ -343,7 +344,7 @@ expectTermById userId refId termId =
 --           (_termId, Just t) -> Right t
 
 loadTermComponentElementByTermIdsOf ::
-  (QueryA m) =>
+  (QueryA m, HasCallStack) =>
   UserId ->
   Traversal s t TermId (Maybe TermComponentElement) ->
   s ->
@@ -371,7 +372,7 @@ termLocalReferences termId =
     <*> termLocalComponentReferences termId
 
 termLocalReferencesOf ::
-  (QueryA m) =>
+  (QueryA m, HasCallStack) =>
   Traversal s t TermId (Share.LocalIds Text ComponentHash) ->
   s ->
   m t
@@ -392,7 +393,7 @@ termLocalTextReferences termId =
           ORDER BY local_index ASC
       |]
 
-termLocalTextReferencesOf :: (QueryA m) => Traversal s t TermId [Text] -> s -> m t
+termLocalTextReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [Text] -> s -> m t
 termLocalTextReferencesOf trav s = do
   s & unsafePartsOf trav \termIds -> do
     let numberedTermIds = zip [0 :: Int32 ..] termIds
@@ -420,7 +421,7 @@ termLocalComponentReferences termId =
           ORDER BY local_index ASC
       |]
 
-termLocalComponentReferencesOf :: (QueryA m) => Traversal s t TermId [ComponentHash] -> s -> m t
+termLocalComponentReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [ComponentHash] -> s -> m t
 termLocalComponentReferencesOf trav s = do
   s & unsafePartsOf trav \termIds -> do
     let numberedTermIds = zip [0 :: Int32 ..] termIds
@@ -472,7 +473,7 @@ resolveConstructorTypeLocalIds (LocalIds.LocalIds {textLookup, defnLookup}) =
 loadDeclKind :: (PG.QueryA m) => TypeReferenceId -> m (Maybe CT.ConstructorType)
 loadDeclKind = loadDeclKindsOf id
 
-loadDeclKindsOf :: (PG.QueryA m) => Traversal s t TypeReferenceId (Maybe CT.ConstructorType) -> s -> m t
+loadDeclKindsOf :: (PG.QueryA m, HasCallStack) => Traversal s t TypeReferenceId (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
     & unsafePartsOf trav %%~ \refIds -> do
@@ -691,7 +692,7 @@ ensureTextIds = ensureTextIdsOf traversed
 
 -- | Efficiently saves all Text's focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureTextIdsOf :: (QueryM m) => Traversal s t Text TextId -> s -> m t
+ensureTextIdsOf :: (QueryM m, HasCallStack) => Traversal s t Text TextId -> s -> m t
 ensureTextIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \texts -> do
@@ -723,7 +724,7 @@ ensureBytesIds = ensureBytesIdsOf traversed
 
 -- | Efficiently saves all bytestrings focused by the provided traversal into the database and
 -- replaces them with their corresponding Ids.
-ensureBytesIdsOf :: (QueryM m) => Traversal s t BS.ByteString BytesId -> s -> m t
+ensureBytesIdsOf :: (QueryM m, HasCallStack) => Traversal s t BS.ByteString BytesId -> s -> m t
 ensureBytesIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \bytestrings -> do
@@ -750,7 +751,7 @@ ensureBytesIdsOf trav s = do
         else pure results
 
 -- | Efficiently loads Texts for all TextIds focused by the provided traversal.
-expectTextsOf :: (QueryM m) => Traversal s t TextId Text -> s -> m t
+expectTextsOf :: (QueryM m, HasCallStack) => Traversal s t TextId Text -> s -> m t
 expectTextsOf trav =
   unsafePartsOf trav %%~ \textIds -> do
     let numberedTextIds = zip [0 :: Int32 ..] textIds
@@ -1141,7 +1142,7 @@ saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerial
       pure typeIds
 
 -- | Efficiently resolve all pg Ids across selected Local Ids.
-resolveLocalIdsOf :: (QueryM m) => Traversal s t PgLocalIds ResolvedLocalIds -> s -> m t
+resolveLocalIdsOf :: (QueryM m, HasCallStack) => Traversal s t PgLocalIds ResolvedLocalIds -> s -> m t
 resolveLocalIdsOf trav s = do
   s
     & unsafePartsOf trav %%~ \pgLocalIds -> do
