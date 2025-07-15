@@ -1,5 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-
 module Share.Env
   ( Env (..),
   )
