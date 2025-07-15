@@ -9,12 +9,8 @@ module Share.Postgres.Definitions.Queries
     expectTermIdsByRefIdsOf,
     saveTermComponent,
     saveEncodedTermComponent,
-    loadTermComponent,
-    expectTermComponent,
     termTagsByReferentsOf,
     typeTagsByReferencesOf,
-    loadTypeComponent,
-    expectTypeComponent,
     expectShareTermComponent,
     expectShareTypeComponent,
     loadDeclKind,
@@ -105,13 +101,11 @@ type ResolvedLocalIds = LocalIds.LocalIds' Text ComponentHash
 
 type PgLocalIds = LocalIds.LocalIds' TextId ComponentHashId
 
-type ComponentRef = These ComponentHash ComponentHashId
-
 data DefinitionQueryError
   = ExpectedTermNotFound (Either TermId TermReferenceId)
-  | ExpectedTermComponentNotFound ComponentRef
+  | ExpectedTermComponentNotFound ComponentHashId
   | ExpectedTypeNotFound (Either TypeId TypeReferenceId)
-  | ExpectedTypeComponentNotFound ComponentRef
+  | ExpectedTypeComponentNotFound ComponentHashId
   deriving stock (Show)
 
 instance ToServerError DefinitionQueryError where
@@ -169,71 +163,11 @@ expectTermIdsByRefIdsOf trav s =
                 (_refId, Just termId) -> Right termId
           )
 
-expectTermsByRefIdsOf :: (HasCallStack, QueryA m) => UserId -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
+expectTermsByRefIdsOf :: (HasCallStack, QueryM m) => UserId -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
 expectTermsByRefIdsOf codebaseUser trav s = do
   s & asListOf trav \termRefs -> do
     termIds <- expectTermIdsByRefIdsOf traversed termRefs
     expectTermsByIdsOf codebaseUser traversed termIds
-
-resolveComponentHash :: (QueryM m) => ComponentRef -> m (ComponentHash, ComponentHashId)
-resolveComponentHash = \case
-  This componentHash -> do
-    componentHashId <- HashQ.ensureComponentHashId componentHash
-    pure (componentHash, componentHashId)
-  That componentHashId -> do
-    componentHash <- HashQ.expectComponentHash componentHashId
-    pure (componentHash, componentHashId)
-  These componentHash componentHashId -> do
-    pure (componentHash, componentHashId)
-
-loadTermComponent :: (QueryM m) => CodebaseEnv -> ComponentRef -> m (Maybe (NonEmpty (V2.Term Symbol, V2.Type Symbol)))
-loadTermComponent (CodebaseEnv {codebaseOwner}) componentRef = runMaybeT $ do
-  (componentHash, componentHashId) <- lift $ resolveComponentHash componentRef
-  componentIndexes <- MaybeT $ termComponentIndexes componentHashId
-  componentElements <- for componentIndexes \compIndex -> do
-    MaybeT $ loadTerm codebaseOwner (Reference.Id (unComponentHash componentHash) compIndex)
-  pure componentElements
-
-loadTypeComponent :: (QueryM m) => CodebaseEnv -> ComponentRef -> m (Maybe (NonEmpty (V2Decl.Decl Symbol)))
-loadTypeComponent (CodebaseEnv {codebaseOwner}) componentRef = runMaybeT $ do
-  (componentHash, componentHashId) <- lift $ resolveComponentHash componentRef
-  componentIndexes <- MaybeT $ typeComponentIndexes componentHashId
-  componentElements <- for componentIndexes \compIndex -> do
-    MaybeT $ loadDecl codebaseOwner (Reference.Id (unComponentHash componentHash) compIndex)
-  pure componentElements
-
-termComponentIndexes :: (QueryM m) => ComponentHashId -> m (Maybe (NonEmpty V2Reference.Pos))
-termComponentIndexes componentHashId = do
-  queryListCol
-    [sql|
-    SELECT component_index from terms term
-      WHERE term.component_hash_id = #{componentHashId}
-    ORDER BY component_index ASC
-   |]
-    <&> fmap unPgComponentIndex
-    <&> NonEmpty.nonEmpty
-
-typeComponentIndexes :: (QueryM m) => ComponentHashId -> m (Maybe (NonEmpty V2Reference.Pos))
-typeComponentIndexes componentHashId = do
-  queryListCol
-    [sql|
-    SELECT component_index from types typ
-      WHERE typ.component_hash_id = #{componentHashId}
-    ORDER BY component_index ASC
-   |]
-    <&> fmap unPgComponentIndex
-    <&> NonEmpty.nonEmpty
-
-expectTermComponent ::
-  (QueryM m) =>
-  CodebaseEnv ->
-  These ComponentHash ComponentHashId ->
-  m (NonEmpty (V2.Term Symbol, V2.Type Symbol))
-expectTermComponent codebase componentRef = do
-  mayComponent <- loadTermComponent codebase componentRef
-  case mayComponent of
-    Just component -> pure component
-    Nothing -> unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentRef)
 
 -- | Helper for loading term components efficiently for sync.
 expectShareTermComponent :: (QueryM m) => CodebaseEnv -> ComponentHashId -> m (Share.TermComponent Text Hash32)
@@ -253,7 +187,7 @@ expectShareTermComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
         <&> checkElements
       )
       `whenNothingM` do
-        unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound (That componentHashId))
+        unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentHashId)
   second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) ->
     (,bytes) <$> termLocalReferences termId
   where
@@ -280,7 +214,7 @@ expectShareTypeComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
         <&> checkElements
       )
       `whenNothingM` do
-        unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound (That componentHashId))
+        unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentHashId)
   second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList <$> for componentElements \(typeId, LocalTypeBytes bytes) ->
     (,bytes) <$> typeLocalReferences typeId
   where
@@ -288,13 +222,6 @@ expectShareTypeComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
     checkElements rows =
       sequenceAOf (traversed . _2) rows
         >>= NonEmpty.nonEmpty
-
-expectTypeComponent :: (QueryM m) => CodebaseEnv -> ComponentRef -> m (NonEmpty (V2Decl.Decl Symbol))
-expectTypeComponent codebase componentRef = do
-  mayComponent <- loadTypeComponent codebase componentRef
-  case mayComponent of
-    Just component -> pure component
-    Nothing -> unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentRef)
 
 -- | Batch load terms by ids.
 loadTermsByIdsOf ::
@@ -322,7 +249,7 @@ loadTermsByIdsOf codebaseUser trav s = do
 
 -- | Load a batch of terms by their RefIds.
 loadTermsByRefIdsOf ::
-  (QueryA m, HasCallStack) =>
+  (QueryM m, HasCallStack) =>
   UserId ->
   Traversal s t TermReferenceId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
   s ->
@@ -840,7 +767,7 @@ saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash comp
     -- Ensure there's a row for this eval result, returning whether it already exists.
     ensureEvalResult :: m (Bool, EvalResultId)
     ensureEvalResult = do
-      resultHashId <- HashQ.ensureComponentHashId (ComponentHash resultHash)
+      resultHashId <- HashQ.ensureComponentHashIdsOf id (ComponentHash resultHash)
       let compIndex = pgComponentIndex compI
       queryExpect1Row @(Bool, EvalResultId)
         [sql|
@@ -872,7 +799,7 @@ saveTermComponent codebase componentHash elements = do
 -- 'saveTermComponent' in cases where you've already got a serialized term (like during sync).
 saveEncodedTermComponent :: forall m. (QueryM m) => CodebaseEnv -> ComponentHash -> Maybe TempEntity -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> m ()
 saveEncodedTermComponent codebase@(CodebaseEnv {codebaseOwner}) componentHash maySerialized elements = do
-  componentHashId <- HashQ.ensureComponentHashId componentHash
+  componentHashId <- HashQ.ensureComponentHashIdsOf id componentHash
   let elementsTable = elements & imap \i _ -> pgComponentIndex $ fromIntegral @Int i
   mayTermIds :: Maybe (NE.NonEmpty TermId) <-
     queryListCol
@@ -996,7 +923,7 @@ saveEncodedTermComponent codebase@(CodebaseEnv {codebaseOwner}) componentHash ma
 
 saveTypeComponent :: forall m. (QueryM m) => CodebaseEnv -> ComponentHash -> Maybe TempEntity -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> m ()
 saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerialized elements = do
-  componentHashId <- HashQ.ensureComponentHashId componentHash
+  componentHashId <- HashQ.ensureComponentHashIdsOf id componentHash
   let elementsTable = elements & imap \i _ -> fromIntegral @Int @Int32 i
   mayTypeIds :: Maybe (NE.NonEmpty TypeId) <-
     queryListCol

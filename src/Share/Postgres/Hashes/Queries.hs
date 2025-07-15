@@ -11,12 +11,10 @@
 -- it's assumed the caller has already validated that they have access to the Causal and by
 -- extension all branches, definitions, patches, and metadata contained inside.
 module Share.Postgres.Hashes.Queries
-  ( ensureComponentHashId,
-    ensureComponentHashIdsOf,
+  ( ensureComponentHashIdsOf,
     expectComponentHashIdsOf,
     expectComponentHashesOf,
     expectComponentHashId,
-    expectComponentHash,
     componentHashIdsOf,
     expectPatchHashesOf,
     expectPatchIdsOf,
@@ -47,10 +45,6 @@ import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.Postgres (ordered)
 import Share.Web.Errors (EntityMissing (EntityMissing), MissingExpectedEntity (..))
-
--- | Save a component hash, or return the existing hash id if it already exists
-ensureComponentHashId :: (HasCallStack, QueryM m) => ComponentHash -> m ComponentHashId
-ensureComponentHashId componentHash = ensureComponentHashIdsOf id componentHash
 
 -- | Get the matching hashId for every component hash, saving any that are missing.
 -- Maintains the invariant that the returned list matches the positions of the input list.
@@ -115,9 +109,6 @@ expectComponentHashesOf trav = do
       SELECT base32 FROM component_hashes JOIN hash_ids ON component_hashes.id = hash_ids.id
         ORDER BY hash_ids.ord ASC
       |]
-
-expectComponentHash :: (HasCallStack, QueryM m) => ComponentHashId -> m ComponentHash
-expectComponentHash hashId = queryExpect1Col [sql|SELECT base32 FROM component_hashes WHERE id = #{hashId}|]
 
 expectPatchHashesOf :: (HasCallStack, QueryA m) => Traversal s t PatchId PatchHash -> s -> m t
 expectPatchHashesOf trav = do
