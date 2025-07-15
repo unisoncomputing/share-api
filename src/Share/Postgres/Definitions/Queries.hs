@@ -592,8 +592,8 @@ constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
 --
 -- This is intentionally not in CodebaseM because this method is used to build the
 -- CodebaseEnv.
-loadCachedEvalResult :: (QueryM m) => UserId -> Reference.Id -> m (Maybe (V2.Term Symbol))
-loadCachedEvalResult codebaseOwner (Reference.Id hash compIndex) = runMaybeT do
+loadCachedEvalResult :: (QueryM m) => CodebaseEnv -> Reference.Id -> m (Maybe (V2.Term Symbol))
+loadCachedEvalResult CodebaseEnv {codebaseOwner} (Reference.Id hash compIndex) = runMaybeT do
   let compIndex' = pgComponentIndex compIndex
   (evalResultId :: EvalResultId, EvalResultTerm term) <-
     MaybeT $
@@ -779,7 +779,7 @@ saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash comp
     -- Ensure there's a row for this eval result, returning whether it already exists.
     ensureEvalResult :: m (Bool, EvalResultId)
     ensureEvalResult = do
-      resultHashId <- HashQ.ensureComponentHashId (ComponentHash resultHash)
+      resultHashId <- HashQ.ensureComponentHashIdsOf id (ComponentHash resultHash)
       let compIndex = pgComponentIndex compI
       queryExpect1Row @(Bool, EvalResultId)
         [sql|
@@ -811,7 +811,7 @@ saveTermComponent codebase componentHash elements = do
 -- 'saveTermComponent' in cases where you've already got a serialized term (like during sync).
 saveEncodedTermComponent :: forall m. (QueryM m) => CodebaseEnv -> ComponentHash -> Maybe TempEntity -> [(PgLocalIds, TermComponentElementBytes, TermFormat.Type)] -> m ()
 saveEncodedTermComponent codebase@(CodebaseEnv {codebaseOwner}) componentHash maySerialized elements = do
-  componentHashId <- HashQ.ensureComponentHashId componentHash
+  componentHashId <- HashQ.ensureComponentHashIdsOf id componentHash
   let elementsTable = elements & imap \i _ -> pgComponentIndex $ fromIntegral @Int i
   mayTermIds :: Maybe (NE.NonEmpty TermId) <-
     queryListCol
@@ -935,7 +935,7 @@ saveEncodedTermComponent codebase@(CodebaseEnv {codebaseOwner}) componentHash ma
 
 saveTypeComponent :: forall m. (QueryM m) => CodebaseEnv -> ComponentHash -> Maybe TempEntity -> [(PgLocalIds, DeclFormat.Decl Symbol)] -> m ()
 saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerialized elements = do
-  componentHashId <- HashQ.ensureComponentHashId componentHash
+  componentHashId <- HashQ.ensureComponentHashIdsOf id componentHash
   let elementsTable = elements & imap \i _ -> fromIntegral @Int @Int32 i
   mayTypeIds :: Maybe (NE.NonEmpty TypeId) <-
     queryListCol
@@ -977,7 +977,7 @@ saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerial
       componentEntity <- case maySerialized of
         Just serialized -> pure serialized
         Nothing -> do
-          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponent codebase chId
+          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponentsOf codebase id chId
       let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
       saveSerializedComponent codebase chId serializedEntity
 
@@ -1230,11 +1230,11 @@ saveSerializedComponent (CodebaseEnv {codebaseOwner}) chId (CBORBytes bytes) = d
       ON CONFLICT DO NOTHING
     |]
 
-expectedTermError :: TermReferenceId -> InternalServerError DefinitionQueryError
+expectedTermError :: Either TermId TermReferenceId -> InternalServerError DefinitionQueryError
 expectedTermError refId =
   InternalServerError "expected-term" (ExpectedTermNotFound refId)
 
-expectedTypeError :: TypeReferenceId -> InternalServerError DefinitionQueryError
+expectedTypeError :: Either TypeId TypeReferenceId -> InternalServerError DefinitionQueryError
 expectedTypeError refId =
   InternalServerError "expected-type" (ExpectedTypeNotFound refId)
 
