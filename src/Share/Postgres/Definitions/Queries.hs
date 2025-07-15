@@ -163,11 +163,11 @@ expectTermIdsByRefIdsOf trav s =
                 (_refId, Just termId) -> Right termId
           )
 
-expectTermsByRefIdsOf :: (HasCallStack, QueryM m) => UserId -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
-expectTermsByRefIdsOf codebaseUser trav s = do
+expectTermsByRefIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
+expectTermsByRefIdsOf codebase trav s = do
   s & asListOf trav \termRefs -> do
     termIds <- expectTermIdsByRefIdsOf traversed termRefs
-    expectTermsByIdsOf codebaseUser traversed termIds
+    expectTermsByIdsOf codebase traversed termIds
 
 -- | Helper for loading term components efficiently for sync.
 expectShareTermComponent :: (QueryM m) => CodebaseEnv -> ComponentHashId -> m (Share.TermComponent Text Hash32)
@@ -226,14 +226,14 @@ expectShareTypeComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
 -- | Batch load terms by ids.
 loadTermsByIdsOf ::
   (QueryA m, HasCallStack) =>
-  UserId ->
+  CodebaseEnv ->
   Traversal s t TermId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
   s ->
   m t
-loadTermsByIdsOf codebaseUser trav s = do
+loadTermsByIdsOf codebase trav s = do
   s & asListOf trav \termIds -> do
     zipWith combine
-      <$> (loadTermComponentElementByTermIdsOf codebaseUser traversed termIds)
+      <$> (loadTermComponentElementByTermIdsOf codebase traversed termIds)
       <*> (termLocalReferencesOf traversed termIds)
   where
     combine maybeTermComponentElement (Share.LocalIds {texts, hashes}) =
@@ -250,21 +250,21 @@ loadTermsByIdsOf codebaseUser trav s = do
 -- | Load a batch of terms by their RefIds.
 loadTermsByRefIdsOf ::
   (QueryM m, HasCallStack) =>
-  UserId ->
+  CodebaseEnv ->
   Traversal s t TermReferenceId (Maybe (V2.Term Symbol, V2.Type Symbol)) ->
   s ->
   m t
-loadTermsByRefIdsOf codebaseUser trav s = do
+loadTermsByRefIdsOf codebase trav s = do
   s & asListOf trav \termRefs -> do
     termIds <- loadTermIdsByRefIdsOf traversed termRefs
-    terms <- loadTermsByIdsOf codebaseUser (traversed . _Just) termIds
+    terms <- loadTermsByIdsOf codebase (traversed . _Just) termIds
     -- Flatten the nested maybes.
     pure $ fmap join terms
 
-expectTermsByIdsOf :: (QueryA m) => UserId -> Traversal s t TermId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
-expectTermsByIdsOf userId trav s = do
+expectTermsByIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TermId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
+expectTermsByIdsOf codebase trav s = do
   s & asListOf trav \termIds -> do
-    loadTermsByIdsOf userId traversed termIds
+    loadTermsByIdsOf codebase traversed termIds
       & unrecoverableEitherMap \results ->
         for (zip termIds results) \case
           (termId, Nothing) -> Left (expectedTermError (Left termId))
@@ -272,11 +272,11 @@ expectTermsByIdsOf userId trav s = do
 
 loadTermComponentElementByTermIdsOf ::
   (QueryA m, HasCallStack) =>
-  UserId ->
+  CodebaseEnv ->
   Traversal s t TermId (Maybe TermComponentElement) ->
   s ->
   m t
-loadTermComponentElementByTermIdsOf codebaseUser trav s = do
+loadTermComponentElementByTermIdsOf CodebaseEnv {codebaseOwner} trav s = do
   s & asListOf trav \termIds -> do
     let numberedTermIds = zip [0 :: Int32 ..] termIds
     queryListCol
@@ -288,7 +288,7 @@ loadTermComponentElementByTermIdsOf codebaseUser trav s = do
           FROM term_ids
             LEFT JOIN sandboxed_terms sandboxed ON sandboxed.term_id = term_ids.term_id
             LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
-          WHERE sandboxed.user_id = #{codebaseUser}
+          WHERE sandboxed.user_id = #{codebaseOwner}
           ORDER BY term_ids.ord ASC
       |]
 
