@@ -32,7 +32,7 @@ references1ToPGOf :: (PG.QueryA m) => Traversal s t V1.Reference (Maybe PGRefere
 references1ToPGOf trav s =
   s
     -- This is safe here because we always return the same number of elements as we're given
-    & unsafePartsOf trav %%~ \ref1s -> do
+    & asListOf trav %%~ \ref1s -> do
       let ref2s = map Cv.reference1to2 ref1s
       references2ToPGOf traversed ref2s
 
@@ -40,14 +40,14 @@ references2ToPGOf :: (PG.QueryA m) => Traversal s t V2.Reference (Maybe PGRefere
 references2ToPGOf trav s =
   s
     -- This is safe here because we always return the same number of elements as we're given
-    & unsafePartsOf trav %%~ \ref2s -> do
+    & asListOf trav %%~ \ref2s -> do
       fmap (sequenceAOf (V2.h_)) <$> Hashes.componentHashIdsOf (traversed . V2.h_ . componentHashAsUHash_) ref2s
 
 referents1ToPGOf :: (PG.QueryA m) => Traversal s t V1.Referent (Maybe PGReferent) -> s -> m t
 referents1ToPGOf trav s =
   s
     -- This is safe here because we always return the same number of elements as we're given
-    & unsafePartsOf trav %%~ \ref1s -> do
+    & asListOf trav %%~ \ref1s -> do
       let ref2s = map Cv.referent1to2 ref1s
       referents2ToPGOf traversed ref2s
 
@@ -55,7 +55,7 @@ referents2ToPGOf :: (PG.QueryA m) => Traversal s t V2.Referent (Maybe PGReferent
 referents2ToPGOf trav s =
   s
     -- This is safe here because we always return the same number of elements as we're given
-    & unsafePartsOf trav %%~ \ref2s -> do
+    & asListOf trav %%~ \ref2s -> do
       -- We traverse the hashes on both the referents and references at once, then convert them
       -- all to ComponentHashIDs in a single batch.
       fmap (sequenceAOf (V2.refs_ . V2.h_)) <$> Hashes.componentHashIdsOf (traversed . V2.refs_ . V2.h_ . componentHashAsUHash_) ref2s
@@ -70,13 +70,13 @@ referencesPGTo2Of :: (PG.QueryA m) => Traversal s t PGReference V2.Reference -> 
 referencesPGTo2Of trav s =
   s
     -- This is safe here because we always return the same number of elements as we are given
-    & unsafePartsOf (trav . V2.h_) %%~ fmap coerce . Hashes.expectComponentHashesOf traversed
+    & asListOf (trav . V2.h_) %%~ fmap coerce . Hashes.expectComponentHashesOf traversed
 
 referentsPGTo1UsingCTOf :: (PG.QueryA m, HasCallStack) => Traversal s t (PGReferent, Maybe V2.ConstructorType) V1.Referent -> s -> m t
 referentsPGTo1UsingCTOf trav s =
   s
     -- This is safe here because we always return the same number of elements as we are given
-    & unsafePartsOf trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       (Hashes.expectComponentHashesOf (traversed . _1 . V2.refs_ . V2.h_ . uHashAsComponentHash_) refs)
         <&> fmap \(ref', mayCT) -> (Cv.referent2to1UsingCT (fromMaybe (error "referentsPGTo1UsingCT: missing Constructor Type") mayCT) ref')
 
@@ -84,7 +84,7 @@ referentsPGTo2Of :: (PG.QueryA m) => Traversal s t PGReferent V2.Referent -> s -
 referentsPGTo2Of trav s =
   s
     -- This is safe here because we always return the same number of elements as we are given
-    & unsafePartsOf (trav . V2.refs_ . V2.h_) %%~ (fmap coerce . Hashes.expectComponentHashesOf traversed)
+    & asListOf (trav . V2.refs_ . V2.h_) %%~ (fmap coerce . Hashes.expectComponentHashesOf traversed)
 
 -- | This is similar to `labeledDependencies1ToPG`, but it filters out refs for components
 -- which don't exist on Share, e.g. generated accessors.
@@ -97,7 +97,7 @@ labeledDependencies1ToPG refs =
     -- This is safe here because we always return the same number of elements as we're given
     -- We traverse the hashes on both the referents and references at once, then convert them
     -- all to ComponentHashIDs in a single batch.
-    & unsafePartsOf (traversed . beside (_2 . V2.refs_) (_2) . V2.h_) %%~ (Hashes.componentHashIdsOf traversed . fmap ComponentHash)
+    & asListOf (traversed . beside (_2 . V2.refs_) (_2) . V2.h_) %%~ (Hashes.componentHashIdsOf traversed . fmap ComponentHash)
     <&> fmap (sequenceOf (beside (_2 . V2.refs_) _2 . V2.h_))
 
 -- | Helper iso for coercing between ComponentHash and UHash.Hash

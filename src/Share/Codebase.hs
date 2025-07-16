@@ -276,7 +276,7 @@ expectDeclKind r = loadDeclKind r `whenNothingM` unrecoverableError (DefnQ.missi
 expectDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
 expectDeclKindsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       results <- loadDeclKindsOf traversed refs
       for (zip refs results) \case
         (r, Nothing) -> unrecoverableError (DefnQ.missingDeclKindError r)
@@ -288,7 +288,7 @@ loadDeclKind = loadDeclKindsOf id
 loadDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
-    & unsafePartsOf trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       xs <-
         refs
           & ( fmap \case

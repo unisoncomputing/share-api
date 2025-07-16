@@ -10,14 +10,14 @@ import Share.Web.Share.Orgs.Queries qualified as OrgsQ
 
 userLikeDisplayInfoOf :: Traversal s t UserLikeIds UnifiedDisplayInfo -> s -> Transaction e t
 userLikeDisplayInfoOf trav s = do
-  s & unsafePartsOf trav \userLikeIds -> do
+  s & asListOf trav \userLikeIds -> do
     withUsers <- userLikeIds & UsersQ.userDisplayInfoOf (traversed . unifiedUser_)
     withOrgs <- withUsers & OrgsQ.orgDisplayInfoOf (traversed . unifiedOrg_)
     pure withOrgs
 
 unifiedDisplayInfoForUserOf :: Traversal s t UserId UnifiedDisplayInfo -> s -> Transaction e t
 unifiedDisplayInfoForUserOf trav s = do
-  s & unsafePartsOf trav \userLikeIds -> do
+  s & asListOf trav \userLikeIds -> do
     userLikes <-
       UserQ.joinOrgIdsToUserIdsOf traversed userLikeIds
         <&> fmap \case

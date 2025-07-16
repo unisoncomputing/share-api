@@ -57,7 +57,7 @@ import Share.Web.Share.Types (PlanTier (..), UserSearchKind (UserSearchKindDefau
 userDisplayInfoOf :: (PG.QueryA m) => Traversal s t UserId UserDisplayInfo -> s -> m t
 userDisplayInfoOf trav s = do
   s
-    & unsafePartsOf trav %%~ \userIds -> do
+    & asListOf trav %%~ \userIds -> do
       let usersTable = zip [0 :: Int32 ..] userIds
       PG.queryListRows @(UserHandle, Maybe Text, Maybe URIParam, UserId)
         [PG.sql|
@@ -86,7 +86,7 @@ userDisplayInfoOf trav s = do
 userIdsByHandlesOf :: (PG.QueryA m) => Traversal s t UserHandle UserId -> s -> m t
 userIdsByHandlesOf trav s = do
   s
-    & unsafePartsOf trav %%~ \userHandles -> do
+    & asListOf trav %%~ \userHandles -> do
       let usersTable = zip [0 :: Int32 ..] userHandles
       PG.queryListCol @(UserId)
         [PG.sql|
@@ -301,7 +301,7 @@ searchUsersByNameOrHandlePrefix (Query prefix) usk (Limit limit) = do
 joinOrgIdsToUserIdsOf :: Traversal s t UserId (UserId, Maybe OrgId) -> s -> PG.Transaction e t
 joinOrgIdsToUserIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \userIds -> do
+    & asListOf trav %%~ \userIds -> do
       let usersTable = zip [0 :: Int32 ..] userIds
       PG.queryListRows @(UserId, Maybe OrgId)
         [PG.sql|

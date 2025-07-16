@@ -21,7 +21,7 @@ import Share.Web.Share.Releases.Types (StatusUpdate (..))
 expectReleaseVersionsOf :: Traversal s t ReleaseId ReleaseVersion -> s -> Transaction e t
 expectReleaseVersionsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \releaseIds -> do
+    & asListOf trav %%~ \releaseIds -> do
       let numberedReleaseIds = zip [1 :: Int32 ..] releaseIds
       results :: [ReleaseVersion] <-
         queryListRows @ReleaseVersion

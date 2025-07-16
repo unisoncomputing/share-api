@@ -52,7 +52,7 @@ data ShouldSuffixify = Suffixify | NoSuffixify
 termNamesForRefsWithinNamespaceOf ::
   (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
 termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
-  s & unsafePartsOf trav \refs -> do
+  s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64)]
         refsTable =
           zip [0 :: Int32 ..] refs <&> \(ord, ref) ->
@@ -96,7 +96,7 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
 -- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
 typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
 typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
-  s & unsafePartsOf trav \refs -> do
+  s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64)]
         refsTable =
           zip [0 :: Int32 ..] refs <&> \(ord, ref) ->

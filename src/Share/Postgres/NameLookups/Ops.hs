@@ -147,7 +147,7 @@ fuzzySearchDefinitions includeDependencies NamesPerspective {nameLookupBranchHas
 termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
 termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix shouldSuffixify trav s = do
   s
-    & unsafePartsOf trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       NameLookupQ.termNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix shouldSuffixify traversed refs
         <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
           ( prefixReversedName pathToMountedNameLookup reversedName,
@@ -159,7 +159,7 @@ termNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, path
 typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [(ReversedName, ReversedName)] -> s -> m t
 typeNamesForRefsWithinNamespaceOf NamesPerspective {nameLookupBranchHashId, pathToMountedNameLookup, nameLookupReceipt} maySuffix shouldSuffixify trav s = do
   s
-    & unsafePartsOf trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       NameLookupQ.typeNamesForRefsWithinNamespaceOf nameLookupReceipt nameLookupBranchHashId mempty maySuffix shouldSuffixify traversed refs
         <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) ->
           ( prefixReversedName pathToMountedNameLookup reversedName,

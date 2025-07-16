@@ -58,7 +58,7 @@ ensureComponentHashId componentHash = ensureComponentHashIdsOf id componentHash
 ensureComponentHashIdsOf :: forall m s t. (QueryA m, HasCallStack) => Traversal s t ComponentHash ComponentHashId -> s -> m t
 ensureComponentHashIdsOf trav s =
   s
-    & unsafePartsOf trav %%~ \componentHashes ->
+    & asListOf trav %%~ \componentHashes ->
       do
         let numberedHashIds = zip [1 :: Int32 ..] componentHashes
         queryListCol @ComponentHashId
@@ -91,7 +91,7 @@ expectComponentHashIdsOf trav s = do
 componentHashIdsOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHash (Maybe ComponentHashId) -> s -> m t
 componentHashIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \componentHashes -> do
+    & asListOf trav %%~ \componentHashes -> do
       let numberedHashes = zip [1 :: Int32 ..] componentHashes
       queryListCol @(Maybe ComponentHashId)
         [sql|
@@ -113,7 +113,7 @@ expectComponentHashId componentHash = do
 
 expectComponentHashesOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHashId ComponentHash -> s -> m t
 expectComponentHashesOf trav = do
-  unsafePartsOf trav %%~ \hashIds ->
+  asListOf trav %%~ \hashIds ->
     do
       let numberedHashIds = zip [0 :: Int32 ..] hashIds
       queryListCol
@@ -134,7 +134,7 @@ expectComponentHash hashId = queryExpect1Col [sql|SELECT base32 FROM component_h
 
 expectPatchHashesOf :: (HasCallStack, QueryM m) => Traversal s t PatchId PatchHash -> s -> m t
 expectPatchHashesOf trav = do
-  unsafePartsOf trav %%~ \hashIds -> do
+  asListOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
     results :: [PatchHash] <-
       queryListCol
@@ -151,7 +151,7 @@ expectPatchHashesOf trav = do
 
 expectPatchIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t PatchHash PatchId -> s -> m t
 expectPatchIdsOf (CodebaseEnv {codebaseOwner}) trav = do
-  unsafePartsOf trav %%~ \hashes -> do
+  asListOf trav %%~ \hashes -> do
     let numberedHashes = zip [0 :: Int32 ..] hashes
     results :: [PatchId] <-
       queryListCol
@@ -245,7 +245,7 @@ addKnownCausalHashMismatch providedHash actualHash = do
 -- | Generic helper which fetches both branch hashes and causal hashes
 expectCausalHashesOfG :: (HasCallStack, QueryA m) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
 expectCausalHashesOfG project trav = do
-  unsafePartsOf trav %%~ \hashIds -> do
+  asListOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
     (\results -> if length results /= length hashIds then error "expectCausalHashesOf: Missing expected causal hash" else (project <$> results))
       <$> queryListRows
@@ -268,7 +268,7 @@ expectCausalHashesByIdsOf = expectCausalHashesOfG snd
 
 expectCausalIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t CausalHash (BranchHashId, CausalId) -> s -> m t
 expectCausalIdsOf (CodebaseEnv {codebaseOwner}) trav = do
-  unsafePartsOf trav %%~ \hashes -> do
+  asListOf trav %%~ \hashes -> do
     let numberedHashes = zip [0 :: Int32 ..] hashes
     results :: [(BranchHashId, CausalId)] <-
       queryListRows
@@ -294,7 +294,7 @@ expectCausalIdsOf (CodebaseEnv {codebaseOwner}) trav = do
 expectNamespaceIdsByCausalIdsOf :: (QueryM m) => Traversal s t CausalId BranchHashId -> s -> m t
 expectNamespaceIdsByCausalIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \causalIds -> do
+    & asListOf trav %%~ \causalIds -> do
       let causalIdsTable = ordered causalIds
       results <-
         queryListCol @(BranchHashId)
@@ -313,7 +313,7 @@ expectNamespaceIdsByCausalIdsOf trav s = do
 expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t BranchHashId BranchHash -> s -> m t
 expectNamespaceHashesByNamespaceHashIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \namespaceHashIds -> do
+    & asListOf trav %%~ \namespaceHashIds -> do
       let namespaceHashIdsTable = ordered namespaceHashIds
       results <-
         queryListCol @(BranchHash)

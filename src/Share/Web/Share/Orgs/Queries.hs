@@ -48,7 +48,7 @@ orgByUserHandle orgHandle = do
 orgsByIdsOf :: (QueryA m) => Traversal s t OrgId Org -> s -> m t
 orgsByIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \orgIds -> do
+    & asListOf trav %%~ \orgIds -> do
       let orgTable = zip [0 :: Int32 ..] orgIds
       queryListRows
         [sql|
@@ -64,7 +64,7 @@ orgsByIdsOf trav s = do
 orgDisplayInfoOf :: (QueryA m) => Traversal s t OrgId OrgDisplayInfo -> s -> m t
 orgDisplayInfoOf trav s = do
   s
-    & unsafePartsOf trav %%~ \orgIds -> do
+    & asListOf trav %%~ \orgIds -> do
       userDisplayInfos <- userDisplayInfoByOrgIdOf traversed orgIds
       orgs <- orgsByIdsOf traversed orgIds
       pure $ zipWith (\(Org {orgId, isCommercial}) userDisplayInfo -> OrgDisplayInfo {orgId, user = userDisplayInfo, isCommercial}) orgs userDisplayInfos
@@ -72,7 +72,7 @@ orgDisplayInfoOf trav s = do
 userDisplayInfoByOrgIdOf :: (QueryA m) => Traversal s t OrgId UserDisplayInfo -> s -> m t
 userDisplayInfoByOrgIdOf trav s = do
   s
-    & unsafePartsOf trav %%~ \orgIds ->
+    & asListOf trav %%~ \orgIds ->
       do
         let orgTable = zip [0 :: Int32 ..] orgIds
         queryListRows

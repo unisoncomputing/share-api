@@ -299,7 +299,7 @@ loadTermsByIdsOf ::
   s ->
   m t
 loadTermsByIdsOf codebaseUser trav s = do
-  s & unsafePartsOf trav \termIds -> do
+  s & asListOf trav \termIds -> do
     zipWith combine
       <$> (loadTermComponentElementByTermIdsOf codebaseUser traversed termIds)
       <*> (termLocalReferencesOf traversed termIds)
@@ -336,7 +336,7 @@ expectTermById userId refId termId =
 --   s ->
 --   m t
 -- expectTermsByIdsOf codebaseUser trav s = do
---   s & unsafePartsOf trav \termIds -> do
+--   s & asListOf trav \termIds -> do
 --     loadTermsByIdsOf codebaseUser traversed termIds
 --       & unrecoverableEitherMap \results ->
 --         for (zip termIds results) \case
@@ -350,7 +350,7 @@ loadTermComponentElementByTermIdsOf ::
   s ->
   m t
 loadTermComponentElementByTermIdsOf codebaseUser trav s = do
-  s & unsafePartsOf trav \termIds -> do
+  s & asListOf trav \termIds -> do
     let numberedTermIds = zip [0 :: Int32 ..] termIds
     queryListCol
       [sql|
@@ -377,7 +377,7 @@ termLocalReferencesOf ::
   s ->
   m t
 termLocalReferencesOf trav s = do
-  s & unsafePartsOf trav \termIds -> do
+  s & asListOf trav \termIds -> do
     zipWith Share.LocalIds
       <$> termLocalTextReferencesOf traversed termIds
       <*> termLocalComponentReferencesOf traversed termIds
@@ -395,7 +395,7 @@ termLocalTextReferences termId =
 
 termLocalTextReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [Text] -> s -> m t
 termLocalTextReferencesOf trav s = do
-  s & unsafePartsOf trav \termIds -> do
+  s & asListOf trav \termIds -> do
     let numberedTermIds = zip [0 :: Int32 ..] termIds
     queryListCol @[Text]
       [sql|
@@ -423,7 +423,7 @@ termLocalComponentReferences termId =
 
 termLocalComponentReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [ComponentHash] -> s -> m t
 termLocalComponentReferencesOf trav s = do
-  s & unsafePartsOf trav \termIds -> do
+  s & asListOf trav \termIds -> do
     let numberedTermIds = zip [0 :: Int32 ..] termIds
     queryListCol @[ComponentHash]
       [sql|
@@ -476,7 +476,7 @@ loadDeclKind = loadDeclKindsOf id
 loadDeclKindsOf :: (PG.QueryA m, HasCallStack) => Traversal s t TypeReferenceId (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
-    & unsafePartsOf trav %%~ \refIds -> do
+    & asListOf trav %%~ \refIds -> do
       let refTable :: [(OrdBy, Hash, PgComponentIndex)]
           refTable =
             refIds & imap \i (Reference.Id compHash (compIndex)) -> (into @OrdBy i, compHash, pgComponentIndex compIndex)
@@ -695,7 +695,7 @@ ensureTextIds = ensureTextIdsOf traversed
 ensureTextIdsOf :: (QueryM m, HasCallStack) => Traversal s t Text TextId -> s -> m t
 ensureTextIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \texts -> do
+    & asListOf trav %%~ \texts -> do
       let numberedTexts = zip [1 :: Int32 ..] texts
       results <-
         queryListCol @(TextId)
@@ -727,7 +727,7 @@ ensureBytesIds = ensureBytesIdsOf traversed
 ensureBytesIdsOf :: (QueryM m, HasCallStack) => Traversal s t BS.ByteString BytesId -> s -> m t
 ensureBytesIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \bytestrings -> do
+    & asListOf trav %%~ \bytestrings -> do
       let numberedBytestrings = zip [1 :: Int32 ..] (RawBytes <$> bytestrings)
       results <-
         queryListCol @(BytesId)
@@ -753,7 +753,7 @@ ensureBytesIdsOf trav s = do
 -- | Efficiently loads Texts for all TextIds focused by the provided traversal.
 expectTextsOf :: (QueryM m, HasCallStack) => Traversal s t TextId Text -> s -> m t
 expectTextsOf trav =
-  unsafePartsOf trav %%~ \textIds -> do
+  asListOf trav %%~ \textIds -> do
     let numberedTextIds = zip [0 :: Int32 ..] textIds
     results :: [Text] <-
       queryListCol
@@ -1145,7 +1145,7 @@ saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerial
 resolveLocalIdsOf :: (QueryM m, HasCallStack) => Traversal s t PgLocalIds ResolvedLocalIds -> s -> m t
 resolveLocalIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \pgLocalIds -> do
+    & asListOf trav %%~ \pgLocalIds -> do
       expectTextsOf (traversed . LocalIds.t_) pgLocalIds
         >>= HashQ.expectComponentHashesOf (traversed . LocalIds.h_)
 
@@ -1153,7 +1153,7 @@ resolveLocalIdsOf trav s = do
 termTagsByReferentsOf :: (HasCallStack) => Traversal s t Referent.Referent Tags.TermTag -> s -> Transaction e t
 termTagsByReferentsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       let partitionedRefs :: [Either Tags.TermTag (ComponentHash, PgComponentIndex, Maybe PgConstructorIndex)]
           partitionedRefs =
             refs <&> \case
@@ -1166,7 +1166,7 @@ termTagsByReferentsOf trav s = do
               Referent.Con (Reference.Builtin t) conId -> error $ "Encountered a constructor for a builtin type, which shouldn't be possible: " <> show (t, conId)
       -- We only need to look up the tags for the derived references from the DB
       partitionedRefs
-        & unsafePartsOf (traversed . _Right)
+        & asListOf (traversed . _Right)
           %%~ ( \refs -> do
                   let refsTable = refs & imap \i (hash, compInd, conInd) -> (into @OrdBy i, hash, compInd, conInd)
                   results <-
@@ -1236,7 +1236,7 @@ termTagsByReferentsOf trav s = do
 typeTagsByReferencesOf :: (HasCallStack) => Traversal s t TypeReference Tags.TypeTag -> s -> Transaction e t
 typeTagsByReferencesOf trav s = do
   s
-    & unsafePartsOf trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       let partitionedRefs :: [Either Tags.TypeTag (ComponentHash, PgComponentIndex)]
           partitionedRefs =
             refs <&> \case
@@ -1244,7 +1244,7 @@ typeTagsByReferencesOf trav s = do
               r@(Reference.Builtin _) -> Left $ typeTagForBuiltin r
       -- We only need to look up the tags for the derived references from the DB
       partitionedRefs
-        & unsafePartsOf (traversed . _Right)
+        & asListOf (traversed . _Right)
           %%~ ( \refs -> do
                   let refsTable = refs & imap \i (hash, compInd) -> (into @OrdBy i, hash, compInd)
                   results <-

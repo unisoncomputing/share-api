@@ -675,10 +675,10 @@ hashPgNamespace :: forall m. (QueryM m) => PgNamespace -> m BranchHash
 hashPgNamespace b = do
   BranchFull.Branch {terms, types, patches, children} <-
     b
-      & ( unsafePartsOf BranchFull.t_ doTexts
-            >=> unsafePartsOf BranchFull.h_ doHashes
-            >=> unsafePartsOf BranchFull.p_ doPatchHashes
-            >=> unsafePartsOf BranchFull.c_ doChildren
+      & ( asListOf BranchFull.t_ doTexts
+            >=> asListOf BranchFull.h_ doHashes
+            >=> asListOf BranchFull.p_ doPatchHashes
+            >=> asListOf BranchFull.c_ doChildren
         )
   let branch =
         H.Branch
@@ -883,7 +883,7 @@ saveV2BranchShallow codebase v2Branch = do
 expectNamespaceStatsOf :: (QueryM m) => Traversal s t BranchHash NamespaceStats -> s -> m t
 expectNamespaceStatsOf trav s =
   s
-    & unsafePartsOf trav %%~ \branchHashes -> do
+    & asListOf trav %%~ \branchHashes -> do
       let branchHashTable :: [(OrdBy, BranchHash)] = ordered branchHashes
       results <-
         whenNonEmpty branchHashTable $

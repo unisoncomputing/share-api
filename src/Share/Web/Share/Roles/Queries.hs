@@ -17,18 +17,18 @@ import Share.Web.Share.Teams.Queries (teamDisplayInfoOf)
 
 displaySubjectsOf :: (Traversal s t ResolvedAuthSubject DisplayAuthSubject) -> s -> Transaction e t
 displaySubjectsOf trav s = pipelined do
-  s & unsafePartsOf trav \authSubjectList -> do
-    let userSubjects = (authSubjectList ^. unsafePartsOf (traversed . _UserSubject))
+  s & asListOf trav \authSubjectList -> do
+    let userSubjects = (authSubjectList ^. asListOf (traversed . _UserSubject))
     newUsers <- userDisplayInfoOf traversed userSubjects
-    let teamSubjects = (authSubjectList ^. unsafePartsOf (traversed . _TeamSubject))
+    let teamSubjects = (authSubjectList ^. asListOf (traversed . _TeamSubject))
     newTeams <- teamDisplayInfoOf traversed teamSubjects
-    let orgSubjects = (authSubjectList ^. unsafePartsOf (traversed . _OrgSubject))
+    let orgSubjects = (authSubjectList ^. asListOf (traversed . _OrgSubject))
     newOrgs <- orgDisplayInfoOf traversed orgSubjects
     pure
       ( authSubjectList
-          & unsafePartsOf (traversed . _UserSubject) .~ newUsers
-          & unsafePartsOf (traversed . _TeamSubject) .~ newTeams
-          & unsafePartsOf (traversed . _OrgSubject) .~ newOrgs
+          & asListOf (traversed . _UserSubject) .~ newUsers
+          & asListOf (traversed . _TeamSubject) .~ newTeams
+          & asListOf (traversed . _OrgSubject) .~ newOrgs
       )
 
 -- | Add a role to a user for a specific resource.

@@ -94,7 +94,7 @@ removeProjectRoles projId toRemove = do
 expectProjectShortHandsOf :: Traversal s t ProjectId ProjectShortHand -> s -> Transaction e t
 expectProjectShortHandsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \projIds -> do
+    & asListOf trav %%~ \projIds -> do
       let numberedProjIds = zip [1 :: Int32 ..] projIds
       results :: [ProjectShortHand] <-
         queryListRows @(UserHandle, ProjectSlug)
