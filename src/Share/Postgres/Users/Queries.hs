@@ -78,10 +78,6 @@ userDisplayInfoOf trav s = do
                   userId
                 }
           )
-        <&> \result ->
-          if length result /= length userIds
-            then error "userDisplayInfoOf: Missing user display info."
-            else result
 
 userIdsByHandlesOf :: (PG.QueryA m) => Traversal s t UserHandle UserId -> s -> m t
 userIdsByHandlesOf trav s = do
@@ -98,10 +94,6 @@ userIdsByHandlesOf trav s = do
           JOIN users u ON u.handle = values.handle
       ORDER BY ord
       |]
-        <&> \result ->
-          if length result /= length userHandles
-            then error "userIdsByHandlesOf: Missing user ids."
-            else result
 
 userProfileById :: UserId -> PG.Transaction e (Maybe UserProfile)
 userProfileById userId = do
@@ -314,10 +306,6 @@ joinOrgIdsToUserIdsOf trav s = do
           JOIN users u ON u.id = values.user_id
       ORDER BY ord
       |]
-        <&> fmap \(userId, mayOrgId) ->
-          if length userIds /= length userIds
-            then error "joinOrgIdsToUserIdsOf: Missing user ids."
-            else (userId, mayOrgId)
 
 data UserCreationError
   = UserHandleTaken UserHandle

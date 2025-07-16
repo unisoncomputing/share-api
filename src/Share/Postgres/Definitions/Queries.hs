@@ -402,11 +402,15 @@ termLocalTextReferencesOf trav s = do
         WITH term_ids(ord, term_id) AS (
             SELECT * FROM ^{toTable numberedTermIds}
         )
-        SELECT array_agg(text.text ORDER BY text_refs.local_index ASC) as text_array
+        SELECT (
+          -- Need COALESCE because array_agg will return NULL rather than the empty array
+          -- if there are no results.
+          SELECT COALESCE(array_agg(text.text ORDER BY text_refs.local_index ASC), '{}') as text_array
+            FROM term_local_text_references text_refs
+              JOIN text ON text_refs.text_id = text.id
+            WHERE term_ids.term_id = text_refs.term_id
+        ) AS texts
         FROM term_ids
-            JOIN term_local_text_references text_refs ON text_refs.term_id = term_ids.term_id
-            JOIN text ON text_refs.text_id = text.id
-        GROUP BY term_ids.ord
         ORDER BY term_ids.ord ASC
       |]
 
@@ -430,11 +434,13 @@ termLocalComponentReferencesOf trav s = do
         WITH term_ids(ord, term_id) AS (
             SELECT * FROM ^{toTable numberedTermIds}
         )
-        SELECT array_agg(component_hashes.base32 ORDER BY local_refs.local_index ASC) as component_hash_array
+        SELECT (
+            SELECT COALESCE(array_agg(component_hashes.base32 ORDER BY local_refs.local_index ASC), '{}') as component_hash_array
+            FROM term_local_component_references local_refs
+                JOIN component_hashes ON local_refs.component_hash_id = component_hashes.id
+            WHERE local_refs.term_id = term_ids.term_id
+        ) AS component_hashes
         FROM term_ids
-            JOIN term_local_component_references local_refs ON local_refs.term_id = term_ids.term_id
-            JOIN component_hashes ON local_refs.component_hash_id = component_hashes.id
-        GROUP BY term_ids.ord
         ORDER BY term_ids.ord ASC
       |]
 
