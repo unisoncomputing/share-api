@@ -23,7 +23,7 @@ ys = [!a, !b] :+ 3
 
 
 ```ucm:hide
-proj/main> add
+proj/main> update
 ```
 
 Push and pull it back.
@@ -40,7 +40,7 @@ newValue = 99
 
 Do a fast-forward push.
 ```ucm
-proj/main> add
+proj/main> update
 proj/main> push
 ```
 
@@ -55,7 +55,7 @@ diverge = 100
 ```
 
 ```ucm
-proj/main> add
+proj/main> update
 proj/main> push @transcripts/proj/main
 ```
 
@@ -64,7 +64,7 @@ diverge = 200
 ```
 
 ```ucm:error
-proj/diverge> add
+proj/diverge> update
 proj/diverge> push @transcripts/proj/main
 ```
 

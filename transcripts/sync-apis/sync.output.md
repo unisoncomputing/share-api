@@ -26,10 +26,9 @@ ys = [!a, !b] :+ 3
   Loading changes detected in scratch.u.
 
   I found and typechecked these definitions in scratch.u. If you
-  do an `add` or `update`, here's how your codebase would
-  change:
+  do an `update`, here's how your codebase would change:
 
-    ⍟ These new definitions are ok to `add`:
+    ⍟ These new definitions are ok to `update`:
     
       type A
       type B
@@ -40,7 +39,7 @@ ys = [!a, !b] :+ 3
 ```
 
 ``` ucm :hide
-proj/main> add
+proj/main> update
 ```
 
 Push and pull it back.
@@ -86,11 +85,9 @@ newValue = 99
 Do a fast-forward push.
 
 ``` ucm
-proj/main> add
+proj/main> update
 
-  ⍟ I've added these definitions:
-
-    newValue : Nat
+  Done.
 
 proj/main> push
 
@@ -115,11 +112,9 @@ diverge = 100
 ```
 
 ``` ucm
-proj/main> add
+proj/main> update
 
-  ⍟ I've added these definitions:
-
-    diverge : Nat
+  Done.
 
 proj/main> push @transcripts/proj/main
 
@@ -133,11 +128,9 @@ diverge = 200
 ```
 
 ``` ucm :error
-proj/diverge> add
+proj/diverge> update
 
-  ⍟ I've added these definitions:
-
-    diverge : Nat
+  Done.
 
 proj/diverge> push @transcripts/proj/main
 

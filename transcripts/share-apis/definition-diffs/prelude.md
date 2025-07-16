@@ -23,7 +23,7 @@ ability BeforeAbility where
 ```
 
 ```ucm:hide
-definition-diff/before> add
+definition-diff/before> update
 definition-diff/before> push @transcripts/definition-diff/before
 definition-diff/before> branch.create-empty /after
 definition-diff/after> builtins.mergeio

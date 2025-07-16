@@ -49,7 +49,7 @@ deleteMeAfterFork = "delete me after fork"
 ```
 
 ```ucm:hide
-contribution-diff/diff-start> add
+contribution-diff/diff-start> update
 contribution-diff/diff-start> push @transcripts/contribution-diff/diff-start
 contribution-diff/diff-start> branch /diff-end
 contribution-diff/diff-end> alias.term termAliasMe aTermAlias

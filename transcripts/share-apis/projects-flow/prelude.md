@@ -19,6 +19,6 @@ References {someTerm}
 
 ```ucm
 scratch/main> project.create-empty transcriptproject
-transcriptproject/main> add
+transcriptproject/main> update
 transcriptproject/main> push
 ```

@@ -17,7 +17,7 @@ some.other.thing = 3
 
 
 ```ucm
-@transcripts/branch-browse/main> add
+@transcripts/branch-browse/main> update
 ```
 
 ```ucm
