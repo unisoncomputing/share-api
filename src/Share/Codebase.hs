@@ -187,12 +187,12 @@ withCodebaseRuntime codebaseEnv sandboxedRuntime f = do
 -- transactions for inner calls to 'codeLookup' / 'cachedEvalResult', which can lead to deadlock due to a starved
 -- connection pool.
 codebaseRuntimeTransaction :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime s (PG.Transaction e))
-codebaseRuntimeTransaction unisonRuntime CodebaseEnv {codebaseOwner} = do
+codebaseRuntimeTransaction unisonRuntime codebase = do
   cacheVar <- newTVarIO (CodeLookupCache mempty mempty)
   pure
     CodebaseRuntime
-      { codeLookup = codeLookupForUser cacheVar codebaseOwner,
-        cachedEvalResult = (fmap . fmap) Term.unannotate . loadCachedEvalResult codebaseOwner,
+      { codeLookup = codeLookupForUser cacheVar codebase,
+        cachedEvalResult = (fmap . fmap) Term.unannotate . loadCachedEvalResult codebase,
         unisonRuntime
       }
 
@@ -376,12 +376,13 @@ loadTypeOfReferent codebase = \case
 
 -- | Load the type of a constructor.
 loadTypesOfConstructorsOf :: (QueryM m) => CodebaseEnv -> Traversal s t (V2.TypeReference, V2.ConstructorId) (Maybe (V1.Type Symbol Ann)) -> m t
-loadTypesOfConstructorsOf codebase ref conId = case ref of
-  -- No constructors for builtin types.
-  Reference.Builtin _txt -> pure Nothing
-  Reference.DerivedId refId -> do
-    decl <- loadTypeDeclaration codebase refId `whenNothingM` (unrecoverableError (MissingDecl refId))
-    pure $ DD.typeOfConstructor (DD.asDataDecl decl) conId
+loadTypesOfConstructorsOf codebase trav s =
+  case ref of
+    -- No constructors for builtin types.
+    Reference.Builtin _txt -> pure Nothing
+    Reference.DerivedId refId -> do
+      decl <- loadTypeDeclaration codebase refId `whenNothingM` (unrecoverableError (MissingDecl refId))
+      pure $ DD.typeOfConstructor (DD.asDataDecl decl) conId
 
 expectTypesOfConstructorsOf :: (QueryM m) => CodebaseEnv -> Traversal s t (V2.TypeReference, V2.ConstructorId) (V1.Type Symbol Ann) -> s -> m t
 expectTypesOfConstructorsOf codebase trav s =
@@ -390,13 +391,14 @@ expectTypesOfConstructorsOf codebase trav s =
       results <- loadTypesOfConstructorsOf codebase traversed refs
       for (zip refs results) \case
         ((ref, conId), Nothing) -> unrecoverableError (MissingTypeForConstructor ref conId)
+        (_, Just r) -> pure r
 
 data CodeLookupCache = CodeLookupCache
   { termCache :: Map Reference.Id (V1.Term Symbol Ann, V1.Type Symbol Ann),
     typeCache :: Map Reference.Id (V1.Decl Symbol Ann)
   }
 
-codeLookupForUser :: TVar CodeLookupCache -> UserId -> CL.CodeLookup Symbol (PG.Transaction e) Ann
+codeLookupForUser :: TVar CodeLookupCache -> CodebaseEnv -> CL.CodeLookup Symbol (PG.Transaction e) Ann
 codeLookupForUser cacheVar codebaseOwner = do
   CL.CodeLookup (fmap (fmap fst) . getTermAndType) (fmap (fmap snd) . getTermAndType) getTypeDecl
     <> Builtin.codeLookup
@@ -410,7 +412,7 @@ codeLookupForUser cacheVar codebaseOwner = do
       case Map.lookup r termCache of
         Just termAndType -> pure (Just termAndType)
         Nothing -> do
-          maybeTermAndType <- loadTermForCodeLookup codebaseOwner r
+          maybeTermAndType <- loadTermAndTypeByRefIdsOf codebaseOwner id r
           whenJust maybeTermAndType \termAndType -> do
             PG.transactionUnsafeIO do
               atomically do
@@ -435,9 +437,9 @@ codeLookupForUser cacheVar codebaseOwner = do
 -- | Look up the result of evaluating a term if we have it cached.
 --
 -- This is intentionally not in CodebaseM because it's used to build the CodebaseEnv.
-loadCachedEvalResult :: UserId -> Reference.Id -> PG.Transaction e (Maybe (V1.Term Symbol Ann))
-loadCachedEvalResult codebaseOwnerUserId ref@(Reference.Id h _) = runMaybeT do
-  v2Term <- MaybeT $ DefnQ.loadCachedEvalResult codebaseOwnerUserId ref
+loadCachedEvalResult :: CodebaseEnv -> Reference.Id -> PG.Transaction e (Maybe (V1.Term Symbol Ann))
+loadCachedEvalResult codebase ref@(Reference.Id h _) = runMaybeT do
+  v2Term <- MaybeT $ DefnQ.loadCachedEvalResult codebase ref
   lift $ Cv.term2to1 h expectDeclKind v2Term
 
 saveCachedEvalResult :: (QueryM m) => CodebaseEnv -> Reference.Id -> V1.Term Symbol Ann -> m ()

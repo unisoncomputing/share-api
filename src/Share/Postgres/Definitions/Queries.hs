@@ -13,9 +13,8 @@ module Share.Postgres.Definitions.Queries
     typeTagsByReferencesOf,
     expectShareTermComponent,
     expectShareTypeComponent,
-    loadDeclKind,
     loadDeclKindsOf,
-    loadDecl,
+    loadDeclsByRefIdsOf,
     expectDecl,
     loadDeclByTypeComponentElementAndTypeId,
     expectTypeComponentElementAndTypeId,
@@ -403,9 +402,6 @@ resolveConstructorTypeLocalIds (LocalIds.LocalIds {textLookup, defnLookup}) =
     substText i = textLookup ^?! ix (fromIntegral i)
     substHash i = unComponentHash $ (defnLookup ^?! ix (fromIntegral i))
 
-loadDeclKind :: (PG.QueryA m) => TypeReferenceId -> m (Maybe CT.ConstructorType)
-loadDeclKind = loadDeclKindsOf id
-
 loadDeclKindsOf :: (PG.QueryA m, HasCallStack) => Traversal s t TypeReferenceId (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
   s
@@ -429,12 +425,15 @@ loadDeclKindsOf trav s =
 
 -- | This isn't in CodebaseM so that we can run it in a normal transaction to build the Code
 -- Lookup.
-loadDecl :: (QueryM m) => UserId -> TypeReferenceId -> m (Maybe (V2.Decl Symbol))
-loadDecl codebaseUser refId = runMaybeT $ do
-  (TypeComponentElement decl, typeId :: TypeId) <- MaybeT (loadTypeComponentElementAndTypeId codebaseUser refId)
-  Share.LocalIds {texts, hashes} <- typeLocalReferences typeId
-  let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
-  pure $ s2cDecl localIds decl
+loadDeclsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t TypeReferenceId (Maybe (V2.Decl Symbol)) -> s -> m t
+loadDeclsByRefIdsOf codebase trav s = do
+  s
+    & asListOf trav %%~ \refs -> do
+      mayTypeComponents <- loadTypeComponentElementsAndTypeIdsOf codebase traversed refs
+      (TypeComponentElement decl, typeId :: TypeId) <- MaybeT (loadTypeComponentElementAndTypeId codebaseUser refId)
+      Share.LocalIds {texts, hashes} <- typeLocalReferences typeId
+      let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
+      pure $ s2cDecl localIds decl
 
 loadDeclByTypeComponentElementAndTypeId :: (QueryA m) => (TypeComponentElement, TypeId) -> m (V2.Decl Symbol)
 loadDeclByTypeComponentElementAndTypeId (TypeComponentElement decl, typeId) =
@@ -442,19 +441,30 @@ loadDeclByTypeComponentElementAndTypeId (TypeComponentElement decl, typeId) =
     let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
      in s2cDecl localIds decl
 
-loadTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TypeReferenceId -> m (Maybe (TypeComponentElement, TypeId))
-loadTypeComponentElementAndTypeId codebaseUser (Reference.Id compHash (pgComponentIndex -> compIndex)) = do
-  query1Row
-    [sql|
-      SELECT bytes.bytes, typ.id
-        FROM types typ
-          JOIN component_hashes ON typ.component_hash_id = component_hashes.id
-          JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
-          JOIN bytes ON sandboxed.bytes_id = bytes.id
-          WHERE sandboxed.user_id = #{codebaseUser}
-            AND component_hashes.base32 = #{compHash}
-            AND typ.component_index = #{compIndex}
-      |]
+loadTypeComponentElementsAndTypeIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TypeReferenceId (Maybe (TypeComponentElement, TypeId)) -> s -> m t
+loadTypeComponentElementsAndTypeIdsOf codebase trav s = do
+  s
+    & asListOf trav %%~ \refs -> do
+      let refsTable =
+            refs
+              & ordered
+              <&> \(ord, Reference.Id compHash compIndex) -> (ord, compHash, (pgComponentIndex compIndex))
+      queryListRows @(Maybe TypeComponentElement, Maybe TypeId)
+        [sql|
+        WITH ref_ids(ord, comp_hash, comp_index) AS (
+          SELECT t.ord, t.comp_hash, t.comp_index FROM ^{toTable refsTable} AS t(ord, comp_hash, comp_index)
+        ) SELECT bytes.bytes, typ.id
+            FROM ref_ids
+              LEFT JOIN types typ ON typ.component_index = ref_ids.comp_index
+              LEFT JOIN component_hashes ON
+                          (typ.component_hash_id = component_hashes.id
+                            AND component_hashes.base32 = ref_ids.comp_hash
+                          )
+              LEFT JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
+              LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
+            WHERE sandboxed.user_id = #{codebaseUser}
+        |]
+        <&> fmap \(element, typeId) -> liftA2 (,) element typeId
 
 expectTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
 expectTypeComponentElementAndTypeId codebaseUser refId =
@@ -465,33 +475,51 @@ expectTypeComponentElementAndTypeId codebaseUser refId =
     )
     (loadTypeComponentElementAndTypeId codebaseUser refId)
 
-typeLocalReferences :: (QueryA m) => TypeId -> m (Share.LocalIds Text ComponentHash)
-typeLocalReferences typeId =
-  Share.LocalIds
-    <$> typeLocalTextReferences typeId
-    <*> typeLocalComponentReferences typeId
+typeLocalReferencesOf :: (QueryA m) => Traversal s t TypeId (Share.LocalIds Text ComponentHash) -> s -> m t
+typeLocalReferencesOf trav s = do
+  s
+    & asListOf trav %%~ \typeIds -> do
+      texts <- typeLocalTextReferencesOf traversed typeIds
+      components <- typeLocalComponentReferencesOf traversed typeIds
+      pure $ zipWith Share.LocalIds texts components
 
-typeLocalTextReferences :: (QueryA m) => TypeId -> m [Text]
-typeLocalTextReferences typeId =
-  queryListCol
-    [sql|
-      SELECT text.text
-        FROM type_local_text_references
-          JOIN text ON type_local_text_references.text_id = text.id
-        WHERE type_id = #{typeId}
-          ORDER BY local_index ASC
-      |]
+typeLocalTextReferencesOf :: (QueryA m) => Traversal s t TypeId [Text] -> s -> m t
+typeLocalTextReferencesOf trav s =
+  s
+    & asListOf trav %%~ \typeIds -> do
+      queryListCol @[Text]
+        [sql|
+        WITH type_ids(ord, type_id) AS (
+          SELECT t.ord, t.type_id FROM ^{toTable (ordered typeIds)} AS t(ord, type_id)
+        ) SELECT (
+            -- Need COALESCE because array_agg will return NULL rather than the empty array
+            -- if there are no results.
+            SELECT COALESCE(array_agg(text.text ORDER BY text_refs.local_index ASC), '{}') as text_array
+              FROM type_local_text_references text_refs
+                JOIN text ON text_refs.text_id = text.id
+              WHERE type_ids.type_id = text_refs.type_id
+        ) AS texts
+        FROM type_ids
+        ORDER BY type_ids.ord ASC
+        |]
 
-typeLocalComponentReferences :: (QueryA m) => TypeId -> m [ComponentHash]
-typeLocalComponentReferences typeId =
-  queryListCol
-    [sql|
-      SELECT component_hashes.base32
-        FROM type_local_component_references
-          JOIN component_hashes ON type_local_component_references.component_hash_id = component_hashes.id
-        WHERE type_id = #{typeId}
-          ORDER BY local_index ASC
-      |]
+typeLocalComponentReferencesOf :: (QueryA m) => Traversal s t TypeId [ComponentHash] -> s -> m t
+typeLocalComponentReferencesOf trav s = do
+  s
+    & asListOf trav %%~ \typeIds -> do
+      queryListCol @[ComponentHash]
+        [sql|
+            WITH type_ids(ord, type_id) AS (
+              SELECT ch.ord, ch.hash FROM ^{toTable (ordered typeIds)} AS (ord, type_id)
+            ) SELECT (
+              SELECT COALESCE(array_agg(component_hashes.base32 ORDER BY local_refs.local_index ASC), '{}') as component_hash_array
+                FROM type_local_component_references local_refs
+                  JOIN component_hashes ON local_refs.component_hash_id = component_hashes.id
+                WHERE local_refs.type_id = type_ids.type_id
+            ) AS component_hashes
+            FROM type_ids
+            ORDER BY type_ids.ord ASC
+        |]
 
 expectDecl :: UserId -> Reference.Id -> PG.Transaction e (V2.Decl Symbol)
 expectDecl codebaseUser refId = do
@@ -580,8 +608,8 @@ constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
 --
 -- This is intentionally not in CodebaseM because this method is used to build the
 -- CodebaseEnv.
-loadCachedEvalResult :: (QueryM m) => UserId -> Reference.Id -> m (Maybe (V2.Term Symbol))
-loadCachedEvalResult codebaseOwner (Reference.Id hash compIndex) = runMaybeT do
+loadCachedEvalResult :: (QueryM m) => CodebaseEnv -> Reference.Id -> m (Maybe (V2.Term Symbol))
+loadCachedEvalResult CodebaseEnv {codebaseOwner} (Reference.Id hash compIndex) = runMaybeT do
   let compIndex' = pgComponentIndex compIndex
   (evalResultId :: EvalResultId, EvalResultTerm term) <-
     MaybeT $
