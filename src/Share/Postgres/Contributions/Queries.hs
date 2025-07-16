@@ -285,7 +285,7 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
 shareContributionsByBranchOf :: Traversal s t BranchId [ShareContribution UserId] -> s -> PG.Transaction e t
 shareContributionsByBranchOf trav s =
   s
-    & unsafePartsOf trav %%~ \branchIds -> do
+    & asListOf trav %%~ \branchIds -> do
       contributionsByBranch <-
         ( PG.queryListRows @(PG.Only BranchId PG.:. ShareContribution UserId)
             [PG.sql|

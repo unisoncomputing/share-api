@@ -321,9 +321,9 @@ _hashPgPatch :: forall m. (QueryM m) => PgPatch -> m PatchHash
 _hashPgPatch p = do
   PatchFull.Patch {termEdits, typeEdits} <-
     p
-      & ( unsafePartsOf PatchFull.patchT_ doTexts
-            >=> unsafePartsOf PatchFull.patchH_ doHashes
-            >=> unsafePartsOf PatchFull.patchO_ doHashes
+      & ( asListOf PatchFull.patchT_ doTexts
+            >=> asListOf PatchFull.patchH_ doHashes
+            >=> asListOf PatchFull.patchO_ doHashes
         )
   let patch =
         H.Patch

@@ -48,6 +48,7 @@ module Share.Prelude
     hoistMaybe,
     traverseFirst,
     throwError,
+    asListOf,
   )
 where
 
@@ -87,6 +88,7 @@ import Data.Word as X (Word64)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
 import Share.Prelude.Orphans ()
+import Share.Utils.Lens
 import Share.Utils.Show (tShow)
 import Text.Read (readMaybe)
 import Unison.Util.Monoid (foldMapM)

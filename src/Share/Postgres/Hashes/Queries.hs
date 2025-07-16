@@ -40,7 +40,6 @@ module Share.Postgres.Hashes.Queries
 where
 
 import Control.Lens
-import Data.Text qualified as Text
 import Share.Codebase.Types (CodebaseEnv (CodebaseEnv))
 import Share.Codebase.Types qualified as Codebase
 import Share.Postgres
@@ -58,7 +57,7 @@ ensureComponentHashId componentHash = ensureComponentHashIdsOf id componentHash
 ensureComponentHashIdsOf :: forall m s t. (QueryA m, HasCallStack) => Traversal s t ComponentHash ComponentHashId -> s -> m t
 ensureComponentHashIdsOf trav s =
   s
-    & unsafePartsOf trav %%~ \componentHashes ->
+    & asListOf trav %%~ \componentHashes ->
       do
         let numberedHashIds = zip [1 :: Int32 ..] componentHashes
         queryListCol @ComponentHashId
@@ -77,10 +76,6 @@ ensureComponentHashIdsOf trav s =
         LEFT JOIN inserted_hashes ON inserted_hashes.hash = new_hashes.hash
       ORDER BY new_hashes.ord ASC
     |]
-          <&> \results ->
-            if length results /= length componentHashes
-              then error "ensureComponentHashIdsOf: Missing expected component hash"
-              else results
 
 expectComponentHashIdsOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHash ComponentHashId -> s -> m t
 expectComponentHashIdsOf trav s = do
@@ -91,7 +86,7 @@ expectComponentHashIdsOf trav s = do
 componentHashIdsOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHash (Maybe ComponentHashId) -> s -> m t
 componentHashIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \componentHashes -> do
+    & asListOf trav %%~ \componentHashes -> do
       let numberedHashes = zip [1 :: Int32 ..] componentHashes
       queryListCol @(Maybe ComponentHashId)
         [sql|
@@ -102,10 +97,6 @@ componentHashIdsOf trav s = do
         LEFT JOIN component_hashes ON component_hashes.base32 = hashes.hash
         ORDER BY hashes.ord ASC
       |]
-        <&> \results ->
-          if length results /= length componentHashes
-            then error "expectComponentHashIdsOf: Missing expected component hash"
-            else results
 
 expectComponentHashId :: (HasCallStack, QueryM m) => ComponentHash -> m ComponentHashId
 expectComponentHashId componentHash = do
@@ -113,7 +104,7 @@ expectComponentHashId componentHash = do
 
 expectComponentHashesOf :: (HasCallStack, QueryA m) => Traversal s t ComponentHashId ComponentHash -> s -> m t
 expectComponentHashesOf trav = do
-  unsafePartsOf trav %%~ \hashIds ->
+  asListOf trav %%~ \hashIds ->
     do
       let numberedHashIds = zip [0 :: Int32 ..] hashIds
       queryListCol
@@ -124,38 +115,29 @@ expectComponentHashesOf trav = do
       SELECT base32 FROM component_hashes JOIN hash_ids ON component_hashes.id = hash_ids.id
         ORDER BY hash_ids.ord ASC
       |]
-      <&> \results ->
-        if length results /= length hashIds
-          then error "expectComponentHashesOf: Missing expected component hash"
-          else results
 
 expectComponentHash :: (HasCallStack, QueryM m) => ComponentHashId -> m ComponentHash
 expectComponentHash hashId = queryExpect1Col [sql|SELECT base32 FROM component_hashes WHERE id = #{hashId}|]
 
-expectPatchHashesOf :: (HasCallStack, QueryM m) => Traversal s t PatchId PatchHash -> s -> m t
+expectPatchHashesOf :: (HasCallStack, QueryA m) => Traversal s t PatchId PatchHash -> s -> m t
 expectPatchHashesOf trav = do
-  unsafePartsOf trav %%~ \hashIds -> do
+  asListOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
-    results :: [PatchHash] <-
-      queryListCol
-        [sql|
+    queryListCol
+      [sql|
       WITH hash_ids(ord, id) AS (
         SELECT * FROM ^{toTable numberedHashIds}
       )
       SELECT patch.hash FROM patches patch JOIN hash_ids ON patch.id = hash_ids.id
         ORDER BY hash_ids.ord ASC
       |]
-    if length results /= length hashIds
-      then error "expectPatchHashesOf: Missing expected patch hash"
-      else pure results
 
-expectPatchIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t PatchHash PatchId -> s -> m t
+expectPatchIdsOf :: (HasCallStack, QueryA m) => CodebaseEnv -> Traversal s t PatchHash PatchId -> s -> m t
 expectPatchIdsOf (CodebaseEnv {codebaseOwner}) trav = do
-  unsafePartsOf trav %%~ \hashes -> do
+  asListOf trav %%~ \hashes -> do
     let numberedHashes = zip [0 :: Int32 ..] hashes
-    results :: [PatchId] <-
-      queryListCol
-        [sql|
+    queryListCol
+      [sql|
       WITH hashes(ord, hash) AS (
         SELECT * FROM ^{toTable numberedHashes}
       )
@@ -167,9 +149,6 @@ expectPatchIdsOf (CodebaseEnv {codebaseOwner}) trav = do
         )
         ORDER BY h.ord ASC
       |]
-    if length results /= length hashes
-      then unrecoverableError $ EntityMissing "expected-patch-for-hash" $ "Missing patch for one of the provided hashes: " <> Text.intercalate ", " (into @Text <$> hashes)
-      else pure results
 
 -- | Save a branch hash, or return the existing hash id if it already exists
 ensureBranchHashId :: (HasCallStack, QueryM m) => BranchHash -> m BranchHashId
@@ -245,7 +224,7 @@ addKnownCausalHashMismatch providedHash actualHash = do
 -- | Generic helper which fetches both branch hashes and causal hashes
 expectCausalHashesOfG :: (HasCallStack, QueryA m) => ((BranchHash, CausalHash) -> h) -> Traversal s t CausalId h -> s -> m t
 expectCausalHashesOfG project trav = do
-  unsafePartsOf trav %%~ \hashIds -> do
+  asListOf trav %%~ \hashIds -> do
     let numberedHashIds = zip [0 :: Int32 ..] hashIds
     (\results -> if length results /= length hashIds then error "expectCausalHashesOf: Missing expected causal hash" else (project <$> results))
       <$> queryListRows
@@ -266,13 +245,12 @@ expectCausalAndBranchHashesOf = expectCausalHashesOfG id
 expectCausalHashesByIdsOf :: (HasCallStack, QueryA m) => Traversal s t CausalId CausalHash -> s -> m t
 expectCausalHashesByIdsOf = expectCausalHashesOfG snd
 
-expectCausalIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t CausalHash (BranchHashId, CausalId) -> s -> m t
+expectCausalIdsOf :: (HasCallStack, QueryA m) => CodebaseEnv -> Traversal s t CausalHash (BranchHashId, CausalId) -> s -> m t
 expectCausalIdsOf (CodebaseEnv {codebaseOwner}) trav = do
-  unsafePartsOf trav %%~ \hashes -> do
+  asListOf trav %%~ \hashes -> do
     let numberedHashes = zip [0 :: Int32 ..] hashes
-    results :: [(BranchHashId, CausalId)] <-
-      queryListRows
-        [sql|
+    queryListRows @(BranchHashId, CausalId)
+      [sql|
       WITH hashes(ord, hash) AS (
         SELECT * FROM ^{toTable numberedHashes}
       )
@@ -287,18 +265,14 @@ expectCausalIdsOf (CodebaseEnv {codebaseOwner}) trav = do
           )
         ORDER BY hashes.ord ASC
       |]
-    if length results /= length hashes
-      then unrecoverableError $ EntityMissing "missing-expected-causal" $ "Missing one of these causals: " <> Text.intercalate ", " (into @Text <$> hashes)
-      else pure results
 
-expectNamespaceIdsByCausalIdsOf :: (QueryM m) => Traversal s t CausalId BranchHashId -> s -> m t
+expectNamespaceIdsByCausalIdsOf :: (QueryA m) => Traversal s t CausalId BranchHashId -> s -> m t
 expectNamespaceIdsByCausalIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \causalIds -> do
+    & asListOf trav %%~ \causalIds -> do
       let causalIdsTable = ordered causalIds
-      results <-
-        queryListCol @(BranchHashId)
-          [sql| WITH causal_ids(ord, causal_id) AS (
+      queryListCol @(BranchHashId)
+        [sql| WITH causal_ids(ord, causal_id) AS (
                 SELECT ord, causal_id FROM ^{toTable causalIdsTable} as t(ord, causal_id)
               )
               SELECT c.namespace_hash_id
@@ -306,18 +280,14 @@ expectNamespaceIdsByCausalIdsOf trav s = do
                 JOIN causals c ON cid.causal_id = c.id
                 ORDER BY cid.ord
         |]
-      if length results /= length causalIds
-        then unrecoverableError . MissingExpectedEntity $ "expectNamespaceIdsByCausalIdsOf: Expected to get the same number of results as causal ids. " <> tShow causalIds
-        else pure results
 
-expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryM m) => Traversal s t BranchHashId BranchHash -> s -> m t
+expectNamespaceHashesByNamespaceHashIdsOf :: (HasCallStack, QueryA m) => Traversal s t BranchHashId BranchHash -> s -> m t
 expectNamespaceHashesByNamespaceHashIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \namespaceHashIds -> do
+    & asListOf trav %%~ \namespaceHashIds -> do
       let namespaceHashIdsTable = ordered namespaceHashIds
-      results <-
-        queryListCol @(BranchHash)
-          [sql| WITH namespace_hash_ids(ord, namespace_hash_id) AS (
+      queryListCol @(BranchHash)
+        [sql| WITH namespace_hash_ids(ord, namespace_hash_id) AS (
                 SELECT ord, namespace_hash_id FROM ^{toTable namespaceHashIdsTable} as t(ord, namespace_hash_id)
               )
               SELECT bh.base32
@@ -325,9 +295,6 @@ expectNamespaceHashesByNamespaceHashIdsOf trav s = do
                 JOIN branch_hashes bh ON nhi.namespace_hash_id = bh.id
                 ORDER BY nhi.ord
         |]
-      if length results /= length namespaceHashIds
-        then unrecoverableError . MissingExpectedEntity $ "expectNamespaceHashesByNamespaceHashIdsOf: Expected to get the same number of results as namespace hash ids. " <> tShow namespaceHashIds
-        else pure results
 
 loadCausalIdByHash :: (QueryM m) => CodebaseEnv -> CausalHash -> m (Maybe CausalId)
 loadCausalIdByHash (CodebaseEnv {codebaseOwner}) causalHash = do

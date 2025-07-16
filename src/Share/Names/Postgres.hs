@@ -35,7 +35,7 @@ namesForReferences namesPerspective refs = do
     typeNamesOf :: Traversal s t (V1.Reference, PGReference) [(Name, V1.Reference)] -> s -> m t
     typeNamesOf trav s = do
       s
-        & unsafePartsOf trav %%~ \refs -> do
+        & asListOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           typeNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
             NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify traversed pgRefs
@@ -48,7 +48,7 @@ namesForReferences namesPerspective refs = do
     termNamesOf :: Traversal s t (V1.Referent, PGReferent) [(Name, V1.Referent)] -> s -> m t
     termNamesOf trav s =
       s
-        & unsafePartsOf trav %%~ \refs -> do
+        & asListOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           termNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
             NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify traversed pgRefs

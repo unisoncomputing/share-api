@@ -101,7 +101,7 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
   -- Resolve the term referents to tag + hash
   diff1 <- PG.transactionSpan "hydrate-diff1" mempty $ do
     diff0
-      & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
+      & asListOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
         %%~ \refs -> do
           termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
           pure $ zip termTags (refs <&> Referent.toShortHash)
@@ -109,7 +109,7 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
   diff2 <-
     PG.transactionSpan "hydrate-diff2" mempty $
       diff1
-        & unsafePartsOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
+        & asListOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
           %%~ \refs -> do
             typeTags <- Codebase.typeTagsByReferencesOf traversed refs
             pure $ zip typeTags (refs <&> V2Reference.toShortHash)

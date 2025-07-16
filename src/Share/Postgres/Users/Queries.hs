@@ -57,7 +57,7 @@ import Share.Web.Share.Types (PlanTier (..), UserSearchKind (UserSearchKindDefau
 userDisplayInfoOf :: (PG.QueryA m) => Traversal s t UserId UserDisplayInfo -> s -> m t
 userDisplayInfoOf trav s = do
   s
-    & unsafePartsOf trav %%~ \userIds -> do
+    & asListOf trav %%~ \userIds -> do
       let usersTable = zip [0 :: Int32 ..] userIds
       PG.queryListRows @(UserHandle, Maybe Text, Maybe URIParam, UserId)
         [PG.sql|
@@ -78,15 +78,11 @@ userDisplayInfoOf trav s = do
                   userId
                 }
           )
-        <&> \result ->
-          if length result /= length userIds
-            then error "userDisplayInfoOf: Missing user display info."
-            else result
 
 userIdsByHandlesOf :: (PG.QueryA m) => Traversal s t UserHandle UserId -> s -> m t
 userIdsByHandlesOf trav s = do
   s
-    & unsafePartsOf trav %%~ \userHandles -> do
+    & asListOf trav %%~ \userHandles -> do
       let usersTable = zip [0 :: Int32 ..] userHandles
       PG.queryListCol @(UserId)
         [PG.sql|
@@ -98,10 +94,6 @@ userIdsByHandlesOf trav s = do
           JOIN users u ON u.handle = values.handle
       ORDER BY ord
       |]
-        <&> \result ->
-          if length result /= length userHandles
-            then error "userIdsByHandlesOf: Missing user ids."
-            else result
 
 userProfileById :: UserId -> PG.Transaction e (Maybe UserProfile)
 userProfileById userId = do
@@ -301,7 +293,7 @@ searchUsersByNameOrHandlePrefix (Query prefix) usk (Limit limit) = do
 joinOrgIdsToUserIdsOf :: Traversal s t UserId (UserId, Maybe OrgId) -> s -> PG.Transaction e t
 joinOrgIdsToUserIdsOf trav s = do
   s
-    & unsafePartsOf trav %%~ \userIds -> do
+    & asListOf trav %%~ \userIds -> do
       let usersTable = zip [0 :: Int32 ..] userIds
       PG.queryListRows @(UserId, Maybe OrgId)
         [PG.sql|
@@ -314,10 +306,6 @@ joinOrgIdsToUserIdsOf trav s = do
           JOIN users u ON u.id = values.user_id
       ORDER BY ord
       |]
-        <&> fmap \(userId, mayOrgId) ->
-          if length userIds /= length userIds
-            then error "joinOrgIdsToUserIdsOf: Missing user ids."
-            else (userId, mayOrgId)
 
 data UserCreationError
   = UserHandleTaken UserHandle

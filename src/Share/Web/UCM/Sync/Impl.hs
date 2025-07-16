@@ -173,7 +173,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
     -- Signing is sufficiently slow to sign in parallel
     signedEntities <-
       entities
-        & traverseOf (unsafePartsOf (traverse . Share.entityHashes_)) \hashes -> lift do
+        & traverseOf (asListOf (traverse . Share.entityHashes_)) \hashes -> lift do
           UnliftIO.pooledForConcurrentlyN maxParallelismPerDownloadRequest hashes \hash -> do
             HashJWT.signHashForUser mayUserId hash
     pure (DownloadEntitiesSuccess signedEntities)

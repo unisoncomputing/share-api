@@ -11,7 +11,7 @@ import Share.Web.Share.DisplayInfo.Types (TeamDisplayInfo (..))
 teamDisplayInfoOf :: (QueryA m) => Traversal s t TeamId TeamDisplayInfo -> s -> m t
 teamDisplayInfoOf trav s = do
   s
-    & unsafePartsOf trav %%~ \teamIds ->
+    & asListOf trav %%~ \teamIds ->
       do
         let teamTable = zip [0 :: Int32 ..] teamIds
         queryListRows

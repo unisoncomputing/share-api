@@ -19,9 +19,8 @@ module Share.Postgres.Authorization.Queries
   )
 where
 
+import Share.Prelude
 import Control.Lens
-import Data.Int (Int32)
-import Data.Set (Set)
 import Data.Set qualified as Set
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -103,7 +102,7 @@ listSubjectsWithResourcePermission resourceId permission = do
 subjectIdsForAuthSubjectsOf :: Traversal s t ResolvedAuthSubject GenericAuthSubject -> s -> PG.Transaction e t
 subjectIdsForAuthSubjectsOf trav s =
   s
-    & unsafePartsOf trav %%~ \resolvedAuthSubjects -> PG.pipelined do
+    & asListOf trav %%~ \resolvedAuthSubjects -> PG.pipelined do
       let userIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _UserSubject)
       let orgIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _OrgSubject)
       let teamIds = zip [0 :: Int32 ..] $ resolvedAuthSubjects ^.. (traversed . _TeamSubject)
@@ -139,9 +138,9 @@ subjectIdsForAuthSubjectsOf trav s =
           |]
       pure $
         resolvedAuthSubjects
-          & unsafePartsOf (traversed . _UserSubject) .~ userSubjects
-          & unsafePartsOf (traversed . _OrgSubject) .~ orgSubjects
-          & unsafePartsOf (traversed . _TeamSubject) .~ teamSubjects
+          & asListOf (traversed . _UserSubject) .~ userSubjects
+          & asListOf (traversed . _OrgSubject) .~ orgSubjects
+          & asListOf (traversed . _TeamSubject) .~ teamSubjects
 
 permissionsForProject :: Maybe UserId -> ProjectId -> PG.Transaction e (Set RolePermission)
 permissionsForProject mayUserId projectId = do
