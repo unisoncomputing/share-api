@@ -1,5 +1,6 @@
 module Share.Web.Share.DisplayInfo.Queries (userLikeDisplayInfoOf, unifiedDisplayInfoForUserOf) where
 
+import Share.Prelude
 import Control.Lens
 import Share.IDs
 import Share.Postgres (Transaction)

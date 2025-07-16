@@ -7,6 +7,7 @@ module Share.Web.Share.Roles.Queries
   )
 where
 
+import Share.Prelude
 import Control.Lens
 import Share.IDs
 import Share.Postgres

@@ -19,9 +19,8 @@ module Share.Postgres.Authorization.Queries
   )
 where
 
+import Share.Prelude
 import Control.Lens
-import Data.Int (Int32)
-import Data.Set (Set)
 import Data.Set qualified as Set
 import Share.IDs
 import Share.Postgres qualified as PG

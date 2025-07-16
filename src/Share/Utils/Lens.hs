@@ -6,4 +6,4 @@ import GHC.Stack (HasCallStack, withFrozenCallStack)
 -- | This is just asListOf, but with a slightly restricted signature and a HasCallStack
 -- in case we get a list mismatch.
 asListOf :: (HasCallStack) => Traversal s t a b -> Lens s t [a] [b]
-asListOf f = withFrozenCallStack asListOf f
+asListOf f = withFrozenCallStack unsafePartsOf f
