@@ -22,5 +22,5 @@ ys = [!a, !b] :+ 3
 
 
 ```ucm
-.prelude> add
+.prelude> update
 ```

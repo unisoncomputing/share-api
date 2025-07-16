@@ -6,10 +6,9 @@ x = 1
   Loading changes detected in scratch.u.
 
   I found and typechecked these definitions in scratch.u. If you
-  do an `add` or `update`, here's how your codebase would
-  change:
+  do an `update`, here's how your codebase would change:
 
-    ⍟ These new definitions are ok to `add`:
+    ⍟ These new definitions are ok to `update`:
     
       x : ##Nat
 ```
@@ -29,15 +28,13 @@ scratch/main> project.create-empty myproject
 
     1. Open scratch.u.
     2. Write some Unison code and save the file.
-    3. In UCM, type `add` to save it to your new project.
+    3. In UCM, type `update` to save it to your new project.
 
   🎉 🥳 Happy coding!
 
-myproject/main> add
+myproject/main> update
 
-  ⍟ I've added these definitions:
-
-    x : ##Nat
+  Done.
 
 myproject/main> move.term x y
 

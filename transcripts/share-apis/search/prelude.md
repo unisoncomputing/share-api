@@ -33,6 +33,6 @@ usesListLike _ = ListLike
 ```
 
 ```ucm
-scratch/main> add
+scratch/main> update
 scratch/main> push @transcripts/search/main
 ```

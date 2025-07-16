@@ -17,7 +17,7 @@ term = "start"
 ```
 
 ```ucm
-bca-updates/main> add
+bca-updates/main> update
 bca-updates/main> push @transcripts/bca-updates/main
 bca-updates/main> branch /feature-one
 ```

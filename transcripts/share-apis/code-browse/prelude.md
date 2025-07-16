@@ -19,7 +19,7 @@ external.externalName = 99
 
 
 ```ucm
-code-browse/main> add
+code-browse/main> update
 ```
 
 ```unison
@@ -29,6 +29,6 @@ a names./+% b = 10
 ```
 
 ```ucm
-code-browse/main> add
+code-browse/main> update
 code-browse/main> push
 ```

@@ -15,15 +15,13 @@ scratch/main> project.create-empty proj
 
     1. Open scratch.u.
     2. Write some Unison code and save the file.
-    3. In UCM, type `add` to save it to your new project.
+    3. In UCM, type `update` to save it to your new project.
 
   🎉 🥳 Happy coding!
 
-proj/main> add
+proj/main> update
 
-  ⍟ I've added these definitions:
-
-    stuff : ##Nat
+  Done.
 
 proj/main> push @test/proj
 

@@ -6,7 +6,7 @@ Create a project, add some history, then push it.
 
 ```ucm
 scratch/main> project.create-empty myproject
-myproject/main> add
+myproject/main> update
 myproject/main> move.term x y
 myproject/main> move.term y z
 myproject/main> history
