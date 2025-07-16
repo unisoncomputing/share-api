@@ -1,16 +1,52 @@
 -- | Initial Telemetry setup.
 module Share.Telemetry.Setup (withTracer) where
 
-import Data.Text (Text)
+import Data.HashMap.Lazy (HashMap)
+import Data.HashMap.Lazy qualified as HM
+import Data.Text qualified as Text
+import Network.URI qualified as URI
 import OpenTelemetry.Attributes qualified as Trace
+import OpenTelemetry.Context (Context)
 import OpenTelemetry.Trace qualified as Trace
-import UnliftIO
+import OpenTelemetry.Trace.Id (TraceId)
+import OpenTelemetry.Trace.Sampler qualified as Sampler
+import OpenTelemetry.Trace.TraceState (TraceState)
+import OpenTelemetry.Trace.TraceState qualified as TraceState
+import Share.Prelude
+
+initSampler :: IO Sampler.Sampler
+initSampler =
+  Trace.detectSampler
+    <&> \defaultSampler ->
+      defaultSampler {Sampler.shouldSample = shouldSample defaultSampler}
+  where
+    lookupTextAttribute :: Text -> Trace.SpanArguments -> Maybe Text
+    lookupTextAttribute key args =
+      HM.lookup key (Trace.attributes args) >>= \case
+        Trace.AttributeValue (Trace.TextAttribute t) -> Just t
+        _ -> Nothing
+    dropSample = (Sampler.Drop, HM.empty, TraceState.empty)
+    -- Configure some custom sampling logic.
+    shouldSample :: Sampler.Sampler -> Context -> TraceId -> Text -> Trace.SpanArguments -> IO (Sampler.SamplingResult, HashMap Text Trace.Attribute, TraceState)
+    shouldSample defaultSampler ctx tid name args = do
+      case (lookupTextAttribute "http.target" args >>= URI.parseURIReference . Text.unpack) <&> URI.pathSegments of
+        Just ("metrics" : _) -> pure dropSample
+        Just ("health" : _) -> pure dropSample
+        -- This is currently used in a health check.
+        Just ("users" : "zarelit" : _) -> pure dropSample
+        _ -> Sampler.shouldSample defaultSampler ctx tid name args
 
 withTracer :: Text -> (Trace.Tracer -> IO c) -> IO c
 withTracer commitHash f =
   bracket
     -- Install the SDK, pulling configuration from the environment
-    Trace.initializeGlobalTracerProvider
+    ( do
+        (spanProcessors, tp) <- Trace.getTracerProviderInitializationOptions
+        sampler <- initSampler
+        tp <- Trace.createTracerProvider spanProcessors (tp {Trace.tracerProviderOptionsSampler = sampler})
+        Trace.setGlobalTracerProvider tp
+        pure tp
+    )
     -- Ensure that any spans that haven't been exported yet are flushed
     Trace.shutdownTracerProvider
     -- Get a tracer so you can create spans
