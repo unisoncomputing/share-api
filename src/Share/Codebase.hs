@@ -22,17 +22,13 @@ module Share.Codebase
     expectTermsByRefIdsOf,
     loadTypesOfTermsOf,
     expectTypesOfTermsOf,
-    expectTypeOfReferent,
     expectTypesOfReferentsOf,
     expectTypesOfConstructorsOf,
     loadTypesOfConstructorsOf,
-    loadTypeOfReferent,
-    loadTypeDeclaration,
-    loadTypeDeclarationForCodeLookup,
-    expectTypeDeclaration,
-    loadDeclKind,
+    loadTypesOfReferentsOf,
+    loadTypeDeclarationsByRefIdsOf,
+    expectTypeDeclarationsByRefIdsOf,
     loadDeclKindsOf,
-    expectDeclKind,
     expectDeclKindsOf,
     termReferentsByShortHash,
     typeReferencesByShortHash,
@@ -59,7 +55,7 @@ module Share.Codebase
     setLooseCodeRoot,
 
     -- * Conversions
-    convertTerm2to1,
+    convertTerms2to1Of,
 
     -- * Utilities
     cachedCodebaseResponse,
@@ -226,18 +222,21 @@ loadTermAndTypeByRefIdsOf codebase trav s = do
     & asListOf trav %%~ \refs -> do
       let hashes = refs <&> \(Reference.Id h _) -> h
       termsAndTypes <- DefnQ.loadTermsByRefIdsOf codebase traversed refs
-      -- TODO: Batchify this so we're not making a separate query to convert every term!
-      for (zip hashes termsAndTypes) \case
-        (_h, Nothing) -> pure Nothing
-        (h, Just (v2Term, v2Type)) ->
-          Just <$> convertTerm2to1 h v2Term v2Type
+      let termInfo =
+            (zip hashes termsAndTypes) <&> \case
+              (_h, Nothing) -> Nothing
+              (h, Just (v2Term, v2Type)) -> Just (h, v2Term, v2Type)
+      convertTerms2to1Of (traversed . _Just) termInfo
 
-convertTerm2to1 :: (PG.QueryM m) => Hash -> V2.Term.Term V2.Symbol -> V2.Term.Type V2.Symbol -> m (V1.Term Symbol Ann, V1.Type Symbol Ann)
-convertTerm2to1 h v2Term v2Type = do
-  -- TODO: batchify this so we're not making a separate query for every decl!
-  v1Term <- Cv.term2to1 h expectDeclKind v2Term
-  let v1Type = Cv.ttype2to1 v2Type
-  pure (v1Term, v1Type)
+convertTerms2to1Of :: (PG.QueryM m) => Traversal s t (Hash, V2.Term.Term V2.Symbol, V2.Term.Type V2.Symbol) (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
+convertTerms2to1Of trav s = do
+  s
+    & asListOf trav %%~ \termInfos -> do
+      for termInfos \(h, v2Term, v2Type) -> do
+        -- TODO: We need to batchify both term2to1 and have it accept a batched 'expectDeclKind' so we're not making a separate query for every decl!
+        v1Term <- Cv.term2to1 h (expectDeclKindsOf id) v2Term
+        let v1Type = Cv.ttype2to1 v2Type
+        pure (v1Term, v1Type)
 
 expectTermsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
 expectTermsByRefIdsOf codebase trav s = do
@@ -279,25 +278,17 @@ expectTypesOfTermsOf codebase trav s = do
         (r, Nothing) -> unrecoverableError (MissingTypeForTerm r)
         (_, Just typ) -> pure typ
 
-expectTypeOfReferent :: (QueryM m) => CodebaseEnv -> Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> m t
-expectTypeOfReferent codebase trav s =
+expectTypesOfReferentsOf :: (QueryM m) => CodebaseEnv -> Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> m t
+expectTypesOfReferentsOf codebase trav s =
   s
     & asListOf trav %%~ \referents -> do
       let partitionedRefs =
             referents <&> \case
               V2.Ref r -> Left r
               V2.Con r conId -> Right (r, conId)
-      expectTypesOfTermsOf codebase (traversed . _Left) partitionedRefs
-        >>= expectTypesOfConstructorsOf codebase (traversed . _Right)
-
--- V2.Con r conId -> expectTypeOfConstructor codebase r conId
-
-expectTypesOfReferentsOf :: (QueryM m) => CodebaseEnv -> Traversal s t V2.Referent (V1.Type Symbol Ann) -> s -> m t
-expectTypesOfReferentsOf codebase trav s = do
-  s & trav %%~ expectTypeOfReferent codebase
-
-expectDeclKind :: (PG.QueryM m) => Reference.TypeReference -> m CT.ConstructorType
-expectDeclKind r = loadDeclKind r `whenNothingM` unrecoverableError (DefnQ.missingDeclKindError r)
+      withTermTypes <- expectTypesOfTermsOf codebase (traversed . _Left) partitionedRefs
+      withConstructorTypes <- expectTypesOfConstructorsOf codebase (traversed . _Right) withTermTypes
+      pure $ fmap (either id id) withConstructorTypes
 
 expectDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference CT.ConstructorType -> s -> m t
 expectDeclKindsOf trav s = do
@@ -307,9 +298,6 @@ expectDeclKindsOf trav s = do
       for (zip refs results) \case
         (r, Nothing) -> unrecoverableError (DefnQ.missingDeclKindError r)
         (_, Just ct) -> pure ct
-
-loadDeclKind :: (PG.QueryM m) => V2.TypeReference -> m (Maybe CT.ConstructorType)
-loadDeclKind = loadDeclKindsOf id
 
 loadDeclKindsOf :: (PG.QueryM m) => Traversal s t Reference.TypeReference (Maybe CT.ConstructorType) -> s -> m t
 loadDeclKindsOf trav s =
@@ -325,16 +313,24 @@ loadDeclKindsOf trav s =
           & DefnQ.loadDeclKindsOf (traversed . _Right)
       pure (fmap (either id id) xs)
 
-loadTypeDeclaration :: (QueryM m) => CodebaseEnv -> Reference.Id -> m (Maybe (V1.Decl Symbol Ann))
-loadTypeDeclaration (CodebaseEnv {codebaseOwner}) refId = do
-  loadTypeDeclarationForCodeLookup codebaseOwner refId
+loadTypeDeclarationsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t Reference.Id (Maybe (V1.Decl Symbol Ann)) -> s -> m t
+loadTypeDeclarationsByRefIdsOf codebase trav s =
+  s
+    & asListOf trav %%~ \refIds -> do
+      DefnQ.loadDeclsByRefIdsOf codebase traversed refIds
+        <&> \decls ->
+          zip refIds decls <&> \case
+            (_, Nothing) -> Nothing
+            ((Reference.Id h _), Just decl) -> Just (Cv.decl2to1 h decl)
 
-loadTypeDeclarationForCodeLookup :: (QueryM m) => UserId -> Reference.Id -> m (Maybe (V1.Decl Symbol Ann))
-loadTypeDeclarationForCodeLookup codebaseUser refId@(Reference.Id h _) =
-  fmap (Cv.decl2to1 h) <$> DefnQ.loadDecl codebaseUser refId
-
-expectTypeDeclaration :: (QueryM m) => CodebaseEnv -> Reference.Id -> m (V1.Decl Symbol Ann)
-expectTypeDeclaration codebase refId = loadTypeDeclaration codebase refId `whenNothingM` (unrecoverableError (MissingDecl refId))
+expectTypeDeclarationsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t Reference.Id (V1.Decl Symbol Ann) -> s -> m t
+expectTypeDeclarationsByRefIdsOf codebase trav s = do
+  s
+    & asListOf trav %%~ \refIds -> do
+      results <- loadTypeDeclarationsByRefIdsOf codebase traversed refIds
+      for (zip refIds results) \case
+        (refId, Nothing) -> unrecoverableError (MissingDecl refId)
+        (_, Just decl) -> pure decl
 
 -- | Find all the term referents that match the given prefix.
 -- Includes decl constructors.
@@ -364,25 +360,34 @@ typeReferencesByShortHash = \case
     DefnQ.declReferencesByPrefix prefix cycle
       <&> Set.map V1.ReferenceDerived
 
--- | Get the type of a referent.
-loadTypeOfReferent ::
-  (QueryM m) =>
-  CodebaseEnv ->
-  V2.Referent ->
-  m (Maybe (V1.Type Symbol Ann))
-loadTypeOfReferent codebase = \case
-  V2.Ref r -> loadTypeOfTerm codebase r
-  V2.Con r conId -> loadTypeOfConstructor codebase r conId
+-- | Load the types of referents
+loadTypesOfReferentsOf :: (QueryM m) => CodebaseEnv -> Traversal s t V2.Referent (Maybe (V1.Type Symbol Ann)) -> s -> m t
+loadTypesOfReferentsOf codebase trav s =
+  s
+    & asListOf trav %%~ \referents -> do
+      let partitionedRefs =
+            referents <&> \case
+              V2.Ref r -> Left r
+              V2.Con r conId -> Right (r, conId)
+      withTermTypes <- loadTypesOfTermsOf codebase (traversed . _Left) partitionedRefs
+      withConstructorTypes <- loadTypesOfConstructorsOf codebase (traversed . _Right) withTermTypes
+      pure $ (either id id <$> withConstructorTypes)
 
 -- | Load the type of a constructor.
-loadTypesOfConstructorsOf :: (QueryM m) => CodebaseEnv -> Traversal s t (V2.TypeReference, V2.ConstructorId) (Maybe (V1.Type Symbol Ann)) -> m t
+loadTypesOfConstructorsOf :: (QueryM m) => CodebaseEnv -> Traversal s t (V2.TypeReference, V2.ConstructorId) (Maybe (V1.Type Symbol Ann)) -> s -> m t
 loadTypesOfConstructorsOf codebase trav s =
-  case ref of
-    -- No constructors for builtin types.
-    Reference.Builtin _txt -> pure Nothing
-    Reference.DerivedId refId -> do
-      decl <- loadTypeDeclaration codebase refId `whenNothingM` (unrecoverableError (MissingDecl refId))
-      pure $ DD.typeOfConstructor (DD.asDataDecl decl) conId
+  s
+    & asListOf trav %%~ \refs -> do
+      let partitionedRefs =
+            refs <&> \case
+              (Reference.Builtin _t, _conId) -> Left Nothing
+              (Reference.DerivedId refId, conId) -> Right ((refId, conId), refId)
+      results <- loadTypeDeclarationsByRefIdsOf codebase (traversed . _Right . _2) partitionedRefs
+      for results \case
+        (Right ((refId, _conId), Nothing)) -> (unrecoverableError (MissingDecl refId))
+        (Right ((_refId, conId), (Just decl))) -> do
+          pure $ DD.typeOfConstructor (DD.asDataDecl decl) conId
+        (Left x) -> pure x
 
 expectTypesOfConstructorsOf :: (QueryM m) => CodebaseEnv -> Traversal s t (V2.TypeReference, V2.ConstructorId) (V1.Type Symbol Ann) -> s -> m t
 expectTypesOfConstructorsOf codebase trav s =
@@ -398,6 +403,8 @@ data CodeLookupCache = CodeLookupCache
     typeCache :: Map Reference.Id (V1.Decl Symbol Ann)
   }
 
+-- | TODO: The code lookup should either be batchified or we should preload the cache with
+-- everything we think we'll need.
 codeLookupForUser :: TVar CodeLookupCache -> CodebaseEnv -> CL.CodeLookup Symbol (PG.Transaction e) Ann
 codeLookupForUser cacheVar codebaseOwner = do
   CL.CodeLookup (fmap (fmap fst) . getTermAndType) (fmap (fmap snd) . getTermAndType) getTypeDecl
@@ -426,7 +433,7 @@ codeLookupForUser cacheVar codebaseOwner = do
       case Map.lookup r typeCache of
         Just typ -> pure (Just typ)
         Nothing -> do
-          maybeType <- loadTypeDeclarationForCodeLookup codebaseOwner r
+          maybeType <- loadTypeDeclarationsByRefIdsOf codebaseOwner id r
           whenJust maybeType \typ ->
             PG.transactionUnsafeIO do
               atomically do
@@ -440,7 +447,8 @@ codeLookupForUser cacheVar codebaseOwner = do
 loadCachedEvalResult :: CodebaseEnv -> Reference.Id -> PG.Transaction e (Maybe (V1.Term Symbol Ann))
 loadCachedEvalResult codebase ref@(Reference.Id h _) = runMaybeT do
   v2Term <- MaybeT $ DefnQ.loadCachedEvalResult codebase ref
-  lift $ Cv.term2to1 h expectDeclKind v2Term
+  -- TODO: Batchify this so we're not making a separate query for every reference in the term!
+  lift $ Cv.term2to1 h (expectDeclKindsOf id) v2Term
 
 saveCachedEvalResult :: (QueryM m) => CodebaseEnv -> Reference.Id -> V1.Term Symbol Ann -> m ()
 saveCachedEvalResult codebase refId@(Reference.Id h _) term = do
