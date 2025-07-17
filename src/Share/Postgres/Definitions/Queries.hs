@@ -17,7 +17,7 @@ module Share.Postgres.Definitions.Queries
     loadDeclsByRefIdsOf,
     expectDeclsByRefIdsOf,
     loadDeclByTypeComponentElementAndTypeId,
-    expectTypeComponentElementAndTypeId,
+    expectTypeComponentElementsAndTypeIdsOf,
     loadCachedEvalResult,
     saveCachedEvalResult,
     termReferencesByPrefix,
@@ -483,8 +483,8 @@ loadTypeComponentElementsAndTypeIdsOf (CodebaseEnv codebaseUser) trav s = do
         |]
         <&> fmap \(element, typeId) -> liftA2 (,) element typeId
 
-expectTypeComponentElementAndTypeId :: (QueryA m) => CodebaseEnv -> Traversal s t TermReferenceId (TypeComponentElement, TypeId) -> s -> m t
-expectTypeComponentElementAndTypeId codebase trav s =
+expectTypeComponentElementsAndTypeIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TermReferenceId (TypeComponentElement, TypeId) -> s -> m t
+expectTypeComponentElementsAndTypeIdsOf codebase trav s =
   s
     & asListOf trav %%~ \refs -> do
       unrecoverableEitherMap

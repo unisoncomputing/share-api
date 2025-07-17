@@ -151,6 +151,7 @@ termListEntry ::
   ExactName NameSegment V2Referent.Referent ->
   m (Backend.TermEntry Symbol Ann)
 termListEntry typ (ExactName nameSegment ref) = do
+  -- TODO: batchify this properly
   tag <- getTermTag ref typ
   pure $
     Backend.TermEntry
@@ -168,6 +169,7 @@ typeListEntry ::
   ExactName NameSegment Reference ->
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
+  -- TODO: batchify this properly
   tag <- getTypeTag ref
   pure $
     Backend.TypeEntry
@@ -248,15 +250,19 @@ evalDocRef ::
   m (Doc.EvaluatedDoc Symbol)
 evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
   let tm = Term.ref () termRef
+  -- TODO: batchify evalDoc.
   Doc.evalDoc terms typeOf eval decls tm
   where
     terms :: Reference -> m (Maybe (V1.Term Symbol ()))
     terms termRef@(Reference.Builtin _) = pure (Just (Term.ref () termRef))
     terms (Reference.DerivedId termRef) =
-      fmap (Term.unannotate . fst) <$> (Codebase.loadTerm codebase termRef)
+      -- TODO: batchify properly
+      fmap (Term.unannotate . fst) <$> (Codebase.loadTermAndTypeByRefIdsOf codebase id termRef)
 
     typeOf :: Referent.Referent -> m (Maybe (V1.Type Symbol ()))
-    typeOf termRef = fmap void <$> Codebase.loadTypeOfReferent codebase (Cv.referent1to2 termRef)
+    typeOf termRef =
+      -- TODO: batchify properly
+      fmap void <$> Codebase.loadTypesOfReferentsOf codebase id (Cv.referent1to2 termRef)
 
     eval :: V1.Term Symbol a -> m (Maybe (V1.Term Symbol ()))
     eval (Term.amap (const mempty) -> tm) = do
@@ -274,7 +280,9 @@ evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntim
       pure $ termRef <&> Term.amap (const mempty) . snd
 
     decls :: Reference -> m (Maybe (DD.Decl Symbol ()))
-    decls (Reference.DerivedId typeRef) = fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclaration codebase typeRef)
+    decls (Reference.DerivedId typeRef) =
+      -- TODO: batchify properly
+      fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclarationsByRefIdsOf codebase id typeRef)
     decls _ = pure Nothing
 
 -- | Find all definitions and children reachable from the given 'V2Branch.Branch',
