@@ -125,7 +125,8 @@ mkTermDefinition ::
   m TermDefinition
 mkTermDefinition codebase termPPED width r docs tm = do
   let referent = V2Referent.Ref r
-  termType <- Codebase.expectTypeOfTerm codebase r
+  -- TODO: batchify this properly
+  termType <- Codebase.expectTypesOfTermsOf codebase id r
   let bn = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE termPPED) width (Referent.Ref r)
   tag <- getTermTag referent termType
   mk termType bn tag
@@ -192,7 +193,9 @@ getTermTag r termType = do
   let isTest = Typechecker.isEqual termType (Decls.testResultListType mempty)
   constructorType <- case r of
     V2Referent.Ref {} -> pure Nothing
-    V2Referent.Con ref _ -> Just <$> Codebase.expectDeclKind ref
+    V2Referent.Con ref _ ->
+      -- TODO: batchify this properly
+      Just <$> Codebase.expectDeclKindsOf id ref
   pure $
     if
       | isDoc -> Doc
@@ -206,7 +209,8 @@ getTypeTag ::
   Reference.TypeReference ->
   m TypeTag
 getTypeTag r = do
-  Codebase.loadDeclKind r <&> \case
+  -- TODO: batchify this properly
+  Codebase.loadDeclKindsOf id r <&> \case
     Nothing -> Data
     Just CT.Data -> Data
     Just CT.Effect -> Ability
@@ -220,7 +224,8 @@ displayTerm codebase = \case
       Nothing -> MissingObject $ Reference.toShortHash ref
       Just typ -> BuiltinObject (mempty <$ typ)
   Reference.DerivedId rid -> do
-    (term, ty) <- Codebase.expectTerm codebase rid
+    -- TODO: batchify this properly
+    (term, ty) <- Codebase.expectTermsByRefIdsOf codebase id rid
     pure case term of
       V1Term.Ann' _ _ -> UserObject term
       -- manually annotate if necessary
@@ -230,7 +235,8 @@ displayType :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObje
 displayType codebase = \case
   Reference.Builtin _ -> pure (BuiltinObject ())
   Reference.DerivedId rid -> do
-    decl <- Codebase.expectTypeDeclaration codebase rid
+    -- TODO: batchify this properly
+    decl <- Codebase.expectTypeDeclarationsByRefIdsOf codebase id rid
     pure (UserObject decl)
 
 evalDocRef ::
@@ -287,7 +293,7 @@ lsBranch codebase b0 = do
     V2Branch.terms b0
       & itoListOf (itraversed <. folding Map.keys)
       & fmap (\(ns, r) -> (r, r, ns))
-      & Codebase.expectTypeOfReferents codebase (traversed . _2)
+      & Codebase.expectTypesOfReferentsOf codebase (traversed . _2)
 
   termEntries <- for termsWithTypes $ \(r, typ, ns) -> do
     Backend.ShallowTermEntry <$> termListEntry typ (ExactName ns r)
@@ -313,6 +319,7 @@ lsBranch codebase b0 = do
       ++ branchEntries
       ++ patchEntries
 
+-- TODO: batchify this
 typeDeclHeader ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
@@ -321,7 +328,7 @@ typeDeclHeader ::
   m (DisplayObject Syntax.SyntaxText Syntax.SyntaxText)
 typeDeclHeader codebase ppe r = case Reference.toId r of
   Just rid ->
-    Codebase.loadTypeDeclaration codebase rid <&> \case
+    Codebase.loadTypeDeclarationsByRefIdsOf codebase id rid <&> \case
       Nothing -> DisplayObject.MissingObject (Reference.toShortHash r)
       Just decl ->
         DisplayObject.UserObject $
