@@ -93,7 +93,7 @@ expectEntity codebase hash = do
       Share.TC <$> DefnQ.expectShareTermComponent codebase componentHashId
     TypeEntity -> do
       componentHashId <- HashQ.expectComponentHashId (fromHash32 @ComponentHash hash)
-      Share.DC <$> DefnQ.expectShareTypeComponent codebase componentHashId
+      Share.DC <$> DefnQ.expectShareTypeComponentsOf codebase id componentHashId
     PatchEntity -> do
       patchId <- HashQ.expectPatchIdsOf codebase id (fromHash32 @PatchHash hash)
       Share.P <$> PatchQ.expectPatchEntity patchId

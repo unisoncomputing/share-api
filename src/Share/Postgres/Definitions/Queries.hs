@@ -12,7 +12,7 @@ module Share.Postgres.Definitions.Queries
     termTagsByReferentsOf,
     typeTagsByReferencesOf,
     expectShareTermComponent,
-    expectShareTypeComponent,
+    expectShareTypeComponentsOf,
     loadDeclKindsOf,
     loadDeclsByRefIdsOf,
     expectDeclsByRefIdsOf,
@@ -195,8 +195,8 @@ expectShareTermComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
         >>= NonEmpty.nonEmpty
 
 -- | Helper for loading type components efficiently for sync.
-expectShareTypeComponent :: (QueryM m) => CodebaseEnv -> Traversal s t ComponentHashId (Share.DeclComponent Text Hash32) -> s -> m t
-expectShareTypeComponent CodebaseEnv {codebaseOwner} trav s = do
+expectShareTypeComponentsOf :: forall m s t. (QueryM m) => CodebaseEnv -> Traversal s t ComponentHashId (Share.DeclComponent Text Hash32) -> s -> m t
+expectShareTypeComponentsOf CodebaseEnv {codebaseOwner} trav s = do
   s
     & asListOf trav %%~ \componentHashIds -> do
       componentElements <- componentElementsOf traversed componentHashIds
@@ -208,10 +208,10 @@ expectShareTypeComponent CodebaseEnv {codebaseOwner} trav s = do
             & NonEmpty.toList
             & Share.DeclComponent
   where
-    componentElementsOf :: Traversal s t ComponentHashId [(TypeId, Maybe LocalTypeBytes)] -> s -> m t
+    componentElementsOf :: forall s t. Traversal s t ComponentHashId [(TypeId, Maybe LocalTypeBytes)] -> s -> m t
     componentElementsOf trav s = do
       s & asListOf trav \componentHashIds -> do
-        queryListCol @[(TypeId, Maybe LocalTypeBytes)]
+        queryListCol @[TupleVal TypeId (Maybe LocalTypeBytes)]
           [sql| WITH component_hashes(ord, component_hash_id) AS (
                 SELECT t.ord, t.component_hash_id FROM ^{toTable (ordered componentHashIds)} AS t(ord, component_hash_id)
               )
@@ -226,6 +226,7 @@ expectShareTypeComponent CodebaseEnv {codebaseOwner} trav s = do
               FROM component_hashes ch
               ORDER BY component_hashes.ord ASC
             |]
+          <&> (fmap . fmap) \(TupleVal (typeId, bytes)) -> (typeId, bytes)
     checkElements :: (ComponentHashId, [(TypeId, Maybe LocalTypeBytes)]) -> m (NonEmpty (TypeId, LocalTypeBytes))
     checkElements (componentHashId, rows) =
       case NonEmpty.nonEmpty rows of
@@ -539,7 +540,7 @@ typeLocalComponentReferencesOf trav s = do
             ORDER BY type_ids.ord ASC
         |]
 
-expectDeclsByRefIdsOf :: CodebaseEnv -> Traversal s t Reference.Id (V2.Decl Symbol) -> s -> m t
+expectDeclsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t Reference.Id (V2.Decl Symbol) -> s -> m t
 expectDeclsByRefIdsOf codebase trav s = do
   s
     & asListOf trav %%~ \refs -> do
@@ -1013,7 +1014,7 @@ saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerial
       componentEntity <- case maySerialized of
         Just serialized -> pure serialized
         Nothing -> do
-          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponent codebase chId
+          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponentsOf codebase id chId
       let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
       saveSerializedComponent codebase chId serializedEntity
 
