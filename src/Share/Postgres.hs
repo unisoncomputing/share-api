@@ -22,6 +22,7 @@ module Share.Postgres
     Interp.DecodeRow (..),
     Interp.DecodeField,
     Only (..),
+    TupleVal (..),
     QueryA (..),
     QueryM (..),
     TransactionError (..),
@@ -96,6 +97,7 @@ import GHC.Exception (SrcLoc (srcLocModule))
 import GHC.Stack qualified as Stack
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
+import Hasql.Interpolate qualified as Hasql
 import Hasql.Interpolate qualified as Interp
 import Hasql.Pipeline qualified as Hasql.Pipeline
 import Hasql.Pool qualified as Pool
@@ -710,3 +712,18 @@ transactionSpan name spanTags action = do
     Trace.endSpan s Nothing
     Trace.adjustContext $ \ctx -> maybe (Trace.removeSpan ctx) (`Trace.insertSpan` ctx) parent
   action
+
+-- | Helper to treat composite types as Values, useful when decoding arrays of rows.
+--
+-- This is a bit annoying, can probably add a better version to hasql-interpolate somehow.
+newtype TupleVal a b = TupleVal (a, b)
+  deriving (Show, Eq, Ord)
+
+instance (Interp.DecodeField a, Interp.DecodeField b) => Hasql.DecodeValue (TupleVal a b) where
+  decodeValue = TupleVal <$> (Decoders.composite decoder)
+    where
+      decoder :: Decoders.Composite (a, b)
+      decoder = do
+        a <- Decoders.field $ Interp.decodeField
+        b <- Decoders.field $ Interp.decodeField
+        pure (a, b)
