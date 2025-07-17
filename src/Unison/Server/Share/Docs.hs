@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 
-module Unison.Server.Share.Docs (docsForDefinitionName) where
+module Unison.Server.Share.Docs (docsForDefinitionNamesOf) where
 
 import Control.Lens qualified as Cons
 import Share.Codebase qualified as Codebase
