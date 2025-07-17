@@ -143,9 +143,8 @@ loadTermIdsByRefIdsOf trav s = do
         )
         SELECT term.id
           FROM ref_ids
-            LEFT JOIN terms term ON term.component_index = ref_ids.comp_index
-            LEFT JOIN component_hashes ON term.component_hash_id = component_hashes.id
-          WHERE component_hashes.base32 = ref_ids.comp_hash
+            LEFT JOIN component_hashes ch ON ch.base32 = ref_ids.comp_hash
+            LEFT JOIN terms term ON (term.component_hash_id = ch.id AND term.component_index = ref_ids.comp_index)
         ORDER BY ref_ids.ord ASC
       |]
 
@@ -299,9 +298,8 @@ loadTermComponentElementByTermIdsOf CodebaseEnv {codebaseOwner} trav s = do
         )
         SELECT bytes.bytes
           FROM term_ids
-            LEFT JOIN sandboxed_terms sandboxed ON sandboxed.term_id = term_ids.term_id
+            LEFT JOIN sandboxed_terms sandboxed ON (sandboxed.term_id = term_ids.term_id AND sandboxed.user_id = #{codebaseOwner})
             LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
-          WHERE sandboxed.user_id = #{codebaseOwner}
           ORDER BY term_ids.ord ASC
       |]
 
@@ -430,9 +428,8 @@ loadDeclKindsOf trav s =
           )
           SELECT kind
             FROM ref_ids
-              LEFT JOIN types typ ON typ.component_index = ref_ids.comp_index
-              LEFT JOIN component_hashes ON typ.component_hash_id = component_hashes.id
-              WHERE component_hashes.base32 = ref_ids.comp_hash
+              LEFT JOIN component_hashes ch ON ch.base32 = ref_ids.comp_hash
+              LEFT JOIN types typ ON typ.component_index = ref_ids.comp_index AND typ.component_hash_id = ch.id
             ORDER BY ref_ids.ord
     |]
         <&> (fmap . fmap) declKindEnumToConstructorType
@@ -472,14 +469,10 @@ loadTypeComponentElementsAndTypeIdsOf (CodebaseEnv codebaseUser) trav s = do
           SELECT t.ord, t.comp_hash, t.comp_index FROM ^{toTable refsTable} AS t(ord, comp_hash, comp_index)
         ) SELECT bytes.bytes, typ.id
             FROM ref_ids
-              LEFT JOIN types typ ON typ.component_index = ref_ids.comp_index
-              LEFT JOIN component_hashes ON
-                          (typ.component_hash_id = component_hashes.id
-                            AND component_hashes.base32 = ref_ids.comp_hash
-                          )
-              LEFT JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
+              LEFT JOIN component_hashes ch ON ref_ids.comp_hash = ch.base32
+              LEFT JOIN types typ ON (typ.component_index = ref_ids.comp_index AND typ.component_hash_id = ch.id)
+              LEFT JOIN sandboxed_types sandboxed ON (typ.id = sandboxed.type_id AND sandboxed.user_id = #{codebaseUser})
               LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
-            WHERE sandboxed.user_id = #{codebaseUser}
         |]
         <&> fmap \(element, typeId) -> liftA2 (,) element typeId
 
@@ -529,7 +522,7 @@ typeLocalComponentReferencesOf trav s = do
       queryListCol @[ComponentHash]
         [sql|
             WITH type_ids(ord, type_id) AS (
-              SELECT ch.ord, ch.hash FROM ^{toTable (ordered typeIds)} AS (ord, type_id)
+              SELECT t.ord, t.type_id FROM ^{toTable (ordered typeIds)} AS t(ord, type_id)
             ) SELECT (
               SELECT COALESCE(array_agg(component_hashes.base32 ORDER BY local_refs.local_index ASC), '{}') as component_hash_array
                 FROM type_local_component_references local_refs
