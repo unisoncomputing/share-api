@@ -15,7 +15,7 @@ module Share.Postgres.Definitions.Queries
     expectShareTypeComponent,
     loadDeclKindsOf,
     loadDeclsByRefIdsOf,
-    expectDecl,
+    expectDeclsByRefIdsOf,
     loadDeclByTypeComponentElementAndTypeId,
     expectTypeComponentElementAndTypeId,
     loadCachedEvalResult,
@@ -50,7 +50,6 @@ import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Servant (err500)
 import Share.Codebase.Types (CodebaseEnv (..))
-import Share.IDs
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Definitions.Types
@@ -196,31 +195,45 @@ expectShareTermComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
         >>= NonEmpty.nonEmpty
 
 -- | Helper for loading type components efficiently for sync.
-expectShareTypeComponent :: (QueryM m) => CodebaseEnv -> ComponentHashId -> m (Share.DeclComponent Text Hash32)
-expectShareTypeComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
-  componentElements :: NonEmpty (TypeId, LocalTypeBytes) <-
-    ( queryListRows
-        [sql| SELECT typ.id, bytes.bytes
-           FROM types typ
-           LEFT JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
-           LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
-           WHERE typ.component_hash_id = #{componentHashId}
-             AND sandboxed.user_id = #{codebaseOwner}
-           ORDER BY typ.component_index ASC
-      |]
-        -- Ensure we get at least one index, and that we have bytes saved for each part of the
-        -- component.
-        <&> checkElements
-      )
-      `whenNothingM` do
-        unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentHashId)
-  second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList <$> for componentElements \(typeId, LocalTypeBytes bytes) ->
-    (,bytes) <$> typeLocalReferences typeId
+expectShareTypeComponent :: (QueryM m) => CodebaseEnv -> Traversal s t ComponentHashId (Share.DeclComponent Text Hash32) -> s -> m t
+expectShareTypeComponent CodebaseEnv {codebaseOwner} trav s = do
+  s
+    & asListOf trav %%~ \componentHashIds -> do
+      componentElements <- componentElementsOf traversed componentHashIds
+      checkedElements :: [NonEmpty (TypeId, LocalTypeBytes)] <- for (zip componentHashIds componentElements) checkElements
+      typeLocalReferencesOf (traversed . traversed . _1) checkedElements
+        <&> fmap \elements ->
+          elements
+            <&> (\(locals, LocalTypeBytes bytes) -> ((Hash32.fromHash . unComponentHash) <$> locals, bytes))
+            & NonEmpty.toList
+            & Share.DeclComponent
   where
-    checkElements :: [(TypeId, Maybe LocalTypeBytes)] -> Maybe (NonEmpty (TypeId, LocalTypeBytes))
-    checkElements rows =
-      sequenceAOf (traversed . _2) rows
-        >>= NonEmpty.nonEmpty
+    componentElementsOf :: Traversal s t ComponentHashId [(TypeId, Maybe LocalTypeBytes)] -> s -> m t
+    componentElementsOf trav s = do
+      s & asListOf trav \componentHashIds -> do
+        queryListCol @[(TypeId, Maybe LocalTypeBytes)]
+          [sql| WITH component_hashes(ord, component_hash_id) AS (
+                SELECT t.ord, t.component_hash_id FROM ^{toTable (ordered componentHashIds)} AS t(ord, component_hash_id)
+              )
+              SELECT (
+                SELECT COALESCE(array_agg((typ.id, bytes.bytes) ORDER BY typ.component_index ASC), '{}') as type_elements
+                  FROM types typ
+                    LEFT JOIN sandboxed_types sandboxed ON typ.id = sandboxed.type_id
+                    LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
+                  WHERE ch.component_hash_id = typ.component_hash_id
+                        AND sandboxed.user_id = #{codebaseOwner}
+              )
+              FROM component_hashes ch
+              ORDER BY component_hashes.ord ASC
+            |]
+    checkElements :: (ComponentHashId, [(TypeId, Maybe LocalTypeBytes)]) -> m (NonEmpty (TypeId, LocalTypeBytes))
+    checkElements (componentHashId, rows) =
+      case NonEmpty.nonEmpty rows of
+        Nothing -> unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentHashId)
+        Just nonEmptyRows ->
+          for nonEmptyRows \case
+            (_typeId, Nothing) -> unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentHashId)
+            (typeId, Just bytes) -> pure (typeId, bytes)
 
 -- | Batch load terms by ids.
 loadTermsByIdsOf ::
@@ -430,19 +443,22 @@ loadDeclsByRefIdsOf codebase trav s = do
   s
     & asListOf trav %%~ \refs -> do
       mayTypeComponents <- loadTypeComponentElementsAndTypeIdsOf codebase traversed refs
-      (TypeComponentElement decl, typeId :: TypeId) <- MaybeT (loadTypeComponentElementAndTypeId codebaseUser refId)
-      Share.LocalIds {texts, hashes} <- typeLocalReferences typeId
-      let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
-      pure $ s2cDecl localIds decl
+      typeLocalReferencesOf (traversed . _Just . _2) mayTypeComponents
+        <&> (fmap . fmap) \(TypeComponentElement decl, Share.LocalIds {texts, hashes}) ->
+          let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
+           in s2cDecl localIds decl
 
-loadDeclByTypeComponentElementAndTypeId :: (QueryA m) => (TypeComponentElement, TypeId) -> m (V2.Decl Symbol)
-loadDeclByTypeComponentElementAndTypeId (TypeComponentElement decl, typeId) =
-  typeLocalReferences typeId <&> \Share.LocalIds {texts, hashes} ->
-    let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
-     in s2cDecl localIds decl
+loadDeclByTypeComponentElementAndTypeId :: (QueryA m) => Traversal s t (TypeComponentElement, TypeId) (V2.Decl Symbol) -> s -> m t
+loadDeclByTypeComponentElementAndTypeId trav s =
+  s
+    & asListOf trav %%~ \ids -> do
+      typeLocalReferencesOf (traversed . _2) ids
+        <&> fmap \(TypeComponentElement decl, Share.LocalIds {texts, hashes}) ->
+          let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
+           in s2cDecl localIds decl
 
 loadTypeComponentElementsAndTypeIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TypeReferenceId (Maybe (TypeComponentElement, TypeId)) -> s -> m t
-loadTypeComponentElementsAndTypeIdsOf codebase trav s = do
+loadTypeComponentElementsAndTypeIdsOf (CodebaseEnv codebaseUser) trav s = do
   s
     & asListOf trav %%~ \refs -> do
       let refsTable =
@@ -466,14 +482,16 @@ loadTypeComponentElementsAndTypeIdsOf codebase trav s = do
         |]
         <&> fmap \(element, typeId) -> liftA2 (,) element typeId
 
-expectTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TermReferenceId -> m (TypeComponentElement, TypeId)
-expectTypeComponentElementAndTypeId codebaseUser refId =
-  unrecoverableEitherMap
-    ( \case
-        Nothing -> Left (expectedTypeError $ Right refId)
-        Just decl -> Right decl
-    )
-    (loadTypeComponentElementAndTypeId codebaseUser refId)
+expectTypeComponentElementAndTypeId :: (QueryA m) => CodebaseEnv -> Traversal s t TermReferenceId (TypeComponentElement, TypeId) -> s -> m t
+expectTypeComponentElementAndTypeId codebase trav s =
+  s
+    & asListOf trav %%~ \refs -> do
+      unrecoverableEitherMap
+        ( \elems -> for (zip refs elems) \case
+            (refId, Nothing) -> Left (expectedTypeError $ Right refId)
+            (_, Just decl) -> Right decl
+        )
+        (loadTypeComponentElementsAndTypeIdsOf codebase traversed refs)
 
 typeLocalReferencesOf :: (QueryA m) => Traversal s t TypeId (Share.LocalIds Text ComponentHash) -> s -> m t
 typeLocalReferencesOf trav s = do
@@ -521,12 +539,14 @@ typeLocalComponentReferencesOf trav s = do
             ORDER BY type_ids.ord ASC
         |]
 
-expectDecl :: UserId -> Reference.Id -> PG.Transaction e (V2.Decl Symbol)
-expectDecl codebaseUser refId = do
-  mayDecl <- loadDecl codebaseUser refId
-  case mayDecl of
-    Just decl -> pure decl
-    Nothing -> unrecoverableError $ InternalServerError "expected-decl" (expectedTermError $ Right refId)
+expectDeclsByRefIdsOf :: CodebaseEnv -> Traversal s t Reference.Id (V2.Decl Symbol) -> s -> m t
+expectDeclsByRefIdsOf codebase trav s = do
+  s
+    & asListOf trav %%~ \refs -> do
+      result <- loadDeclsByRefIdsOf codebase traversed refs
+      for (zip refs result) \case
+        (_, Just decl) -> pure decl
+        (refId, Nothing) -> unrecoverableError $ InternalServerError "expected-decl" (expectedTermError $ Right refId)
 
 s2cDecl :: ResolvedLocalIds -> DeclFormat.Decl Symbol -> (V2.Decl Symbol)
 s2cDecl (LocalIds.LocalIds {textLookup, defnLookup}) V2.DataDeclaration {declType, modifier, bound, constructorTypes} =
