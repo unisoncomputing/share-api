@@ -79,7 +79,7 @@ tryComputeCausalDiff ::
     )
 tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = PG.transactionSpan "tryComputeCausalDiff" mempty do
   -- Ensure name lookups for the things we're diffing.
-  let getBranch :: CausalId -> PG.Transaction NamespaceDiffError (BranchHashId, NameLookupReceipt)
+  let getBranch :: (PG.QueryM m) => CausalId -> m (BranchHashId, NameLookupReceipt)
       getBranch causalId = do
         branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
         nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
@@ -210,6 +210,7 @@ diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
     -- Just dropping them from the diff for now
     _ -> pure Nothing
 
+-- TODO: batchify this
 getTermDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction e (Maybe (Either ConstructorReference TermDefinition))
 getTermDefinition (codebase, rt, bhId, name) = do
   let perspective = mempty
@@ -236,6 +237,7 @@ diffTypes !_authZReceipt old@(_, _, _, oldTypeName) new@(_, _, _, newTypeName) =
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition oldType) (typeDefinition newType)
   pure $ TypeDefinitionDiff {left = oldType, right = newType, diff = typeDiffDisplayObject}
 
+-- TODO: batchify this
 getTypeDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction e (Maybe TypeDefinition)
 getTypeDefinition (codebase, rt, bhId, name) = do
   let perspective = mempty

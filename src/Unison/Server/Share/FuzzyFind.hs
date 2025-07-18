@@ -189,14 +189,25 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
           then do
             NameLookupOps.namesPerspectiveForRootAndPath bhId (coerce (Path.toList perspective) <> pathToMatch)
           else pure searchPerspective
+      let partitionedRefs =
+            refs <&> \case
+              Backend.FoundTermRef r -> Left (Cv.referent1to2 r)
+              Backend.FoundTypeRef r -> Right r
+      refsWithTypeInfo <-
+        partitionedRefs
+          & asListOf (traversed . _Left) %%~ \referents -> do
+            typeInfo <- Codebase.expectTypesOfReferentsOf codebase traversed referents
+            pure $ zip typeInfo referents
       entries <-
-        for refs $
-          \case
-            Backend.FoundTermRef r -> do
-              typ <- Codebase.expectTypeOfReferent codebase (Cv.referent1to2 r)
-              Left . (r,) <$> Backend.termListEntry typ (ExactName (NameSegment n) (Cv.referent1to2 r))
-            Backend.FoundTypeRef r ->
-              Right . (r,) <$> Backend.typeListEntry (ExactName (NameSegment n) r)
+        refsWithTypeInfo
+          & (traversed . _Left)
+            %%~ ( \(typ, r) -> do
+                    (r,) <$> Backend.termListEntry typ (ExactName (NameSegment n) r)
+                )
+          >>= (traversed . _Right)
+            %%~ ( \r -> do
+                    (r,) <$> Backend.typeListEntry (ExactName (NameSegment n) r)
+                )
       let allLabeledDependencies = foldMap (either (termEntryLabeledDependencies . snd) (typeEntryLabeledDependencies . snd)) entries
       pped <- PPED.ppedForReferences namesPerspective allLabeledDependencies
       let ppe = PPED.suffixifiedPPE pped
@@ -214,6 +225,7 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
           let namedType = Backend.typeEntryToNamedType typeEntry
           -- Use the name from the search here rather than the pretty printer best-name
           let typeName = (Name.toText $ HQ'.toName $ UBackend.typeEntryHQName typeEntry)
+          -- TODO batchify this
           typeHeader <- Backend.typeDeclHeader codebase ppe r
           let ft = FoundType typeName typeHeader namedType
           pure (a, FoundTypeResult ft)
