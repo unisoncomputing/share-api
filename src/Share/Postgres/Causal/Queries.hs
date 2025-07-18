@@ -914,7 +914,7 @@ expectNamespaceStatsOf trav s =
 -- | Copy a causal and all its dependencies from one codebase to another.
 -- Make sure you've done some form of authorization check before calling this.
 importCausalIntoCodebase :: (QueryM m) => CodebaseEnv -> UserId -> CausalId -> m ()
-importCausalIntoCodebase (CodebaseEnv {codebaseOwner}) fromCodebaseUserId causalId = do
+importCausalIntoCodebase (CodebaseEnv {codebaseOwner}) fromCodebaseUserId causalId = transactionSpan "importCausalIntoCodebase" mempty do
   execute_
     [sql|
       SELECT copy_causal_into_codebase(#{causalId}, #{fromCodebaseUserId}, #{codebaseOwner})

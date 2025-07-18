@@ -232,6 +232,14 @@ type T = Transaction Void
 newtype Session e a = Session {_unSession :: Logging.LoggerT (ReaderT (Env.Env TransactionCtx) (ExceptT (TransactionError e) Hasql.Session)) a}
   deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), MonadIO, Logging.MonadLogger, MonadError (TransactionError e))
 
+instance MonadTracer (Session e) where
+  getTracer = asks Env.tracer
+
+instance MonadTags (Session e) where
+  askTags = ask >>= transactionUnsafeIO . getTags
+  withTags newTags (Session t) = Session $ do
+    local (addTags newTags) t
+
 data PostgresError
   = PostgresError (Pool.UsageError)
   deriving stock (Show)
@@ -461,7 +469,7 @@ class (Applicative m) => QueryA m where
       Right y -> pure y
       Left e -> unrecoverableError e
 
-class (Logging.MonadLogger m, QueryA m) => QueryM m where
+class (Logging.MonadLogger m, MonadTracer m, MonadTags m, QueryA m) => QueryM m where
   -- | Allow running IO actions in a transaction. These actions may be run multiple times if
   -- the transaction is retried.
   transactionUnsafeIO :: IO a -> m a
@@ -686,7 +694,7 @@ catchAllTransaction (Transaction t) = Transaction do
     Right a -> pure (Right $ Right a)
 
 -- | Allows tracking a span in a transaction.
-transactionSpan :: (HasCallStack, MonadTracer m, MonadTags m, QueryM m) => Text -> HM.HashMap Text Trace.Attribute -> m a -> m a
+transactionSpan :: (HasCallStack, QueryM m) => Text -> HM.HashMap Text Trace.Attribute -> m a -> m a
 transactionSpan name spanTags action = do
   tags <- askTags
   let (_mayFuncName, callSiteInfo) = spanInfo
