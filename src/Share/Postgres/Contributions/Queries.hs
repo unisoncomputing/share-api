@@ -36,6 +36,7 @@ import Share.Postgres.Comments.Queries (commentsByTicketOrContribution)
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.API
+import Share.Utils.Postgres
 import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors
 import Share.Web.Share.Contributions.API (ContributionTimelineCursor, ListContributionsCursor)
@@ -289,8 +290,8 @@ shareContributionsByBranchOf trav s =
       contributionsByBranch <-
         ( PG.queryListRows @(PG.Only BranchId PG.:. ShareContribution UserId)
             [PG.sql|
-          WITH source_branches(branch_id) AS (
-            SELECT * FROM ^{PG.singleColumnTable branchIds}
+          WITH source_branches(ord, branch_id) AS (
+            SELECT * FROM ^{PG.toTable (ordered branchIds)}
           )
           SELECT
             source_branches.branch_id,
@@ -317,6 +318,7 @@ shareContributionsByBranchOf trav s =
             LEFT JOIN users AS source_branch_contributor ON source_branch_contributor.id = source_branch.contributor_id
             JOIN project_branches AS target_branch ON target_branch.id = contribution.target_branch
             LEFT JOIN users AS target_branch_contributor ON target_branch_contributor.id = target_branch.contributor_id
+          ORDER BY source_branches.ord ASC
       |]
             <&> ( \(results :: [PG.Only BranchId PG.:. ShareContribution UserId]) ->
                     -- Group by the source branch Id.
