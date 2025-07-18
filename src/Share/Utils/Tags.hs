@@ -7,7 +7,6 @@ module Share.Utils.Tags
   )
 where
 
-import Control.Monad.Trans.Maybe (mapMaybeT)
 import Share.Prelude
 
 type Tags = Map Text Text
@@ -34,10 +33,6 @@ instance (Monad m) => MonadTags (TagT m) where
 instance (MonadTags m) => MonadTags (ReaderT e m) where
   askTags = lift askTags
   withTags newTags = mapReaderT (withTags newTags)
-
-instance (MonadTags m) => MonadTags (MaybeT m) where
-  askTags = lift askTags
-  withTags newTags = mapMaybeT (withTags newTags)
 
 class HasTags ctx where
   getTags :: (MonadIO m) => ctx -> m Tags

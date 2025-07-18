@@ -6,8 +6,6 @@
 module Share.Prelude.Orphans () where
 
 import Control.Comonad.Cofree (Cofree (..))
-import Control.Monad.Trans (MonadTrans (..))
-import Control.Monad.Trans.Maybe (MaybeT)
 import Data.Align (Semialign (..))
 import Data.Text (Text)
 import Data.These (These (..))
@@ -15,7 +13,6 @@ import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import GHC.TypeLits qualified as TypeError
 import Hasql.Interpolate qualified as Interp
-import OpenTelemetry.Trace.Monad
 import Unison.Server.Orphans ()
 import Unison.ShortHash (ShortHash)
 import Unison.ShortHash qualified as SH
@@ -44,6 +41,3 @@ instance From UUID Text where
 
 instance From ShortHash Text where
   from = SH.toText
-
-instance (MonadTracer m) => MonadTracer (MaybeT m) where
-  getTracer = lift getTracer
