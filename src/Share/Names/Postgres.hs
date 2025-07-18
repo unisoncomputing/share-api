@@ -4,6 +4,7 @@ module Share.Names.Postgres (namesForReferences) where
 import Control.Lens
 import Data.Either qualified as List
 import Data.Set qualified as Set
+import Share.Postgres (transactionSpan)
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
@@ -20,7 +21,7 @@ import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 
 namesForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledDependency -> m Names
-namesForReferences namesPerspective refs = do
+namesForReferences namesPerspective refs = transactionSpan "namesForReferences" mempty do
   (pgRefTerms, pgRefTypes) <-
     Set.toList refs
       & CV.labeledDependencies1ToPG

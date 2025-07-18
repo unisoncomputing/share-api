@@ -21,7 +21,7 @@ import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 
 ppedForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledDependency -> m PPED.PrettyPrintEnvDecl
-ppedForReferences namesPerspective refs = do
+ppedForReferences namesPerspective refs = PG.transactionSpan "ppedForReferences" mempty do
   (pgRefTerms, pgRefTypes) <-
     Set.toList refs
       & CV.labeledDependencies1ToPG
