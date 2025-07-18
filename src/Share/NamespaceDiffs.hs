@@ -829,21 +829,11 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           PG.Transaction e (Map Name (TypeReferenceId, Decl Symbol Ann))
         hydrateTypes codebase typeReferences = PG.transactionSpan "hydrateTypes" mempty do
           let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
-          -- typeIdsWithComponents <- Align.zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
-          -- DefnsQ.loadDeclByTypeComponentElementAndTypeId (traversed . _2) typeIdsWithComponents
-          --   <&> fmap \(refId, v2Decl) ->
-          --     let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
-          --      in (refId, v1Decl)
-          --
-          typeIds <-
-            PG.pFor typeReferenceIds \refId ->
-              (refId,) <$> DefnsQ.expectTypeComponentElementAndTypeId (Codebase.codebaseOwner codebase) refId
-          v1Decls <-
-            PG.pFor typeIds \(refId, typeId) ->
-              DefnsQ.loadDeclByTypeComponentElementAndTypeId typeId <&> \v2Decl ->
-                let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
-                 in (refId, v1Decl)
-          pure v1Decls
+          typeIdsWithComponents <- Align.zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
+          DefnsQ.loadDeclByTypeComponentElementAndTypeId (traversed . _2) typeIdsWithComponents
+            <&> fmap \(refId, v2Decl) ->
+              let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
+               in (refId, v1Decl)
         f ::
           Codebase.CodebaseEnv ->
           Defns (BiMultimap Referent Name) (BiMultimap TypeReference Name) ->

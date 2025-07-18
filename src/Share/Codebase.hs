@@ -317,7 +317,7 @@ loadTypeDeclarationsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t Ref
 loadTypeDeclarationsByRefIdsOf codebase trav s =
   s
     & asListOf trav %%~ \refIds -> do
-      traverse (DefnQ.loadDecl (codebaseOwner codebase)) refIds
+      DefnQ.loadDeclsByRefIdsOf codebase traversed refIds
         <&> \decls ->
           zip refIds decls <&> \case
             (_, Nothing) -> Nothing
