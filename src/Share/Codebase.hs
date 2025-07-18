@@ -221,7 +221,8 @@ loadTermAndTypeByRefIdsOf codebase trav s = do
   s
     & asListOf trav %%~ \refs -> do
       let hashes = refs <&> \(Reference.Id h _) -> h
-      termsAndTypes <- DefnQ.loadTermsByRefIdsOf codebase traversed refs
+      -- TODO Rebatchify this
+      termsAndTypes <- traverseOf traversed (DefnQ.loadTerm (codebaseOwner codebase)) refs
       let termInfo =
             (zip hashes termsAndTypes) <&> \case
               (_h, Nothing) -> Nothing
@@ -317,7 +318,7 @@ loadTypeDeclarationsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t Ref
 loadTypeDeclarationsByRefIdsOf codebase trav s =
   s
     & asListOf trav %%~ \refIds -> do
-      DefnQ.loadDeclsByRefIdsOf codebase traversed refIds
+      traverse (DefnQ.loadDecl (codebaseOwner codebase)) refIds
         <&> \decls ->
           zip refIds decls <&> \case
             (_, Nothing) -> Nothing
@@ -446,7 +447,7 @@ codeLookupForUser cacheVar codebaseOwner = do
 -- This is intentionally not in CodebaseM because it's used to build the CodebaseEnv.
 loadCachedEvalResult :: CodebaseEnv -> Reference.Id -> PG.Transaction e (Maybe (V1.Term Symbol Ann))
 loadCachedEvalResult codebase ref@(Reference.Id h _) = runMaybeT do
-  v2Term <- MaybeT $ DefnQ.loadCachedEvalResult codebase ref
+  v2Term <- MaybeT $ DefnQ.loadCachedEvalResult (codebaseOwner codebase) ref
   -- TODO: Batchify this so we're not making a separate query for every reference in the term!
   lift $ Cv.term2to1 h (expectDeclKindsOf id) v2Term
 
