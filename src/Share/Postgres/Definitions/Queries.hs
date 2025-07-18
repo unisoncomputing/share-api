@@ -11,8 +11,6 @@ module Share.Postgres.Definitions.Queries
     saveEncodedTermComponent,
     termTagsByReferentsOf,
     typeTagsByReferencesOf,
-    loadTypeComponent,
-    expectTypeComponent,
     expectShareTermComponent,
     expectShareTypeComponent,
     loadDeclKind,
@@ -102,8 +100,6 @@ import Unison.SyncV2.Types qualified as SyncV2
 type ResolvedLocalIds = LocalIds.LocalIds' Text ComponentHash
 
 type PgLocalIds = LocalIds.LocalIds' TextId ComponentHashId
-
-type ComponentRef = These ComponentHash ComponentHashId
 
 data DefinitionQueryError
   = ExpectedTermNotFound (Either TermId TermReferenceId)
@@ -217,7 +213,7 @@ expectShareTypeComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
         <&> checkElements
       )
       `whenNothingM` do
-        unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound (That componentHashId))
+        unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentHashId)
   second (Hash32.fromHash . unComponentHash) . Share.DeclComponent . toList <$> for componentElements \(typeId, LocalTypeBytes bytes) ->
     (,bytes) <$> typeLocalReferences typeId
   where
@@ -225,13 +221,6 @@ expectShareTypeComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
     checkElements rows =
       sequenceAOf (traversed . _2) rows
         >>= NonEmpty.nonEmpty
-
-expectTypeComponent :: (QueryM m) => CodebaseEnv -> ComponentRef -> m (NonEmpty (V2Decl.Decl Symbol))
-expectTypeComponent codebase componentRef = do
-  mayComponent <- loadTypeComponent codebase componentRef
-  case mayComponent of
-    Just component -> pure component
-    Nothing -> unrecoverableError $ InternalServerError "expected-type-component" (ExpectedTypeComponentNotFound componentRef)
 
 -- | Batch load terms by ids.
 loadTermsByIdsOf ::
@@ -469,7 +458,7 @@ expectTypeComponentElementAndTypeId :: (QueryA m) => UserId -> TermReferenceId -
 expectTypeComponentElementAndTypeId codebaseUser refId =
   unrecoverableEitherMap
     ( \case
-        Nothing -> Left (expectedTypeError refId)
+        Nothing -> Left (expectedTypeError $ Right refId)
         Just decl -> Right decl
     )
     (loadTypeComponentElementAndTypeId codebaseUser refId)
@@ -507,7 +496,7 @@ expectDecl codebaseUser refId = do
   mayDecl <- loadDecl codebaseUser refId
   case mayDecl of
     Just decl -> pure decl
-    Nothing -> unrecoverableError $ InternalServerError "expected-decl" (ExpectedTermNotFound refId)
+    Nothing -> unrecoverableError $ InternalServerError "expected-decl" (ExpectedTermNotFound $ Right refId)
 
 s2cDecl :: ResolvedLocalIds -> DeclFormat.Decl Symbol -> (V2.Decl Symbol)
 s2cDecl (LocalIds.LocalIds {textLookup, defnLookup}) V2.DataDeclaration {declType, modifier, bound, constructorTypes} =
@@ -974,7 +963,9 @@ saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerial
       componentEntity <- case maySerialized of
         Just serialized -> pure serialized
         Nothing -> do
-          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponentsOf codebase id chId
+          -- TODO: re batchify this
+          -- SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponentsOf codebase id chId
+          SyncCommon.entityToTempEntity id . Share.DC <$> expectShareTypeComponent codebase chId
       let serializedEntity = SyncV2.serialiseCBORBytes componentEntity
       saveSerializedComponent codebase chId serializedEntity
 

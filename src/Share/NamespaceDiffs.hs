@@ -819,8 +819,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
         hydrateTerms codebase termReferents = PG.transactionSpan "hydrateTerms" mempty do
           let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
-          -- v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed termReferenceIds
-          v2Terms <- traverse (DefnsQ.expectTerm (Codebase.codebaseOwner codebase)) termReferenceIds
+          v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed termReferenceIds
           let v2TermsWithRef = Align.zip termReferenceIds v2Terms
           let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, ((Reference.idToHash refId), term, typ))
           Codebase.convertTerms2to1Of (traversed . _2) refHashes
