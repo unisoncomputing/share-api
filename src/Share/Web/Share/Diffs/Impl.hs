@@ -103,7 +103,7 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
     diff0
       & asListOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
         %%~ \refs -> do
-          termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
+          termTags <- Codebase.termTagsByReferentsOf traversed (referent1to2 <$> refs)
           pure $ zip termTags (refs <&> Referent.toShortHash)
   -- Resolve the type references to tag + hash
   diff2 <-

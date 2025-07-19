@@ -13,6 +13,7 @@ where
 import Control.Lens hiding ((??))
 import Data.Bifoldable (bifoldMap)
 import Data.Either (partitionEithers)
+import Data.List (zip4)
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Set qualified as Set
@@ -29,6 +30,7 @@ import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Caching.JSON qualified as Caching
+import Share.Utils.Lens (asListOfDeduped)
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
@@ -186,13 +188,15 @@ mkDefinitionsForQuery ::
   m Backend.DefinitionResults
 mkDefinitionsForQuery codebase nameSearch query = do
   QueryResult misses results <- hqNameQuery nameSearch query
+  let termRefs = Set.toList $ searchResultsToTermRefs results
   -- todo: remember to replace this with getting components directly,
   -- and maybe even remove getComponentLength from Codebase interface altogether
-  terms <- Map.foldMapM (\ref -> (ref,) <$> Backend.displayTerm codebase ref) (searchResultsToTermRefs results)
-  types <- do
+  displayedTerms <- Backend.displayTermsOf codebase traversed termRefs
+  let termsMap = Map.fromList (zip termRefs displayedTerms)
+  typesMap <- do
     typeRefs <- pure $ searchResultsToTypeRefs results
     Map.foldMapM (\ref -> (ref,) <$> Backend.displayType codebase ref) typeRefs
-  pure (Backend.DefinitionResults terms types misses)
+  pure (Backend.DefinitionResults termsMap typesMap misses)
   where
     searchResultsToTermRefs :: [SR.SearchResult] -> Set V1.Reference
     searchResultsToTermRefs results =
@@ -210,18 +214,27 @@ mkDefinitionsForQuery codebase nameSearch query = do
 -- Nothing means not found
 -- Just Left means constructor
 -- Just Right means term
-termDisplayObjectByName ::
+termDisplayObjectsByNameOf ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
   NameSearch m ->
-  Name ->
-  m (Maybe (Either ConstructorReference (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann))))
-termDisplayObjectByName codebase nameSearch name = runMaybeT do
-  refs <- lift $ NameSearch.lookupRelativeHQRefs' (termSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
-  ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
-  case ref of
-    Referent.Ref r -> Right . (r,) <$> lift (Backend.displayTerm codebase r)
-    Referent.Con r _ -> pure (Left r)
+  Traversal s t Name (Maybe (Either ConstructorReference (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann)))) ->
+  s ->
+  m t
+termDisplayObjectsByNameOf codebase nameSearch trav s = do
+  s
+    & asListOfDeduped trav %%~ \names -> do
+      -- TODO: batchify this:
+      allRefs <- traverse (NameSearch.lookupRelativeHQRefs' (termSearch nameSearch) NS.ExactName) (HQ'.NameOnly <$> names)
+      let partitionedRefs =
+            allRefs <&> \refs ->
+              do
+                (NESet.nonEmptySet refs)
+                <&> NESet.findMin
+                <&> \case
+                  (Referent.Ref r) -> Right $ (r, r)
+                  (Referent.Con r _) -> (Left r)
+      Backend.displayTermsOf codebase (traversed . _Just . _Right . _2) partitionedRefs
 
 -- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
 -- share among all of them, it would be more efficient than generating a PPED per definition.
@@ -249,6 +262,42 @@ termDefinitionByName codebase ppedBuilder nameSearch width rt name = runMaybeT d
       defn <- lift $ Backend.mkTermDefinition codebase biasedPPED width ref renderedDocs (syntaxDO)
       pure (Right defn)
     Left ref -> pure (Left ref)
+
+termDefinitionByNamesOf ::
+  (QueryM m) =>
+  CodebaseEnv ->
+  PPEDBuilder m ->
+  NameSearch m ->
+  Width ->
+  CodebaseRuntime s IO ->
+  Traversal s t Name (Maybe (Either ConstructorReference TermDefinition)) ->
+  s ->
+  m t
+termDefinitionByNamesOf codebase ppedBuilder nameSearch width rt trav s = do
+  s
+    & asListOfDeduped trav %%~ \allNames -> do
+      constructorsAndRendered <- termDisplayObjectsByNameOf codebase nameSearch traversed allNames
+      let addName name = \case
+            Just (Right (termRef, displayObject)) -> Just (Right (name, termRef, displayObject))
+            Just (Left constructorRef) -> Just (Left constructorRef)
+            Nothing -> Nothing
+      let withNames = zipWith addName allNames constructorsAndRendered
+      -- Only the Right values are terms which we're concerned with, the Left values are constructors
+      withNames
+        & asListOf (traversed . _Just . _Right) %%~ \(refsDO :: [(Name, TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann))]) -> do
+          let allDeps = refsDO & foldMap \(_name, ref, displayObject) -> termDisplayObjectLabeledDependencies ref displayObject
+          pped <- ppedBuilder allDeps
+          let (names, refs, dos) = unzip3 refsDO
+          allDocRefs <- Docs.docsForDefinitionNamesOf codebase nameSearch traversed names
+          -- TODO: properly batchify this
+          allRenderedDocs <- for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
+          let syntaxDOs =
+                Backend.termsToSyntaxOf (Suffixify False) width pped traversed (zip refs dos)
+                  <&> snd
+          -- TODO: properly batchify this
+          for (zip4 names refs allRenderedDocs syntaxDOs) \(name, ref, renderedDocs, syntaxDO) -> do
+            let biasedPPED = PPED.biasTo [name] pped
+            Backend.mkTermDefinition codebase biasedPPED width ref renderedDocs syntaxDO
 
 termDisplayObjectLabeledDependencies :: TermReference -> DisplayObject (Type Symbol Ann) (Term Symbol Ann) -> (Set LD.LabeledDependency)
 termDisplayObjectLabeledDependencies termRef displayObject = do
