@@ -79,7 +79,7 @@ tryComputeCausalDiff ::
     )
 tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = PG.transactionSpan "tryComputeCausalDiff" mempty do
   -- Ensure name lookups for the things we're diffing.
-  let getBranch :: (PG.QueryM m) => CausalId -> m (BranchHashId, NameLookupReceipt)
+  let getBranch :: CausalId -> PG.Transaction NamespaceDiffError (BranchHashId, NameLookupReceipt)
       getBranch causalId = do
         branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
         nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
@@ -103,7 +103,7 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
     diff0
       & asListOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
         %%~ \refs -> do
-          termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
+          termTags <- Codebase.termTagsByReferentsOf traversed (referent1to2 <$> refs)
           pure $ zip termTags (refs <&> Referent.toShortHash)
   -- Resolve the type references to tag + hash
   diff2 <-
