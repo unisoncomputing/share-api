@@ -1,11 +1,6 @@
--- | This module contains implementations of Backend methods which are specialized for Share.
--- We should likely move them to the Share repository eventually, but for now it's much easier
--- to ensure they're resilient to refactors and changes in the Backend API if they live here.
---
--- Perhaps we'll move them when the backing implementation switches to postgres.
 module Unison.Server.Share.Definitions
   ( definitionForHQName,
-    termDefinitionByName,
+    termDefinitionByNamesOf,
     typeDefinitionByName,
   )
 where
@@ -235,33 +230,6 @@ termDisplayObjectsByNameOf codebase nameSearch trav s = do
                   (Referent.Ref r) -> Right $ (r, r)
                   (Referent.Con r _) -> (Left r)
       Backend.displayTermsOf codebase (traversed . _Just . _Right . _2) partitionedRefs
-
--- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
--- share among all of them, it would be more efficient than generating a PPED per definition.
-termDefinitionByName ::
-  (QueryM m) =>
-  CodebaseEnv ->
-  PPEDBuilder m ->
-  NameSearch m ->
-  Width ->
-  CodebaseRuntime s IO ->
-  Name ->
-  m (Maybe (Either ConstructorReference TermDefinition))
-termDefinitionByName codebase ppedBuilder nameSearch width rt name = runMaybeT do
-  MaybeT (termDisplayObjectByName codebase nameSearch name) >>= \case
-    Right (ref, displayObject) -> do
-      let deps = termDisplayObjectLabeledDependencies ref displayObject
-      pped <- lift $ ppedBuilder deps
-      let biasedPPED = PPED.biasTo [name] pped
-      -- TODO: properly batchify this
-      docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase nameSearch id name
-      -- TODO: properly batchify this
-      renderedDocs <- lift $ renderDocRefs codebase ppedBuilder width rt docRefs
-      let (_ref, syntaxDO) = Backend.termsToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
-      -- TODO: properly batchify this
-      defn <- lift $ Backend.mkTermDefinition codebase biasedPPED width ref renderedDocs (syntaxDO)
-      pure (Right defn)
-    Left ref -> pure (Left ref)
 
 termDefinitionByNamesOf ::
   (QueryM m) =>

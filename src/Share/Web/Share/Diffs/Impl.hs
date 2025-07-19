@@ -24,6 +24,7 @@ import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Aeson (PreEncoded (PreEncoded))
+import Share.Utils.Lens (asListOfDeduped)
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
@@ -220,6 +221,20 @@ getTermDefinition (codebase, rt, namesPerspective, name) = do
   let ppedBuilder deps = PPED.biasTo [name] <$> PPEPostgres.ppedForReferences namesPerspective deps
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
   Definitions.termDefinitionByName codebase ppedBuilder nameSearch renderWidth rt name
+  where
+    renderWidth :: Width
+    renderWidth = 80
+
+getTermDefinitionsOf :: Codebase.CodebaseEnv -> Codebase.CodebaseRuntime s IO -> BranchHashId -> Traversal s t Name (Maybe (Either ConstructorReference TermDefinition)) -> s -> m t
+getTermDefinitionsOf codebase rt bhId trav s = do
+  s
+    & asListOfDeduped trav %%~ \names -> do
+      let perspective = mempty
+      -- TODO: batchify this
+      (namesPerspective, Identity relocatedName) <- for names \name -> NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+      let ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
+      let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+      Definitions.termDefinitionByNamesOf codebase ppedBuilder nameSearch renderWidth rt relocatedName
   where
     renderWidth :: Width
     renderWidth = 80
