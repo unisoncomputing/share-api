@@ -47,7 +47,6 @@ import Data.Align (Semialign (..))
 import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
 import Data.Map qualified as Map
-import Data.Semialign qualified as Align
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
@@ -814,28 +813,32 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
           (TypeReferenceId, Decl Symbol Ann)
       ) <- PG.transactionSpan "hydratedDefns3" mempty do
-    let hydrateTerms ::
+    let hydrateTermsOf ::
           Codebase.CodebaseEnv ->
-          BiMultimap Referent Name ->
-          PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
-        hydrateTerms codebase termReferents = PG.transactionSpan "hydrateTerms" mempty do
-          let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
-          v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed termReferenceIds
-          let v2TermsWithRef = Align.zip termReferenceIds v2Terms
-          let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, ((Reference.idToHash refId), term, typ))
-          Codebase.convertTerms2to1Of (traversed . _2) refHashes
-        hydrateTypes ::
+          Traversal s t TermReferenceId (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)) ->
+          s ->
+          PG.Transaction e t
+        hydrateTermsOf codebase trav s = PG.transactionSpan "hydrateTerms" mempty do
+          s
+            & asListOf trav %%~ \refs -> do
+              v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed refs
+              let v2TermsWithRef = zip refs v2Terms
+              let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, ((Reference.idToHash refId), term, typ))
+              Codebase.convertTerms2to1Of (traversed . _2) refHashes
+        hydrateTypesOf ::
           Codebase.CodebaseEnv ->
-          BiMultimap TypeReference Name ->
-          PG.Transaction e (Map Name (TypeReferenceId, Decl Symbol Ann))
-        hydrateTypes codebase typeReferences = PG.transactionSpan "hydrateTypes" mempty do
-          let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
-          typeIdsWithComponents <- Align.zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
-          DefnsQ.loadDeclByTypeComponentElementAndTypeId (traversed . _2) typeIdsWithComponents
-            <&> fmap \(refId, v2Decl) ->
-              let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
-               in (refId, v1Decl)
-        f ::
+          Traversal s t TypeReferenceId (TypeReferenceId, Decl Symbol Ann) ->
+          s ->
+          PG.Transaction e t
+        hydrateTypesOf codebase trav s = PG.transactionSpan "hydrateTypes" mempty do
+          s
+            & asListOf trav %%~ \typeReferenceIds -> do
+              typeIdsWithComponents <- zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
+              DefnsQ.loadDeclByTypeComponentElementAndTypeIdsOf (traversed . _2) typeIdsWithComponents
+                <&> fmap \(refId, v2Decl) ->
+                  let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
+                   in (refId, v1Decl)
+        hydrateDefns ::
           Codebase.CodebaseEnv ->
           Defns (BiMultimap Referent Name) (BiMultimap TypeReference Name) ->
           PG.Transaction
@@ -845,7 +848,16 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
                 (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
                 (TypeReferenceId, Decl Symbol Ann)
             )
-        f codebaseEnv = bitraverse (hydrateTerms codebaseEnv) (hydrateTypes codebaseEnv)
+        hydrateDefns codebase (Defns {terms, types}) = PG.transactionSpan "hydrateDefns" mempty do
+          let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range terms)
+          hydratedTerms <- hydrateTermsOf codebase traversed termReferenceIds
+          let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range types)
+          hydratedTypes <- hydrateTypesOf codebase traversed typeReferenceIds
+          pure
+            Defns
+              { terms = hydratedTerms,
+                types = hydratedTypes
+              }
 
     let -- Here we assume that the LCA is in the same codebase as Alice.
         codebaseEnvs3 :: ThreeWay Codebase.CodebaseEnv
@@ -855,7 +867,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
               bob = codebaseEnvs2.bob,
               lca = codebaseEnvs2.alice
             }
-    sequence (f <$> codebaseEnvs3 <*> blob0.defns)
+    sequence (hydrateDefns <$> codebaseEnvs3 <*> blob0.defns)
 
   -- Get a names object that contains just enough names to compute the diff:
   names3 :: TwoOrThreeWay Names <- do

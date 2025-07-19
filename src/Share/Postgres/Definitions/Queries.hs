@@ -16,7 +16,7 @@ module Share.Postgres.Definitions.Queries
     loadDeclKindsOf,
     loadDeclsByRefIdsOf,
     expectDeclsByRefIdsOf,
-    loadDeclByTypeComponentElementAndTypeId,
+    loadDeclByTypeComponentElementAndTypeIdsOf,
     expectTypeComponentElementsAndTypeIdsOf,
     loadCachedEvalResult,
     saveCachedEvalResult,
@@ -446,8 +446,8 @@ loadDeclsByRefIdsOf codebase trav s = do
           let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
            in s2cDecl localIds decl
 
-loadDeclByTypeComponentElementAndTypeId :: (QueryA m) => Traversal s t (TypeComponentElement, TypeId) (V2.Decl Symbol) -> s -> m t
-loadDeclByTypeComponentElementAndTypeId trav s =
+loadDeclByTypeComponentElementAndTypeIdsOf :: (QueryA m) => Traversal s t (TypeComponentElement, TypeId) (V2.Decl Symbol) -> s -> m t
+loadDeclByTypeComponentElementAndTypeIdsOf trav s =
   s
     & asListOf trav %%~ \ids -> do
       typeLocalReferencesOf (traversed . _2) ids
