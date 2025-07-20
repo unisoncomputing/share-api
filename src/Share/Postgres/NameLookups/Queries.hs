@@ -35,6 +35,7 @@ import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
+import Share.Utils.Postgres (ordered)
 import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType)
 import U.Codebase.Referent qualified as V2
@@ -160,17 +161,51 @@ transitiveDependenciesSql rootBranchHashId =
 -- id. It's the caller's job to select the correct name lookup for your exact name.
 --
 -- See termRefsForExactName in U.Codebase.Sqlite.Operations
-termRefsForExactName :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef (PGReferent, Maybe ConstructorType)]
-termRefsForExactName !_nameLookupReceipt bhId reversedName = do
-  results :: [NamedRef (PGReferent PG.:. PG.Only (Maybe ConstructorType))] <-
-    PG.queryListRows
-      [PG.sql|
-        SELECT reversed_name, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index, referent_constructor_type
-        FROM scoped_term_name_lookup
-        WHERE root_branch_hash_id = #{bhId}
-              AND reversed_name = #{reversedName}
-      |]
-  pure (fmap unRow <$> results)
+termRefsForExactName :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef (PGReferent, Maybe ConstructorType)] -> s -> m t
+termRefsForExactName NamesPerspective {mounts, nameLookupReceipt = !_nlr} trav s = do
+  s
+    & asListOf trav %%~ \fqns -> do
+      results :: [NamedRef (PGReferent PG.:. PG.Only (Maybe ConstructorType))] <-
+        PG.queryListRows
+          [PG.sql|
+          SELECT reversed_name, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index, referent_constructor_type
+          FROM scoped_term_name_lookup
+          WHERE root_branch_hash_id = #{bhId}
+                AND reversed_name = #{reversedName}
+        |]
+      pure (fmap unRow <$> results)
+  where
+    unRow (a PG.:. PG.Only b) = (a, b)
+
+-- | Get the set of refs for an exact name.
+termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef (PGReferent, Maybe ConstructorType)] -> s -> m t
+termRefsForExactNamesOf np trav s = do
+  s
+    & asListOf trav %%~ \fqns -> do
+      relocatedNames <- relocateToMounts np traversed fqns
+      let mountPaths = relocatedNames <&> \(_, mountPath, _) -> mountPath
+      let scopedNamesTable =
+            ordered relocatedNames
+              <&> \(ord, (mountRoot, _mountPath, scopedReversedName)) ->
+                (ord, mountRoot, scopedReversedName)
+      results :: [[NamedRef (PGReferent PG.:. PG.Only (Maybe ConstructorType))]] <-
+        PG.queryListCol
+          [PG.sql|
+          WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
+            SELECT * FROM ^{PG.toTable scopedNamesTable} AS t(ord, mount_branch_hash_id, reversed_name)
+          )
+          SELECT (
+            SELECT COALESCE(array_agg((stnl.reversed_name, stnl.referent_builtin, stnl.referent_component_hash_id, stnl.referent_component_index, stnl.referent_constructor_index, stnl.referent_constructor_type)), '{}')
+            FROM scoped_term_name_lookup stnl
+            WHERE stnl.root_branch_hash_id = scoped_names.mount_branch_hash_id
+                  AND stnl.reversed_name = scoped_names.reversed_name
+          ) FROM scoped_names
+          ORDER BY scoped_names.ord ASC
+        |]
+      results
+        <&> (fmap . fmap) unRow
+        & zipWith (\mp namedRefs -> prefixNamedRef mp <$> namedRefs) mountPaths
+        & pure
   where
     unRow (a PG.:. PG.Only b) = (a, b)
 
@@ -453,3 +488,8 @@ projectTypesWithinRoot !_nlReceipt bhId = do
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
+
+-- | Resolve the root branch hash a given name is located within, and the name prefix the
+-- mount is located at, as well as the name relative to that mount.
+relocateToMounts :: (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (BranchHashId, PathSegments, ReversedName) -> s -> m t
+relocateToMounts = _
