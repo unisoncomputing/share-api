@@ -9,6 +9,7 @@ module Share.Postgres.NameLookups.Types
     NamedRef (..),
     NamespaceText,
     NameLookupReceipt (..),
+    MountTree,
     pathSegmentsToText,
     textToPathSegments,
     nameToPathSegments,
@@ -24,8 +25,10 @@ module Share.Postgres.NameLookups.Types
   )
 where
 
+import Control.Comonad.Cofree (Cofree)
 import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
+import Data.Functor.Compose (Compose (..))
 import Data.List.Extra qualified as List
 import Data.List.NonEmpty.Extra qualified as NonEmpty
 import Data.Text qualified as Text
@@ -46,6 +49,10 @@ import Unison.NameSegment.Internal (NameSegment (..))
 data NameLookupReceipt = UnsafeNameLookupReceipt
   deriving (Eq, Show)
 
+-- | A tree of mounted namespaces, where each node is a branch hash ID of that namespace,
+-- and the path segments to that namespace from the root.
+type MountTree m = Cofree (Compose (Map PathSegments) m) BranchHashId
+
 -- | Any time we need to lookup or search names we need to know what the scope of that search
 -- should be. This can be complicated to keep track of, so this is a helper type to make it
 -- easy to pass around.
@@ -65,16 +72,14 @@ data NameLookupReceipt = UnsafeNameLookupReceipt
 --  , relativePerspective = ["data", "List"]
 --  }
 -- @@
-data NamesPerspective = NamesPerspective
-  { -- | The branch hash of the name lookup we'll use for queries
-    nameLookupBranchHashId :: BranchHashId,
-    -- | Where the name lookup is mounted relative to the root branch
-    pathToMountedNameLookup :: PathSegments,
+data NamesPerspective m = NamesPerspective
+  { -- | The branch hash IDs of the root namespace and all the mounted namespaces
+    -- within it, recursively.
+    mounts :: MountTree m,
     -- | The path to the perspective relative to the current name lookup
-    relativePerspective :: PathSegments,
+    -- relativePerspective :: PathSegments,
     nameLookupReceipt :: NameLookupReceipt
   }
-  deriving (Eq, Show)
 
 data NameWithSuffix = NameWithSuffix
   { reversedName :: ReversedName,

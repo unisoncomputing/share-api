@@ -19,7 +19,7 @@ import Unison.Names qualified as Names
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 
-namesForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledDependency -> m Names
+namesForReferences :: forall m. (PG.QueryM m) => NamesPerspective m -> Set LabeledDependency -> m Names
 namesForReferences namesPerspective refs = do
   (pgRefTerms, pgRefTypes) <-
     Set.toList refs
