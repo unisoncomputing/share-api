@@ -5,6 +5,7 @@
 {-# LANGUAGE LiberalTypeSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Postgres helpers
 module Share.Postgres
@@ -21,6 +22,8 @@ module Share.Postgres
     Interp.DecodeValue (..),
     Interp.DecodeRow (..),
     Interp.DecodeField,
+    DecodeComposite (..),
+    CompositeRow (..),
     Only (..),
     TupleVal (..),
     QueryA (..),
@@ -111,6 +114,7 @@ import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Safe (headMay)
 import Share.Debug qualified as Debug
 import Share.Env qualified as Env
+import Share.Postgres.Composites
 import Share.Postgres.Orphans ()
 import Share.Prelude
 import Share.Telemetry qualified as Trace
