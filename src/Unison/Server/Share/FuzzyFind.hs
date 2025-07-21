@@ -31,7 +31,7 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Queries qualified as Q
-import Share.Postgres.NameLookups.Types (NamedRef (..), NamesPerspective (..), PathSegments (..))
+import Share.Postgres.NameLookups.Types (NamedRef (..), PathSegments (..))
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPED
@@ -119,12 +119,12 @@ serveFuzzyFind ::
   m [(Alignment, FoundResult)]
 serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayLimit typeWidth query = fromMaybeT (pure []) do
   bhId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausal
-  namesPerspective@NameLookups.NamesPerspective {pathToMountedNameLookup = PathSegments pathToPerspective} <- NameLookupOps.namesPerspectiveForRootAndPath bhId (coerce $ Path.toList perspective)
+  namesPerspective <- lift $ NameLookupOps.namesPerspectiveForRootAndPath bhId (coerce $ Path.toList perspective)
   -- If were browsing at a scratch root we need to include one level of dependencies even if
   -- the 'include-dependencies' flag is not set
   -- since the projects are all "dependencies" of the scratch root as far as name-lookups
   -- are concerned.
-  let isScratchRootSearch = inScratch && null pathToPerspective
+  let isScratchRootSearch = inScratch
   -- Include dependencies if they were explicitly requested OR if we're running a search
   -- from a scratch root
   let includeDependencies = isScratchRootSearch || searchDependencies
@@ -134,7 +134,7 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
     (Nothing, _) -> empty
     (_, Nothing) -> empty
     (Just preparedQuery, Just lastSegment) -> do
-      (terms, types) <- NameLookupOps.fuzzySearchDefinitions includeDependencies namesPerspective limit preparedQuery lastSegment
+      (terms, types) <- lift $ NameLookupOps.fuzzySearchDefinitions includeDependencies namesPerspective limit preparedQuery lastSegment
       pure (terms, types)
   let prepareMatch :: NamedRef Backend.FoundRef -> (PathSegments, Alignment, UnisonName, [Backend.FoundRef])
       prepareMatch name@(NamedRef {reversedSegments}) =
@@ -177,7 +177,7 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
   (join <$> traverse (lift . loadEntry includeDependencies bhId namesPerspective) alignments)
   where
     limit = fromMaybe 10 mayLimit
-    loadEntry :: Bool -> BranchHashId -> NameLookups.NamesPerspective -> (PathSegments, Alignment, Text, [Backend.FoundRef]) -> m [(Alignment, FoundResult)]
+    loadEntry :: Bool -> BranchHashId -> NameLookups.NamesPerspective m -> (PathSegments, Alignment, Text, [Backend.FoundRef]) -> m [(Alignment, FoundResult)]
     loadEntry includeDependencies bhId searchPerspective (pathToMatch, a, n, refs) = do
       namesPerspective <-
         -- If we're including dependencies we need to ensure each match's type signature is

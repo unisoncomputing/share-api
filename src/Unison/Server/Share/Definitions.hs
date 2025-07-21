@@ -25,6 +25,7 @@ import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Types (pathToPathSegments)
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
@@ -98,7 +99,15 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
     go :: m DefinitionDisplayResults
     go = do
       rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
-      (namesPerspective, query) <- NameLookupOps.relocateToNameRoot perspective perspectiveQuery rootBranchNamespaceHashId
+      initialNP <- NameLookupOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (pathToPathSegments perspective)
+      (perspectiveNP, query) <-
+        NameLookupOps.relocateNamesToMountsOf initialNP traversed perspectiveQuery
+          <&> \case
+            HQ.NameOnly (perspectiveNP', n) -> (perspectiveNP', HQ.NameOnly n)
+            HQ.HashOnly sh -> (initialNP, HQ.HashOnly sh)
+            HQ.HashQualified (perspectiveNP', n) sh ->
+              (perspectiveNP', HQ.HashQualified n sh)
+
       -- Bias towards both relative and absolute path to queries,
       -- This allows us to still bias towards definitions outside our namesRoot but within the
       -- same tree;
@@ -107,8 +116,8 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
       -- `trunk` over those in other releases.
       -- ppe which returns names fully qualified to the current namesRoot,  not to the codebase root.
       let biases = maybeToList $ HQ.toName query
-      let ppedBuilder deps = (PPED.biasTo biases) <$> (PPEPostgres.ppedForReferences namesPerspective deps)
-      let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
+      let ppedBuilder deps = (PPED.biasTo biases) <$> (PPEPostgres.ppedForReferences perspectiveNP deps)
+      let nameSearch = PGNameSearch.nameSearchForPerspective perspectiveNP
       dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery codebase nameSearch [query]
       let width = mayDefaultWidth renderWidth
       -- TODO: properly batchify this

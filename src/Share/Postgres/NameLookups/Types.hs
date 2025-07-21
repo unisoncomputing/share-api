@@ -17,6 +17,7 @@ module Share.Postgres.NameLookups.Types
     pathSegmentsToText,
     textToPathSegments,
     nameToPathSegments,
+    pathToPathSegments,
     reversedNameToNamespaceText,
     reversedNameToPathSegments,
     prefixNamedRef,
@@ -47,6 +48,8 @@ import Share.Postgres.IDs (BranchHashId, ComponentHashId)
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import U.Codebase.Referent (ConstructorType)
+import Unison.Codebase.Path (Path)
+import Unison.Codebase.Path qualified as Path
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment qualified as NameSegment
@@ -190,6 +193,9 @@ pathSegmentsToText (PathSegments txt) = Text.intercalate "." txt
 -- PathSegments ["base","data","List"]
 nameToPathSegments :: Name -> PathSegments
 nameToPathSegments name = (PathSegments . Foldable.toList . fmap NameSegment.toUnescapedText $ Name.segments name)
+
+pathToPathSegments :: Path -> PathSegments
+pathToPathSegments path = coerce $ Path.toList path
 
 -- |
 -- >>> textToPathSegments "base.data.List"

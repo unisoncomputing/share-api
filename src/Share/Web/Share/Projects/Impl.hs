@@ -27,6 +27,7 @@ import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
+import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Queries qualified as Q
@@ -217,6 +218,10 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
+    (oldNamesPerspective, newNamesPerspective) <- PG.runTransactionOrRespondError $ do
+      oldNP <- NLOps.namesPerspectiveForRoot oldBhId
+      newNP <- NLOps.namesPerspectiveForRoot newBhId
+      pure (oldNP, newNP)
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTermName, Name.toText newTermName]
     unisonRuntime <- asks Env.sandboxedRuntime
@@ -224,7 +229,7 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
       result <- PG.tryRunTransaction $ do
         Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
           Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
-            Diffs.diffTerms authZReceipt (oldCodebase, oldRuntime, oldBhId, oldTermName) (newCodebase, newRuntime, newBhId, newTermName)
+            Diffs.diffTerms authZReceipt (oldCodebase, oldRuntime, oldNamesPerspective, oldTermName) (newCodebase, newRuntime, newNamesPerspective, newTermName)
       termDiff <- case result of
         Left err -> respondError err
         -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
@@ -260,6 +265,10 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
 
     (oldCodebase, _causalId, oldBhId) <- namespaceHashForBranchOrRelease authZReceipt project oldShortHand
     (newCodebase, _newCausalId, newBhId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
+    (oldNamesPerspective, newNamesPerspective) <- PG.runTransactionOrRespondError $ do
+      oldNP <- NLOps.namesPerspectiveForRoot oldBhId
+      newNP <- NLOps.namesPerspectiveForRoot newBhId
+      pure (oldNP, newNP)
 
     let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.branchIdCacheKey oldBhId, Caching.branchIdCacheKey newBhId, Name.toText oldTypeName, Name.toText newTypeName]
     unisonRuntime <- asks Env.sandboxedRuntime
@@ -269,8 +278,8 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
           Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
             Diffs.diffTypes
               authZReceipt
-              (oldCodebase, oldRuntime, oldBhId, oldTypeName)
-              (newCodebase, newRuntime, newBhId, newTypeName)
+              (oldCodebase, oldRuntime, oldNamesPerspective, oldTypeName)
+              (newCodebase, newRuntime, newNamesPerspective, newTypeName)
       typeDiff <- case result of
         Left err -> respondError err
         Right diff -> pure diff
