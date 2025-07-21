@@ -31,6 +31,7 @@ import Data.Functor.Compose (Compose (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map qualified as Map
 import Data.Text qualified as Text
+import Hasql.Decoders (Composite)
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
@@ -171,7 +172,7 @@ termRefsForExactNamesOf np trav s = do
             ordered relocatedNames
               <&> \(ord, (mountRoot, _mountPath, scopedReversedName)) ->
                 (ord, mountRoot, scopedReversedName)
-      results :: [[NamedRef (PGReferent PG.:. PG.Only (Maybe ConstructorType))]] <-
+      results :: [[CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))]] <-
         PG.queryListCol
           [PG.sql|
           WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
@@ -186,11 +187,9 @@ termRefsForExactNamesOf np trav s = do
           ORDER BY scoped_names.ord ASC
         |]
       results
-        <&> (fmap . fmap) unRow
+        & coerce @[[CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))]] @[[(NamedRef (PGReferent, (Maybe ConstructorType)))]]
         & zipWith (\mp namedRefs -> prefixNamedRef mp <$> namedRefs) mountPaths
         & pure
-  where
-    unRow (a PG.:. PG.Only b) = (a, b)
 
 -- | Get the set of refs for an exact name.
 -- This will only return results which are within the name lookup for the provided branch hash

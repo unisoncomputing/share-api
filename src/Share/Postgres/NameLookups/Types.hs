@@ -192,6 +192,12 @@ reversedNameFromText txt =
 data NamedRef ref = NamedRef {reversedSegments :: ReversedName, ref :: ref}
   deriving stock (Show, Functor, Foldable, Traversable)
 
+instance (PG.DecodeComposite ref) => PG.DecodeComposite (NamedRef ref) where
+  decodeComposite = do
+    reversedSegments <- Decoders.field $ Interp.decodeField
+    ref <- PG.decodeComposite
+    pure $ NamedRef {..}
+
 ref_ :: Lens (NamedRef ref) (NamedRef ref') ref ref'
 ref_ = lens ref (\namedRef ref -> namedRef {ref = ref})
 
