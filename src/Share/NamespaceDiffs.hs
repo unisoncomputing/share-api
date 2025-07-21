@@ -867,8 +867,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           Mergeblob1.hydratedDefnsLabeledDependencies <$> hydratedDefns3
     -- Get a names perspective for Alice/Bob/LCA
     namesPerspectives3 :: TwoOrThreeWay (NL.NamesPerspective m) <-
-      for branchHashIds3 \branchHashId ->
-        NL.namesPerspectiveForRootAndPath branchHashId (mempty @NL.PathSegments)
+      for branchHashIds3 \branchHashId -> NL.namesPerspectiveForRoot branchHashId
     sequence (PGNames.namesForReferences <$> namesPerspectives3 <*> ThreeWay.toTwoOrThreeWay labeledDeps3)
 
   blob1 :: Mergeblob1 BranchHashId <- do

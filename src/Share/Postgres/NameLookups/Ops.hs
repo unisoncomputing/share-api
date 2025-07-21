@@ -1,13 +1,12 @@
 module Share.Postgres.NameLookups.Ops
-  ( namesPerspectiveForRoot,
-    fuzzySearchDefinitions,
+  ( fuzzySearchDefinitions,
     termNamesForRefsWithinNamespaceOf,
     typeNamesForRefsWithinNamespaceOf,
     termRefsForExactNamesOf,
     typeRefsForExactNamesOf,
     checkBranchHashNameLookupExists,
     deleteNameLookupsExceptFor,
-    ensureNameLookupForBranchId,
+    Q.ensureNameLookupForBranchId,
     Q.projectTermsWithinRoot,
     Q.projectTypesWithinRoot,
     Q.listNameLookupMounts,
@@ -15,12 +14,9 @@ module Share.Postgres.NameLookups.Ops
   )
 where
 
-import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens
-import Data.Functor.Compose (Compose (..))
-import Data.Map qualified as Map
 import Data.Set qualified as Set
-import Share.Postgres (QueryA, QueryM)
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.Hashes.Queries qualified as HashQ
@@ -40,48 +36,6 @@ import Unison.Names (Names)
 import Unison.Names qualified as Names
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
-import UnliftIO.STM
-
--- | Build a 'MountTree' for the given root branch hash ID.
--- The MountTree is a tree of mounted namespace indexes, where each node is a branch hash ID of that namespace,
--- It uses caching to avoid redundant database queries.
-buildMountTree :: forall m. (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> m (MountTree m)
-buildMountTree nameLookupReceipt rootBranchHashId = do
-  cacheVar <- PG.transactionUnsafeIO $ newTVarIO mempty
-  go cacheVar rootBranchHashId
-  where
-    go :: TVar (Map BranchHashId (MountTree m)) -> BranchHashId -> m (MountTree m)
-    go cacheVar branchHashId = do
-      cachedMounts <- PG.transactionUnsafeIO $ atomically $ do
-        readTVar cacheVar
-      case Map.lookup branchHashId cachedMounts of
-        Just mountTree -> pure mountTree
-        Nothing -> do
-          mounts <- NameLookupQ.listNameLookupMounts nameLookupReceipt branchHashId
-          let mountTree :: Map PathSegments BranchHashId = Map.fromList mounts
-          pure (branchHashId Cofree.:< Compose (go cacheVar <$> mountTree))
-
--- | Determine which nameLookup is the closest parent of the provided perspective.
---
--- Returns (rootBranchId of the closest parent index, namespace that index is mounted at, location of the perspective within the mounted namespace)
---
--- E.g.
--- If your namespace is "lib.distributed.lib.base.data.List", you'd get back
--- (rootBranchId of the lib.distributed.lib.base name lookup, "lib.distributed.lib.base", "data.List")
---
--- Or if your namespace is "subnamespace.user", you'd get back
--- (the rootBranchId you provided, "", "subnamespace.user")
-namesPerspectiveForRoot :: forall m. (PG.QueryM m) => BranchHashId -> m (NamesPerspective m)
-namesPerspectiveForRoot rootBranchHashId = do
-  nameLookupReceipt <- ensureNameLookupForBranchId rootBranchHashId
-  mounts <- buildMountTree nameLookupReceipt rootBranchHashId
-  let currentMount = ([], rootBranchHashId)
-  pure $
-    NamesPerspective
-      { mounts,
-        currentMount,
-        nameLookupReceipt
-      }
 
 -- | Search for term or type names which contain the provided list of segments in order.
 -- Search is case insensitive.
@@ -152,11 +106,6 @@ deleteNameLookupsExceptFor :: Set BranchHash -> PG.Transaction e ()
 deleteNameLookupsExceptFor reachable = do
   bhIds <- for (Set.toList reachable) HashQ.ensureBranchHashId
   Q.deleteNameLookupsExceptFor bhIds
-
-ensureNameLookupForBranchId :: (QueryA m) => BranchHashId -> m NameLookupReceipt
-ensureNameLookupForBranchId branchHashId =
-  UnsafeNameLookupReceipt
-    <$ PG.execute_ [PG.sql| SELECT ensure_name_lookup(#{branchHashId}) |]
 
 -- | Build a 'Names' for all definitions within the given root, without any dependencies.
 -- Note: This loads everything into memory at once, so avoid this and prefer streaming when possible.

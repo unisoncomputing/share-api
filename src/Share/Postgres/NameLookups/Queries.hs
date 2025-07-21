@@ -12,6 +12,7 @@ module Share.Postgres.NameLookups.Queries
     fuzzySearchTerms,
     fuzzySearchTypes,
     FuzzySearchScore,
+    ensureNameLookupForBranchId,
 
     -- * Cursors
     projectTermsWithinRoot,
@@ -22,19 +23,27 @@ module Share.Postgres.NameLookups.Queries
     listNameLookupMounts,
     checkBranchHashNameLookupExists,
     deleteNameLookupsExceptFor,
+    -- NamesPerspective stuff
+    namesPerspectiveForRoot,
+    namesPerspectiveForRootAndPath,
+    relocateNamesToMountsOf,
   )
 where
 
+import Control.Comonad.Cofree qualified as Cofree
+import Control.Concurrent.STM (TVar, newTVarIO, readTVar)
 import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
+import Data.Functor.Compose (Compose (..))
 import Data.Generics.Product (HasField (..))
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.IDs
-import Share.Postgres.NameLookups.MountTree qualified as MountTree
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
@@ -46,6 +55,7 @@ import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.Name (Name)
 import Unison.Referent qualified as V1
 import Unison.Util.Monoid qualified as Monoid
+import UnliftIO.STM (atomically)
 
 data ShouldSuffixify = Suffixify | NoSuffixify
 
@@ -169,7 +179,7 @@ termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t 
 termRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
-      relocatedNames <- MountTree.relocateNamesToMountsOf np traversed fqns
+      relocatedNames <- relocateNamesToMountsOf np traversed fqns
       let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
@@ -204,7 +214,7 @@ typeRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t 
 typeRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
-      relocatedNames <- MountTree.relocateNamesToMountsOf np traversed fqns
+      relocatedNames <- relocateNamesToMountsOf np traversed fqns
       let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
@@ -499,3 +509,89 @@ projectTypesWithinRoot !_nlReceipt bhId = do
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
+
+ensureNameLookupForBranchId :: (QueryA m) => BranchHashId -> m NameLookupReceipt
+ensureNameLookupForBranchId branchHashId =
+  UnsafeNameLookupReceipt
+    <$ PG.execute_ [PG.sql| SELECT ensure_name_lookup(#{branchHashId}) |]
+
+-- | Build a 'MountTree' for the given root branch hash ID.
+-- The MountTree is a tree of mounted namespace indexes, where each node is a branch hash ID of that namespace,
+-- It uses caching to avoid redundant database queries.
+buildMountTree :: forall m. (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> m (MountTree m)
+buildMountTree nameLookupReceipt rootBranchHashId = do
+  cacheVar <- PG.transactionUnsafeIO $ newTVarIO mempty
+  go cacheVar rootBranchHashId
+  where
+    go :: TVar (Map BranchHashId (MountTree m)) -> BranchHashId -> m (MountTree m)
+    go cacheVar branchHashId = do
+      cachedMounts <- PG.transactionUnsafeIO $ atomically $ do
+        readTVar cacheVar
+      case Map.lookup branchHashId cachedMounts of
+        Just mountTree -> pure mountTree
+        Nothing -> do
+          mounts <- listNameLookupMounts nameLookupReceipt branchHashId
+          let mountTree :: Map PathSegments BranchHashId = Map.fromList mounts
+          pure (branchHashId Cofree.:< Compose (go cacheVar <$> mountTree))
+
+-- | Determine which nameLookup is the closest parent of the provided perspective.
+--
+-- Returns (rootBranchId of the closest parent index, namespace that index is mounted at, location of the perspective within the mounted namespace)
+--
+-- E.g.
+-- If your namespace is "lib.distributed.lib.base.data.List", you'd get back
+-- (rootBranchId of the lib.distributed.lib.base name lookup, "lib.distributed.lib.base", "data.List")
+--
+-- Or if your namespace is "subnamespace.user", you'd get back
+-- (the rootBranchId you provided, "", "subnamespace.user")
+namesPerspectiveForRoot :: forall m. (PG.QueryM m) => BranchHashId -> m (NamesPerspective m)
+namesPerspectiveForRoot rootBranchHashId = do
+  nameLookupReceipt <- ensureNameLookupForBranchId rootBranchHashId
+  mounts <- buildMountTree nameLookupReceipt rootBranchHashId
+  let currentMount = ([], rootBranchHashId)
+  pure $
+    NamesPerspective
+      { mounts,
+        currentMount,
+        nameLookupReceipt
+      }
+
+-- | Resolve the root branch hash a given name is located within, and the name prefix the
+-- mount is located at, as well as the name relative to that mount.
+relocateNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (NamesPerspective m, ReversedName) -> s -> m t
+relocateNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts} trav s =
+  s
+    & asListOf trav
+      %%~ \reversedNames -> do
+        let unreversedNamePaths = reversedNames <&> \(ReversedName rev) -> NonEmpty.reverse rev
+        for unreversedNamePaths (resolvePathToMount rootNamesPerspective mounts [])
+          <&> fmap
+            ( \(np, nameRelativeToMount) ->
+                ( np,
+                  ReversedName (NonEmpty.reverse nameRelativeToMount)
+                )
+            )
+
+namesPerspectiveForRootAndPath :: forall m. (QueryM m) => BranchHashId -> PathSegments -> m (NamesPerspective m)
+namesPerspectiveForRootAndPath rootBhId (PathSegments path) = do
+  rootNP <- namesPerspectiveForRoot rootBhId
+  case NonEmpty.nonEmpty path of
+    Just pathSegments -> fst <$> resolvePathToMount rootNP (mounts rootNP) mempty pathSegments
+    Nothing -> pure rootNP
+
+resolvePathToMount :: (QueryM m) => NamesPerspective m -> MountTree m -> [PathSegments] -> NonEmpty Text -> m (NamesPerspective m, NonEmpty Text)
+resolvePathToMount rootNP (bhId Cofree.:< Compose mountTreeMap) reversedMountPrefix path = do
+  -- Split each name into its possible mount path and the rest of the name.
+  -- If the name is in a mount, the mount path will always be the first two segments of
+  -- the non-reversed name, e.g. lib.base.data.List -> (lib.base, data.List)
+  let (possibleMountPath, remainingPath) = first PathSegments $ NonEmpty.splitAt 2 path
+  case (NonEmpty.nonEmpty remainingPath, Map.lookup possibleMountPath mountTreeMap) of
+    (Just unMountedPath, Just nextMountsM) -> do
+      -- This only does a query the first time we access this mount, then it's cached
+      -- automatically in the mount tree.
+      nextMount <- nextMountsM
+      -- Recursively get the mount for the next segment of the name.
+      resolvePathToMount rootNP nextMount (possibleMountPath : reversedMountPrefix) unMountedPath
+    _ ->
+      -- No more mounts to check, the name must be in the current mount.
+      pure (rootNP {currentMount = (reverse $ reversedMountPrefix, bhId)}, path)

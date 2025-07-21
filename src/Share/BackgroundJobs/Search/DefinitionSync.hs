@@ -160,7 +160,7 @@ syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
     (DDQ.isRootIndexed rootBranchHashId) >>= \case
       False -> do
         DDQ.markRootAsIndexed rootBranchHashId
-        namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NL.PathSegments [])
+        namesPerspective <- NLOps.namesPerspectiveForRoot rootBranchHashId
         let nlReceipt = NL.nameLookupReceipt namesPerspective
         let codebaseLoc = Codebase.codebaseLocationForProjectRelease codebaseOwner
         let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
@@ -190,7 +190,7 @@ syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do
 syncTerms ::
   (PG.QueryM m) =>
   Codebase.CodebaseEnv ->
-  NL.NamesPerspective ->
+  NL.NamesPerspective m ->
   BranchHashId ->
   Cursors.PGCursor (Name, Referent) ->
   m ([DefnIndexingFailure], [Text])
@@ -369,7 +369,7 @@ typeSigTokens typ =
 syncTypes ::
   (PG.QueryM m) =>
   Codebase.CodebaseEnv ->
-  NL.NamesPerspective ->
+  NL.NamesPerspective m ->
   BranchHashId ->
   Cursors.PGCursor (Name, TypeReference) ->
   m ([DefnIndexingFailure], [Text])

@@ -75,7 +75,6 @@ library
       Share.Postgres.LooseCode.Queries
       Share.Postgres.Metrics.Queries
       Share.Postgres.NameLookups.Conversions
-      Share.Postgres.NameLookups.MountTree
       Share.Postgres.NameLookups.Ops
       Share.Postgres.NameLookups.Queries
       Share.Postgres.NameLookups.Types
