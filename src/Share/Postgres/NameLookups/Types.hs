@@ -91,9 +91,13 @@ data NamesPerspective m = NamesPerspective
     -- | The path to the currently mounted namespace as a sequence of mount paths.
     currentMount :: ([PathSegments], BranchHashId),
     -- | The path to the perspective relative to the current name lookup
-    -- relativePerspective :: PathSegments,
+    relativePerspective :: PathSegments,
     nameLookupReceipt :: NameLookupReceipt
   }
+
+instance Show (NamesPerspective m) where
+  show NamesPerspective {currentMount} =
+    "(NamesPerspective {currentMount = " <> show currentMount <> "})"
 
 perspectiveRootBranchHashId :: NamesPerspective m -> BranchHashId
 perspectiveRootBranchHashId NamesPerspective {mounts = root Cofree.:< _} = root

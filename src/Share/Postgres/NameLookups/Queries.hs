@@ -569,10 +569,12 @@ namesPerspectiveForRoot rootBranchHashId = do
   nameLookupReceipt <- ensureNameLookupForBranchId rootBranchHashId
   mounts <- buildMountTree nameLookupReceipt rootBranchHashId
   let currentMount = ([], rootBranchHashId)
+  let relativePerspective = mempty
   pure $
     NamesPerspective
       { mounts,
         currentMount,
+        relativePerspective,
         nameLookupReceipt
       }
 
@@ -583,14 +585,15 @@ relocateReversedNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts} t
   s
     & asListOf trav
       %%~ \reversedNames -> do
-        let unreversedNamePaths = reversedNames <&> \(ReversedName rev) -> NonEmpty.reverse rev
-        for unreversedNamePaths (resolvePathToMount rootNamesPerspective mounts [])
-          <&> fmap
-            ( \(np, nameRelativeToMount) ->
-                ( np,
-                  ReversedName (NonEmpty.reverse nameRelativeToMount)
-                )
-            )
+        for reversedNames \(ReversedName revFqn) ->
+          do
+            let (lastNameSegment :| revNamePath) = revFqn
+            np <- resolvePathToMount rootNamesPerspective mounts [] (PathSegments $ reverse revNamePath)
+            let (PathSegments relativePath) = relativePerspective np
+            pure
+              ( np {relativePerspective = mempty},
+                ReversedName (lastNameSegment NonEmpty.:| reverse relativePath)
+              )
 
 relocateNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t Name (NamesPerspective m, Name) -> s -> m t
 relocateNamesToMountsOf np t s =
@@ -602,25 +605,28 @@ relocateNamesToMountsOf np t s =
         pure $ relocated <&> \(np', rev) -> (np', reversedNameToName rev)
 
 namesPerspectiveForRootAndPath :: forall m. (QueryM m) => BranchHashId -> PathSegments -> m (NamesPerspective m)
-namesPerspectiveForRootAndPath rootBhId (PathSegments path) = do
+namesPerspectiveForRootAndPath rootBhId pathSegments = do
   rootNP <- namesPerspectiveForRoot rootBhId
-  case NonEmpty.nonEmpty path of
-    Just pathSegments -> fst <$> resolvePathToMount rootNP (mounts rootNP) mempty pathSegments
-    Nothing -> pure rootNP
+  resolvePathToMount rootNP (mounts rootNP) mempty pathSegments
 
-resolvePathToMount :: (QueryM m) => NamesPerspective m -> MountTree m -> [PathSegments] -> NonEmpty Text -> m (NamesPerspective m, NonEmpty Text)
-resolvePathToMount rootNP (bhId Cofree.:< Compose mountTreeMap) reversedMountPrefix path = do
-  -- Split each name into its possible mount path and the rest of the name.
-  -- If the name is in a mount, the mount path will always be the first two segments of
-  -- the non-reversed name, e.g. lib.base.data.List -> (lib.base, data.List)
-  let (possibleMountPath, remainingPath) = first PathSegments $ NonEmpty.splitAt 2 path
-  case (NonEmpty.nonEmpty remainingPath, Map.lookup possibleMountPath mountTreeMap) of
-    (Just unMountedPath, Just nextMountsM) -> do
-      -- This only does a query the first time we access this mount, then it's cached
-      -- automatically in the mount tree.
-      nextMount <- nextMountsM
-      -- Recursively get the mount for the next segment of the name.
-      resolvePathToMount rootNP nextMount (possibleMountPath : reversedMountPrefix) unMountedPath
-    _ ->
-      -- No more mounts to check, the name must be in the current mount.
-      pure (rootNP {currentMount = (reverse $ reversedMountPrefix, bhId)}, path)
+resolvePathToMount :: (QueryM m) => NamesPerspective m -> MountTree m -> [PathSegments] -> PathSegments -> m (NamesPerspective m)
+resolvePathToMount rootNP (bhId Cofree.:< Compose mountTreeMap) reversedMountPrefix (PathSegments path) = do
+  case NonEmpty.nonEmpty path of
+    Nothing ->
+      -- If we have no more segments to check, we can return the current mount.
+      pure (rootNP {currentMount = (reverse $ reversedMountPrefix, bhId), relativePerspective = mempty})
+    Just nePath -> do
+      -- Split the path into the first two segments and the remaining path.
+      -- If the path is in a mount, the mount path will always be the first two segments
+      -- e.g. lib.base.data.List -> (lib.base, data.List)
+      let (possibleMountPath, remainingPath) = bothMap PathSegments $ NonEmpty.splitAt 2 nePath
+      case Map.lookup possibleMountPath mountTreeMap of
+        Just nextMountsM -> do
+          -- This only does a query the first time we access this mount, then it's cached
+          -- automatically in the mount tree.
+          nextMount <- nextMountsM
+          -- Recursively get the mount for the next segment of the name.
+          resolvePathToMount rootNP nextMount (possibleMountPath : reversedMountPrefix) remainingPath
+        Nothing -> do
+          -- No mount, the path must be in the current mount.
+          pure (rootNP {currentMount = (reverse $ reversedMountPrefix, bhId), relativePerspective = PathSegments path})
