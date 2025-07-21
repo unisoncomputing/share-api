@@ -10,6 +10,7 @@ module Share.Postgres.NameLookups.Types
     NamespaceText,
     NameLookupReceipt (..),
     MountTree,
+    perspectiveRootBranchHashId,
     pathSegmentsToText,
     textToPathSegments,
     nameToPathSegments,
@@ -26,6 +27,7 @@ module Share.Postgres.NameLookups.Types
 where
 
 import Control.Comonad.Cofree (Cofree)
+import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
 import Data.Functor.Compose (Compose (..))
@@ -80,6 +82,9 @@ data NamesPerspective m = NamesPerspective
     -- relativePerspective :: PathSegments,
     nameLookupReceipt :: NameLookupReceipt
   }
+
+perspectiveRootBranchHashId :: NamesPerspective m -> BranchHashId
+perspectiveRootBranchHashId NamesPerspective {mounts = root Cofree.:< _} = root
 
 data NameWithSuffix = NameWithSuffix
   { reversedName :: ReversedName,

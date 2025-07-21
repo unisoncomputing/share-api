@@ -47,13 +47,13 @@ import Unison.Util.Monoid qualified as Monoid
 
 data ShouldSuffixify = Suffixify | NoSuffixify
 
--- | Get the list of term names and suffixifications for a given Referent within a given namespace.
+-- | Get the list of term names and suffixifications for a given Referent within a given root namespace perspective.
 -- Considers one level of dependencies, but not transitive dependencies.
 --
 -- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
 termNamesForRefsWithinNamespaceOf ::
-  (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
-termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
+  (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
+termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
   s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64)]
         refsTable =
@@ -70,7 +70,7 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
           -- if there are no results.
           SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
           FROM term_names_for_ref_within_namespace(
-            #{bhId},
+            #{rootBranchHashId},
             #{namespacePrefix},
             #{reversedNamePrefix},
             #{shouldSuffixifyArg},
@@ -84,10 +84,11 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
         ORDER BY refs.ord ASC
       |]
   where
+    rootBranchHashId = perspectiveRootBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
       Suffixify -> True
       NoSuffixify -> False
-    namespacePrefix = toNamespacePrefix namespaceRoot
+    namespacePrefix = toNamespacePrefix mempty
     reversedNamePrefix = case maySuffix of
       Just suffix -> toReversedNamePrefix suffix
       Nothing -> ""
@@ -96,8 +97,8 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
 -- Considers one level of dependencies, but not transitive dependencies.
 --
 -- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
-typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
-typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
+typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
   s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64)]
         refsTable =
@@ -114,7 +115,7 @@ typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
           -- if there are no results.
           SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
           FROM type_names_for_ref_within_namespace(
-            #{bhId},
+            #{rootBranchHashId},
             #{namespacePrefix},
             #{reversedNamePrefix},
             #{shouldSuffixifyArg},
@@ -127,10 +128,11 @@ typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
         ORDER BY refs.ord ASC
       |]
   where
+    rootBranchHashId = perspectiveRootBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
       Suffixify -> True
       NoSuffixify -> False
-    namespacePrefix = toNamespacePrefix namespaceRoot
+    namespacePrefix = toNamespacePrefix mempty
     reversedNamePrefix = case maySuffix of
       Just suffix -> toReversedNamePrefix suffix
       Nothing -> ""
