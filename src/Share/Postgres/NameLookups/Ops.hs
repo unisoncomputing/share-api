@@ -75,9 +75,11 @@ namesPerspectiveForRoot :: forall m. (PG.QueryM m) => BranchHashId -> m (NamesPe
 namesPerspectiveForRoot rootBranchHashId = do
   nameLookupReceipt <- ensureNameLookupForBranchId rootBranchHashId
   mounts <- buildMountTree nameLookupReceipt rootBranchHashId
+  let currentMount = ([], rootBranchHashId)
   pure $
     NamesPerspective
       { mounts,
+        currentMount,
         nameLookupReceipt
       }
 
@@ -93,17 +95,12 @@ fuzzySearchDefinitions ::
   Text ->
   m ([(Q.FuzzySearchScore, NameLookups.NamedRef (Referent, Maybe ConstructorType))], [(Q.FuzzySearchScore, NamedRef Reference)])
 fuzzySearchDefinitions includeDependencies namesPerspective limit querySegments lastQuerySegment = do
-  (pgTermNames, pgTypeNames) <- PG.pipelined $ do
+  (pgTermNames, pgTypeNames) <- do
+    let relativePerspective = mempty
     pgTermNames <-
-      Q.fuzzySearchTerms nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
-        <&> fmap \termName ->
-          termName
-            & second (stripPrefixFromNamedRef relativePerspective)
+      Q.fuzzySearchTerms namesPerspective includeDependencies (into @Int64 limit) relativePerspective querySegments lastQuerySegment
     pgTypeNames <-
-      Q.fuzzySearchTypes nameLookupReceipt includeDependencies nameLookupBranchHashId (into @Int64 limit) relativePerspective querySegments lastQuerySegment
-        <&> fmap \typeName ->
-          typeName
-            & second (stripPrefixFromNamedRef relativePerspective)
+      Q.fuzzySearchTypes namesPerspective includeDependencies (into @Int64 limit) relativePerspective querySegments lastQuerySegment
     pure (pgTermNames, pgTypeNames)
   PG.pipelined $ do
     termNames <- pgTermNames & CV.referentsPGTo2Of (traversed . _2 . traversed . _1)

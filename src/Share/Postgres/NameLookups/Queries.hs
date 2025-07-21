@@ -308,11 +308,10 @@ instance DecodeRow FuzzySearchScore where
 -- | Searches for all names within the given name lookup which contain the provided list of segments
 -- in order.
 -- Search is case insensitive.
-fuzzySearchTerms :: (PG.QueryA m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
-fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
-  fmap unRow
-    <$> PG.queryListRows
-      [PG.sql|
+fuzzySearchTerms :: (PG.QueryA m) => NamesPerspective m -> Bool -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
+fuzzySearchTerms np includeDependencies limit namespace querySegments lastSearchTerm = do
+  PG.queryListRows
+    [PG.sql|
       SELECT matches.reversed_name, matches.referent_builtin, matches.referent_component_hash_id, matches.referent_component_index, matches.referent_constructor_index, matches.referent_constructor_type,
       matches.exact_last_segment_match, matches.last_segment_infix_match, matches.last_segment_match_pos, matches.inverse_name_length
       FROM (
@@ -337,7 +336,10 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
                ) DESC
       LIMIT #{limit}
             |]
+    <&> fmap unRow
+    <&> over (traversed . traversed . namedRefReversedName_) (qualifyNameToPerspective np)
   where
+    bhId = perspectiveCurrentMountBranchHashId np
     namespacePrefix = toNamespacePrefix namespace
     -- Union in the dependencies if required.
     dependenciesSql =
@@ -367,11 +369,10 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
 -- in order.
 --
 -- Search is case insensitive.
-fuzzySearchTypes :: (PG.QueryA m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef PGReference)]
-fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
-  fmap unRow
-    <$> PG.queryListRows
-      [PG.sql|
+fuzzySearchTypes :: (PG.QueryA m) => NamesPerspective m -> Bool -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef PGReference)]
+fuzzySearchTypes np includeDependencies limit namespace querySegments lastSearchTerm = do
+  PG.queryListRows
+    [PG.sql|
 
       SELECT matches.reversed_name, matches.reference_builtin, matches.reference_component_hash_id, matches.reference_component_index,
       matches.exact_last_segment_match, matches.last_segment_infix_match, matches.last_segment_match_pos, matches.inverse_name_length
@@ -397,7 +398,10 @@ fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace qu
                ) DESC
       LIMIT #{limit}
           |]
+    <&> fmap unRow
+    <&> over (traversed . traversed . namedRefReversedName_) (qualifyNameToPerspective np)
   where
+    bhId = perspectiveCurrentMountBranchHashId np
     unRow :: (NamedRef PGReference PG.:. FuzzySearchScore) -> (FuzzySearchScore, NamedRef PGReference)
     unRow (namedRef PG.:. score) = (score, namedRef)
     namespacePrefix = toNamespacePrefix namespace
