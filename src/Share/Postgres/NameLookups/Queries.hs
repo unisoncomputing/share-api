@@ -40,6 +40,8 @@ import Data.Generics.Product (HasField (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map qualified as Map
 import Data.Text qualified as Text
+import Hasql.Decoders qualified as Decoders
+import Hasql.Interpolate qualified as Hasql
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
@@ -175,6 +177,23 @@ transitiveDependenciesSql rootBranchHashId =
           )
           |]
 
+newtype NamedReferentResult = NamedReferentResult (NamedRef (PGReferent, (Maybe ConstructorType)))
+
+instance Hasql.DecodeValue NamedReferentResult where
+  decodeValue = Decoders.composite $ do
+    name <- Decoders.field $ Hasql.decodeField @ReversedName
+    ref <- decodeComposite
+    ct <- (Decoders.field $ Hasql.decodeField @(Maybe ConstructorType))
+    pure $ NamedReferentResult (NamedRef name (ref, ct))
+
+newtype NamedReferenceResult = NamedReferenceResult (NamedRef PGReference)
+
+instance Hasql.DecodeValue NamedReferenceResult where
+  decodeValue = Decoders.composite $ do
+    name <- Decoders.field $ Hasql.decodeField @ReversedName
+    ref <- decodeComposite
+    pure $ NamedReferenceResult (NamedRef name ref)
+
 -- | Get the set of refs for an exact name.
 termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef (PGReferent, Maybe ConstructorType)] -> s -> m t
 termRefsForExactNamesOf np trav s = do
@@ -188,7 +207,7 @@ termRefsForExactNamesOf np trav s = do
                 let mountRoot = perspectiveCurrentMountBranchHashId np
                  in (ord, mountRoot, scopedReversedName)
       results <-
-        PG.queryListCol @([CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))])
+        PG.queryListCol @([NamedReferentResult])
           [PG.sql|
           WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
             SELECT * FROM ^{PG.toTable scopedNamesTable} AS t(ord, mount_branch_hash_id, reversed_name)
@@ -202,7 +221,7 @@ termRefsForExactNamesOf np trav s = do
           ORDER BY scoped_names.ord ASC
         |]
       results
-        & coerce @[[CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))]] @[[(NamedRef (PGReferent, (Maybe ConstructorType)))]]
+        & coerce @[[NamedReferentResult]] @[[(NamedRef (PGReferent, (Maybe ConstructorType)))]]
         & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
         & pure
 
@@ -223,7 +242,7 @@ typeRefsForExactNamesOf np trav s = do
                 let mountRoot = perspectiveCurrentMountBranchHashId np
                  in (ord, mountRoot, scopedReversedName)
       results <-
-        PG.queryListCol @([CompositeRow (NamedRef PGReference)])
+        PG.queryListCol @([NamedReferenceResult])
           [PG.sql|
           WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
             SELECT * FROM ^{PG.toTable scopedNamesTable} AS t(ord, mount_branch_hash_id, reversed_name)
@@ -238,7 +257,7 @@ typeRefsForExactNamesOf np trav s = do
           ORDER BY scoped_names.ord ASC
         |]
       results
-        & coerce @[[CompositeRow (NamedRef PGReference)]] @[[NamedRef PGReference]]
+        & coerce @[[NamedReferenceResult]] @[[NamedRef PGReference]]
         & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
         & pure
 
