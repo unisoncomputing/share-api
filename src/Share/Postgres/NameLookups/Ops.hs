@@ -52,13 +52,18 @@ fuzzySearchDefinitions ::
   NonEmpty Text ->
   Text ->
   m ([(Q.FuzzySearchScore, NameLookups.NamedRef (Referent, Maybe ConstructorType))], [(Q.FuzzySearchScore, NamedRef Reference)])
-fuzzySearchDefinitions includeDependencies namesPerspective limit querySegments lastQuerySegment = do
+fuzzySearchDefinitions includeDependencies namesPerspective@NamesPerspective {relativePerspective} limit querySegments lastQuerySegment = do
   (pgTermNames, pgTypeNames) <- do
-    let relativePerspective = mempty
     pgTermNames <-
       Q.fuzzySearchTerms namesPerspective includeDependencies (into @Int64 limit) relativePerspective querySegments lastQuerySegment
+        <&> fmap \termName ->
+          termName
+            & second (stripPrefixFromNamedRef relativePerspective)
     pgTypeNames <-
       Q.fuzzySearchTypes namesPerspective includeDependencies (into @Int64 limit) relativePerspective querySegments lastQuerySegment
+        <&> fmap \typeName ->
+          typeName
+            & second (stripPrefixFromNamedRef relativePerspective)
     pure (pgTermNames, pgTypeNames)
   PG.pipelined $ do
     termNames <- pgTermNames & CV.referentsPGTo2Of (traversed . _2 . traversed . _1)
