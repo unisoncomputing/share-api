@@ -26,7 +26,7 @@ import Unison.Referent qualified as V1Referent
 import Unison.Server.NameSearch (NameSearch (..), Search (..))
 import Unison.Server.SearchResult qualified as SR
 
-nameSearchForPerspective :: forall m. (PG.QueryM m) => NamesPerspective -> NameSearch m
+nameSearchForPerspective :: forall m. (PG.QueryM m) => NamesPerspective m -> NameSearch m
 nameSearchForPerspective namesPerspective =
   NameSearch {typeSearch, termSearch}
   where

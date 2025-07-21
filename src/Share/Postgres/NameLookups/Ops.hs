@@ -3,8 +3,8 @@ module Share.Postgres.NameLookups.Ops
     fuzzySearchDefinitions,
     termNamesForRefsWithinNamespaceOf,
     typeNamesForRefsWithinNamespaceOf,
-    termRefsForExactName,
-    typeRefsForExactName,
+    termRefsForExactNamesOf,
+    typeRefsForExactNamesOf,
     checkBranchHashNameLookupExists,
     deleteNameLookupsExceptFor,
     ensureNameLookupForBranchId,
@@ -33,6 +33,7 @@ import Share.Postgres.NameLookups.Types
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Postgres.Refs.Types
 import Share.Prelude
+import Share.Utils.Lens (asListOfDeduped)
 import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType, Referent)
 import Unison.Names (Names)
@@ -133,28 +134,19 @@ typeNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify tra
             suffixifiedName
           )
 
--- | Helper for findings refs by name within the correct mounted indexes.
-refsForExactName ::
-  (PG.QueryM m) =>
-  (NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef ref]) ->
-  NamesPerspective m ->
-  ReversedName ->
-  m [NamedRef ref]
-refsForExactName query namesPerspective name = do
-  namedRefs <- query nameLookupReceipt nameLookupBranchHashId name
-  pure $
-    namedRefs
-      <&> prefixNamedRef pathToMountedNameLookup
+termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef V1.Referent] -> s -> m t
+termRefsForExactNamesOf namesPerspective trav s = do
+  s
+    & asListOfDeduped trav %%~ \names -> do
+      NameLookupQ.termRefsForExactNamesOf namesPerspective traversed names
+        >>= CV.referentsPGTo1UsingCTOf (traversed . traversed . traversed)
 
-termRefsForExactName :: (PG.QueryM m) => NamesPerspective m -> ReversedName -> m [NamedRef V1.Referent]
-termRefsForExactName namesPerspective reversedName = do
-  refsForExactName NameLookupQ.termRefsForExactName namesPerspective reversedName
-    >>= CV.referentsPGTo1UsingCTOf (traversed . traversed)
-
-typeRefsForExactName :: (PG.QueryM m) => NamesPerspective m -> ReversedName -> m [NamedRef V1.Reference]
-typeRefsForExactName namesPerspective reversedName = do
-  refsForExactName NameLookupQ.typeRefsForExactName namesPerspective reversedName
-    >>= CV.referencesPGTo1Of (traverse . traverse)
+typeRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef V1.Reference] -> s -> m t
+typeRefsForExactNamesOf namesPerspective trav s = do
+  s
+    & asListOfDeduped trav %%~ \names -> do
+      NameLookupQ.typeRefsForExactNamesOf namesPerspective traversed names
+        >>= CV.referencesPGTo1Of (traversed . traversed . traversed)
 
 -- | Check whether we've already got an index for a given branch hash.
 checkBranchHashNameLookupExists :: (PG.QueryM m) => BranchHash -> m Bool

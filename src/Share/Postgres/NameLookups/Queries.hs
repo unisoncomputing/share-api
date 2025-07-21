@@ -7,7 +7,7 @@ module Share.Postgres.NameLookups.Queries
     typeNamesForRefsWithinNamespaceOf,
     ShouldSuffixify (..),
     termRefsForExactNamesOf,
-    typeRefsForExactName,
+    typeRefsForExactNamesOf,
     fuzzySearchTerms,
     fuzzySearchTypes,
     FuzzySearchScore,
@@ -24,19 +24,15 @@ module Share.Postgres.NameLookups.Queries
   )
 where
 
-import Control.Comonad.Cofree qualified as Cofree
 import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
-import Data.Functor.Compose (Compose (..))
-import Data.List.NonEmpty qualified as NonEmpty
-import Data.Map qualified as Map
 import Data.Text qualified as Text
-import Hasql.Decoders (Composite)
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.IDs
+import Share.Postgres.NameLookups.MountTree qualified as MountTree
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
@@ -166,14 +162,14 @@ termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t 
 termRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
-      relocatedNames <- relocateToMounts np traversed fqns
+      relocatedNames <- MountTree.relocateNamesToMountsOf np traversed fqns
       let mountPaths = relocatedNames <&> \(_, mountPath, _) -> mountPath
       let scopedNamesTable =
             ordered relocatedNames
               <&> \(ord, (mountRoot, _mountPath, scopedReversedName)) ->
                 (ord, mountRoot, scopedReversedName)
-      results :: [[CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))]] <-
-        PG.queryListCol
+      results <-
+        PG.queryListCol @([CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))])
           [PG.sql|
           WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
             SELECT * FROM ^{PG.toTable scopedNamesTable} AS t(ord, mount_branch_hash_id, reversed_name)
@@ -196,15 +192,35 @@ termRefsForExactNamesOf np trav s = do
 -- id. It's the caller's job to select the correct name lookup for your exact name.
 --
 -- See termRefsForExactName in U.Codebase.Sqlite.Operations
-typeRefsForExactName :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef PGReference]
-typeRefsForExactName !_nameLookupReceipt bhId reversedName = do
-  PG.queryListRows
-    [PG.sql|
-      SELECT reversed_name, reference_builtin, reference_component_hash_id, reference_component_index
-      FROM scoped_type_name_lookup
-      WHERE root_branch_hash_id = #{bhId}
-            AND reversed_name = #{reversedName}
-    |]
+typeRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef PGReference] -> s -> m t
+typeRefsForExactNamesOf np trav s = do
+  s
+    & asListOf trav %%~ \fqns -> do
+      relocatedNames <- MountTree.relocateNamesToMountsOf np traversed fqns
+      let mountPaths = relocatedNames <&> \(_, mountPath, _) -> mountPath
+      let scopedNamesTable =
+            ordered relocatedNames
+              <&> \(ord, (mountRoot, _mountPath, scopedReversedName)) ->
+                (ord, mountRoot, scopedReversedName)
+      results <-
+        PG.queryListCol @([CompositeRow (NamedRef PGReference)])
+          [PG.sql|
+          WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
+            SELECT * FROM ^{PG.toTable scopedNamesTable} AS t(ord, mount_branch_hash_id, reversed_name)
+          ) SELECT (
+            -- Need COALESCE because array_agg will return NULL rather than the empty array
+            -- if there are no results.
+              SELECT COALESCE(array_agg((stnl.reversed_name, stnl.reference_builtin, stnl.reference_component_hash_id, stnl.reference_component_index)), '{}')
+              FROM scoped_type_name_lookup stnl
+              WHERE stnl.root_branch_hash_id = scoped_names.mount_branch_hash_id
+                    AND stnl.reversed_name = scoped_names.reversed_name
+          ) FROM scoped_names
+          ORDER BY scoped_names.ord ASC
+        |]
+      results
+        & coerce @[[CompositeRow (NamedRef PGReference)]] @[[NamedRef PGReference]]
+        & zipWith (\mp namedRefs -> prefixNamedRef mp <$> namedRefs) mountPaths
+        & pure
 
 -- | Check if we've already got an index for the desired root branch hash.
 checkBranchHashNameLookupExists :: (PG.QueryM m) => BranchHashId -> m Bool
@@ -470,38 +486,3 @@ projectTypesWithinRoot !_nlReceipt bhId = do
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
-
--- | Resolve the root branch hash a given name is located within, and the name prefix the
--- mount is located at, as well as the name relative to that mount.
-relocateNamesToMountsOf :: (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (BranchHashId, PathSegments, ReversedName) -> s -> m t
-relocateNamesToMountsOf NamesPerspective {mounts} trav s =
-  s
-    & asListOf trav %%~ \reversedNames -> do
-      let unreversedNames = reversedNames <&> \(ReversedName rev) -> NonEmpty.reverse rev
-      for unreversedNames (resolveNameToMount mounts)
-        <&> fmap
-          ( \(branchHashId, mountPath, nameRelativeToMount) ->
-              ( branchHashId,
-                mountPath,
-                ReversedName (NonEmpty.reverse nameRelativeToMount)
-              )
-          )
-  where
-    resolveNameToMount :: MountTree m -> NonEmpty Text {- the non-reversed name -} -> m (BranchHashId {- branch hash of the mount -}, PathSegments {- Path to the mount -}, NonEmpty Text {- name relative to the returned mount, not-reversed -})
-    resolveNameToMount (bhId Cofree.:< Compose mountTreeMap) name = do
-      -- Split each name into its possible mount path and the rest of the name.
-      -- If the name is in a mount, the mount path will always be the first two segments of
-      -- the non-reversed name, e.g. lib.base.data.List -> (lib.base, data.List)
-      let (possibleMountPath, remainingName) = first PathSegments $ NonEmpty.splitAt 2 name
-      case (NonEmpty.nonEmpty remainingName, Map.lookup possibleMountPath mountTreeMap) of
-        (Just unMountedName, Just nextMountsM) -> do
-          -- This only does a query the first time we access this mount, then it's cached
-          -- automatically in the mount tree.
-          nextMount <- nextMountsM
-          -- Recursively get the mount for the next segment of the name.
-          resolveNameToMount nextMount unMountedName
-            <&> \(resultBhId, mountPrefix, nameRelativeToMount) -> do
-              (resultBhId, possibleMountPath <> mountPrefix, nameRelativeToMount)
-        _ ->
-          -- No more mounts to check, the name must be in the current mount.
-          pure (bhId, mempty, name)
