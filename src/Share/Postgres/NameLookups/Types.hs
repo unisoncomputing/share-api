@@ -10,7 +10,10 @@ module Share.Postgres.NameLookups.Types
     NamespaceText,
     NameLookupReceipt (..),
     MountTree,
+    qualifyNameToPerspective,
     perspectiveRootBranchHashId,
+    perspectiveCurrentMountPathPrefix,
+    perspectiveCurrentMountBranchHashId,
     pathSegmentsToText,
     textToPathSegments,
     nameToPathSegments,
@@ -22,6 +25,7 @@ module Share.Postgres.NameLookups.Types
     pgNamedReferenceFields,
     pgNamedReferentFields,
     ref_,
+    namedRefReversedName_,
     reversedNameToName,
   )
 where
@@ -77,7 +81,11 @@ type MountTree m = Cofree (Compose (Map PathSegments) m) BranchHashId
 data NamesPerspective m = NamesPerspective
   { -- | The branch hash IDs of the root namespace and all the mounted namespaces
     -- within it, recursively.
+    --
+    -- The root of the MountTree contains the root branch hash id for the perspective.
     mounts :: MountTree m,
+    -- | The path to the currently mounted namespace as a sequence of mount paths.
+    currentMount :: ([PathSegments], BranchHashId),
     -- | The path to the perspective relative to the current name lookup
     -- relativePerspective :: PathSegments,
     nameLookupReceipt :: NameLookupReceipt
@@ -86,11 +94,23 @@ data NamesPerspective m = NamesPerspective
 perspectiveRootBranchHashId :: NamesPerspective m -> BranchHashId
 perspectiveRootBranchHashId NamesPerspective {mounts = root Cofree.:< _} = root
 
+perspectiveCurrentMountBranchHashId :: NamesPerspective m -> BranchHashId
+perspectiveCurrentMountBranchHashId NamesPerspective {currentMount = (_, branchHashId)} = branchHashId
+
+perspectiveCurrentMountPathPrefix :: NamesPerspective m -> PathSegments
+perspectiveCurrentMountPathPrefix NamesPerspective {currentMount = (mountPaths, _)} = fold mountPaths
+
+qualifyNameToPerspective :: NamesPerspective m -> ReversedName -> ReversedName
+qualifyNameToPerspective np =
+  let prefix = perspectiveCurrentMountPathPrefix np
+   in -- This func is often partially applied, so the closure avoids re-computing the prefix over and over.
+      \reversedName -> prefixReversedName prefix reversedName
+
 data NameWithSuffix = NameWithSuffix
   { reversedName :: ReversedName,
     suffixifiedName :: ReversedName
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Generic)
 
 instance PG.DecodeValue NameWithSuffix where
   decodeValue = Decoders.composite nameWithSuffixComposite
@@ -196,6 +216,9 @@ reversedNameFromText txt =
 
 data NamedRef ref = NamedRef {reversedSegments :: ReversedName, ref :: ref}
   deriving stock (Show, Functor, Foldable, Traversable)
+
+namedRefReversedName_ :: Lens' (NamedRef ref) ReversedName
+namedRefReversedName_ = lens reversedSegments (\namedRef reversedName -> namedRef {reversedSegments = reversedName})
 
 instance (PG.DecodeComposite ref) => PG.DecodeComposite (NamedRef ref) where
   decodeComposite = do

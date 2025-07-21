@@ -6,29 +6,27 @@ import Control.Lens
 import Data.Functor.Compose (Compose (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map qualified as Map
-import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types
 import Share.Prelude
 
 -- | Resolve the root branch hash a given name is located within, and the name prefix the
 -- mount is located at, as well as the name relative to that mount.
-relocateNamesToMountsOf :: forall m s t. (Monad m) => NamesPerspective m -> Traversal s t ReversedName (BranchHashId, PathSegments, ReversedName) -> s -> m t
-relocateNamesToMountsOf NamesPerspective {mounts} trav s =
+relocateNamesToMountsOf :: forall m s t. (Monad m) => NamesPerspective m -> Traversal s t ReversedName (NamesPerspective m, ReversedName) -> s -> m t
+relocateNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts} trav s =
   s
     & asListOf trav
       %%~ \reversedNames -> do
         let unreversedNames = reversedNames <&> \(ReversedName rev) -> NonEmpty.reverse rev
-        for unreversedNames (resolveNameToMount mounts)
+        for unreversedNames (resolveNameToMount mounts [])
           <&> fmap
-            ( \(branchHashId, mountPath, nameRelativeToMount) ->
-                ( branchHashId,
-                  mountPath,
+            ( \(np, nameRelativeToMount) ->
+                ( np,
                   ReversedName (NonEmpty.reverse nameRelativeToMount)
                 )
             )
   where
-    resolveNameToMount :: MountTree m -> NonEmpty Text {- the non-reversed name -} -> m (BranchHashId {- branch hash of the mount -}, PathSegments {- Path to the mount -}, NonEmpty Text {- name relative to the returned mount, not-reversed -})
-    resolveNameToMount (bhId Cofree.:< Compose mountTreeMap) name = do
+    resolveNameToMount :: MountTree m -> [PathSegments] -> NonEmpty Text {- the non-reversed name -} -> m (NamesPerspective m, NonEmpty Text {- name relative to the returned mount, not-reversed -})
+    resolveNameToMount (bhId Cofree.:< Compose mountTreeMap) reversedMountPrefix name = do
       -- Split each name into its possible mount path and the rest of the name.
       -- If the name is in a mount, the mount path will always be the first two segments of
       -- the non-reversed name, e.g. lib.base.data.List -> (lib.base, data.List)
@@ -39,9 +37,7 @@ relocateNamesToMountsOf NamesPerspective {mounts} trav s =
           -- automatically in the mount tree.
           nextMount <- nextMountsM
           -- Recursively get the mount for the next segment of the name.
-          resolveNameToMount nextMount unMountedName
-            <&> \(resultBhId, mountPrefix, nameRelativeToMount) -> do
-              (resultBhId, possibleMountPath <> mountPrefix, nameRelativeToMount)
+          resolveNameToMount nextMount (possibleMountPath : reversedMountPrefix) unMountedName
         _ ->
           -- No more mounts to check, the name must be in the current mount.
-          pure (bhId, mempty, name)
+          pure (rootNamesPerspective {currentMount = (reverse $ reversedMountPrefix, bhId)}, name)

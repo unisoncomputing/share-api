@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
@@ -26,6 +27,7 @@ where
 
 import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
+import Data.Generics.Product (HasField (..))
 import Data.Text qualified as Text
 import Share.Postgres
 import Share.Postgres qualified as PG
@@ -70,7 +72,7 @@ termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
           -- if there are no results.
           SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
           FROM term_names_for_ref_within_namespace(
-            #{rootBranchHashId},
+            #{bhId},
             #{namespacePrefix},
             #{reversedNamePrefix},
             #{shouldSuffixifyArg},
@@ -83,8 +85,10 @@ termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
         FROM refs
         ORDER BY refs.ord ASC
       |]
+      <&> over (traversed . traversed . field @"reversedName") (qualifyNameToPerspective np)
   where
-    rootBranchHashId = perspectiveRootBranchHashId np
+    -- Look in the current mount.
+    bhId = perspectiveCurrentMountBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
       Suffixify -> True
       NoSuffixify -> False
@@ -115,7 +119,7 @@ typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
           -- if there are no results.
           SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
           FROM type_names_for_ref_within_namespace(
-            #{rootBranchHashId},
+            #{bhId},
             #{namespacePrefix},
             #{reversedNamePrefix},
             #{shouldSuffixifyArg},
@@ -127,8 +131,9 @@ typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
         FROM refs
         ORDER BY refs.ord ASC
       |]
+      <&> over (traversed . traversed . field @"reversedName") (qualifyNameToPerspective np)
   where
-    rootBranchHashId = perspectiveRootBranchHashId np
+    bhId = perspectiveCurrentMountBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
       Suffixify -> True
       NoSuffixify -> False
@@ -165,11 +170,12 @@ termRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
       relocatedNames <- MountTree.relocateNamesToMountsOf np traversed fqns
-      let mountPaths = relocatedNames <&> \(_, mountPath, _) -> mountPath
+      let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
-              <&> \(ord, (mountRoot, _mountPath, scopedReversedName)) ->
-                (ord, mountRoot, scopedReversedName)
+              <&> \(ord, (np, scopedReversedName)) ->
+                let mountRoot = perspectiveCurrentMountBranchHashId np
+                 in (ord, mountRoot, scopedReversedName)
       results <-
         PG.queryListCol @([CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))])
           [PG.sql|
@@ -186,7 +192,7 @@ termRefsForExactNamesOf np trav s = do
         |]
       results
         & coerce @[[CompositeRow (NamedRef (CompositeRow PGReferent, (Maybe ConstructorType)))]] @[[(NamedRef (PGReferent, (Maybe ConstructorType)))]]
-        & zipWith (\mp namedRefs -> prefixNamedRef mp <$> namedRefs) mountPaths
+        & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
         & pure
 
 -- | Get the set of refs for an exact name.
@@ -199,11 +205,12 @@ typeRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
       relocatedNames <- MountTree.relocateNamesToMountsOf np traversed fqns
-      let mountPaths = relocatedNames <&> \(_, mountPath, _) -> mountPath
+      let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
-              <&> \(ord, (mountRoot, _mountPath, scopedReversedName)) ->
-                (ord, mountRoot, scopedReversedName)
+              <&> \(ord, (np, scopedReversedName)) ->
+                let mountRoot = perspectiveCurrentMountBranchHashId np
+                 in (ord, mountRoot, scopedReversedName)
       results <-
         PG.queryListCol @([CompositeRow (NamedRef PGReference)])
           [PG.sql|
@@ -221,7 +228,7 @@ typeRefsForExactNamesOf np trav s = do
         |]
       results
         & coerce @[[CompositeRow (NamedRef PGReference)]] @[[NamedRef PGReference]]
-        & zipWith (\mp namedRefs -> prefixNamedRef mp <$> namedRefs) mountPaths
+        & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
         & pure
 
 -- | Check if we've already got an index for the desired root branch hash.
