@@ -11,6 +11,10 @@ module Share.Postgres.NameLookups.Ops
     Q.projectTypesWithinRoot,
     Q.listNameLookupMounts,
     projectNamesWithoutLib,
+    Q.namesPerspectiveForRootAndPath,
+    Q.namesPerspectiveForRoot,
+    Q.relocateNamesToMountsOf,
+    Q.relocateReversedNamesToMountsOf,
   )
 where
 

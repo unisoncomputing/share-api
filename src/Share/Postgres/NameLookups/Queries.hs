@@ -26,6 +26,7 @@ module Share.Postgres.NameLookups.Queries
     -- NamesPerspective stuff
     namesPerspectiveForRoot,
     namesPerspectiveForRootAndPath,
+    relocateReversedNamesToMountsOf,
     relocateNamesToMountsOf,
   )
 where
@@ -179,7 +180,7 @@ termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t 
 termRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
-      relocatedNames <- relocateNamesToMountsOf np traversed fqns
+      relocatedNames <- relocateReversedNamesToMountsOf np traversed fqns
       let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
@@ -214,7 +215,7 @@ typeRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t 
 typeRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
-      relocatedNames <- relocateNamesToMountsOf np traversed fqns
+      relocatedNames <- relocateReversedNamesToMountsOf np traversed fqns
       let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
@@ -558,8 +559,8 @@ namesPerspectiveForRoot rootBranchHashId = do
 
 -- | Resolve the root branch hash a given name is located within, and the name prefix the
 -- mount is located at, as well as the name relative to that mount.
-relocateNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (NamesPerspective m, ReversedName) -> s -> m t
-relocateNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts} trav s =
+relocateReversedNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (NamesPerspective m, ReversedName) -> s -> m t
+relocateReversedNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts} trav s =
   s
     & asListOf trav
       %%~ \reversedNames -> do
@@ -571,6 +572,15 @@ relocateNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts} trav s =
                   ReversedName (NonEmpty.reverse nameRelativeToMount)
                 )
             )
+
+relocateNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t Name (NamesPerspective m, Name) -> s -> m t
+relocateNamesToMountsOf np t s =
+  s
+    & asListOf t
+      %%~ \names -> do
+        let reversedNames = names <&> nameToReversedName
+        relocated <- relocateReversedNamesToMountsOf np traversed reversedNames
+        pure $ relocated <&> \(np', rev) -> (np', reversedNameToName rev)
 
 namesPerspectiveForRootAndPath :: forall m. (QueryM m) => BranchHashId -> PathSegments -> m (NamesPerspective m)
 namesPerspectiveForRootAndPath rootBhId (PathSegments path) = do

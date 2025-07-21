@@ -27,6 +27,7 @@ module Share.Postgres.NameLookups.Types
     ref_,
     namedRefReversedName_,
     reversedNameToName,
+    nameToReversedName,
   )
 where
 
@@ -133,6 +134,10 @@ newtype ReversedName = ReversedName (NonEmpty Text)
 reversedNameToName :: ReversedName -> Name
 reversedNameToName (ReversedName revName) =
   Name.fromReverseSegments (NameSegment <$> revName)
+
+nameToReversedName :: Name -> ReversedName
+nameToReversedName name =
+  ReversedName (coerce $ Name.reverseSegments name)
 
 instance From ReversedName Name where
   from = reversedNameToName
