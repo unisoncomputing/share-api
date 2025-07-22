@@ -237,7 +237,7 @@ termDefinitionByNamesOf ::
   PPEDBuilder m ->
   NameSearch m ->
   Width ->
-  CodebaseRuntime s IO ->
+  CodebaseRuntime sym IO ->
   Traversal s t Name (Maybe (Either ConstructorReference TermDefinition)) ->
   s ->
   m t
