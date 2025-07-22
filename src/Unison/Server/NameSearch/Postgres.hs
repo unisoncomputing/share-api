@@ -15,7 +15,6 @@ import Share.Postgres.NameLookups.Types
 import Share.Postgres.NamesPerspective.Types (NamesPerspective, perspectiveCurrentMountPathPrefix)
 import Share.Prelude
 import Unison.Codebase.Path qualified as Path
-import Unison.Debug qualified as Debug
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.Name (Name)
 import Unison.Name qualified as Name
@@ -77,12 +76,9 @@ nameSearchForPerspective namesPerspective =
     -- Search the codebase for matches to the given hq name.
     hqTermSearch :: HQ'.HashQualified Name -> m (Set V1Referent.Referent)
     hqTermSearch hqName = do
-      Debug.debugM Debug.Temp "namesearch:hqTermSearch: searching for hqName:" hqName
-      Debug.debugM Debug.Temp "namesearch:hqTermSearch: perspective" namesPerspective
       case hqName of
         HQ'.NameOnly name -> do
           namedRefs <- NLOps.termRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
-          Debug.debugM Debug.Temp "namesearch:hqTermSearch: found namedRefs:" namedRefs
           namedRefs
             & fmap (\(NamedRef {ref}) -> ref)
             & Set.fromList

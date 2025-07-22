@@ -36,7 +36,6 @@ import Unison.ConstructorReference (ConstructorReference)
 import Unison.ConstructorReference qualified as ConstructorReference
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration.Dependencies qualified as DD
-import Unison.Debug qualified as Debug
 import Unison.HashQualified qualified as HQ
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.LabeledDependency qualified as LD
@@ -87,7 +86,6 @@ definitionForHQName ::
   HQ.HashQualified Name ->
   m DefinitionDisplayResults
 definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausalId renderWidth suffixifyBindings rt perspectiveQuery = do
-  Debug.debugM Debug.Temp "definitionForHQName: perspective, perspectiveQuery" (perspective, perspectiveQuery)
   let cacheKey =
         Caching.CacheKey
           { cacheTopic = "definitionForHQName",
@@ -101,7 +99,6 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
     go = do
       rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
       initialNP <- NPOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (pathToPathSegments perspective)
-      Debug.debugM Debug.Temp "definitionForHQName:go: initialNP" initialNP
       (perspectiveNP, query) <-
         NPOps.relocateNamesToMountsOf initialNP traversed perspectiveQuery
           <&> \case
@@ -109,7 +106,6 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
             HQ.HashOnly sh -> (initialNP, HQ.HashOnly sh)
             HQ.HashQualified (perspectiveNP', n) sh ->
               (perspectiveNP', HQ.HashQualified n sh)
-      Debug.debugM Debug.Temp "definitionForHQName:go: relocatedNP, query" (perspectiveNP, query)
 
       -- Bias towards both relative and absolute path to queries,
       -- This allows us to still bias towards definitions outside our namesRoot but within the
@@ -129,7 +125,6 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
             -- We need to re-lookup the names perspective here because the name we've found
             -- may now be in a lib.
             (scopedPerspective, relativeName) <- NPOps.relocateNamesToMountsOf perspectiveNP id name
-            Debug.debugM Debug.Temp "docResults: scopedPerspective, relativeName" (scopedPerspective, relativeName)
             let nameSearch = PGNameSearch.nameSearchForPerspective scopedPerspective
             -- TODO: properly batchify this
             docRefs <- Docs.docsForDefinitionNamesOf codebase nameSearch id relativeName

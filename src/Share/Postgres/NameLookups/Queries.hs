@@ -1,7 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -Wno-missing-signatures #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Share.Postgres.NameLookups.Queries
   ( termNamesForRefsWithinNamespaceOf,
@@ -47,7 +45,6 @@ import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType)
 import U.Codebase.Referent qualified as V2
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
-import Unison.Debug qualified as Debug
 import Unison.Name (Name)
 import Unison.Referent qualified as V1
 import Unison.Util.Monoid qualified as Monoid
@@ -170,10 +167,7 @@ termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t 
 termRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
-      Debug.debugM Debug.Temp "termRefsForExactNamesOf: np" np
-      Debug.debugM Debug.Temp "termRefsForExactNamesOf: fqns" fqns
       relocatedNames <- NPQ.relocateReversedNamesToMountsOf np traversed fqns
-      Debug.debugM Debug.Temp "termRefsForExactNamesOf: relocatedNames" relocatedNames
       let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
@@ -194,7 +188,6 @@ termRefsForExactNamesOf np trav s = do
           ) FROM scoped_names
           ORDER BY scoped_names.ord ASC
         |]
-      Debug.debugM Debug.Temp "termRefsForExactNamesOf: results" results
       results
         & coerce @[[NamedReferentResult]] @[[(NamedRef (PGReferent, (Maybe ConstructorType)))]]
         & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
