@@ -12,7 +12,6 @@ import Share.Postgres.IDs
 import Share.Prelude
 import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.TempEntity (TempEntity)
-import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
 
@@ -22,7 +21,6 @@ allSerializedDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid except
   execute_ [sql| CREATE TEMP TABLE except_causals (causal_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_components ( component_hash_id INTEGER PRIMARY KEY ) ON COMMIT DROP |]
   execute_ [sql| CREATE TEMP TABLE except_namespaces ( branch_hash_ids INTEGER PRIMARY KEY ) ON COMMIT DROP |]
-  Debug.debugM Debug.Temp "populating except hashes for N causal hashes:" (length exceptCausalHashes)
   execute_
     [sql|
     WITH the_causal_hashes(hash) AS (
@@ -55,7 +53,6 @@ allSerializedDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid except
       WHERE dh.kind = 'component'::dependency_kind
       ON CONFLICT DO NOTHING
     |]
-  Debug.debugLogM Debug.Temp "populated except hashes"
   cursor <-
     PGCursor.newRowCursor @(CBORBytes TempEntity, Hash32, Maybe Int32)
       "serialized_entities"

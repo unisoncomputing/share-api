@@ -8,8 +8,8 @@ import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Queries (ShouldSuffixify (NoSuffixify))
-import Share.Postgres.NameLookups.Types (NamesPerspective)
 import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import Unison.LabeledDependency (LabeledDependency)
@@ -19,7 +19,7 @@ import Unison.Names qualified as Names
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 
-namesForReferences :: forall m. (PG.QueryM m) => NamesPerspective -> Set LabeledDependency -> m Names
+namesForReferences :: forall m. (PG.QueryM m) => NamesPerspective m -> Set LabeledDependency -> m Names
 namesForReferences namesPerspective refs = do
   (pgRefTerms, pgRefTypes) <-
     Set.toList refs

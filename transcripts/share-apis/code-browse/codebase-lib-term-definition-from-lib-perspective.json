@@ -1,0 +1,217 @@
+{
+  "body": {
+    "missingDefinitions": [],
+    "termDefinitions": {
+      "#8jqq74m7ubl141d8u991vs77o2l442qqsuq5d2vkipv5ug3imhl34ccmbneetdthhiq92trnfbll5ps5tv063gnf0adi7p57jdfifmg": {
+        "bestTermName": "fst",
+        "defnTermTag": "Plain",
+        "signature": [
+          {
+            "annotation": {
+              "contents": "#37avk6c16m9c3342o2i77so3fcb4tq2l72qblg5l0di98avr5ms92h6j90e57vch5aabo6fe9dn9tj701nvt5p5ro67spivndok50fo",
+              "tag": "TypeReference"
+            },
+            "segment": "Tuple"
+          },
+          {
+            "annotation": null,
+            "segment": " "
+          },
+          {
+            "annotation": {
+              "tag": "Var"
+            },
+            "segment": "a"
+          },
+          {
+            "annotation": null,
+            "segment": " "
+          },
+          {
+            "annotation": {
+              "tag": "Var"
+            },
+            "segment": "b"
+          },
+          {
+            "annotation": null,
+            "segment": " "
+          },
+          {
+            "annotation": {
+              "tag": "TypeOperator"
+            },
+            "segment": "->"
+          },
+          {
+            "annotation": null,
+            "segment": " "
+          },
+          {
+            "annotation": {
+              "tag": "Var"
+            },
+            "segment": "a"
+          }
+        ],
+        "termDefinition": {
+          "contents": [
+            {
+              "annotation": {
+                "contents": "lib.data.Tuple.fst",
+                "tag": "HashQualifier"
+              },
+              "segment": "lib.data.Tuple.fst"
+            },
+            {
+              "annotation": {
+                "tag": "TypeAscriptionColon"
+              },
+              "segment": " :"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "#37avk6c16m9c3342o2i77so3fcb4tq2l72qblg5l0di98avr5ms92h6j90e57vch5aabo6fe9dn9tj701nvt5p5ro67spivndok50fo",
+                "tag": "TypeReference"
+              },
+              "segment": "Tuple"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "a"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "b"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "a"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": {
+                "contents": "lib.data.Tuple.fst",
+                "tag": "HashQualifier"
+              },
+              "segment": "lib.data.Tuple.fst"
+            },
+            {
+              "annotation": {
+                "tag": "BindingEquals"
+              },
+              "segment": " ="
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "ControlKeyword"
+              },
+              "segment": "cases"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "#37avk6c16m9c3342o2i77so3fcb4tq2l72qblg5l0di98avr5ms92h6j90e57vch5aabo6fe9dn9tj701nvt5p5ro67spivndok50fo#d0",
+                "tag": "TermReference"
+              },
+              "segment": "Tuple"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "a"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "DelimiterChar"
+              },
+              "segment": "_"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "ControlKeyword"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "a"
+            }
+          ],
+          "tag": "UserObject"
+        },
+        "termDocs": [],
+        "termNames": [
+          "lib.data.Tuple.fst"
+        ]
+      }
+    },
+    "typeDefinitions": {}
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

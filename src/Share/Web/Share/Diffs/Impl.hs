@@ -18,9 +18,9 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHash, BranchHashId, CausalId)
-import Share.Postgres.NameLookups.Ops qualified as NLOps
-import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
+import Share.Postgres.NamesPerspective.Ops qualified as NLOps
+import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Aeson (PreEncoded (PreEncoded))
@@ -79,19 +79,19 @@ tryComputeCausalDiff ::
     )
 tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCodebase, newRuntime, newCausalId) maybeLcaCausalId = PG.transactionSpan "tryComputeCausalDiff" mempty do
   -- Ensure name lookups for the things we're diffing.
-  let getBranch :: (PG.QueryM m) => CausalId -> m (BranchHashId, NameLookupReceipt)
+  let getBranch :: CausalId -> PG.Transaction NamespaceDiffError (BranchHashId, NameLookupReceipt, NamesPerspective (PG.Transaction NamespaceDiffError))
       getBranch causalId = do
         branchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
-        nameLookupReceipt <- NLOps.ensureNameLookupForBranchId branchHashId
-        pure (branchHashId, nameLookupReceipt)
-  (oldBranchHashId, oldBranchNLReceipt) <- PG.transactionSpan "getOldBranch" mempty $ getBranch oldCausalId
-  (newBranchHashId, newBranchNLReceipt) <- PG.transactionSpan "getNewBranch" mempty $ getBranch newCausalId
-  (maybeLcaBranchHashId, maybeLcaBranchNLReceipt) <-
+        np@NamesPerspective {nameLookupReceipt} <- NLOps.namesPerspectiveForRoot branchHashId
+        pure (branchHashId, nameLookupReceipt, np)
+  (oldBranchHashId, oldBranchNLReceipt, oldPerspective) <- PG.transactionSpan "getOldBranch" mempty $ getBranch oldCausalId
+  (newBranchHashId, newBranchNLReceipt, newPerspective) <- PG.transactionSpan "getNewBranch" mempty $ getBranch newCausalId
+  (maybeLcaBranchHashId, maybeLcaBranchNLReceipt, maybeLcaPerspective) <-
     case maybeLcaCausalId of
       Just lcaCausalId -> do
-        (lcaBranchHashId, lcaBranchNLReceipt) <- PG.transactionSpan "getNewBranch" mempty $ getBranch lcaCausalId
-        pure (Just lcaBranchHashId, Just lcaBranchNLReceipt)
-      Nothing -> pure (Nothing, Nothing)
+        (lcaBranchHashId, lcaBranchNLReceipt, lcaPerspective) <- PG.transactionSpan "getNewBranch" mempty $ getBranch lcaCausalId
+        pure (Just lcaBranchHashId, Just lcaBranchNLReceipt, Just lcaPerspective)
+      Nothing -> pure (Nothing, Nothing, Nothing)
   -- Do the initial 3-way namespace diff
   diff0 <-
     NamespaceDiffs.computeThreeWayNamespaceDiff
@@ -128,32 +128,33 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
         & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
           %%~ computeUpdatedDefinitionDiffs
             authZReceipt
-            (oldCodebase, oldRuntime, fromMaybe oldBranchHashId maybeLcaBranchHashId)
-            (newCodebase, newRuntime, newBranchHashId)
+            (oldCodebase, oldRuntime, fromMaybe oldPerspective maybeLcaPerspective)
+            (newCodebase, newRuntime, newPerspective)
   pure diff4
 
 computeUpdatedDefinitionDiffs ::
   forall a b from to.
   (Ord a, Ord b) =>
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime from IO, BranchHashId) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, BranchHashId) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime from IO, NamesPerspective (PG.Transaction NamespaceDiffError)) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, NamesPerspective (PG.Transaction NamespaceDiffError)) ->
   GNamespaceTreeDiff NameSegment a b Name Name Name Name ->
   PG.Transaction
     NamespaceDiffError
     (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
-computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId) (toCodebase, toRuntime, toBHId) diff0 = PG.transactionSpan "computeUpdatedDefinitionDiffs" mempty $ do
+computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromPerspective) (toCodebase, toRuntime, toPerspective) diff0 = PG.transactionSpan "computeUpdatedDefinitionDiffs" mempty $ do
   diff1 <- PG.transactionSpan "termDiffs" mempty $ do
     NamespaceDiffs.witherNamespaceTreeDiffTermDiffs
-      (\name -> diffTerms authZReceipt (fromCodebase, fromRuntime, fromBHId, name) (toCodebase, toRuntime, toBHId, name))
+      (\name -> diffTerms authZReceipt (fromCodebase, fromRuntime, fromPerspective, name) (toCodebase, toRuntime, toPerspective, name))
       diff0
   diff2 <- PG.transactionSpan "termDiffKinds" mempty $ do
     NamespaceDiffs.witherNamespaceTreeTermDiffKinds
+      -- TODO: Batchify this properly
       (fmap throwAwayConstructorDiffs . renderDiffKind getTermDefinition)
       diff1
   diff3 <- PG.transactionSpan "typeDiffs" mempty $ do
     NamespaceDiffs.namespaceTreeDiffTypeDiffs_
-      (\name -> diffTypes authZReceipt (fromCodebase, fromRuntime, fromBHId, name) (toCodebase, toRuntime, toBHId, name))
+      (\name -> diffTypes authZReceipt (fromCodebase, fromRuntime, fromPerspective, name) (toCodebase, toRuntime, toPerspective, name))
       diff2
   diff4 <- PG.transactionSpan "typeDiffKinds" mempty $ do
     NamespaceDiffs.namespaceTreeTypeDiffKinds_
@@ -165,17 +166,17 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId
 
     renderDiffKind ::
       forall diff r x.
-      (forall s. (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction NamespaceDiffError (Maybe x)) ->
+      (forall s. (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) -> PG.Transaction NamespaceDiffError (Maybe x)) ->
       DefinitionDiffKind r Name diff ->
       PG.Transaction NamespaceDiffError (DefinitionDiffKind r x diff)
     renderDiffKind getter = \case
-      Added r name -> Added r <$> (getter (toCodebase, toRuntime, toBHId, name) `whenNothingM` throwError (notFound name "Added"))
-      NewAlias r existingNames name -> NewAlias r existingNames <$> (getter (toCodebase, toRuntime, toBHId, name) `whenNothingM` throwError (notFound name "NewAlias"))
-      Removed r name -> Removed r <$> (getter (fromCodebase, fromRuntime, fromBHId, name) `whenNothingM` throwError (notFound name "Removed"))
+      Added r name -> Added r <$> (getter (toCodebase, toRuntime, toPerspective, name) `whenNothingM` throwError (notFound name "Added"))
+      NewAlias r existingNames name -> NewAlias r existingNames <$> (getter (toCodebase, toRuntime, toPerspective, name) `whenNothingM` throwError (notFound name "NewAlias"))
+      Removed r name -> Removed r <$> (getter (fromCodebase, fromRuntime, fromPerspective, name) `whenNothingM` throwError (notFound name "Removed"))
       Updated oldRef newRef diff -> pure $ Updated oldRef newRef diff
       Propagated oldRef newRef diff -> pure $ Propagated oldRef newRef diff
-      RenamedTo r names name -> RenamedTo r names <$> (getter (fromCodebase, fromRuntime, fromBHId, name) `whenNothingM` throwError (notFound name "RenamedTo"))
-      RenamedFrom r names name -> RenamedFrom r names <$> (getter (toCodebase, toRuntime, toBHId, name) `whenNothingM` throwError (notFound name "RenamedFrom"))
+      RenamedTo r names name -> RenamedTo r names <$> (getter (fromCodebase, fromRuntime, fromPerspective, name) `whenNothingM` throwError (notFound name "RenamedTo"))
+      RenamedFrom r names name -> RenamedFrom r names <$> (getter (toCodebase, toRuntime, toPerspective, name) `whenNothingM` throwError (notFound name "RenamedFrom"))
 
     throwAwayConstructorDiffs ::
       DefinitionDiffKind a (Either ConstructorReference TermDefinition) diff -> Maybe (DefinitionDiffKind a TermDefinition diff)
@@ -196,8 +197,8 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromBHId
 
 diffTerms ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime old IO, BranchHashId, Name) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime old IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
   PG.Transaction NamespaceDiffError (Maybe TermDefinitionDiff)
 diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
   oldTerm <- getTermDefinition old `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
@@ -210,22 +211,23 @@ diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
     -- Just dropping them from the diff for now
     _ -> pure Nothing
 
+-- | Get the term definition for a given name. Note: This assumes all names are within the
+-- same names perspective.
+--
 -- TODO: batchify this
-getTermDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction e (Maybe (Either ConstructorReference TermDefinition))
-getTermDefinition (codebase, rt, bhId, name) = do
-  let perspective = mempty
-  (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+getTermDefinition :: (PG.QueryM m) => (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, NamesPerspective m, Name) -> m (Maybe (Either ConstructorReference TermDefinition))
+getTermDefinition (codebase, rt, namesPerspective, name) = do
   let ppedBuilder deps = PPED.biasTo [name] <$> PPEPostgres.ppedForReferences namesPerspective deps
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  Definitions.termDefinitionByName codebase ppedBuilder nameSearch renderWidth rt relocatedName
+  Definitions.termDefinitionByName codebase ppedBuilder nameSearch renderWidth rt name
   where
     renderWidth :: Width
     renderWidth = 80
 
 diffTypes ::
   AuthZReceipt ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime old IO, BranchHashId, Name) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, BranchHashId, Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime old IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
+  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
   PG.Transaction NamespaceDiffError TypeDefinitionDiff
 diffTypes !_authZReceipt old@(_, _, _, oldTypeName) new@(_, _, _, newTypeName) = do
   oldType <-
@@ -237,14 +239,15 @@ diffTypes !_authZReceipt old@(_, _, _, oldTypeName) new@(_, _, _, newTypeName) =
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition oldType) (typeDefinition newType)
   pure $ TypeDefinitionDiff {left = oldType, right = newType, diff = typeDiffDisplayObject}
 
+-- | Get the type definition for a given name. Note: This assumes all names are within the
+-- same names perspective.
+--
 -- TODO: batchify this
-getTypeDefinition :: (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, BranchHashId, Name) -> PG.Transaction e (Maybe TypeDefinition)
-getTypeDefinition (codebase, rt, bhId, name) = do
-  let perspective = mempty
-  (namesPerspective, Identity relocatedName) <- NameLookupOps.relocateToNameRoot perspective (Identity name) bhId
+getTypeDefinition :: (PG.QueryM m) => (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, NamesPerspective m, Name) -> m (Maybe TypeDefinition)
+getTypeDefinition (codebase, rt, namesPerspective, name) = do
   let ppedBuilder deps = (PPED.biasTo [name]) <$> (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  Definitions.typeDefinitionByName codebase ppedBuilder nameSearch renderWidth rt relocatedName
+  Definitions.typeDefinitionByName codebase ppedBuilder nameSearch renderWidth rt name
   where
     renderWidth :: Width
     renderWidth = 80

@@ -1,16 +1,16 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -Wno-missing-signatures #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Share.Postgres.NameLookups.Queries
   ( termNamesForRefsWithinNamespaceOf,
     typeNamesForRefsWithinNamespaceOf,
     ShouldSuffixify (..),
-    termRefsForExactName,
-    typeRefsForExactName,
+    termRefsForExactNamesOf,
+    typeRefsForExactNamesOf,
     fuzzySearchTerms,
     fuzzySearchTypes,
     FuzzySearchScore,
+    ensureNameLookupForBranchId,
 
     -- * Cursors
     projectTermsWithinRoot,
@@ -26,15 +26,21 @@ where
 
 import Control.Lens hiding (from)
 import Data.Foldable qualified as Foldable
+import Data.Generics.Product (HasField (..))
 import Data.Text qualified as Text
+import Hasql.Decoders qualified as Decoders
+import Hasql.Interpolate qualified as Hasql
 import Share.Postgres
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types
+import Share.Postgres.NamesPerspective.Queries qualified as NPQ
+import Share.Postgres.NamesPerspective.Types (NamesPerspective, perspectiveCurrentMountBranchHashId, qualifyNameToPerspective)
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
+import Share.Utils.Postgres (ordered)
 import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType)
 import U.Codebase.Referent qualified as V2
@@ -45,13 +51,13 @@ import Unison.Util.Monoid qualified as Monoid
 
 data ShouldSuffixify = Suffixify | NoSuffixify
 
--- | Get the list of term names and suffixifications for a given Referent within a given namespace.
+-- | Get the list of term names and suffixifications for a given Referent within a given root namespace perspective.
 -- Considers one level of dependencies, but not transitive dependencies.
 --
 -- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
 termNamesForRefsWithinNamespaceOf ::
-  (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
-termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
+  (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
+termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
   s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64)]
         refsTable =
@@ -81,11 +87,14 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
         FROM refs
         ORDER BY refs.ord ASC
       |]
+      <&> over (traversed . traversed . field @"reversedName") (qualifyNameToPerspective np)
   where
+    -- Look in the current mount.
+    bhId = perspectiveCurrentMountBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
       Suffixify -> True
       NoSuffixify -> False
-    namespacePrefix = toNamespacePrefix namespaceRoot
+    namespacePrefix = toNamespacePrefix mempty
     reversedNamePrefix = case maySuffix of
       Just suffix -> toReversedNamePrefix suffix
       Nothing -> ""
@@ -94,8 +103,8 @@ termNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
 -- Considers one level of dependencies, but not transitive dependencies.
 --
 -- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
-typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> PathSegments -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
-typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuffix shouldSuffixify trav s = do
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
+typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
   s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64)]
         refsTable =
@@ -124,70 +133,101 @@ typeNamesForRefsWithinNamespaceOf !_nameLookupReceipt bhId namespaceRoot maySuff
         FROM refs
         ORDER BY refs.ord ASC
       |]
+      <&> over (traversed . traversed . field @"reversedName") (qualifyNameToPerspective np)
   where
+    bhId = perspectiveCurrentMountBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
       Suffixify -> True
       NoSuffixify -> False
-    namespacePrefix = toNamespacePrefix namespaceRoot
+    namespacePrefix = toNamespacePrefix mempty
     reversedNamePrefix = case maySuffix of
       Just suffix -> toReversedNamePrefix suffix
       Nothing -> ""
 
--- | Brings into scope the transitive_dependency_mounts CTE table, which contains all transitive deps of the given root, but does NOT include the direct dependencies.
--- @transitive_dependency_mounts(root_branch_hash_id, reversed_mount_path)@
--- Where @reversed_mount_path@ is the reversed path from the provided root to the mounted
--- dependency's root.
-transitiveDependenciesSql :: BranchHashId -> PG.Sql
-transitiveDependenciesSql rootBranchHashId =
-  [PG.sql|
-        -- Recursive table containing all transitive deps
-        WITH RECURSIVE
-          transitive_dependency_mounts(root_branch_hash_id, reversed_mount_path) AS (
-            -- We've already searched direct deps above, so start with children of direct deps
-            SELECT transitive.mounted_root_branch_hash_id, transitive.reversed_mount_path || direct.reversed_mount_path
-            FROM name_lookup_mounts direct
-                 JOIN name_lookup_mounts transitive on direct.mounted_root_branch_hash_id = transitive.parent_root_branch_hash_id
-            WHERE direct.parent_root_branch_hash_id = #{rootBranchHashId}
-            UNION ALL
-            SELECT mount.mounted_root_branch_hash_id, mount.reversed_mount_path || rec.reversed_mount_path
-            FROM name_lookup_mounts mount
-              INNER JOIN transitive_dependency_mounts rec ON mount.parent_root_branch_hash_id = rec.root_branch_hash_id
+newtype NamedReferentResult = NamedReferentResult (NamedRef (PGReferent, (Maybe ConstructorType)))
+  deriving (Show)
+
+instance Hasql.DecodeValue NamedReferentResult where
+  decodeValue = Decoders.composite $ do
+    name <- Decoders.field $ Hasql.decodeField @ReversedName
+    ref <- decodeComposite
+    ct <- (Decoders.field $ Hasql.decodeField @(Maybe ConstructorType))
+    pure $ NamedReferentResult (NamedRef name (ref, ct))
+
+newtype NamedReferenceResult = NamedReferenceResult (NamedRef PGReference)
+
+instance Hasql.DecodeValue NamedReferenceResult where
+  decodeValue = Decoders.composite $ do
+    name <- Decoders.field $ Hasql.decodeField @ReversedName
+    ref <- decodeComposite
+    pure $ NamedReferenceResult (NamedRef name ref)
+
+-- | Get the set of refs for an exact name.
+termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef (PGReferent, Maybe ConstructorType)] -> s -> m t
+termRefsForExactNamesOf np trav s = do
+  s
+    & asListOf trav %%~ \fqns -> do
+      relocatedNames <- NPQ.relocateReversedNamesToMountsOf np traversed fqns
+      let (scopedPerspectives, _) = unzip relocatedNames
+      let scopedNamesTable =
+            ordered relocatedNames
+              <&> \(ord, (np, scopedReversedName)) ->
+                let mountRoot = perspectiveCurrentMountBranchHashId np
+                 in (ord, mountRoot, scopedReversedName)
+      results <-
+        PG.queryListCol @([NamedReferentResult])
+          [PG.sql|
+          WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
+            SELECT * FROM ^{PG.toTable scopedNamesTable} AS t(ord, mount_branch_hash_id, reversed_name)
           )
-          |]
+          SELECT (
+            SELECT COALESCE(array_agg((stnl.reversed_name, stnl.referent_builtin, stnl.referent_component_hash_id, stnl.referent_component_index, stnl.referent_constructor_index, stnl.referent_constructor_type)), '{}')
+            FROM scoped_term_name_lookup stnl
+            WHERE stnl.root_branch_hash_id = scoped_names.mount_branch_hash_id
+                  AND stnl.reversed_name = scoped_names.reversed_name
+          ) FROM scoped_names
+          ORDER BY scoped_names.ord ASC
+        |]
+      results
+        & coerce @[[NamedReferentResult]] @[[(NamedRef (PGReferent, (Maybe ConstructorType)))]]
+        & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
+        & pure
 
 -- | Get the set of refs for an exact name.
 -- This will only return results which are within the name lookup for the provided branch hash
 -- id. It's the caller's job to select the correct name lookup for your exact name.
 --
 -- See termRefsForExactName in U.Codebase.Sqlite.Operations
-termRefsForExactName :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef (PGReferent, Maybe ConstructorType)]
-termRefsForExactName !_nameLookupReceipt bhId reversedName = do
-  results :: [NamedRef (PGReferent PG.:. PG.Only (Maybe ConstructorType))] <-
-    PG.queryListRows
-      [PG.sql|
-        SELECT reversed_name, referent_builtin, referent_component_hash_id, referent_component_index, referent_constructor_index, referent_constructor_type
-        FROM scoped_term_name_lookup
-        WHERE root_branch_hash_id = #{bhId}
-              AND reversed_name = #{reversedName}
-      |]
-  pure (fmap unRow <$> results)
-  where
-    unRow (a PG.:. PG.Only b) = (a, b)
-
--- | Get the set of refs for an exact name.
--- This will only return results which are within the name lookup for the provided branch hash
--- id. It's the caller's job to select the correct name lookup for your exact name.
---
--- See termRefsForExactName in U.Codebase.Sqlite.Operations
-typeRefsForExactName :: (PG.QueryM m) => NameLookupReceipt -> BranchHashId -> ReversedName -> m [NamedRef PGReference]
-typeRefsForExactName !_nameLookupReceipt bhId reversedName = do
-  PG.queryListRows
-    [PG.sql|
-      SELECT reversed_name, reference_builtin, reference_component_hash_id, reference_component_index
-      FROM scoped_type_name_lookup
-      WHERE root_branch_hash_id = #{bhId}
-            AND reversed_name = #{reversedName}
-    |]
+typeRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef PGReference] -> s -> m t
+typeRefsForExactNamesOf np trav s = do
+  s
+    & asListOf trav %%~ \fqns -> do
+      relocatedNames <- NPQ.relocateReversedNamesToMountsOf np traversed fqns
+      let (scopedPerspectives, _) = unzip relocatedNames
+      let scopedNamesTable =
+            ordered relocatedNames
+              <&> \(ord, (np, scopedReversedName)) ->
+                let mountRoot = perspectiveCurrentMountBranchHashId np
+                 in (ord, mountRoot, scopedReversedName)
+      results <-
+        PG.queryListCol @([NamedReferenceResult])
+          [PG.sql|
+          WITH scoped_names(ord, mount_branch_hash_id, reversed_name) AS (
+            SELECT * FROM ^{PG.toTable scopedNamesTable} AS t(ord, mount_branch_hash_id, reversed_name)
+          ) SELECT (
+            -- Need COALESCE because array_agg will return NULL rather than the empty array
+            -- if there are no results.
+              SELECT COALESCE(array_agg((stnl.reversed_name, stnl.reference_builtin, stnl.reference_component_hash_id, stnl.reference_component_index)), '{}')
+              FROM scoped_type_name_lookup stnl
+              WHERE stnl.root_branch_hash_id = scoped_names.mount_branch_hash_id
+                    AND stnl.reversed_name = scoped_names.reversed_name
+          ) FROM scoped_names
+          ORDER BY scoped_names.ord ASC
+        |]
+      results
+        & coerce @[[NamedReferenceResult]] @[[NamedRef PGReference]]
+        & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
+        & pure
 
 -- | Check if we've already got an index for the desired root branch hash.
 checkBranchHashNameLookupExists :: (PG.QueryM m) => BranchHashId -> m Bool
@@ -239,8 +279,7 @@ listNameLookupMounts !_nameLookupReceipt rootBranchHashId =
          in (mountPath, mountedRootBranchHashId)
 
 -- | Larger is better.
-data FuzzySearchScore
-  = FuzzySearchScore
+data FuzzySearchScore = FuzzySearchScore
   { exactLastSegmentMatch :: Bool,
     lastSegmentInfixMatch :: Bool,
     lastSegmentMatchPos :: Int64,
@@ -250,10 +289,14 @@ data FuzzySearchScore
 
 instance Ord FuzzySearchScore where
   compare (FuzzySearchScore exact1 infix1 pos1 len1) (FuzzySearchScore exact2 infix2 pos2 len2) =
-    exact1 `compare` exact2
-      <> infix1 `compare` infix2
-      <> pos1 `compare` pos2
-      <> len1 `compare` len2
+    exact1
+      `compare` exact2
+        <> infix1
+      `compare` infix2
+        <> pos1
+      `compare` pos2
+        <> len1
+      `compare` len2
 
 instance DecodeRow FuzzySearchScore where
   decodeRow =
@@ -266,11 +309,10 @@ instance DecodeRow FuzzySearchScore where
 -- | Searches for all names within the given name lookup which contain the provided list of segments
 -- in order.
 -- Search is case insensitive.
-fuzzySearchTerms :: (PG.QueryA m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
-fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
-  fmap unRow
-    <$> PG.queryListRows
-      [PG.sql|
+fuzzySearchTerms :: (PG.QueryA m) => NamesPerspective m -> Bool -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef (PGReferent, Maybe ConstructorType))]
+fuzzySearchTerms np includeDependencies limit namespace querySegments lastSearchTerm = do
+  PG.queryListRows
+    [PG.sql|
       SELECT matches.reversed_name, matches.referent_builtin, matches.referent_component_hash_id, matches.referent_component_index, matches.referent_constructor_index, matches.referent_constructor_type,
       matches.exact_last_segment_match, matches.last_segment_infix_match, matches.last_segment_match_pos, matches.inverse_name_length
       FROM (
@@ -295,7 +337,10 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
                ) DESC
       LIMIT #{limit}
             |]
+    <&> fmap unRow
+    <&> over (traversed . traversed . namedRefReversedName_) (qualifyNameToPerspective np)
   where
+    bhId = perspectiveCurrentMountBranchHashId np
     namespacePrefix = toNamespacePrefix namespace
     -- Union in the dependencies if required.
     dependenciesSql =
@@ -325,11 +370,10 @@ fuzzySearchTerms !_nameLookupReceipt includeDependencies bhId limit namespace qu
 -- in order.
 --
 -- Search is case insensitive.
-fuzzySearchTypes :: (PG.QueryA m) => NameLookupReceipt -> Bool -> BranchHashId -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef PGReference)]
-fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace querySegments lastSearchTerm = do
-  fmap unRow
-    <$> PG.queryListRows
-      [PG.sql|
+fuzzySearchTypes :: (PG.QueryA m) => NamesPerspective m -> Bool -> Int64 -> PathSegments -> NonEmpty Text -> Text -> m [(FuzzySearchScore, NamedRef PGReference)]
+fuzzySearchTypes np includeDependencies limit namespace querySegments lastSearchTerm = do
+  PG.queryListRows
+    [PG.sql|
 
       SELECT matches.reversed_name, matches.reference_builtin, matches.reference_component_hash_id, matches.reference_component_index,
       matches.exact_last_segment_match, matches.last_segment_infix_match, matches.last_segment_match_pos, matches.inverse_name_length
@@ -355,7 +399,10 @@ fuzzySearchTypes !_nameLookupReceipt includeDependencies bhId limit namespace qu
                ) DESC
       LIMIT #{limit}
           |]
+    <&> fmap unRow
+    <&> over (traversed . traversed . namedRefReversedName_) (qualifyNameToPerspective np)
   where
+    bhId = perspectiveCurrentMountBranchHashId np
     unRow :: (NamedRef PGReference PG.:. FuzzySearchScore) -> (FuzzySearchScore, NamedRef PGReference)
     unRow (namedRef PG.:. score) = (score, namedRef)
     namespacePrefix = toNamespacePrefix namespace
@@ -453,3 +500,8 @@ projectTypesWithinRoot !_nlReceipt bhId = do
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
+
+ensureNameLookupForBranchId :: (QueryA m) => BranchHashId -> m NameLookupReceipt
+ensureNameLookupForBranchId branchHashId =
+  UnsafeNameLookupReceipt
+    <$ PG.execute_ [PG.sql| SELECT ensure_name_lookup(#{branchHashId}) |]

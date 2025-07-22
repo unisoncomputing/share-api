@@ -17,8 +17,8 @@ import Share.Codebase.Types (CodebaseEnv (..), CodebaseRuntime)
 import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
-import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types (PathSegments (..))
+import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PostgresPPE
 import Share.Utils.Caching.JSON qualified as Caching
@@ -59,7 +59,7 @@ findAndRenderDoc codebase@(CodebaseEnv {codebaseOwner}) docNames runtime namespa
           }
 
   lift $ Caching.usingJSONCache cacheKey do
-    namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootNamespaceHashId (coerce $ Path.toList namespacePath)
+    namesPerspective <- NPOps.namesPerspectiveForRootAndPath rootNamespaceHashId (coerce $ Path.toList namespacePath)
     eDoc <- Backend.evalDocRef codebase runtime docRef
     let docDeps = Doc.dependencies eDoc <> Set.singleton (LD.TermReference docRef)
     docPPE <- PostgresPPE.ppedForReferences namesPerspective docDeps

@@ -21,8 +21,8 @@ import Share.Codebase qualified as Codebase
 import Share.Postgres (QueryM, unrecoverableError)
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
-import Share.Postgres.NameLookups.Ops qualified as NLOps
 import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
@@ -78,7 +78,7 @@ termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayW
   let termReference = V2Referent.toReference referent
   let deps = Type.labeledDependencies typeSig
   -- TODO: find a way to batchify namesPerspectiveForRootAndPath
-  namesPerspective <- NLOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
+  namesPerspective <- NPOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
   pped <- PPEPostgres.ppedForReferences namesPerspective deps
   let formattedTypeSig = Backend.formatSuffixedType pped width typeSig
   let summary = mkSummary termReference formattedTypeSig

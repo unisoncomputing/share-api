@@ -1,8 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Share.Postgres.NameLookups.Types
-  ( NamesPerspective (..),
-    ReversedName (..),
+  ( ReversedName (..),
     NameWithSuffix (..),
     ReversedPath (..),
     PathSegments (..),
@@ -12,6 +11,7 @@ module Share.Postgres.NameLookups.Types
     pathSegmentsToText,
     textToPathSegments,
     nameToPathSegments,
+    pathToPathSegments,
     reversedNameToNamespaceText,
     reversedNameToPathSegments,
     prefixNamedRef,
@@ -20,7 +20,9 @@ module Share.Postgres.NameLookups.Types
     pgNamedReferenceFields,
     pgNamedReferentFields,
     ref_,
+    namedRefReversedName_,
     reversedNameToName,
+    nameToReversedName,
   )
 where
 
@@ -33,10 +35,12 @@ import Hasql.Decoders qualified as Decoders
 import Hasql.Interpolate qualified as Hasql
 import Hasql.Interpolate qualified as Interp
 import Share.Postgres qualified as PG
-import Share.Postgres.IDs (BranchHashId, ComponentHashId)
+import Share.Postgres.IDs (ComponentHashId)
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import U.Codebase.Referent (ConstructorType)
+import Unison.Codebase.Path (Path)
+import Unison.Codebase.Path qualified as Path
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment qualified as NameSegment
@@ -46,41 +50,11 @@ import Unison.NameSegment.Internal (NameSegment (..))
 data NameLookupReceipt = UnsafeNameLookupReceipt
   deriving (Eq, Show)
 
--- | Any time we need to lookup or search names we need to know what the scope of that search
--- should be. This can be complicated to keep track of, so this is a helper type to make it
--- easy to pass around.
---
--- You should use 'namesPerspectiveForRootAndPath' to construct this type.
---
--- E.g. if we're in loose code, we need to search the correct name lookup for the
--- user's perspective. If their perspective is "myprojects.json.latest.lib.base.data.List",
--- we need to search names using the name index mounted at "myprojects.json.latest.lib.base".
---
--- The NamesPerspective representing this viewpoint would be:
---
--- @@
--- NamesPerspective
---  { nameLookupBranchHashId = #libbasehash
---  , pathToMountedNameLookup = ["myprojects.json", "latest", "lib", "base"]
---  , relativePerspective = ["data", "List"]
---  }
--- @@
-data NamesPerspective = NamesPerspective
-  { -- | The branch hash of the name lookup we'll use for queries
-    nameLookupBranchHashId :: BranchHashId,
-    -- | Where the name lookup is mounted relative to the root branch
-    pathToMountedNameLookup :: PathSegments,
-    -- | The path to the perspective relative to the current name lookup
-    relativePerspective :: PathSegments,
-    nameLookupReceipt :: NameLookupReceipt
-  }
-  deriving (Eq, Show)
-
 data NameWithSuffix = NameWithSuffix
   { reversedName :: ReversedName,
     suffixifiedName :: ReversedName
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Generic)
 
 instance PG.DecodeValue NameWithSuffix where
   decodeValue = Decoders.composite nameWithSuffixComposite
@@ -103,6 +77,10 @@ newtype ReversedName = ReversedName (NonEmpty Text)
 reversedNameToName :: ReversedName -> Name
 reversedNameToName (ReversedName revName) =
   Name.fromReverseSegments (NameSegment <$> revName)
+
+nameToReversedName :: Name -> ReversedName
+nameToReversedName name =
+  ReversedName (coerce $ Name.reverseSegments name)
 
 instance From ReversedName Name where
   from = reversedNameToName
@@ -156,6 +134,9 @@ pathSegmentsToText (PathSegments txt) = Text.intercalate "." txt
 nameToPathSegments :: Name -> PathSegments
 nameToPathSegments name = (PathSegments . Foldable.toList . fmap NameSegment.toUnescapedText $ Name.segments name)
 
+pathToPathSegments :: Path -> PathSegments
+pathToPathSegments path = coerce $ Path.toList path
+
 -- |
 -- >>> textToPathSegments "base.data.List"
 -- PathSegments ["base","data","List"]
@@ -186,6 +167,15 @@ reversedNameFromText txt =
 
 data NamedRef ref = NamedRef {reversedSegments :: ReversedName, ref :: ref}
   deriving stock (Show, Functor, Foldable, Traversable)
+
+namedRefReversedName_ :: Lens' (NamedRef ref) ReversedName
+namedRefReversedName_ = lens reversedSegments (\namedRef reversedName -> namedRef {reversedSegments = reversedName})
+
+instance (PG.DecodeComposite ref) => PG.DecodeComposite (NamedRef ref) where
+  decodeComposite = do
+    reversedSegments <- Decoders.field $ Interp.decodeField
+    ref <- PG.decodeComposite
+    pure $ NamedRef {..}
 
 ref_ :: Lens (NamedRef ref) (NamedRef ref') ref ref'
 ref_ = lens ref (\namedRef ref -> namedRef {ref = ref})

@@ -12,13 +12,13 @@ import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops as NLOps
 import Share.Postgres.NameLookups.Queries (ShouldSuffixify (NoSuffixify))
 import Share.Postgres.NameLookups.Types
+import Share.Postgres.NamesPerspective.Types (NamesPerspective, perspectiveCurrentMountPathPrefix)
 import Share.Prelude
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualifiedPrime qualified as HQ'
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment.Internal (NameSegment (..))
-import Unison.NameSegment.Internal qualified as NameSegment
 import Unison.NamesWithHistory (SearchType (..))
 import Unison.Reference qualified as V1
 import Unison.Reference qualified as V1Reference
@@ -26,14 +26,14 @@ import Unison.Referent qualified as V1Referent
 import Unison.Server.NameSearch (NameSearch (..), Search (..))
 import Unison.Server.SearchResult qualified as SR
 
-nameSearchForPerspective :: forall m. (PG.QueryM m) => NamesPerspective -> NameSearch m
+nameSearchForPerspective :: forall m. (PG.QueryM m) => NamesPerspective m -> NameSearch m
 nameSearchForPerspective namesPerspective =
   NameSearch {typeSearch, termSearch}
   where
     -- Some searches will provide a fully-qualified name, so we need to strip off the
     -- mount-path before we search or it will fail to find anything.
     stripMountPathPrefix :: Name -> Name
-    stripMountPathPrefix name = Name.tryStripReversedPrefix name (reverse . coerce $ pathToMountedNameLookup namesPerspective)
+    stripMountPathPrefix name = Name.tryStripReversedPrefix name (reverse . coerce $ perspectiveCurrentMountPathPrefix namesPerspective)
     typeSearch =
       Search
         { lookupNames = lookupNamesForTypes,
@@ -60,7 +60,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTypes :: V1.Reference -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTypes ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.references1ToPGOf id ref
-      names <- NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
+      names <- lift $ NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Reference.toShortHash ref))
         & Set.fromList
@@ -68,7 +68,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTerms :: V1Referent.Referent -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTerms ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.referents1ToPGOf id ref
-      names <- NLOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
+      names <- lift $ NLOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Referent.toShortHash ref))
         & Set.fromList
@@ -78,7 +78,7 @@ nameSearchForPerspective namesPerspective =
     hqTermSearch hqName = do
       case hqName of
         HQ'.NameOnly name -> do
-          namedRefs <- NLOps.termRefsForExactName namesPerspective (coerce $ Name.reverseSegments name)
+          namedRefs <- NLOps.termRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
           namedRefs
             & fmap (\(NamedRef {ref}) -> ref)
             & Set.fromList
@@ -107,7 +107,7 @@ nameSearchForPerspective namesPerspective =
     hqTypeSearch hqName = do
       case hqName of
         HQ'.NameOnly name -> do
-          namedRefs <- NLOps.typeRefsForExactName namesPerspective (coerce $ Name.reverseSegments name)
+          namedRefs <- NLOps.typeRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
           namedRefs
             & fmap (\NamedRef {ref} -> ref)
             & Set.fromList
@@ -135,4 +135,6 @@ nameSearchForPerspective namesPerspective =
 
     -- Fully qualify a name by prepending the current namespace perspective's path
     fullyQualifyName :: Name -> Name
-    fullyQualifyName name = fromMaybe name $ Path.maybePrefixName (Path.AbsolutePath' $ Path.Absolute (Path.fromList . (fmap NameSegment.NameSegment) . into @[Text] $ pathToMountedNameLookup namesPerspective)) name
+    fullyQualifyName name =
+      -- TODO: Is it actually correct to do this?
+      fromMaybe name $ Path.maybePrefixName (Path.AbsolutePath' $ Path.Absolute (Path.fromList . (fmap NameSegment) . into @[Text] $ perspectiveCurrentMountPathPrefix namesPerspective)) name

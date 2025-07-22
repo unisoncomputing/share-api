@@ -16,6 +16,7 @@ import Hasql.Interpolate qualified as Hasql
 import Hasql.Session qualified as Hasql
 import Servant (err500)
 import Servant.API
+import Share.Postgres.Composites (DecodeComposite (..))
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (RawLazyBytes (..))
@@ -125,29 +126,42 @@ instance Hasql.EncodeValue Name where
 
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.DecodeRow (Reference' t h) where
   decodeRow = do
-    t <- decodeField @(Maybe t)
-    h <- decodeField @(Maybe h)
-    i <- decodeField @(Maybe Int64)
-    let wordI = either (error . show) id . tryInto @Word64 <$> i
-    pure $ mkRef t h wordI
-    where
-      mkRef (Just t) Nothing Nothing =
-        ReferenceBuiltin t
-      mkRef Nothing (Just h) (Just componentIdx) =
-        ReferenceDerived (Id h componentIdx)
-      mkRef t h i =
-        error $ "invalid find_type_index type reference: " ++ str
-        where
-          str = "(" ++ show t ++ ", " ++ show h ++ ", " ++ show i ++ ")"
+    decodeReference (decodeField @(Maybe t)) (decodeField @(Maybe h)) (decodeField @(Maybe Int64))
+
+instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => DecodeComposite (Reference' t h) where
+  decodeComposite = decodeReference (Decoders.field (Hasql.decodeField @(Maybe t))) (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int64))
+
+decodeReference :: forall t h m. (Monad m, Show t, Show h) => m (Maybe t) -> m (Maybe h) -> m (Maybe Int64) -> m (Reference' t h)
+decodeReference getT getH getI = do
+  t <- getT
+  h <- getH
+  i <- getI
+  let wordI = either (error . show) id . tryInto @Word64 <$> i
+  pure $ mkRef t h wordI
+  where
+    mkRef (Just t) Nothing Nothing =
+      ReferenceBuiltin t
+    mkRef Nothing (Just h) (Just componentIdx) =
+      ReferenceDerived (Id h componentIdx)
+    mkRef t h i =
+      error $ "invalid find_type_index type reference: " ++ str
+      where
+        str = "(" ++ show t ++ ", " ++ show h ++ ", " ++ show i ++ ")"
 
 instance (Hasql.DecodeRow (Reference' t h)) => Hasql.DecodeRow (Referent' (Reference' t h) (Reference' t h)) where
-  decodeRow = do
-    ref <- Hasql.decodeRow
-    mayCid <- decodeField @(Maybe Int64)
-    let wordCid = either (error . show) id . tryInto @Word64 <$> mayCid
-    case wordCid of
-      Nothing -> pure $ Ref ref
-      Just cid -> pure $ Con ref cid
+  decodeRow = decodeReferent Hasql.decodeRow (decodeField @(Maybe Int64))
+
+instance (DecodeComposite (Reference' t h)) => DecodeComposite (Referent' (Reference' t h) (Reference' t h)) where
+  decodeComposite = decodeReferent decodeComposite (Decoders.field $ Hasql.decodeField @(Maybe Int64))
+
+decodeReferent :: (Monad m) => m (Reference' t h) -> m (Maybe Int64) -> m (Referent' (Reference' t h) (Reference' t h))
+decodeReferent getRef getCid = do
+  ref <- getRef
+  mayCid <- getCid
+  let wordCid = either (error . show) id . tryInto @Word64 <$> mayCid
+  case wordCid of
+    Nothing -> pure $ Ref ref
+    Just cid -> pure $ Con ref cid
 
 instance Hasql.DecodeValue ConstructorType where
   decodeValue =

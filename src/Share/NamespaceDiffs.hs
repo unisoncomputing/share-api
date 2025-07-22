@@ -46,7 +46,6 @@ import Data.Aeson.Types (ToJSON (..))
 import Data.Align (Semialign (..))
 import Data.Either (partitionEithers)
 import Data.Foldable qualified as Foldable
-import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
 import Data.Semialign qualified as Align
 import Data.Set qualified as Set
@@ -61,6 +60,8 @@ import Share.Postgres.IDs (BranchHash, BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NameLookups.Types qualified as NL
+import Share.Postgres.NamesPerspective.Ops qualified as NPOps
+import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors
@@ -866,9 +867,8 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
         labeledDeps3 =
           Mergeblob1.hydratedDefnsLabeledDependencies <$> hydratedDefns3
     -- Get a names perspective for Alice/Bob/LCA
-    namesPerspectives3 :: TwoOrThreeWay NL.NamesPerspective <-
-      for branchHashIds3 \branchHashId ->
-        NL.namesPerspectiveForRootAndPath branchHashId (mempty @NL.PathSegments)
+    namesPerspectives3 :: TwoOrThreeWay (NamesPerspective m) <-
+      for branchHashIds3 \branchHashId -> NPOps.namesPerspectiveForRoot branchHashId
     sequence (PGNames.namesForReferences <$> namesPerspectives3 <*> ThreeWay.toTwoOrThreeWay labeledDeps3)
 
   blob1 :: Mergeblob1 BranchHashId <- do

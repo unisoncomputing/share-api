@@ -21,6 +21,7 @@ module Share.Postgres
     Interp.DecodeValue (..),
     Interp.DecodeRow (..),
     Interp.DecodeField,
+    DecodeComposite (..),
     Only (..),
     TupleVal (..),
     QueryA (..),
@@ -82,7 +83,6 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Functor.Compose (Compose (..))
 import Data.HashMap.Lazy qualified as HM
 import Data.Kind (Type)
 import Data.Map qualified as Map
@@ -111,6 +111,7 @@ import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Safe (headMay)
 import Share.Debug qualified as Debug
 import Share.Env qualified as Env
+import Share.Postgres.Composites
 import Share.Postgres.Orphans ()
 import Share.Prelude
 import Share.Telemetry qualified as Trace

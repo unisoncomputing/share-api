@@ -34,6 +34,7 @@ import Share.Postgres.Contributions.Ops qualified as ContribOps
 import Share.Postgres.Contributions.Ops qualified as ContributionOps
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.NameLookups.Ops qualified as NL
+import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Postgres.Queries qualified as BranchQ
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Users.Queries qualified as UserQ
@@ -366,10 +367,11 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
             Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
               Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
                 (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
+                (oldPerspective, newPerspective) <- (oldBranchHashId, newBranchHashId) & traverseOf both NPOps.namesPerspectiveForRoot
                 Diffs.diffTerms
                   authZReceipt
-                  (oldCodebase, oldRuntime, oldBranchHashId, oldTermName)
-                  (newCodebase, newRuntime, newBranchHashId, newTermName)
+                  (oldCodebase, oldRuntime, oldPerspective, oldTermName)
+                  (newCodebase, newRuntime, newPerspective, newTermName)
         case result of
           Left err -> respondError err
           -- Not exactly a "term not found" - one or both term names is a constructor - but probably ok for now
@@ -425,7 +427,8 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
             Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
               Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
                 (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
-                Diffs.diffTypes authZReceipt (oldCodebase, oldRuntime, oldBranchHashId, oldTypeName) (newCodebase, newRuntime, newBranchHashId, newTypeName)
+                (oldPerspective, newPerspective) <- (oldBranchHashId, newBranchHashId) & traverseOf both NPOps.namesPerspectiveForRoot
+                Diffs.diffTypes authZReceipt (oldCodebase, oldRuntime, oldPerspective, oldTypeName) (newCodebase, newRuntime, newPerspective, newTypeName)
       pure $
         ShareTypeDiffResponse
           { project = projectShorthand,

@@ -43,6 +43,7 @@ module Share.Prelude
     (<<<),
     (&&&),
     wundefined,
+    Compose (..),
     Exception (..),
     MaybeT (..),
     hoistMaybe,
@@ -71,6 +72,7 @@ import Data.Either.Combinators (mapLeft, mapRight)
 import Data.Foldable as X
 import Data.Function as X
 import Data.Functor as X
+import Data.Functor.Compose (Compose (..))
 import Data.Functor.Contravariant (contramap)
 import Data.Functor.Identity as X
 import Data.Int as X
