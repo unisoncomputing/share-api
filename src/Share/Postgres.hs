@@ -10,7 +10,6 @@
 module Share.Postgres
   ( -- * Types
     Transaction,
-    UnliftIOTransaction (..),
     Pipeline,
     T,
     Session (..),
@@ -120,7 +119,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
 import Share.Utils.Tags (HasTags (..), MonadTags (..))
 import Share.Web.App
-import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServerError (..), internalServerError, respondError, someServerError)
+import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
 import UnliftIO qualified
 
@@ -143,6 +142,8 @@ thisModuleName =
 data TransactionError e
   = Unrecoverable SomeServerError
   | Err !e
+  deriving stock (Show)
+  deriving anyclass (Exception)
 
 newtype Tags = Tags (Map Text Text)
 
@@ -167,36 +168,33 @@ newtype Transaction e a = Transaction {unTransaction :: Logging.LoggerT (ReaderT
     (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), Logging.MonadLogger)
     via (Logging.LoggerT (ReaderT (Env.Env TransactionCtx) (ExceptT (TransactionError e) Hasql.Session)))
 
-instance MonadTags (Transaction e) where
+instance MonadIO (Transaction e) where
+  liftIO io = Transaction . liftIO $ do
+    UnliftIO.tryAny io >>= \case
+      Left someException -> pure (Left (Unrecoverable $ someServerError someException))
+      Right a -> pure (Right a)
+
+-- | Be careful using this instance on Transaction. With great power comes great responsibility.
+instance (Exception e) => MonadUnliftIO (Transaction e) where
+  withRunInIO f = Transaction $ do
+    unliftIO <- UnliftIO.askUnliftIO
+    r <- UnliftIO.try $ liftIO $ f \(Transaction m) -> do
+      case unliftIO of
+        UnliftIO.UnliftIO toIO -> do
+          toIO m >>= \case
+            Left err -> throwIO err
+            Right a -> pure a
+    case r of
+      Left (err :: TransactionError e) -> pure (Left err)
+      Right b -> pure $ Right b
+
+instance (Exception e) => MonadTags (Transaction e) where
   askTags = ask >>= transactionUnsafeIO . getTags
   withTags newTags (Transaction t) = Transaction $ do
     local (addTags newTags) t
 
 instance MonadTracer (Transaction e) where
   getTracer = asks Env.tracer
-
--- | A very annoying type we must define so that we can embed transactions in IO for the
--- Unison Runtime. You really shouldn't use this unless you absolutely need the MonadUnliftIO
--- class for a PG transaction.
-newtype UnliftIOTransaction e a = UnliftIOTransaction {asUnliftIOTransaction :: Transaction e a}
-  deriving newtype (Functor, Applicative, Monad, MonadReader (Env.Env TransactionCtx), Logging.MonadLogger, MonadTracer)
-
-instance MonadIO (UnliftIOTransaction e) where
-  liftIO io = UnliftIOTransaction . Transaction $ Right <$> liftIO io
-
-instance (Exception e) => MonadUnliftIO (UnliftIOTransaction e) where
-  withRunInIO f = UnliftIOTransaction $ Transaction $ do
-    unliftIO <- UnliftIO.askUnliftIO
-    r <- UnliftIO.try $ liftIO $ f \(UnliftIOTransaction (Transaction m)) -> do
-      case unliftIO of
-        UnliftIO.UnliftIO toIO -> do
-          toIO m >>= \case
-            Left (Unrecoverable err) -> throwIO err
-            Left (Err e) -> throwIO e
-            Right a -> pure a
-    case r of
-      Left err@(SomeServerError {}) -> pure (Left (Unrecoverable err))
-      Right b -> pure $ Right b
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err
@@ -218,10 +216,10 @@ pEitherMap f (Pipeline p) =
       Right x -> mapLeft Err (f x)
       Left e -> Left e
 
-pFor :: (Traversable f) => f a -> (a -> Pipeline e b) -> Transaction e (f b)
+pFor :: (Traversable f, QueryM m) => f a -> (a -> Pipeline (TError m) b) -> m (f b)
 pFor f p = pipelined $ for f p
 
-pFor_ :: (Foldable f) => f a -> (a -> Pipeline e b) -> Transaction e ()
+pFor_ :: (Foldable f, QueryM m) => f a -> (a -> Pipeline (TError m) b) -> m ()
 pFor_ f p = pipelined $ for_ f p
 
 -- | A transaction that has no errors. Prefer using a fully polymorphic 'e' when possible,
@@ -444,7 +442,7 @@ runSessionOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => Sessi
 runSessionOrRespondError t = tryRunSession t >>= either respondError pure
 
 -- | Represents anywhere we can run a statement
-class (Applicative m) => QueryA m where
+class (Exception (TError m), Applicative m) => QueryA m where
   type TError m :: Type
   statement :: q -> Hasql.Statement q r -> m r
 
@@ -462,14 +460,14 @@ class (Applicative m) => QueryA m where
       Right y -> pure y
       Left e -> unrecoverableError e
 
-class (Logging.MonadLogger m, QueryA m) => QueryM m where
+class (Logging.MonadLogger m, MonadTracer m, MonadUnliftIO m, QueryA m, MonadTags m, MonadReader (Env.Env TransactionCtx) m) => QueryM m where
   -- | Allow running IO actions in a transaction. These actions may be run multiple times if
   -- the transaction is retried.
   transactionUnsafeIO :: IO a -> m a
 
   pipelined :: Pipeline (TError m) a -> m a
 
-instance QueryA (Transaction e) where
+instance (Exception e) => QueryA (Transaction e) where
   type TError (Transaction e) = e
   statement q s = do
     transactionStatement q s
@@ -477,7 +475,7 @@ instance QueryA (Transaction e) where
   unrecoverableError e = do
     Transaction (pure (Left (Unrecoverable (someServerError e))))
 
-instance QueryM (Transaction e) where
+instance (Exception e) => QueryM (Transaction e) where
   -- Catch any IO exceptions that may occur in the transaction, and convert them to an
   -- unrecoverable error for better error handling.
   transactionUnsafeIO io = Transaction . liftIO $ do
@@ -489,7 +487,7 @@ instance QueryM (Transaction e) where
 -- | Run a pipeline in a transaction
 -- pipelined :: Pipeline e a -> Transaction e a
 -- pipelined
-instance QueryA (Session e) where
+instance (Exception e) => QueryA (Session e) where
   type TError (Session e) = e
   statement q s =
     Session . lift . lift . lift $ Session.statement q s
@@ -497,15 +495,7 @@ instance QueryA (Session e) where
   unrecoverableError e = do
     throwError (Unrecoverable (someServerError e))
 
-instance QueryM (Session e) where
-  transactionUnsafeIO io = Session $ do
-    liftIO (UnliftIO.tryAny io) >>= \case
-      Left someException -> throwError (Unrecoverable (someServerError someException))
-      Right a -> pure a
-  pipelined p = Session $ do
-    lift . lift . ExceptT $ Hasql.pipeline (unPipeline p)
-
-instance QueryA (Pipeline e) where
+instance (Exception e) => QueryA (Pipeline e) where
   type TError (Pipeline e) = e
   statement q s = Pipeline (Right <$> Hasql.Pipeline.statement q s)
 
@@ -524,19 +514,15 @@ instance (QueryM m) => QueryA (ReaderT e m) where
   unrecoverableError e = do
     lift $ unrecoverableError e
 
-instance (QueryM m) => QueryM (ReaderT e m) where
-  transactionUnsafeIO io = lift $ transactionUnsafeIO io
-  pipelined p = lift $ pipelined p
+-- instance (QueryM m) => QueryM (ReaderT e m) where
+--   transactionUnsafeIO io = lift $ transactionUnsafeIO io
+--   pipelined p = lift $ pipelined p
 
 instance (QueryM m) => QueryA (MaybeT m) where
   type TError (MaybeT m) = TError m
   statement q s = lift $ statement q s
 
   unrecoverableError e = lift $ unrecoverableError e
-
-instance (QueryM m) => QueryM (MaybeT m) where
-  transactionUnsafeIO io = lift $ transactionUnsafeIO io
-  pipelined p = lift $ pipelined p
 
 prepareStatements :: Bool
 prepareStatements = True
@@ -687,7 +673,7 @@ catchAllTransaction (Transaction t) = Transaction do
     Right a -> pure (Right $ Right a)
 
 -- | Allows tracking a span in a transaction.
-transactionSpan :: (HasCallStack, MonadTracer m, MonadTags m, QueryM m) => Text -> HM.HashMap Text Trace.Attribute -> m a -> m a
+transactionSpan :: (HasCallStack, QueryM m) => Text -> HM.HashMap Text Trace.Attribute -> m a -> m a
 transactionSpan name spanTags action = do
   tags <- askTags
   let (_mayFuncName, callSiteInfo) = spanInfo
