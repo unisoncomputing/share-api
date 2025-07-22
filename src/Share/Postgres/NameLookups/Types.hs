@@ -96,8 +96,8 @@ data NamesPerspective m = NamesPerspective
   }
 
 instance Show (NamesPerspective m) where
-  show NamesPerspective {currentMount} =
-    "(NamesPerspective {currentMount = " <> show currentMount <> "})"
+  show NamesPerspective {currentMount, relativePerspective} =
+    "(NamesPerspective {currentMount = " <> show currentMount <> ", relativePerspective = " <> show (relativePerspective) <> "})"
 
 perspectiveRootBranchHashId :: NamesPerspective m -> BranchHashId
 perspectiveRootBranchHashId NamesPerspective {mounts = root Cofree.:< _} = root

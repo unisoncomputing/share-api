@@ -581,15 +581,15 @@ namesPerspectiveForRoot rootBranchHashId = do
 -- | Resolve the root branch hash a given name is located within, and the name prefix the
 -- mount is located at, as well as the name relative to that mount.
 relocateReversedNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (NamesPerspective m, ReversedName) -> s -> m t
-relocateReversedNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts} trav s =
+relocateReversedNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts, relativePerspective = namespacePrefix} trav s =
   s
     & asListOf trav
       %%~ \reversedNames -> do
         for reversedNames \(ReversedName revFqn) ->
           do
             let (lastNameSegment :| revNamePath) = revFqn
-            np <- resolvePathToMount rootNamesPerspective mounts [] (PathSegments $ reverse revNamePath)
-            let (PathSegments relativePath) = relativePerspective np
+            np@NamesPerspective {relativePerspective} <- resolvePathToMount rootNamesPerspective mounts [] (namespacePrefix <> PathSegments (reverse revNamePath))
+            let (PathSegments relativePath) = relativePerspective
             pure
               ( np {relativePerspective = mempty},
                 ReversedName (lastNameSegment NonEmpty.:| reverse relativePath)
@@ -606,8 +606,8 @@ relocateNamesToMountsOf np t s =
 
 namesPerspectiveForRootAndPath :: forall m. (QueryM m) => BranchHashId -> PathSegments -> m (NamesPerspective m)
 namesPerspectiveForRootAndPath rootBhId pathSegments = do
-  rootNP <- namesPerspectiveForRoot rootBhId
-  resolvePathToMount rootNP (mounts rootNP) mempty pathSegments
+  rootNP@NamesPerspective {relativePerspective} <- namesPerspectiveForRoot rootBhId
+  resolvePathToMount rootNP (mounts rootNP) mempty (relativePerspective <> pathSegments)
 
 resolvePathToMount :: (QueryM m) => NamesPerspective m -> MountTree m -> [PathSegments] -> PathSegments -> m (NamesPerspective m)
 resolvePathToMount rootNP (bhId Cofree.:< Compose mountTreeMap) reversedMountPrefix (PathSegments path) = do
