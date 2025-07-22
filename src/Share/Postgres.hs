@@ -5,7 +5,6 @@
 {-# LANGUAGE LiberalTypeSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 -- | Postgres helpers
 module Share.Postgres
@@ -23,7 +22,6 @@ module Share.Postgres
     Interp.DecodeRow (..),
     Interp.DecodeField,
     DecodeComposite (..),
-    CompositeRow (..),
     Only (..),
     TupleVal (..),
     QueryA (..),

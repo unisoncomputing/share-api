@@ -1,7 +1,6 @@
 -- | A Typeclass for decoding composite values
 module Share.Postgres.Composites
   ( DecodeComposite (..),
-    CompositeRow (..),
   )
 where
 
@@ -21,11 +20,6 @@ import Hasql.Interpolate qualified as Hasql
 class DecodeComposite a where
   -- | Decode a composite value
   decodeComposite :: Composite a
-
-newtype CompositeRow a = CompositeRow {compositeValue :: a}
-
-instance (DecodeComposite a) => Hasql.DecodeValue (CompositeRow a) where
-  decodeValue = CompositeRow <$> Decoders.composite decodeComposite
 
 instance (Hasql.DecodeField a, Hasql.DecodeField b) => DecodeComposite (a, b) where
   decodeComposite = do
