@@ -22,15 +22,14 @@ import Unison.Name (Name)
 -- with an empty relativePerspective. If the name is in the same mount as the initial
 -- perspective then relativePerspective will remain unchanged.
 relocateReversedNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (NamesPerspective m, ReversedName) -> s -> m t
-relocateReversedNamesToMountsOf rootNamesPerspective@NamesPerspective {relativePerspective = namespacePrefix} trav s = do
+relocateReversedNamesToMountsOf rootNamesPerspective trav s = do
   s
     & asListOf trav
       %%~ \reversedNames -> do
         for reversedNames \(ReversedName revFqn) ->
           do
             let (lastNameSegment :| revNamePath) = revFqn
-            np@NamesPerspective {relativePerspective} <- resolvePathToMount rootNamesPerspective (namespacePrefix <> PathSegments (reverse revNamePath))
-            let (PathSegments relativePath) = relativePerspective
+            np@NamesPerspective {relativePerspective = PathSegments relativePath} <- resolvePathToMount rootNamesPerspective (PathSegments (reverse revNamePath))
             pure
               ( np {relativePerspective = mempty},
                 ReversedName (lastNameSegment NonEmpty.:| reverse relativePath)
@@ -56,7 +55,9 @@ relocateNamesToMountsOf np t s =
 resolvePathToMount :: forall m. (Monad m) => NamesPerspective m -> PathSegments -> m (NamesPerspective m)
 resolvePathToMount rootNP path = do
   mountTree <- currentMountTree rootNP
-  go mountTree [] path
+  let (mountPrefix, _bhId) = currentMount rootNP
+  let pathPrefix = relativePerspective rootNP
+  go mountTree (reverse mountPrefix) (pathPrefix <> path)
   where
     go :: MountTree m -> [PathSegments] -> PathSegments -> m (NamesPerspective m)
     go (bhId Cofree.:< Compose mountTreeMap) reversedMountPrefix (PathSegments path) = do
