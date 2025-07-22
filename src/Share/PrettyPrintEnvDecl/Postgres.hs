@@ -8,8 +8,8 @@ import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Queries (ShouldSuffixify (..))
-import Share.Postgres.NameLookups.Types (NamesPerspective)
 import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import Unison.HashQualifiedPrime qualified as HQ'

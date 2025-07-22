@@ -83,7 +83,6 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Functor.Compose (Compose (..))
 import Data.HashMap.Lazy qualified as HM
 import Data.Kind (Type)
 import Data.Map qualified as Map

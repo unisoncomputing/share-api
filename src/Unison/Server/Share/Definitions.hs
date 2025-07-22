@@ -24,8 +24,8 @@ import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
-import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Types (pathToPathSegments)
+import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Caching.JSON qualified as Caching
@@ -100,10 +100,10 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
     go :: m DefinitionDisplayResults
     go = do
       rootBranchNamespaceHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
-      initialNP <- NameLookupOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (pathToPathSegments perspective)
+      initialNP <- NPOps.namesPerspectiveForRootAndPath rootBranchNamespaceHashId (pathToPathSegments perspective)
       Debug.debugM Debug.Temp "definitionForHQName:go: initialNP" initialNP
       (perspectiveNP, query) <-
-        NameLookupOps.relocateNamesToMountsOf initialNP traversed perspectiveQuery
+        NPOps.relocateNamesToMountsOf initialNP traversed perspectiveQuery
           <&> \case
             HQ.NameOnly (perspectiveNP', n) -> (perspectiveNP', HQ.NameOnly n)
             HQ.HashOnly sh -> (initialNP, HQ.HashOnly sh)
@@ -128,7 +128,7 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
           docResults name = do
             -- We need to re-lookup the names perspective here because the name we've found
             -- may now be in a lib.
-            (scopedPerspective, relativeName) <- NameLookupOps.relocateNamesToMountsOf perspectiveNP id name
+            (scopedPerspective, relativeName) <- NPOps.relocateNamesToMountsOf perspectiveNP id name
             Debug.debugM Debug.Temp "docResults: scopedPerspective, relativeName" (scopedPerspective, relativeName)
             let nameSearch = PGNameSearch.nameSearchForPerspective scopedPerspective
             -- TODO: properly batchify this

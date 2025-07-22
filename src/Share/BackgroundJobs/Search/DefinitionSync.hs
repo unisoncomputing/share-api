@@ -29,7 +29,8 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
-import Share.Postgres.NameLookups.Types qualified as NL
+import Share.Postgres.NamesPerspective.Ops qualified as NPOps
+import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Postgres.Notifications qualified as Notif
 import Share.Postgres.Releases.Queries qualified as RQ
 import Share.Postgres.Releases.Queries qualified as ReleasesQ
@@ -160,8 +161,8 @@ syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
     (DDQ.isRootIndexed rootBranchHashId) >>= \case
       False -> do
         DDQ.markRootAsIndexed rootBranchHashId
-        namesPerspective <- NLOps.namesPerspectiveForRoot rootBranchHashId
-        let nlReceipt = NL.nameLookupReceipt namesPerspective
+        namesPerspective <- NPOps.namesPerspectiveForRoot rootBranchHashId
+        let nlReceipt = nameLookupReceipt namesPerspective
         let codebaseLoc = Codebase.codebaseLocationForProjectRelease codebaseOwner
         let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
         termsCursor <- NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
@@ -190,7 +191,7 @@ syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do
 syncTerms ::
   (PG.QueryM m) =>
   Codebase.CodebaseEnv ->
-  NL.NamesPerspective m ->
+  NamesPerspective m ->
   BranchHashId ->
   Cursors.PGCursor (Name, Referent) ->
   m ([DefnIndexingFailure], [Text])
@@ -369,7 +370,7 @@ typeSigTokens typ =
 syncTypes ::
   (PG.QueryM m) =>
   Codebase.CodebaseEnv ->
-  NL.NamesPerspective m ->
+  NamesPerspective m ->
   BranchHashId ->
   Cursors.PGCursor (Name, TypeReference) ->
   m ([DefnIndexingFailure], [Text])

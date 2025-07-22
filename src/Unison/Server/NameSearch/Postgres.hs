@@ -12,6 +12,7 @@ import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops as NLOps
 import Share.Postgres.NameLookups.Queries (ShouldSuffixify (NoSuffixify))
 import Share.Postgres.NameLookups.Types
+import Share.Postgres.NamesPerspective.Types (NamesPerspective, perspectiveCurrentMountPathPrefix)
 import Share.Prelude
 import Unison.Codebase.Path qualified as Path
 import Unison.Debug qualified as Debug

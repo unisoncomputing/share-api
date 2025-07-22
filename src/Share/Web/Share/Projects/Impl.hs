@@ -27,7 +27,7 @@ import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
-import Share.Postgres.NameLookups.Ops qualified as NLOps
+import Share.Postgres.NamesPerspective.Ops qualified as NLOps
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Queries qualified as Q

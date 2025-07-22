@@ -11,10 +11,6 @@ module Share.Postgres.NameLookups.Ops
     Q.projectTypesWithinRoot,
     Q.listNameLookupMounts,
     projectNamesWithoutLib,
-    Q.namesPerspectiveForRootAndPath,
-    Q.namesPerspectiveForRoot,
-    Q.relocateNamesToMountsOf,
-    Q.relocateReversedNamesToMountsOf,
   )
 where
 
@@ -31,6 +27,7 @@ import Share.Postgres.NameLookups.Queries qualified as NameLookupQ
 import Share.Postgres.NameLookups.Queries qualified as Q
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import Share.Utils.Lens (asListOfDeduped)

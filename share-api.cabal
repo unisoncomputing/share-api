@@ -79,6 +79,9 @@ library
       Share.Postgres.NameLookups.Queries
       Share.Postgres.NameLookups.Types
       Share.Postgres.NamespaceDiffs
+      Share.Postgres.NamesPerspective.Ops
+      Share.Postgres.NamesPerspective.Queries
+      Share.Postgres.NamesPerspective.Types
       Share.Postgres.Notifications
       Share.Postgres.Ops
       Share.Postgres.Orphans

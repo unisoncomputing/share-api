@@ -18,8 +18,9 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHash, BranchHashId, CausalId)
-import Share.Postgres.NameLookups.Ops qualified as NLOps
-import Share.Postgres.NameLookups.Types (NameLookupReceipt, NamesPerspective (NamesPerspective, nameLookupReceipt), nameLookupReceipt)
+import Share.Postgres.NameLookups.Types (NameLookupReceipt)
+import Share.Postgres.NamesPerspective.Ops qualified as NLOps
+import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Aeson (PreEncoded (PreEncoded))

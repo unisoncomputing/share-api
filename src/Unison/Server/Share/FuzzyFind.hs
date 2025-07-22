@@ -33,6 +33,8 @@ import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
 import Share.Postgres.NameLookups.Queries qualified as Q
 import Share.Postgres.NameLookups.Types (NamedRef (..), PathSegments (..))
 import Share.Postgres.NameLookups.Types qualified as NameLookups
+import Share.Postgres.NamesPerspective.Ops qualified as NPOps
+import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPED
 import Unison.Codebase.Editor.DisplayObject
@@ -119,7 +121,7 @@ serveFuzzyFind ::
   m [(Alignment, FoundResult)]
 serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayLimit typeWidth query = fromMaybeT (pure []) do
   bhId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausal
-  namesPerspective <- lift $ NameLookupOps.namesPerspectiveForRootAndPath bhId (coerce $ Path.toList perspective)
+  namesPerspective <- lift $ NPOps.namesPerspectiveForRootAndPath bhId (coerce $ Path.toList perspective)
   -- If were browsing at a scratch root we need to include one level of dependencies even if
   -- the 'include-dependencies' flag is not set
   -- since the projects are all "dependencies" of the scratch root as far as name-lookups
@@ -177,7 +179,7 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
   (join <$> traverse (lift . loadEntry includeDependencies bhId namesPerspective) alignments)
   where
     limit = fromMaybe 10 mayLimit
-    loadEntry :: Bool -> BranchHashId -> NameLookups.NamesPerspective m -> (PathSegments, Alignment, Text, [Backend.FoundRef]) -> m [(Alignment, FoundResult)]
+    loadEntry :: Bool -> BranchHashId -> NamesPerspective m -> (PathSegments, Alignment, Text, [Backend.FoundRef]) -> m [(Alignment, FoundResult)]
     loadEntry includeDependencies bhId searchPerspective (pathToMatch, a, n, refs) = do
       namesPerspective <-
         -- If we're including dependencies we need to ensure each match's type signature is
@@ -187,7 +189,7 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
         -- If not we can use the same perspective for every match.
         if includeDependencies
           then do
-            NameLookupOps.namesPerspectiveForRootAndPath bhId (coerce (Path.toList perspective) <> pathToMatch)
+            NPOps.namesPerspectiveForRootAndPath bhId (coerce (Path.toList perspective) <> pathToMatch)
           else pure searchPerspective
       let partitionedRefs =
             refs <&> \case
