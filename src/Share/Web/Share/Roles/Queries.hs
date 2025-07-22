@@ -7,16 +7,16 @@ module Share.Web.Share.Roles.Queries
   )
 where
 
-import Share.Prelude
 import Control.Lens
 import Share.IDs
 import Share.Postgres
 import Share.Postgres.Users.Queries (userDisplayInfoOf)
+import Share.Prelude
 import Share.Web.Authorization.Types (AuthZReceipt, DisplayAuthSubject, ResolvedAuthSubject, RoleRef, _OrgSubject, _TeamSubject, _UserSubject)
 import Share.Web.Share.Orgs.Queries (orgDisplayInfoOf)
 import Share.Web.Share.Teams.Queries (teamDisplayInfoOf)
 
-displaySubjectsOf :: (Traversal s t ResolvedAuthSubject DisplayAuthSubject) -> s -> Transaction e t
+displaySubjectsOf :: (QueryM m) => (Traversal s t ResolvedAuthSubject DisplayAuthSubject) -> s -> m t
 displaySubjectsOf trav s = pipelined do
   s & asListOf trav \authSubjectList -> do
     let userSubjects = (authSubjectList ^. asListOf (traversed . _UserSubject))
@@ -33,13 +33,13 @@ displaySubjectsOf trav s = pipelined do
       )
 
 -- | Add a role to a user for a specific resource.
-assignUserRoleMembership :: AuthZReceipt -> UserId -> ResourceId -> RoleRef -> Transaction e ()
+assignUserRoleMembership :: (QueryM m) => AuthZReceipt -> UserId -> ResourceId -> RoleRef -> m ()
 assignUserRoleMembership authZReceipt userId resourceId roleRef = do
   subjectId <- queryExpect1Col [sql| SELECT u.subject_id FROM users u WHERE u.id = #{userId} LIMIT 1|]
   assignRoleMembership authZReceipt subjectId resourceId roleRef
 
 -- | Add a role to a subject for a specific resource.
-assignRoleMembership :: AuthZReceipt -> SubjectId -> ResourceId -> RoleRef -> Transaction e ()
+assignRoleMembership :: (QueryM m) => AuthZReceipt -> SubjectId -> ResourceId -> RoleRef -> m ()
 assignRoleMembership !_authZReceipt subjectId resourceId roleRef = do
   execute_
     [sql|

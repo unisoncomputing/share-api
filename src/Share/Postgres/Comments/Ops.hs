@@ -5,6 +5,7 @@ import Share.Contribution (Contribution (..))
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifsQ
 import Share.Notifications.Types (CommentData (..), ContributionData (..), NotificationEvent (..), NotificationEventData (..), TicketData (..))
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.Projects.Queries qualified as ProjectQ
@@ -14,10 +15,11 @@ import Share.Ticket (Ticket (..))
 import Share.Web.Share.Comments
 
 createComment ::
+  (QueryM m) =>
   UserId ->
   Either ContributionId TicketId ->
   Text ->
-  PG.Transaction e (Comment UserId)
+  m (Comment UserId)
 createComment authorId thingId content = do
   let (contributionId, ticketId) = case thingId of
         Left contributionId -> (Just contributionId, Nothing)

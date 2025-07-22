@@ -64,7 +64,7 @@ expectEvent eventId = do
       WHERE id = #{eventId}
     |]
 
-listNotificationHubEntryPayloads :: UserId -> Maybe Int -> Maybe (Cursor GetHubEntriesCursor) -> Maybe (NESet NotificationStatus) -> Transaction e (Paged GetHubEntriesCursor (NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload))
+listNotificationHubEntryPayloads :: (PG.QueryM m) => UserId -> Maybe Int -> Maybe (Cursor GetHubEntriesCursor) -> Maybe (NESet NotificationStatus) -> m (Paged GetHubEntriesCursor (NotificationHubEntry UnifiedDisplayInfo HydratedEventPayload))
 listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFilter = do
   let limit = clamp (0, 100) . fromIntegral @Int @Int32 . fromMaybe 50 $ mayLimit
   let mkCursorFilter = \case
@@ -103,7 +103,7 @@ listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFil
           LIMIT #{limit}
         |]
 
-hasUnreadNotifications :: UserId -> Transaction e Bool
+hasUnreadNotifications :: (PG.QueryA m) => UserId -> m Bool
 hasUnreadNotifications notificationUserId = do
   queryExpect1Col
     [sql|
@@ -131,7 +131,7 @@ updateNotificationHubEntries hubEntryIds status = do
 
 -- | Note: If a given delivery method belongs to a different subscriber user, it will simply be ignored,
 -- this should never happen in non-malicious workflows so it's fine to ignore it.
-addSubscriptionDeliveryMethods :: UserId -> NotificationSubscriptionId -> NESet DeliveryMethodId -> Transaction e ()
+addSubscriptionDeliveryMethods :: (PG.QueryM m) => UserId -> NotificationSubscriptionId -> NESet DeliveryMethodId -> m ()
 addSubscriptionDeliveryMethods subscriberUserId subscriptionId deliveryMethods = do
   let (emailIds, webhookIds) =
         deliveryMethods & foldMap \case
@@ -162,7 +162,7 @@ addSubscriptionDeliveryMethods subscriberUserId subscriptionId deliveryMethods =
       ON CONFLICT DO NOTHING
     |]
 
-removeSubscriptionDeliveryMethods :: UserId -> NotificationSubscriptionId -> NESet DeliveryMethodId -> Transaction e ()
+removeSubscriptionDeliveryMethods :: (PG.QueryM m) => UserId -> NotificationSubscriptionId -> NESet DeliveryMethodId -> m ()
 removeSubscriptionDeliveryMethods subscriberUserId subscriptionId deliveryMethods = do
   let (emailIds, webhookIds) =
         deliveryMethods & foldMap \case
@@ -227,7 +227,7 @@ listWebhooks userId maySubscriptionId = do
         ORDER BY nw.created_at
     |]
 
-createEmailDeliveryMethod :: UserId -> Email -> Transaction e NotificationEmailDeliveryMethodId
+createEmailDeliveryMethod :: (PG.QueryM m) => UserId -> Email -> m NotificationEmailDeliveryMethodId
 createEmailDeliveryMethod userId email = do
   existingEmailDeliveryMethodId <-
     query1Col
@@ -247,7 +247,7 @@ createEmailDeliveryMethod userId email = do
           RETURNING id
         |]
 
-updateEmailDeliveryMethod :: UserId -> NotificationEmailDeliveryMethodId -> Email -> Transaction e ()
+updateEmailDeliveryMethod :: (PG.QueryA m) => UserId -> NotificationEmailDeliveryMethodId -> Email -> m ()
 updateEmailDeliveryMethod notificationUserId emailDeliveryMethodId email = do
   execute_
     [sql|
@@ -257,7 +257,7 @@ updateEmailDeliveryMethod notificationUserId emailDeliveryMethodId email = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-deleteEmailDeliveryMethod :: UserId -> NotificationEmailDeliveryMethodId -> Transaction e ()
+deleteEmailDeliveryMethod :: (PG.QueryA m) => UserId -> NotificationEmailDeliveryMethodId -> m ()
 deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
   execute_
     [sql|
@@ -266,7 +266,7 @@ deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-createWebhookDeliveryMethod :: UserId -> Text -> Transaction e NotificationWebhookId
+createWebhookDeliveryMethod :: (PG.QueryA m) => UserId -> Text -> m NotificationWebhookId
 createWebhookDeliveryMethod userId name = do
   queryExpect1Col
     [sql|
@@ -275,7 +275,7 @@ createWebhookDeliveryMethod userId name = do
           RETURNING id
         |]
 
-deleteWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> Transaction e ()
+deleteWebhookDeliveryMethod :: (PG.QueryA m) => UserId -> NotificationWebhookId -> m ()
 deleteWebhookDeliveryMethod notificationUserId webhookDeliveryMethodId = do
   execute_
     [sql|
@@ -284,7 +284,7 @@ deleteWebhookDeliveryMethod notificationUserId webhookDeliveryMethodId = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscription NotificationSubscriptionId]
+listNotificationSubscriptions :: (PG.QueryA m) => UserId -> m [NotificationSubscription NotificationSubscriptionId]
 listNotificationSubscriptions subscriberUserId = do
   queryListRows
     [sql|
@@ -294,7 +294,7 @@ listNotificationSubscriptions subscriberUserId = do
       ORDER BY ns.created_at DESC
     |]
 
-createNotificationSubscription :: UserId -> UserId -> Set NotificationTopic -> Set NotificationTopicGroup -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
+createNotificationSubscription :: (PG.QueryA m) => UserId -> UserId -> Set NotificationTopic -> Set NotificationTopicGroup -> Maybe SubscriptionFilter -> m NotificationSubscriptionId
 createNotificationSubscription subscriberUserId subscriptionScope subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
   queryExpect1Col
     [sql|
@@ -303,7 +303,7 @@ createNotificationSubscription subscriberUserId subscriptionScope subscriptionTo
       RETURNING id
     |]
 
-deleteNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transaction e ()
+deleteNotificationSubscription :: (PG.QueryA m) => UserId -> NotificationSubscriptionId -> m ()
 deleteNotificationSubscription subscriberUserId subscriptionId = do
   execute_
     [sql|
@@ -312,7 +312,7 @@ deleteNotificationSubscription subscriberUserId subscriptionId = do
         AND subscriber_user_id = #{subscriberUserId}
     |]
 
-updateNotificationSubscription :: UserId -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> Transaction e ()
+updateNotificationSubscription :: (PG.QueryA m) => UserId -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> m ()
 updateNotificationSubscription subscriberUserId subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
   execute_
     [sql|
@@ -324,7 +324,7 @@ updateNotificationSubscription subscriberUserId subscriptionId subscriptionTopic
         AND subscriber_user_id = #{subscriberUserId}
     |]
 
-getNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transaction e (NotificationSubscription NotificationSubscriptionId)
+getNotificationSubscription :: (PG.QueryA m) => UserId -> NotificationSubscriptionId -> m (NotificationSubscription NotificationSubscriptionId)
 getNotificationSubscription subscriberUserId subscriptionId = do
   queryExpect1Row
     [sql|
@@ -508,7 +508,7 @@ hydrateEventPayload = \case
         <*> (UsersQ.userDisplayInfoOf id commentAuthorUserId)
 
 -- | Subscribe or unsubscribe to watching a project
-updateWatchProjectSubscription :: UserId -> ProjectId -> Bool -> Transaction e (Maybe NotificationSubscriptionId)
+updateWatchProjectSubscription :: (PG.QueryM m) => UserId -> ProjectId -> Bool -> m (Maybe NotificationSubscriptionId)
 updateWatchProjectSubscription userId projId shouldBeSubscribed = do
   let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
   existing <- isUserSubscribedToWatchProject userId projId
@@ -535,7 +535,7 @@ updateWatchProjectSubscription userId projId shouldBeSubscribed = do
       Just <$> createNotificationSubscription userId projectOwnerUserId mempty (Set.singleton WatchProject) (Just filter)
     _ -> pure Nothing
 
-isUserSubscribedToWatchProject :: UserId -> ProjectId -> Transaction e (Maybe NotificationSubscriptionId)
+isUserSubscribedToWatchProject :: (PG.QueryA m) => UserId -> ProjectId -> m (Maybe NotificationSubscriptionId)
 isUserSubscribedToWatchProject userId projId = do
   let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
   query1Col @NotificationSubscriptionId

@@ -26,7 +26,7 @@ import Share.Web.Authorization.Types
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UserDisplayInfo (..))
 import Share.Web.Share.Orgs.Types (Org (..))
 
-orgByUserId :: UserId -> Transaction e (Maybe Org)
+orgByUserId :: (QueryA m) => UserId -> m (Maybe Org)
 orgByUserId orgUserId = do
   query1Row
     [sql|
@@ -35,7 +35,7 @@ orgByUserId orgUserId = do
       WHERE org.user_id = #{orgUserId}
     |]
 
-orgByUserHandle :: UserHandle -> Transaction e (Maybe Org)
+orgByUserHandle :: (QueryA m) => UserHandle -> m (Maybe Org)
 orgByUserHandle orgHandle = do
   query1Row
     [sql|
@@ -93,7 +93,7 @@ userDisplayInfoByOrgIdOf trav s = do
                 userId
               }
 
-listOrgRoles :: OrgId -> Transaction e [RoleAssignment ResolvedAuthSubject]
+listOrgRoles :: (QueryA m) => OrgId -> m [RoleAssignment ResolvedAuthSubject]
 listOrgRoles orgId = do
   queryListRows @(ResolvedAuthSubject :. Only [RoleRef])
     [sql|
@@ -107,7 +107,7 @@ listOrgRoles orgId = do
     |]
     <&> fmap \(subject :. Only roleRefs) -> RoleAssignment {subject, roles = Set.fromList roleRefs}
 
-addOrgRoles :: OrgId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [RoleAssignment ResolvedAuthSubject]
+addOrgRoles :: (QueryM m) => OrgId -> [RoleAssignment ResolvedAuthSubject] -> m [RoleAssignment ResolvedAuthSubject]
 addOrgRoles orgId newRoles = do
   let newRolesTable =
         newRoles
@@ -130,7 +130,7 @@ addOrgRoles orgId newRoles = do
         |]
   listOrgRoles orgId
 
-removeOrgRoles :: OrgId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [RoleAssignment ResolvedAuthSubject]
+removeOrgRoles :: (QueryM m) => OrgId -> [RoleAssignment ResolvedAuthSubject] -> m [RoleAssignment ResolvedAuthSubject]
 removeOrgRoles orgId toRemove = do
   let removedRolesTable =
         toRemove
@@ -154,7 +154,7 @@ removeOrgRoles orgId toRemove = do
         |]
   listOrgRoles orgId
 
-listOrgMembers :: OrgId -> Transaction e [UserDisplayInfo]
+listOrgMembers :: (QueryM m) => OrgId -> m [UserDisplayInfo]
 listOrgMembers orgId = do
   queryListRows
     [sql|
@@ -172,7 +172,7 @@ listOrgMembers orgId = do
           userId
         }
 
-addOrgMembers :: OrgId -> Set UserId -> Transaction e ()
+addOrgMembers :: (QueryM m) => OrgId -> Set UserId -> m ()
 addOrgMembers orgId newMembers = do
   execute_
     [sql|
@@ -185,7 +185,7 @@ addOrgMembers orgId newMembers = do
           ON CONFLICT DO NOTHING
         |]
 
-removeOrgMembers :: OrgId -> Set UserId -> Transaction e ()
+removeOrgMembers :: (QueryA m) => OrgId -> Set UserId -> m ()
 removeOrgMembers orgId toRemove = do
   execute_
     [sql|
@@ -198,7 +198,7 @@ removeOrgMembers orgId toRemove = do
             AND org_members.org_id = #{orgId}
         |]
 
-doesOrgHaveOwner :: OrgId -> Transaction e Bool
+doesOrgHaveOwner :: (QueryA m) => OrgId -> m Bool
 doesOrgHaveOwner orgId = do
   queryExpect1Col
     [sql|

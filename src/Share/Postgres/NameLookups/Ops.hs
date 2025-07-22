@@ -108,7 +108,7 @@ checkBranchHashNameLookupExists bh = do
 -- | Delete any name lookup that's not in the provided list.
 --
 -- This can be used to garbage collect unreachable name lookups.
-deleteNameLookupsExceptFor :: Set BranchHash -> PG.Transaction e ()
+deleteNameLookupsExceptFor :: (QueryM m) => Set BranchHash -> m ()
 deleteNameLookupsExceptFor reachable = do
   bhIds <- for (Set.toList reachable) HashQ.ensureBranchHashId
   Q.deleteNameLookupsExceptFor bhIds

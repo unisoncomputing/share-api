@@ -209,6 +209,7 @@ data InternalServerError err = InternalServerError
     err :: err
   }
   deriving stock (Show)
+  deriving anyclass (Exception)
 
 instance (Show err) => Loggable (InternalServerError err) where
   toLog = withSeverity Error . showLog

@@ -19,7 +19,7 @@ import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Web.Authorization.Types (ResolvedAuthSubject, RoleAssignment (..), RoleRef (..), projectRoles, resolvedAuthSubjectColumns)
 
-isPremiumProject :: ProjectId -> Transaction e Bool
+isPremiumProject :: (QueryM m) => ProjectId -> m Bool
 isPremiumProject projId =
   fromMaybe False <$> do
     query1Col
@@ -27,7 +27,7 @@ isPremiumProject projId =
     SELECT EXISTS (SELECT FROM premium_projects WHERE project_id = #{projId})
     |]
 
-listProjectRoles :: ProjectId -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+listProjectRoles :: (QueryM m) => ProjectId -> m [(RoleAssignment ResolvedAuthSubject)]
 listProjectRoles projId = do
   queryListRows @(ResolvedAuthSubject PG.:. Only ([RoleRef]))
     [sql|
@@ -42,7 +42,7 @@ listProjectRoles projId = do
     |]
     <&> fmap \(subject PG.:. Only roleRefs) -> (RoleAssignment {subject, roles = Set.fromList roleRefs})
 
-addProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+addProjectRoles :: (QueryM m) => ProjectId -> [RoleAssignment ResolvedAuthSubject] -> m [(RoleAssignment ResolvedAuthSubject)]
 addProjectRoles projId toAdd = do
   let addedRolesTable =
         toAdd
@@ -66,7 +66,7 @@ addProjectRoles projId toAdd = do
         |]
   listProjectRoles projId
 
-removeProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+removeProjectRoles :: (QueryM m) => ProjectId -> [RoleAssignment ResolvedAuthSubject] -> m [(RoleAssignment ResolvedAuthSubject)]
 removeProjectRoles projId toRemove = do
   let removedRolesTable =
         toRemove
@@ -91,7 +91,7 @@ removeProjectRoles projId toRemove = do
         |]
   listProjectRoles projId
 
-expectProjectShortHandsOf :: Traversal s t ProjectId ProjectShortHand -> s -> Transaction e t
+expectProjectShortHandsOf :: (QueryM m) => Traversal s t ProjectId ProjectShortHand -> s -> m t
 expectProjectShortHandsOf trav s = do
   s
     & asListOf trav %%~ \projIds -> do

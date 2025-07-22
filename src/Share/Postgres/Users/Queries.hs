@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeOperators #-}
@@ -38,7 +39,7 @@ import Share.Codebase qualified as Codebase
 import Share.Github
 import Share.IDs
 import Share.IDs qualified as IDs
-import Share.Postgres (unrecoverableError)
+import Share.Postgres (QueryA, QueryM, unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.LooseCode.Queries qualified as LCQ
 import Share.Prelude
@@ -95,7 +96,7 @@ userIdsByHandlesOf trav s = do
       ORDER BY ord
       |]
 
-userProfileById :: UserId -> PG.Transaction e (Maybe UserProfile)
+userProfileById :: (PG.QueryA m) => UserId -> m (Maybe UserProfile)
 userProfileById userId = do
   PG.query1Row
     [PG.sql|
@@ -105,6 +106,7 @@ userProfileById userId = do
       |]
 
 updateUser ::
+  (PG.QueryM m) =>
   UserId ->
   NullableUpdate Text ->
   NullableUpdate URIParam ->
@@ -113,7 +115,7 @@ updateUser ::
   NullableUpdate Text ->
   NullableUpdate Text ->
   NullableUpdate Text ->
-  PG.Transaction e ()
+  m ()
 updateUser toUpdateUserId newName newAvatarUrl newBio newWebsite newLocation newTwitterHandle newPronouns = void . runMaybeT $ do
   UserProfile
     { user_name = existingName,
@@ -170,7 +172,7 @@ expectUser userId = do
         WHERE u.id = #{userId}
       |]
 
-userByEmail :: Text -> PG.Transaction e (Maybe User)
+userByEmail :: (PG.QueryA m) => Text -> m (Maybe User)
 userByEmail email = do
   PG.query1Row
     [PG.sql|
@@ -180,7 +182,7 @@ userByEmail email = do
         LIMIT 1
       |]
 
-userByGithubUserId :: Int64 -> PG.Transaction e (Maybe User)
+userByGithubUserId :: (PG.QueryA m) => Int64 -> m (Maybe User)
 userByGithubUserId githubUserId = do
   PG.query1Row
     [PG.sql|
@@ -191,7 +193,7 @@ userByGithubUserId githubUserId = do
         WHERE gh.github_user_id = #{githubUserId}
       |]
 
-userByHandle :: UserHandle -> PG.Transaction e (Maybe User)
+userByHandle :: (PG.QueryA m) => UserHandle -> m (Maybe User)
 userByHandle handle = do
   PG.query1Row
     [PG.sql|
@@ -269,7 +271,7 @@ findOrCreateGithubUser authZReceipt ghu@(GithubUser _login githubUserId _avatarU
     Nothing -> do
       New <$> createFromGithubUser authZReceipt ghu primaryEmail userHandle
 
-searchUsersByNameOrHandlePrefix :: Query -> UserSearchKind -> Limit -> PG.Transaction e [(UserLike UserId OrgId)]
+searchUsersByNameOrHandlePrefix :: (PG.QueryM m) => Query -> UserSearchKind -> Limit -> m [(UserLike UserId OrgId)]
 searchUsersByNameOrHandlePrefix (Query prefix) usk (Limit limit) = do
   let q = likeEscape prefix <> "%"
   let uskFilter = case usk of
@@ -290,7 +292,7 @@ searchUsersByNameOrHandlePrefix (Query prefix) usk (Limit limit) = do
       Just orgId -> UnifiedOrg orgId
       Nothing -> UnifiedUser userId
 
-joinOrgIdsToUserIdsOf :: Traversal s t UserId (UserId, Maybe OrgId) -> s -> PG.Transaction e t
+joinOrgIdsToUserIdsOf :: (QueryM m) => Traversal s t UserId (UserId, Maybe OrgId) -> s -> m t
 joinOrgIdsToUserIdsOf trav s = do
   s
     & asListOf trav %%~ \userIds -> do
@@ -313,6 +315,8 @@ data UserCreationError
     -- This shouldn't happen for Github Handles, but in the case it does, we throw an error.
     -- (Error Message, Invalid Handle)
     InvalidUserHandle Text Text
+  deriving stock (Eq, Show)
+  deriving anyclass (Exception)
 
 instance Logging.Loggable UserCreationError where
   toLog = \case
@@ -328,14 +332,14 @@ instance ToServerError UserCreationError where
     UserHandleTaken {} -> (ErrorID "user-creation:handle-taken", Servant.err409 {Servant.errBody = "User handle taken."})
     InvalidUserHandle err _handle -> (ErrorID "user-creation:invalid-handle", Servant.err400 {Servant.errBody = "Invalid user handle: " <> BL.fromStrict (Text.encodeUtf8 err)})
 
-allUsers :: PG.Transaction e [UserId]
+allUsers :: (QueryA m) => m [UserId]
 allUsers = do
   PG.queryListCol
     [PG.sql|
         SELECT id FROM users
       |]
 
-userSubscriptionTier :: UserId -> PG.Transaction e PlanTier
+userSubscriptionTier :: (PG.QueryA m) => UserId -> m PlanTier
 userSubscriptionTier userId =
   fromMaybe Free <$> do
     PG.query1Col

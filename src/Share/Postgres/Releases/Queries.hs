@@ -18,14 +18,13 @@ import Share.Prelude
 import Share.Release
 import Share.Web.Share.Releases.Types (StatusUpdate (..))
 
-expectReleaseVersionsOf :: Traversal s t ReleaseId ReleaseVersion -> s -> Transaction e t
+expectReleaseVersionsOf :: (QueryA m) => Traversal s t ReleaseId ReleaseVersion -> s -> m t
 expectReleaseVersionsOf trav s = do
   s
     & asListOf trav %%~ \releaseIds -> do
       let numberedReleaseIds = zip [1 :: Int32 ..] releaseIds
-      results :: [ReleaseVersion] <-
-        queryListRows @ReleaseVersion
-          [sql|
+      queryListRows @ReleaseVersion
+        [sql|
       WITH release_ids(ord, id) AS (
         SELECT * FROM ^{toTable numberedReleaseIds}
       )
@@ -33,11 +32,8 @@ expectReleaseVersionsOf trav s = do
         FROM release_ids JOIN project_releases r ON release_ids.id = r.id
         ORDER BY release_ids.ord ASC
       |]
-      if length results /= length releaseIds
-        then error "expectReleaseVersionsOf: Missing expected release version"
-        else pure results
 
-latestReleaseByProjectId :: ProjectId -> Transaction e (Maybe (Release CausalId UserId))
+latestReleaseByProjectId :: (QueryA m) => ProjectId -> m (Maybe (Release CausalId UserId))
 latestReleaseByProjectId projectId = do
   query1Row @(Release CausalId UserId)
     [sql|

@@ -1126,7 +1126,7 @@ resolveLocalIdsOf trav s = do
         >>= HashQ.expectComponentHashesOf (traversed . LocalIds.h_)
 
 -- | Fetch term tags for all the provided Referents.
-termTagsByReferentsOf :: (HasCallStack) => Traversal s t Referent.Referent Tags.TermTag -> s -> Transaction e t
+termTagsByReferentsOf :: (QueryM m) => (HasCallStack) => Traversal s t Referent.Referent Tags.TermTag -> s -> m t
 termTagsByReferentsOf trav s = do
   s
     & asListOf trav %%~ \refs -> do
@@ -1209,7 +1209,7 @@ termTagsByReferentsOf trav s = do
         (refTagRow Tags.Test Decls.testResultListRef)
       ]
 
-typeTagsByReferencesOf :: (HasCallStack) => Traversal s t TypeReference Tags.TypeTag -> s -> Transaction e t
+typeTagsByReferencesOf :: (QueryM m) => (HasCallStack) => Traversal s t TypeReference Tags.TypeTag -> s -> m t
 typeTagsByReferencesOf trav s = do
   s
     & asListOf trav %%~ \refs -> do

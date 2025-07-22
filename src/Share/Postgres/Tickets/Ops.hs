@@ -9,6 +9,7 @@ where
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
 import Share.Notifications.Types (NotificationEvent (..), NotificationEventData (..), StatusUpdateData (..), TicketData (..))
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Projects.Queries qualified as ProjectsQ
 import Share.Postgres.Tickets.Queries qualified as TicketQ
@@ -17,6 +18,7 @@ import Share.Ticket (Ticket (..), TicketStatus)
 import Share.Utils.API (NullableUpdate, fromNullableUpdate)
 
 createTicket ::
+  (QueryM m) =>
   -- | Author
   UserId ->
   ProjectId ->
@@ -25,7 +27,7 @@ createTicket ::
   -- | Description
   Maybe Text ->
   TicketStatus ->
-  PG.Transaction e (TicketId, TicketNumber)
+  m (TicketId, TicketNumber)
 createTicket authorId projectId title description status = do
   (ticketId, number) <-
     PG.queryExpect1Row
@@ -67,7 +69,7 @@ createTicket authorId projectId title description status = do
   NotifQ.recordEvent notifEvent
   pure (ticketId, number)
 
-updateTicket :: UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> PG.Transaction e ()
+updateTicket :: (QueryM m) => UserId -> TicketId -> Maybe Text -> NullableUpdate Text -> Maybe TicketStatus -> m ()
 updateTicket callerUserId ticketId newTitle newDescription newStatus = do
   Ticket {..} <- TicketQ.ticketById ticketId
   let updatedTitle = fromMaybe title newTitle
@@ -86,7 +88,7 @@ updateTicket callerUserId ticketId newTitle newDescription newStatus = do
         WHERE id = #{ticketId}
         |]
 
-insertTicketStatusChangeEvent :: ProjectId -> TicketId -> UserId -> Maybe TicketStatus -> TicketStatus -> PG.Transaction e ()
+insertTicketStatusChangeEvent :: (QueryM m) => ProjectId -> TicketId -> UserId -> Maybe TicketStatus -> TicketStatus -> m ()
 insertTicketStatusChangeEvent projectId ticketId actorUserId oldStatus newStatus = do
   PG.execute_
     [PG.sql|

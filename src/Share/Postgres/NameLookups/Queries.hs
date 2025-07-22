@@ -245,7 +245,7 @@ checkBranchHashNameLookupExists hashId = do
 -- | Delete any name lookup that's not in the provided list.
 --
 -- This can be used to garbage collect unreachable name lookups.
-deleteNameLookupsExceptFor :: [BranchHashId] -> PG.Transaction e ()
+deleteNameLookupsExceptFor :: (PG.QueryM m) => [BranchHashId] -> m ()
 deleteNameLookupsExceptFor hashIds = do
   case hashIds of
     [] -> PG.execute_ [PG.sql| DELETE FROM name_lookups |]
@@ -291,12 +291,12 @@ instance Ord FuzzySearchScore where
   compare (FuzzySearchScore exact1 infix1 pos1 len1) (FuzzySearchScore exact2 infix2 pos2 len2) =
     exact1
       `compare` exact2
-        <> infix1
-      `compare` infix2
-        <> pos1
-      `compare` pos2
-        <> len1
-      `compare` len2
+      <> infix1
+        `compare` infix2
+      <> pos1
+        `compare` pos2
+      <> len1
+        `compare` len2
 
 instance DecodeRow FuzzySearchScore where
   decodeRow =

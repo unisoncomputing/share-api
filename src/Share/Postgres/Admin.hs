@@ -8,7 +8,7 @@ import Share.IDs (UserId)
 import Share.Postgres qualified as PG
 
 -- | Delete a user COMPLETELY. This is unreversable.
-hardDeleteUser :: UserId -> PG.Transaction e ()
+hardDeleteUser :: (PG.QueryA m) => UserId -> m ()
 hardDeleteUser userId =
   PG.execute_
     [PG.sql|

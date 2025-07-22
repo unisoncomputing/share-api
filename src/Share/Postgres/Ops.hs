@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 -- | Postgres operations composed of individual queries
 module Share.Postgres.Ops where
 
@@ -18,6 +20,8 @@ import Share.Web.Errors
 
 data Errors
   = ProjectAlreadyExists UserId ProjectSlug ProjectId
+  deriving stock (Eq, Show)
+  deriving anyclass (Exception)
 
 instance Logging.Loggable Errors where
   toLog (ProjectAlreadyExists uid slug projId) =

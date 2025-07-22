@@ -19,16 +19,17 @@ module Share.Postgres.Authorization.Queries
   )
 where
 
-import Share.Prelude
 import Control.Lens
 import Data.Set qualified as Set
 import Share.IDs
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
+import Share.Prelude
 import Share.Web.Authorization.Types
 
 -- | A user has access if they own the repo, or if they're a member of an org which owns it.
-checkIsUserMaintainer :: UserId -> UserId -> PG.Transaction e Bool
+checkIsUserMaintainer :: (QueryM m) => UserId -> UserId -> m Bool
 checkIsUserMaintainer requestingUserId codebaseOwnerUserId
   | requestingUserId == codebaseOwnerUserId = pure True
   | otherwise =
@@ -42,14 +43,14 @@ checkIsUserMaintainer requestingUserId codebaseOwnerUserId
         )
       |]
 
-isSuperadmin :: UserId -> PG.Transaction e Bool
+isSuperadmin :: (QueryM m) => UserId -> m Bool
 isSuperadmin uid = do
   PG.queryExpect1Col
     [PG.sql|
         SELECT EXISTS (SELECT FROM superadmins s WHERE s.user_id = #{uid})
       |]
 
-isOrgMember :: UserId -> UserId -> PG.Transaction e Bool
+isOrgMember :: (QueryM m) => UserId -> UserId -> m Bool
 isOrgMember userId orgUserId = do
   PG.queryExpect1Col
     [PG.sql|
@@ -59,7 +60,7 @@ isOrgMember userId orgUserId = do
                        )
       |]
 
-causalIsInHistoryOf :: CausalId -> CausalId -> PG.Transaction e Bool
+causalIsInHistoryOf :: (QueryM m) => CausalId -> CausalId -> m Bool
 causalIsInHistoryOf rootCausalId targetCausalId = do
   PG.queryExpect1Col
     [PG.sql| SELECT EXISTS (
@@ -74,14 +75,14 @@ causalIsInHistoryOf rootCausalId targetCausalId = do
 
 -- * NEW AuthZ * --
 
-userHasProjectPermission :: Maybe UserId -> ProjectId -> RolePermission -> PG.Transaction e Bool
+userHasProjectPermission :: (QueryM m) => Maybe UserId -> ProjectId -> RolePermission -> m Bool
 userHasProjectPermission mayUserId projectId permission = do
   PG.queryExpect1Col
     [PG.sql|
       SELECT user_has_permission(#{mayUserId}, (SELECT p.resource_id from projects p WHERE p.id = #{projectId}), #{permission})
     |]
 
-userHasOrgPermission :: UserId -> OrgId -> RolePermission -> PG.Transaction e Bool
+userHasOrgPermission :: (QueryM m) => UserId -> OrgId -> RolePermission -> m Bool
 userHasOrgPermission userId orgId permission = do
   PG.queryExpect1Col
     [PG.sql|
@@ -89,7 +90,7 @@ userHasOrgPermission userId orgId permission = do
     |]
 
 -- | Find all the subjects which have access to a given resource.
-listSubjectsWithResourcePermission :: ResourceId -> RolePermission -> PG.Transaction e [AuthSubject SubjectId SubjectId SubjectId]
+listSubjectsWithResourcePermission :: (QueryM m) => ResourceId -> RolePermission -> m [AuthSubject SubjectId SubjectId SubjectId]
 listSubjectsWithResourcePermission resourceId permission = do
   PG.queryListRows @(AuthSubject SubjectId SubjectId SubjectId)
     [PG.sql|
@@ -99,7 +100,7 @@ listSubjectsWithResourcePermission resourceId permission = do
         AND permission = #{permission}
     |]
 
-subjectIdsForAuthSubjectsOf :: Traversal s t ResolvedAuthSubject GenericAuthSubject -> s -> PG.Transaction e t
+subjectIdsForAuthSubjectsOf :: (QueryM m) => Traversal s t ResolvedAuthSubject GenericAuthSubject -> s -> m t
 subjectIdsForAuthSubjectsOf trav s =
   s
     & asListOf trav %%~ \resolvedAuthSubjects -> PG.pipelined do
@@ -142,7 +143,7 @@ subjectIdsForAuthSubjectsOf trav s =
           & asListOf (traversed . _OrgSubject) .~ orgSubjects
           & asListOf (traversed . _TeamSubject) .~ teamSubjects
 
-permissionsForProject :: Maybe UserId -> ProjectId -> PG.Transaction e (Set RolePermission)
+permissionsForProject :: (QueryM m) => Maybe UserId -> ProjectId -> m (Set RolePermission)
 permissionsForProject mayUserId projectId = do
   PG.queryListCol @RolePermission
     [PG.sql|
@@ -155,7 +156,7 @@ permissionsForProject mayUserId projectId = do
       |]
     <&> Set.fromList
 
-permissionsForOrg :: Maybe UserId -> OrgId -> PG.Transaction e (Set RolePermission)
+permissionsForOrg :: (QueryM m) => Maybe UserId -> OrgId -> m (Set RolePermission)
 permissionsForOrg mayUserId orgId = do
   PG.queryListCol @RolePermission
     [PG.sql|

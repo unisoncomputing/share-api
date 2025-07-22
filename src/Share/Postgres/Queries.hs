@@ -19,7 +19,7 @@ import Share.IDs qualified as IDs
 import Share.Notifications.Queries qualified as NotifQ
 import Share.Notifications.Types (BranchData (..), NotificationEvent (..), NotificationEventData (..), ProjectData (..))
 import Share.OAuth.Types
-import Share.Postgres (unrecoverableError)
+import Share.Postgres (QueryM, unrecoverableError)
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
@@ -41,7 +41,7 @@ import Share.Web.Share.Types
 import Unison.Util.List qualified as Utils
 import Unison.Util.Monoid (intercalateMap)
 
-projectById :: ProjectId -> PG.Transaction e (Maybe Project)
+projectById :: (QueryM m) => ProjectId -> m (Maybe Project)
 projectById projectId = do
   PG.query1Row
     [PG.sql|
@@ -50,13 +50,13 @@ projectById projectId = do
         WHERE p.id = #{projectId}
       |]
 
-expectProjectById :: ProjectId -> PG.Transaction e Project
+expectProjectById :: (QueryM m) => ProjectId -> m Project
 expectProjectById projectId = do
   mayResult <- projectById projectId
   whenNothing mayResult $ unrecoverableError $ EntityMissing (ErrorID "project:missing") ("Project with id " <> IDs.toText projectId <> " not found")
 
 -- | returns (project, favData, projectOwner, default branch, latest release version)
-projectByIdWithMetadata :: Maybe UserId -> ProjectId -> PG.Transaction e (Maybe (Project, FavData, ProjectOwner, Maybe BranchName, Maybe ReleaseVersion))
+projectByIdWithMetadata :: forall m. (QueryM m) => Maybe UserId -> ProjectId -> m (Maybe (Project, FavData, ProjectOwner, Maybe BranchName, Maybe ReleaseVersion))
 projectByIdWithMetadata caller projectId = do
   PG.query1Row sql <&> fmap \(p PG.:. favData PG.:. projectOwner PG.:. (branchName, major, minor, patch)) -> (p, favData, projectOwner, branchName, releaseVersionFromInts major minor patch)
   where
@@ -85,7 +85,7 @@ projectByIdWithMetadata caller projectId = do
       WHERE p.id = #{projectId}
       |]
 
-projectIDFromHandleAndSlug :: UserHandle -> ProjectSlug -> PG.Transaction e (Maybe ProjectId)
+projectIDFromHandleAndSlug :: (QueryM m) => UserHandle -> ProjectSlug -> m (Maybe ProjectId)
 projectIDFromHandleAndSlug userHandle slug =
   PG.query1Col
     [PG.sql|
@@ -96,7 +96,7 @@ projectIDFromHandleAndSlug userHandle slug =
               AND projects.slug = #{slug}
       |]
 
-projectIDFromUserIdAndSlug :: UserId -> ProjectSlug -> PG.Transaction e (Maybe ProjectId)
+projectIDFromUserIdAndSlug :: (QueryM m) => UserId -> ProjectSlug -> m (Maybe ProjectId)
 projectIDFromUserIdAndSlug userId slug =
   PG.query1Col
     [PG.sql|
@@ -107,7 +107,7 @@ projectIDFromUserIdAndSlug userId slug =
       |]
 
 -- | Get the UserId of a project's owner.
-projectOwner :: ProjectId -> PG.Transaction e (Maybe UserId)
+projectOwner :: (QueryM m) => ProjectId -> m (Maybe UserId)
 projectOwner projectID = do
   PG.query1Col
     [PG.sql|
@@ -116,7 +116,7 @@ projectOwner projectID = do
         WHERE projects.id = #{projectID}
       |]
 
-setProjectFav :: UserId -> ProjectId -> Bool -> PG.Transaction e ()
+setProjectFav :: (QueryM m) => UserId -> ProjectId -> Bool -> m ()
 setProjectFav userId projectId fav = do
   case fav of
     True -> PG.execute_ favSql
@@ -139,7 +139,7 @@ setProjectFav userId projectId fav = do
 --
 -- The PG.queryListRows accepts strings as web search queries, see
 -- https://www.postgresql.org/docs/current/textsearch-controls.html
-searchProjects :: Maybe UserId -> Maybe UserId -> Query -> ProjectSearchKind -> Limit -> PG.Transaction e [(Project, UserHandle)]
+searchProjects :: (QueryM m) => Maybe UserId -> Maybe UserId -> Query -> ProjectSearchKind -> Limit -> m [(Project, UserHandle)]
 searchProjects caller userIdFilter (Query query) psk limit = do
   let pskFilter = case psk of
         -- This is the default
@@ -195,7 +195,7 @@ searchProjects caller userIdFilter (Query query) psk limit = do
   pure (results <&> \(project PG.:. PG.Only handle) -> (project, handle))
 
 -- | Returns the list of tours the user has completed.
-getCompletedToursForUser :: UserId -> PG.Transaction e [TourId]
+getCompletedToursForUser :: (QueryM m) => UserId -> m [TourId]
 getCompletedToursForUser uid = do
   PG.queryListCol
     [PG.sql|
@@ -205,7 +205,7 @@ getCompletedToursForUser uid = do
       |]
 
 -- | Marks a set of tours as completed.
-completeToursForUser :: UserId -> NonEmpty TourId -> PG.Transaction e ()
+completeToursForUser :: (QueryM m) => UserId -> NonEmpty TourId -> m ()
 completeToursForUser uid tours = do
   let toursToInsert = ((uid,) <$> toList tours)
   PG.execute_
@@ -216,7 +216,7 @@ completeToursForUser uid tours = do
       |]
 
 -- | Return all projects
-allProjects :: PG.Transaction e [ProjectId]
+allProjects :: (QueryM m) => m [ProjectId]
 allProjects = do
   PG.queryListCol
     [PG.sql|
@@ -225,7 +225,7 @@ allProjects = do
 
 -- | Returns all projects owned by that user.
 -- Note that the user may still have access to other projects via orgs.
-projectIdsOwnedByUser :: UserId -> Bool -> PG.Transaction e [ProjectId]
+projectIdsOwnedByUser :: (QueryM m) => UserId -> Bool -> m [ProjectId]
 projectIdsOwnedByUser userId includePrivate = do
   PG.queryListCol
     [PG.sql|
@@ -237,7 +237,7 @@ projectIdsOwnedByUser userId includePrivate = do
                 END
       |]
 
-projectsOwnedByUser :: UserId -> Bool -> PG.Transaction e [Project]
+projectsOwnedByUser :: (QueryM m) => UserId -> Bool -> m [Project]
 projectsOwnedByUser userId includePrivate = do
   PG.queryListRows
     [PG.sql|
@@ -250,10 +250,11 @@ projectsOwnedByUser userId includePrivate = do
       |]
 
 listProjectsByUserWithMetadata ::
+  (QueryM m) =>
   Maybe UserId ->
   UserId ->
   -- | (project, numFavs, isFavedByCaller)
-  PG.Transaction e [(Project, FavData, ProjectOwner)]
+  m [(Project, FavData, ProjectOwner)]
 listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
   unpackRows
     <$> PG.queryListRows @(Project PG.:. FavData PG.:. ProjectOwner)
@@ -287,9 +288,11 @@ listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
       (project, favData, projectOwner)
 
 listProjectsFromCatalogWithMetadata ::
+  forall m.
+  (QueryM m) =>
   Maybe UserId ->
   -- | (project, numFavs, isFavedByCaller)
-  PG.Transaction e (Map CategoryName [(Project, FavData, ProjectOwner)])
+  m (Map CategoryName [(Project, FavData, ProjectOwner)])
 listProjectsFromCatalogWithMetadata callerUserId = do
   projects :: [(Project PG.:. PG.Only CategoryName PG.:. FavData PG.:. ProjectOwner)] <- PG.queryListRows sql
   projects
@@ -324,7 +327,7 @@ listProjectsFromCatalogWithMetadata callerUserId = do
         ORDER BY cc.name
       |]
 
-addProjectToCatalogCategory :: ProjectId -> CategoryID -> PG.Transaction e ()
+addProjectToCatalogCategory :: (QueryM m) => ProjectId -> CategoryID -> m ()
 addProjectToCatalogCategory projectId categoryId = do
   PG.execute_
     [PG.sql|
@@ -333,7 +336,7 @@ addProjectToCatalogCategory projectId categoryId = do
           ON CONFLICT DO NOTHING
       |]
 
-removeProjectFromCatalogCategory :: ProjectId -> CategoryID -> PG.Transaction e ()
+removeProjectFromCatalogCategory :: (QueryM m) => ProjectId -> CategoryID -> m ()
 removeProjectFromCatalogCategory projectId categoryId = do
   PG.execute_
     [PG.sql|
@@ -342,7 +345,7 @@ removeProjectFromCatalogCategory projectId categoryId = do
       |]
 
 -- | Get or create catalog category.
-getOrCreateCatalogCategory :: CategoryName -> PG.Transaction e CategoryID
+getOrCreateCatalogCategory :: (QueryM m) => CategoryName -> m CategoryID
 getOrCreateCatalogCategory categoryName = do
   PG.query1Col getCatSql >>= \case
     Just catId -> pure catId
@@ -361,7 +364,7 @@ getOrCreateCatalogCategory categoryName = do
       |]
 
 -- | Get or create catalog category.
-getCatalogCategory :: CategoryName -> PG.Transaction e (Maybe CategoryID)
+getCatalogCategory :: (QueryM m) => CategoryName -> m (Maybe CategoryID)
 getCatalogCategory categoryName = do
   PG.query1Col
     [PG.sql|
@@ -369,7 +372,7 @@ getCatalogCategory categoryName = do
           WHERE name = #{categoryName}
       |]
 
-createProject :: UserId -> ProjectSlug -> Maybe Text -> Set ProjectTag -> ProjectVisibility -> PG.Transaction e ProjectId
+createProject :: (QueryM m) => UserId -> ProjectSlug -> Maybe Text -> Set ProjectTag -> ProjectVisibility -> m ProjectId
 createProject ownerUserId slug summary tags visibility = do
   let tagsList = Set.toList tags
   PG.queryExpect1Col
@@ -382,7 +385,7 @@ createProject ownerUserId slug summary tags visibility = do
 -- | Returns false if project could not be found.
 --
 -- Must be called with a transaction to be safe.
-updateProject :: ProjectId -> NullableUpdate Text -> SetUpdate ProjectTag -> Maybe ProjectVisibility -> PG.Transaction e Bool
+updateProject :: (QueryM m) => ProjectId -> NullableUpdate Text -> SetUpdate ProjectTag -> Maybe ProjectVisibility -> m Bool
 updateProject projectId newSummary tagChanges newVisibility =
   -- This method is a bit naive, we just get the old project, update the fields accordingly,
   -- then save the entire project again.
@@ -404,7 +407,7 @@ updateProject projectId newSummary tagChanges newVisibility =
       |]
 
 -- | Deletes a project and anything referencing it entirely. No tombstones are left behind.
-deleteProject :: ProjectId -> PG.Transaction e ()
+deleteProject :: (QueryM m) => ProjectId -> m ()
 deleteProject projectId =
   PG.execute_
     [PG.sql|
@@ -413,7 +416,7 @@ deleteProject projectId =
         projects.id = #{projectId}
       |]
 
-branchByProjectIdAndShortHand :: ProjectId -> BranchShortHand -> PG.Transaction e (Maybe (Branch CausalId))
+branchByProjectIdAndShortHand :: (QueryM m) => ProjectId -> BranchShortHand -> m (Maybe (Branch CausalId))
 branchByProjectIdAndShortHand projectId BranchShortHand {contributorHandle, branchName} = runMaybeT do
   mayContributorUserId <- case contributorHandle of
     Nothing -> pure Nothing
@@ -444,7 +447,7 @@ branchByProjectIdAndShortHand projectId BranchShortHand {contributorHandle, bran
 data DeletionFilter = IncludeDeleted | ExcludeDeleted
   deriving (Eq, Show)
 
-branchById :: DeletionFilter -> BranchId -> PG.Transaction e (Maybe (Branch CausalId))
+branchById :: (QueryM m) => DeletionFilter -> BranchId -> m (Maybe (Branch CausalId))
 branchById deletionFilter branchId = do
   let includeDeleted = case deletionFilter of
         IncludeDeleted -> True
@@ -466,7 +469,7 @@ branchById deletionFilter branchId = do
               AND (#{includeDeleted} OR pb.deleted_at IS NULL)
       |]
 
-branchByProjectBranchShortHand :: ProjectBranchShortHand -> PG.Transaction e (Maybe (Branch CausalId))
+branchByProjectBranchShortHand :: (QueryM m) => ProjectBranchShortHand -> m (Maybe (Branch CausalId))
 branchByProjectBranchShortHand ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName} = do
   PG.query1Row
     [PG.sql|
@@ -492,7 +495,7 @@ branchByProjectBranchShortHand ProjectBranchShortHand {userHandle, projectSlug, 
           AND b.name = #{branchName}
       |]
 
-projectBranchShortHandByBranchId :: BranchId -> PG.Transaction e (Maybe ProjectBranchShortHand)
+projectBranchShortHandByBranchId :: (QueryM m) => BranchId -> m (Maybe ProjectBranchShortHand)
 projectBranchShortHandByBranchId branchId = do
   PG.query1Row
     [PG.sql|
@@ -519,7 +522,7 @@ projectBranchShortHandByBranchId branchId = do
 
 -- | Sets the 'deleted_at' field on the branch so it won't appear
 -- in queries, but the row is kept.
-softDeleteBranch :: BranchId -> PG.Transaction e ()
+softDeleteBranch :: (QueryM m) => BranchId -> m ()
 softDeleteBranch branchId = do
   PG.execute_
     [PG.sql|
@@ -528,7 +531,7 @@ softDeleteBranch branchId = do
         WHERE id = #{branchId}
       |]
 
-projectByShortHand :: ProjectShortHand -> PG.Transaction e (Maybe Project)
+projectByShortHand :: (QueryM m) => ProjectShortHand -> m (Maybe Project)
 projectByShortHand ProjectShortHand {userHandle, projectSlug} = do
   PG.query1Row
     [PG.sql|
@@ -548,6 +551,7 @@ projectByShortHand ProjectShortHand {userHandle, projectSlug} = do
       |]
 
 createBranch ::
+  (QueryM m) =>
   NameLookupReceipt ->
   ProjectId ->
   BranchName ->
@@ -555,7 +559,7 @@ createBranch ::
   CausalId ->
   Maybe BranchId ->
   UserId ->
-  PG.Transaction e BranchId
+  m BranchId
 createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget creatorId = do
   branchId <- PG.queryExpect1Col createBranchSQL
   PG.execute_ (updateReflogSQL branchId ("Branch Created" :: Text))
@@ -601,7 +605,7 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
         WHERE id = #{branchId}
       |]
 
-    recordNotificationEvent :: BranchId -> Maybe UserId -> PG.Transaction e ()
+    recordNotificationEvent :: (QueryM m) => BranchId -> Maybe UserId -> m ()
     recordNotificationEvent branchId branchContributorUserId = do
       (projectData, projectResourceId, projectOwnerUserId) <- ProjectsQ.projectNotificationData projectId
       let branchData =
@@ -621,12 +625,13 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
       NotifQ.recordEvent notifEvent
 
 setBranchCausalHash ::
+  (QueryM m) =>
   NameLookupReceipt ->
   Text ->
   UserId ->
   BranchId ->
   CausalId ->
-  PG.Transaction e ()
+  m ()
 setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causalId = do
   PG.execute_ updateReflogSQL
   PG.execute_ setBranchSQL
@@ -687,7 +692,7 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
               }
       NotifQ.recordEvent notifEvent
 
-getCausalIdForBranch :: BranchId -> PG.Transaction e CausalId
+getCausalIdForBranch :: (QueryM m) => BranchId -> m CausalId
 getCausalIdForBranch branchId = do
   PG.queryExpect1Col sql
   where
@@ -699,6 +704,7 @@ getCausalIdForBranch branchId = do
       |]
 
 listBranchesByProject ::
+  (QueryM m) =>
   Limit ->
   Maybe (Cursor (UTCTime, BranchId)) ->
   Maybe Query ->
@@ -707,7 +713,7 @@ listBranchesByProject ::
   BranchKindFilter ->
   ProjectId ->
   -- | (branch, contributorHandle)
-  PG.Transaction e [(Branch CausalId, Maybe UserHandle)]
+  m [(Branch CausalId, Maybe UserHandle)]
 listBranchesByProject limit mayCursor mayBranchNamePrefix mayContributorQuery kind projectId = do
   let kindFilter = case kind of
         AllBranchKinds -> ""
@@ -763,8 +769,9 @@ listBranchesByProject limit mayCursor mayBranchNamePrefix mayContributorQuery ki
 
 -- | List all BranchHashes which are reachable within a given user's codebase.
 accessibleCausalsForUser ::
+  (QueryM m) =>
   UserId ->
-  PG.Transaction e [CausalId]
+  m [CausalId]
 accessibleCausalsForUser userId = do
   PG.queryListCol
     [PG.sql|
@@ -811,6 +818,7 @@ accessibleCausalsForUser userId = do
 
 -- | List all contributor branches of a given user which the caller has access to.
 listContributorBranchesOfUserAccessibleToCaller ::
+  (QueryM m) =>
   UserId ->
   Maybe UserId ->
   Limit ->
@@ -818,7 +826,7 @@ listContributorBranchesOfUserAccessibleToCaller ::
   Maybe Query ->
   Maybe ProjectId ->
   -- | (branch, project, projectOwnerHandle)
-  PG.Transaction e [(Branch CausalId, Project, ProjectOwner)]
+  m [(Branch CausalId, Project, ProjectOwner)]
 listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserId limit mayCursor mayBranchNamePrefix mayProjectId = do
   let branchNameFilter = case mayBranchNamePrefix of
         Nothing -> mempty
@@ -876,7 +884,7 @@ listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserI
     <&> fmap (\(branch PG.:. project PG.:. projectOwner) -> (branch, project, projectOwner))
 
 -- | Returns Project Owner information, including whether that user is an organization or not.
-projectOwnerByProjectId :: ProjectId -> PG.Transaction e (Maybe ProjectOwner)
+projectOwnerByProjectId :: (QueryM m) => ProjectId -> m (Maybe ProjectOwner)
 projectOwnerByProjectId projectId = do
   listToMaybe
     <$> PG.queryListRows
@@ -890,7 +898,7 @@ projectOwnerByProjectId projectId = do
         WHERE projects.id = #{projectId};
       |]
 
-releaseDownloadStatsForProject :: ProjectId -> PG.Transaction e DownloadStats
+releaseDownloadStatsForProject :: (QueryM m) => ProjectId -> m DownloadStats
 releaseDownloadStatsForProject projectId = do
   downloadsInLast28Days <-
     PG.queryListCol
@@ -905,7 +913,7 @@ releaseDownloadStatsForProject projectId = do
       |]
   pure $ DownloadStats downloadsInLast28Days
 
-contributionStatsForProject :: ProjectId -> PG.Transaction e ContributionStats
+contributionStatsForProject :: (QueryM m) => ProjectId -> m ContributionStats
 contributionStatsForProject projectId = do
   statusCounts <-
     PG.queryListRows @(ContributionStatus, Int64)
@@ -924,7 +932,7 @@ contributionStatsForProject projectId = do
             (Merged, count) -> (0, 0, 0, Sum $ fromIntegral count)
   pure $ ContributionStats {draft, inReview, closed, merged}
 
-ticketStatsForProject :: ProjectId -> PG.Transaction e TicketStats
+ticketStatsForProject :: (QueryM m) => ProjectId -> m TicketStats
 ticketStatsForProject projectId = do
   statusCounts <-
     PG.queryListRows @(TicketStatus, Int64)
@@ -941,7 +949,7 @@ ticketStatsForProject projectId = do
             (Ticket.Closed, count) -> (mempty, fromIntegral count)
   pure $ TicketStats {numOpenTickets, numClosedTickets}
 
-isUnisonEmployee :: UserId -> PG.Transaction e Bool
+isUnisonEmployee :: (QueryM m) => UserId -> m Bool
 isUnisonEmployee uid = do
   PG.queryExpect1Col
     [PG.sql|
@@ -952,7 +960,7 @@ isUnisonEmployee uid = do
       |]
 
 -- | Returns the handles of all orgs the provided user is a member of.
-organizationMemberships :: UserId -> PG.Transaction e [UserHandle]
+organizationMemberships :: (QueryM m) => UserId -> m [UserHandle]
 organizationMemberships uid = do
   PG.queryListCol
     [PG.sql|
@@ -961,7 +969,7 @@ organizationMemberships uid = do
           WHERE member_user_id = #{uid}
       |]
 
-releaseByProjectReleaseShortHand :: ProjectReleaseShortHand -> PG.Transaction e (Maybe (Release CausalId UserId))
+releaseByProjectReleaseShortHand :: (QueryM m) => ProjectReleaseShortHand -> m (Maybe (Release CausalId UserId))
 releaseByProjectReleaseShortHand ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion = ReleaseVersion {major, minor, patch}} = do
   PG.query1Row
     [PG.sql|
@@ -991,7 +999,7 @@ releaseByProjectReleaseShortHand ProjectReleaseShortHand {userHandle, projectSlu
               AND release.deleted_at IS NULL
       |]
 
-releaseByProjectIdAndReleaseShortHand :: ProjectId -> ReleaseShortHand -> PG.Transaction e (Maybe (Release CausalId UserId))
+releaseByProjectIdAndReleaseShortHand :: (QueryM m) => ProjectId -> ReleaseShortHand -> m (Maybe (Release CausalId UserId))
 releaseByProjectIdAndReleaseShortHand projectId ReleaseShortHand {releaseVersion = ReleaseVersion {major, minor, patch}} = do
   PG.query1Row
     [PG.sql|
@@ -1019,12 +1027,13 @@ releaseByProjectIdAndReleaseShortHand projectId ReleaseShortHand {releaseVersion
       |]
 
 listReleasesByProject ::
+  (QueryM m) =>
   Limit ->
   Maybe (Cursor (Int64, Int64, Int64, ReleaseId)) ->
   Maybe Query ->
   ReleaseStatusFilter ->
   ProjectId ->
-  PG.Transaction e [Release CausalId UserHandle]
+  m [Release CausalId UserHandle]
 listReleasesByProject limit mayCursor mayVersionPrefix status projectId = do
   let statusFilter = case status of
         AllReleases -> ""
@@ -1096,7 +1105,7 @@ listReleasesByProject limit mayCursor mayVersionPrefix status projectId = do
   PG.queryListRows sql
 
 -- | Add one to the daily downloads of a release.
-incrementReleaseDownloads :: ReleaseId -> PG.Transaction e ()
+incrementReleaseDownloads :: (QueryM m) => ReleaseId -> m ()
 incrementReleaseDownloads releaseId = do
   PG.execute_
     [PG.sql|
@@ -1108,7 +1117,7 @@ incrementReleaseDownloads releaseId = do
       |]
 
 -- | Add one to the daily downloads of a branch.
-incrementBranchDownloads :: BranchId -> PG.Transaction e ()
+incrementBranchDownloads :: (QueryM m) => BranchId -> m ()
 incrementBranchDownloads branchId = do
   PG.execute_
     [PG.sql|
@@ -1122,7 +1131,7 @@ incrementBranchDownloads branchId = do
 likeEscape :: Text -> Text
 likeEscape = Text.replace "%" "\\%" . Text.replace "_" "\\_"
 
-getOAuthConfigForClient :: OAuthClientId -> PG.Transaction e (Maybe OAuthClientConfig)
+getOAuthConfigForClient :: (QueryM m) => OAuthClientId -> m (Maybe OAuthClientConfig)
 getOAuthConfigForClient clientId = do
   PG.query1Row
     [PG.sql|

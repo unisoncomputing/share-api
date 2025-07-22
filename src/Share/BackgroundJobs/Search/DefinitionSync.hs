@@ -152,9 +152,10 @@ processRelease authZReceipt = withSpan "background:definition-sync:process-relea
       pure True
 
 syncRoot ::
+  (PG.QueryM m) =>
   AuthZ.AuthZReceipt ->
   (Maybe ReleaseId, BranchHashId, UserId) ->
-  PG.Transaction e ([DefnIndexingFailure], [Text])
+  m ([DefnIndexingFailure], [Text])
 syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
   -- Only index it if it's not already indexed.
   (errs, badNames) <-
@@ -176,7 +177,7 @@ syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
   for mayReleaseId (syncRelease rootBranchHashId)
   pure (errs, badNames)
 
-syncRelease :: BranchHashId -> ReleaseId -> PG.Transaction e ()
+syncRelease :: (PG.QueryM m) => BranchHashId -> ReleaseId -> m ()
 syncRelease rootBranchHashId releaseId = fmap (fromMaybe ()) . runMaybeT $ do
   Release {projectId, releaseId, version} <- lift $ ReleasesQ.releaseById releaseId
   -- Wipe out any existing rows for this release. Normally there should be none, but this

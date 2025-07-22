@@ -171,18 +171,17 @@ codebaseEnv !_authZReceipt codebaseLoc = do
 -- | Construct a Runtime linked to a specific codebase and transaction.
 -- Don't use the runtime for one codebase with another codebase.
 -- Don't use this runtime in any transaction other than the one where it's created.
-withCodebaseRuntime :: (Exception e) => CodebaseEnv -> Runtime Symbol -> (forall s. CodebaseRuntime s IO -> PG.Transaction e r) -> PG.Transaction e r
+withCodebaseRuntime :: (QueryM m) => CodebaseEnv -> Runtime Symbol -> (forall s. CodebaseRuntime s IO -> m r) -> m r
 withCodebaseRuntime codebaseEnv sandboxedRuntime f = do
-  rt <- PG.transactionUnsafeIO (codebaseRuntimeTransaction sandboxedRuntime codebaseEnv)
-  PG.asUnliftIOTransaction $ do
-    UnliftIO.withRunInIO \toIO -> do
-      toIO . PG.UnliftIOTransaction $ f $ hoistCodebaseRuntime (toIO . PG.UnliftIOTransaction) rt
+  rt <- liftIO (codebaseRuntimeTransaction sandboxedRuntime codebaseEnv)
+  UnliftIO.withRunInIO \toIO -> do
+    toIO $ f $ hoistCodebaseRuntime toIO rt
 
 -- | Ideally, we'd use this – a runtime with lookup actions in transaction, not IO. But that will require refactoring to
 -- the runtime interface in ucm, so we can't use it for now. That's bad: we end up unsafely running separate
 -- transactions for inner calls to 'codeLookup' / 'cachedEvalResult', which can lead to deadlock due to a starved
 -- connection pool.
-codebaseRuntimeTransaction :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime s (PG.Transaction e))
+codebaseRuntimeTransaction :: (QueryM m) => Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime s m)
 codebaseRuntimeTransaction unisonRuntime codebase = do
   cacheVar <- newTVarIO (CodeLookupCache mempty mempty)
   pure
@@ -405,7 +404,7 @@ data CodeLookupCache = CodeLookupCache
 
 -- | TODO: The code lookup should either be batchified or we should preload the cache with
 -- everything we think we'll need.
-codeLookupForUser :: TVar CodeLookupCache -> CodebaseEnv -> CL.CodeLookup Symbol (PG.Transaction e) Ann
+codeLookupForUser :: forall m. (QueryM m) => TVar CodeLookupCache -> CodebaseEnv -> CL.CodeLookup Symbol m Ann
 codeLookupForUser cacheVar codebaseOwner = do
   CL.CodeLookup (fmap (fmap fst) . getTermAndType) (fmap (fmap snd) . getTermAndType) getTypeDecl
     <> Builtin.codeLookup
@@ -413,7 +412,7 @@ codeLookupForUser cacheVar codebaseOwner = do
   where
     getTermAndType ::
       Reference.Id ->
-      PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+      m (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
     getTermAndType r = do
       CodeLookupCache {termCache} <- PG.transactionUnsafeIO (readTVarIO cacheVar)
       case Map.lookup r termCache of
@@ -427,7 +426,7 @@ codeLookupForUser cacheVar codebaseOwner = do
                   CodeLookupCache {termCache = Map.insert r termAndType termCache, ..}
           pure maybeTermAndType
 
-    getTypeDecl :: Reference.Id -> PG.Transaction e (Maybe (V1.Decl Symbol Ann))
+    getTypeDecl :: Reference.Id -> m (Maybe (V1.Decl Symbol Ann))
     getTypeDecl r = do
       CodeLookupCache {typeCache} <- PG.transactionUnsafeIO (readTVarIO cacheVar)
       case Map.lookup r typeCache of
@@ -444,7 +443,7 @@ codeLookupForUser cacheVar codebaseOwner = do
 -- | Look up the result of evaluating a term if we have it cached.
 --
 -- This is intentionally not in CodebaseM because it's used to build the CodebaseEnv.
-loadCachedEvalResult :: CodebaseEnv -> Reference.Id -> PG.Transaction e (Maybe (V1.Term Symbol Ann))
+loadCachedEvalResult :: (QueryM m) => CodebaseEnv -> Reference.Id -> m (Maybe (V1.Term Symbol Ann))
 loadCachedEvalResult codebase ref@(Reference.Id h _) = runMaybeT do
   v2Term <- MaybeT $ DefnQ.loadCachedEvalResult codebase ref
   -- TODO: Batchify this so we're not making a separate query for every reference in the term!

@@ -27,6 +27,7 @@ import Network.Wai.Middleware.Prometheus qualified as Prom
 import Prometheus qualified as Prom
 import Prometheus.Metric.GHC qualified as Prom
 import Share.Env qualified as Env
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Metrics.Queries qualified as Q
 import Share.Prelude
@@ -309,7 +310,7 @@ atMostOnceEveryInterval interval action = do
       pure $ (Just (now, result), result)
 
 -- | A collection of metrics that are expensive to compute and don't change often.
-queryMetrics :: Time.UTCTime -> PG.Transaction e SlowChangingMetrics
+queryMetrics :: (QueryM m) => Time.UTCTime -> m SlowChangingMetrics
 queryMetrics now = do
   uniqueUserPushesInWeek <- Q.numUniqueUsersPushedSince (Time.addUTCTime ((-7) * Time.nominalDay) now)
   uniqueUserPushesInMonth <- Q.numUniqueUsersPushedSince (Time.addUTCTime ((-30) * Time.nominalDay) now)

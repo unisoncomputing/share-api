@@ -66,7 +66,7 @@ instance Logging.Loggable DefinitionSearchError where
         & Logging.withSeverity Logging.Error
 
 -- | Claim the oldest unsynced root to be indexed.
-claimUnsynced :: Transaction e (Maybe (Maybe ReleaseId, BranchHashId, UserId))
+claimUnsynced :: (QueryM m) => m (Maybe (Maybe ReleaseId, BranchHashId, UserId))
 claimUnsynced = do
   r <-
     query1Row
@@ -95,7 +95,7 @@ claimUnsynced = do
 -- | Delete the claimed root from the queue once it's been processed.
 -- We specifically do this right at the end of the transaction to avoid holding a lock on the
 -- table for any longer than necessary.
-deleteClaimed :: BranchHashId -> Transaction e ()
+deleteClaimed :: (QueryM m) => BranchHashId -> m ()
 deleteClaimed rootBranchHashId = do
   execute_
     [sql|
@@ -106,7 +106,7 @@ deleteClaimed rootBranchHashId = do
 -- | Delete the claimed root from the queue once it's been processed.
 -- We specifically do this right at the end of the transaction to avoid holding a lock on the
 -- table for any longer than necessary.
-markAsFailed :: BranchHashId -> Text -> Transaction e ()
+markAsFailed :: (QueryM m) => BranchHashId -> Text -> m ()
 markAsFailed rootBranchHashId errors = do
   execute_
     [sql|
@@ -115,7 +115,7 @@ markAsFailed rootBranchHashId errors = do
       WHERE root_namespace_hash_id = #{rootBranchHashId}
     |]
 
-isRootIndexed :: BranchHashId -> Transaction e Bool
+isRootIndexed :: (QueryM m) => BranchHashId -> m Bool
 isRootIndexed rootBranchHashId = do
   queryExpect1Col
     [sql|
@@ -125,7 +125,7 @@ isRootIndexed rootBranchHashId = do
       )
     |]
 
-markRootAsIndexed :: BranchHashId -> Transaction e ()
+markRootAsIndexed :: (QueryM m) => BranchHashId -> m ()
 markRootAsIndexed rootBranchHashId = do
   execute_
     [sql|
@@ -193,7 +193,7 @@ insertDefinitionDocuments docs = pipelined $ do
         | otherwise = Left $ tShow (NEL.reverse (NameSegmentInternal.toUnescapedText <$> segments))
 
 -- | When we publish a new release, we also copy those search docs into the global search.
-copySearchDocumentsForRelease :: BranchHashId -> ProjectId -> ReleaseId -> Transaction e ()
+copySearchDocumentsForRelease :: (QueryM m) => BranchHashId -> ProjectId -> ReleaseId -> m ()
 copySearchDocumentsForRelease rootBranchHashId projectId releaseId = do
   execute_
     [sql|
@@ -205,7 +205,7 @@ copySearchDocumentsForRelease rootBranchHashId projectId releaseId = do
 
 -- | Wipe out any rows for the given project, useful when re-indexing and we only want to
 -- have records for the latest release.
-cleanIndexForProject :: ProjectId -> Transaction e ()
+cleanIndexForProject :: (QueryM m) => ProjectId -> m ()
 cleanIndexForProject projectId = do
   execute_
     [sql|
@@ -356,7 +356,7 @@ data DefnSearchFilter
   = RootBranchFilter ProjectId BranchOrReleaseShortHand BranchHashId
   | UserFilter UserId
 
-defNameCompletionSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+defNameCompletionSearch :: (QueryM m) => Maybe UserId -> Maybe DefnSearchFilter -> Query -> Limit -> m [(Name, TermOrTypeTag)]
 defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
   case mayFilter of
     Nothing -> globalDefNameCompletionSearch mayCaller Nothing (Query query) limit
@@ -365,7 +365,7 @@ defNameCompletionSearch mayCaller mayFilter (Query query) limit = do
       -- If we have a branch filter, we can use the scoped search index.
       scopedDefNameCompletionSearch mayCaller projId branchHashId (Query query) limit
 
-scopedDefNameCompletionSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+scopedDefNameCompletionSearch :: (QueryM m) => Maybe UserId -> ProjectId -> BranchHashId -> Query -> Limit -> m [(Name, TermOrTypeTag)]
 scopedDefNameCompletionSearch mayCaller projectId branchHashId (Query query) limit = do
   queryListRows @(Name, TermOrTypeTag)
     [sql|
@@ -392,7 +392,7 @@ scopedDefNameCompletionSearch mayCaller projectId branchHashId (Query query) lim
     <&> over (traversed . _1) Name.makeRelative
 
 -- | Find names which would be valid completions for the given query.
-globalDefNameCompletionSearch :: Maybe UserId -> Maybe UserId -> Query -> Limit -> Transaction e [(Name, TermOrTypeTag)]
+globalDefNameCompletionSearch :: (QueryM m) => Maybe UserId -> Maybe UserId -> Query -> Limit -> m [(Name, TermOrTypeTag)]
 globalDefNameCompletionSearch mayCaller mayUserFilter (Query query) limit = do
   let filters = case mayUserFilter of
         Just userId -> [sql| AND p.owner_user_id = #{userId} |]
@@ -423,7 +423,7 @@ globalDefNameCompletionSearch mayCaller mayUserFilter (Query query) limit = do
     -- Names are stored in absolute form, but we usually work with them in relative form.
     <&> over (traversed . _1) Name.makeRelative
 
-definitionTokenSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, BranchOrReleaseShortHand, Name, TermOrTypeSummary)]
+definitionTokenSearch :: (QueryM m) => Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> m [(ProjectId, BranchOrReleaseShortHand, Name, TermOrTypeSummary)]
 definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
   case mayFilter of
     Nothing -> do
@@ -439,7 +439,7 @@ definitionTokenSearch mayCaller mayFilter limit searchTokens preferredArity = do
       scopedDefinitionTokenSearch mayCaller projId branchHashId limit searchTokens preferredArity
         <&> fmap \(name, meta) -> (projId, branchOrReleaseSH, name, meta)
 
-scopedDefinitionTokenSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(Name, TermOrTypeSummary)]
+scopedDefinitionTokenSearch :: (QueryM m) => Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> m [(Name, TermOrTypeSummary)]
 scopedDefinitionTokenSearch mayCaller projectId rootBranchHashId limit searchTokens preferredArity = do
   let (regularTokens, returnTokens, names) =
         searchTokens & foldMap \token -> case token of
@@ -479,7 +479,7 @@ scopedDefinitionTokenSearch mayCaller projectId rootBranchHashId limit searchTok
       )
 
 -- | Perform a type search for the given tokens.
-globalDefinitionTokenSearch :: Maybe UserId -> Maybe UserId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+globalDefinitionTokenSearch :: (QueryM m) => Maybe UserId -> Maybe UserId -> Limit -> Set (DefnSearchToken (Either Name ShortHash)) -> Maybe Arity -> m [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
 globalDefinitionTokenSearch mayCaller mayUserFilter limit searchTokens preferredArity = do
   let filters = case mayUserFilter of
         Just userId -> [sql| AND p.owner_user_id = #{userId} |]
@@ -558,7 +558,7 @@ tokenSearchOrderClause categoryCheck names mayReturnTokensText = do
                  doc.name
             |]
 
-definitionNameSearch :: Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Query -> Transaction e [(ProjectId, BranchOrReleaseShortHand, Name, TermOrTypeSummary)]
+definitionNameSearch :: (QueryM m) => Maybe UserId -> Maybe DefnSearchFilter -> Limit -> Query -> m [(ProjectId, BranchOrReleaseShortHand, Name, TermOrTypeSummary)]
 definitionNameSearch mayCaller mayFilter limit (Query query) = do
   case mayFilter of
     Nothing -> do
@@ -575,7 +575,7 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
         <&> fmap \(name, meta) -> (projId, branchOrReleaseSH, name, meta)
 
 -- | Perform a fuzzy trigram search on definition names
-scopedDefinitionNameSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Query -> Transaction e [(Name, TermOrTypeSummary)]
+scopedDefinitionNameSearch :: (QueryM m) => Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Query -> m [(Name, TermOrTypeSummary)]
 scopedDefinitionNameSearch mayCaller projectId rootBranchHashId limit (Query query) = do
   rows <-
     queryListRows @(Name, Hasql.Jsonb)
@@ -610,7 +610,7 @@ scopedDefinitionNameSearch mayCaller projectId rootBranchHashId limit (Query que
       )
 
 -- | Perform a fuzzy trigram search on definition names
-globalDefinitionNameSearch :: Maybe UserId -> Maybe UserId -> Limit -> Query -> Transaction e [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
+globalDefinitionNameSearch :: (QueryM m) => Maybe UserId -> Maybe UserId -> Limit -> Query -> m [(ProjectId, ReleaseId, Name, TermOrTypeSummary)]
 globalDefinitionNameSearch mayCaller mayUserFilter limit (Query query) = do
   let filters = case mayUserFilter of
         Just userId -> [sql| AND p.owner_user_id = #{userId} |]

@@ -14,6 +14,7 @@ import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
 import Share.Notifications.Types (ContributionData (..), NotificationEvent (..), NotificationEventData (..), StatusUpdateData (..))
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Contributions.Queries qualified as ContribQ
 import Share.Postgres.Projects.Queries qualified as ProjectQ
@@ -22,6 +23,7 @@ import Share.Prelude
 import Share.Utils.API (NullableUpdate (..), fromNullableUpdate)
 
 createContribution ::
+  (QueryM m) =>
   -- | Author
   UserId ->
   ProjectId ->
@@ -34,7 +36,7 @@ createContribution ::
   BranchId ->
   -- | Target Branch
   BranchId ->
-  PG.Transaction e (ContributionId, ContributionNumber)
+  m (ContributionId, ContributionNumber)
 createContribution authorId projectId title description status sourceBranchId targetBranchId = do
   (contributionId, number) <-
     PG.queryExpect1Row
@@ -85,7 +87,7 @@ createContribution authorId projectId title description status sourceBranchId ta
   NotifQ.recordEvent notifEvent
   pure (contributionId, number)
 
-updateContribution :: UserId -> ContributionId -> Maybe Text -> NullableUpdate Text -> Maybe ContributionStatus -> Maybe BranchId -> Maybe BranchId -> PG.Transaction e Bool
+updateContribution :: (QueryM m) => UserId -> ContributionId -> Maybe Text -> NullableUpdate Text -> Maybe ContributionStatus -> Maybe BranchId -> Maybe BranchId -> m Bool
 updateContribution callerUserId contributionId newTitle newDescription newStatus newSourceBranchId newTargetBranchId = do
   isJust <$> runMaybeT do
     Contribution {..} <- lift $ ContribQ.contributionById contributionId
@@ -129,7 +131,7 @@ updateContribution callerUserId contributionId newTitle newDescription newStatus
           WHERE id = #{contributionId}
           |]
 
-insertContributionStatusChangeEvent :: ProjectId -> ContributionId -> UserId -> Maybe ContributionStatus -> ContributionStatus -> PG.Transaction e ()
+insertContributionStatusChangeEvent :: (QueryM m) => ProjectId -> ContributionId -> UserId -> Maybe ContributionStatus -> ContributionStatus -> m ()
 insertContributionStatusChangeEvent projectId contributionId actorUserId oldStatus newStatus = do
   PG.execute_
     [PG.sql|
@@ -159,7 +161,7 @@ insertContributionStatusChangeEvent projectId contributionId actorUserId oldStat
 
 -- | Recompute the best common ancestors for all contributions related to the branch, then
 -- return the set of contribution IDs which have been marked as merged.
-performMergesAndBCAUpdatesFromBranchPush :: UserId -> BranchId -> PG.Transaction e (Set ContributionId)
+performMergesAndBCAUpdatesFromBranchPush :: (QueryM m) => UserId -> BranchId -> m (Set ContributionId)
 performMergesAndBCAUpdatesFromBranchPush callerUserId branchId = do
   -- Get the new BCAs for all contributions related to the branch
   contributionsToMarkAsMerged <-

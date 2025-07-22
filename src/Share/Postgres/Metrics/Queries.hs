@@ -1,10 +1,11 @@
 module Share.Postgres.Metrics.Queries where
 
 import Data.Time (UTCTime)
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Prelude
 
-usersInteractedWithTickets :: PG.Transaction e Int64
+usersInteractedWithTickets :: (QueryM m) => m Int64
 usersInteractedWithTickets = do
   PG.queryExpect1Col
     [PG.sql|
@@ -12,7 +13,7 @@ usersInteractedWithTickets = do
           FROM ticket_status_events
       |]
 
-usersInteractedWithContributions :: PG.Transaction e Int64
+usersInteractedWithContributions :: (QueryM m) => m Int64
 usersInteractedWithContributions = do
   PG.queryExpect1Col
     [PG.sql|
@@ -20,7 +21,7 @@ usersInteractedWithContributions = do
           FROM contribution_status_events
       |]
 
-numUniqueUsersPushedSince :: UTCTime -> PG.Transaction e Int64
+numUniqueUsersPushedSince :: (QueryM m) => UTCTime -> m Int64
 numUniqueUsersPushedSince sinceTime = do
   PG.queryExpect1Col
     [PG.sql|
@@ -29,19 +30,19 @@ numUniqueUsersPushedSince sinceTime = do
       WHERE created_at >= #{sinceTime}
   |]
 
-numUniqueUsersWithAPush :: PG.Transaction e Int64
+numUniqueUsersWithAPush :: (QueryM m) => m Int64
 numUniqueUsersWithAPush = do
   PG.queryExpect1Col
     [PG.sql|
       SELECT COUNT(DISTINCT user_id) FROM project_branch_reflog
   |]
 
-allUsersCount :: PG.Transaction e Int64
+allUsersCount :: (QueryM m) => m Int64
 allUsersCount =
   PG.queryExpect1Col [PG.sql| SELECT COUNT(*) FROM users |]
 
 -- | Returns the number of total projects (private, public, total)
-allProjectsCount :: PG.Transaction e (Int64, Int64, Int64)
+allProjectsCount :: (QueryM m) => m (Int64, Int64, Int64)
 allProjectsCount = do
   private <-
     PG.queryExpect1Col
@@ -60,7 +61,7 @@ allProjectsCount = do
   pure (private, public, private + public)
 
 -- | Returns the total number of total release downloads for the last (day, 7 days, 30 days)
-releaseDownloadsGauges :: PG.Transaction e (Int64, Int64, Int64)
+releaseDownloadsGauges :: (QueryM m) => m (Int64, Int64, Int64)
 releaseDownloadsGauges = do
   daily <-
     PG.queryExpect1Col
@@ -86,12 +87,12 @@ releaseDownloadsGauges = do
   pure (daily, weekly, monthly)
 
 -- | Users who have access to cloud.
-numCloudUsers :: PG.Transaction e Int64
+numCloudUsers :: (QueryM m) => m Int64
 numCloudUsers =
   PG.queryExpect1Col [PG.sql| SELECT COUNT(*) FROM cloud_users |]
 
 -- Number of total definitions on /main branch of all Share projects (including private)
-numTotalPublicOrPrivateDefinitions :: PG.Transaction e Int64
+numTotalPublicOrPrivateDefinitions :: (QueryM m) => m Int64
 numTotalPublicOrPrivateDefinitions =
   PG.queryExpect1Col
     [PG.sql|
@@ -127,7 +128,7 @@ WITH namespaces(handle, slug, name, namespace_hash_id, private) AS (
     |]
 
 -- Number of total definitions on /main branch of all Share projects (excluding private)
-numTotalPublicDefinitions :: PG.Transaction e Int64
+numTotalPublicDefinitions :: (QueryM m) => m Int64
 numTotalPublicDefinitions =
   PG.queryExpect1Col
     [PG.sql|
@@ -163,7 +164,7 @@ WITH namespaces(handle, slug, name, namespace_hash_id, private) AS (
   FROM namespaces
     |]
 
-numCausalDiffQueueEntries :: PG.Transaction e Int64
+numCausalDiffQueueEntries :: (QueryM m) => m Int64
 numCausalDiffQueueEntries =
   PG.queryExpect1Col
     [PG.sql| SELECT COUNT(*) FROM causal_diff_queue |]

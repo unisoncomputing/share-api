@@ -10,13 +10,15 @@ where
 import Data.List qualified as List
 import Data.Time (UTCTime)
 import Share.IDs
+import Share.Postgres (QueryA, QueryM)
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Web.Share.Comments
 
 getComment ::
+  (QueryM m) =>
   CommentId ->
-  PG.Transaction e (Maybe (Comment UserId))
+  m (Maybe (Comment UserId))
 getComment commentId = do
   PG.query1Row
     [PG.sql|
@@ -42,11 +44,12 @@ data UpdateCommentResult user
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 updateComment ::
+  (QueryM m) =>
   UserId ->
   CommentId ->
   RevisionNumber ->
   Text ->
-  PG.Transaction e (UpdateCommentResult UserId)
+  m (UpdateCommentResult UserId)
 updateComment authorId commentId expectedRevision content = do
   mayLatestRevision <- getComment commentId
   case mayLatestRevision of
@@ -66,7 +69,7 @@ updateComment authorId commentId expectedRevision content = do
 
 -- | Deletes a comment, returning True if the comment was deleted, False if the comment was
 -- not found.
-deleteComment :: CommentId -> PG.Transaction e Bool
+deleteComment :: (QueryA m) => CommentId -> m Bool
 deleteComment commentId = do
   isJust
     <$> PG.query1Col @UTCTime
@@ -80,7 +83,7 @@ deleteComment commentId = do
 
 -- | Fetch comments within the given range, returning the latest revision of each comment, and
 -- any comments in range that were deleted (without leaking information)
-commentsByTicketOrContribution :: Either ContributionId TicketId -> Maybe UTCTime -> Maybe UTCTime -> PG.Transaction e [CommentEvent UserId]
+commentsByTicketOrContribution :: forall m. (QueryM m) => Either ContributionId TicketId -> Maybe UTCTime -> Maybe UTCTime -> m [CommentEvent UserId]
 commentsByTicketOrContribution thingId mayFromExclusive untilInclusive = do
   commentEvents <- fmap CommentEvent <$> getComments
   deletedCommentEvents <- fmap DeletedCommentEvent <$> getDeletedComments
@@ -89,7 +92,7 @@ commentsByTicketOrContribution thingId mayFromExclusive untilInclusive = do
     commentFilter = case thingId of
       Left contributionId -> [PG.sql| comment.contribution_id = #{contributionId} |]
       Right ticketId -> [PG.sql| comment.ticket_id = #{ticketId} |]
-    getComments :: PG.Transaction e [Comment UserId]
+    getComments :: m [Comment UserId]
     getComments =
       PG.queryListRows @(Comment UserId)
         [PG.sql|
@@ -118,7 +121,7 @@ commentsByTicketOrContribution thingId mayFromExclusive untilInclusive = do
                   AND (#{untilInclusive} IS NULL OR comment.created_at <= #{untilInclusive})
             ORDER BY comment.created_at ASC
           |]
-    getDeletedComments :: PG.Transaction e [DeletedComment]
+    getDeletedComments :: m [DeletedComment]
     getDeletedComments =
       PG.queryListRows @DeletedComment
         [PG.sql|

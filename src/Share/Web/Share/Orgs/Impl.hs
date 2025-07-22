@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Share.Web.Share.Orgs.Impl (server) where
 
@@ -31,6 +32,7 @@ data OrgError
   | OrgMustHaveOwnerError
   deriving stock (Show, Eq)
   deriving (Logging.Loggable) via (Logging.ShowLoggable Logging.UserFault OrgError)
+  deriving anyclass (Exception)
 
 instance ToServerError OrgError where
   toServerError = \case

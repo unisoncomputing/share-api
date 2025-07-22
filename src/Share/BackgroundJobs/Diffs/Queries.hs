@@ -41,7 +41,7 @@ submitContributionsToBeDiffed contributions = do
   Notif.notifyChannel Notif.CausalDiffChannel
 
 -- | Claim the oldest contribution in the queue to be diffed.
-claimCausalDiff :: Transaction e (Maybe CausalDiffInfo)
+claimCausalDiff :: (QueryA m) => m (Maybe CausalDiffInfo)
 claimCausalDiff = do
   query1Row
     [sql|
@@ -53,7 +53,7 @@ claimCausalDiff = do
       FOR UPDATE SKIP LOCKED
     |]
 
-deleteClaimedCausalDiff :: CausalDiffInfo -> Transaction e ()
+deleteClaimedCausalDiff :: (QueryA m) => CausalDiffInfo -> m ()
 deleteClaimedCausalDiff CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner} =
   execute_
     [sql|

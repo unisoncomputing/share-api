@@ -30,9 +30,10 @@ import Share.Web.Share.Tickets.API
 import Share.Web.Share.Tickets.Types
 
 ticketByProjectIdAndNumber ::
+  (PG.QueryA m) =>
   ProjectId ->
   TicketNumber ->
-  PG.Transaction e (Maybe Ticket)
+  m (Maybe Ticket)
 ticketByProjectIdAndNumber projectId ticketNumber = do
   PG.query1Row
     [PG.sql|
@@ -52,9 +53,10 @@ ticketByProjectIdAndNumber projectId ticketNumber = do
       |]
 
 shareTicketByProjectIdAndNumber ::
+  (PG.QueryA m) =>
   ProjectId ->
   TicketNumber ->
-  PG.Transaction e (Maybe (ShareTicket UserId))
+  m (Maybe (ShareTicket UserId))
 shareTicketByProjectIdAndNumber projectId ticketNumber = do
   PG.query1Row @(ShareTicket UserId)
     [PG.sql|
@@ -80,12 +82,13 @@ shareTicketByProjectIdAndNumber projectId ticketNumber = do
 -- | Lists all tickets for a project which match the provided filters.
 --   Most recently updated first.
 listTicketsByProjectId ::
+  (PG.QueryA m) =>
   ProjectId ->
   Limit ->
   Maybe (Cursor ListTicketsCursor) ->
   Maybe UserId ->
   Maybe TicketStatus ->
-  PG.Transaction e (Paged ListTicketsCursor (ShareTicket UserId))
+  m (Paged ListTicketsCursor (ShareTicket UserId))
 listTicketsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter = do
   let cursorFilter = case mayCursor of
         Nothing -> "true"
@@ -148,7 +151,7 @@ ticketById ticketId = do
         WHERE ticket.id = #{ticketId}
       |]
 
-ticketStatusChangeEventsByTicketId :: TicketId -> Maybe UTCTime -> Maybe UTCTime -> PG.Transaction e [StatusChangeEvent UserId]
+ticketStatusChangeEventsByTicketId :: (PG.QueryA m) => TicketId -> Maybe UTCTime -> Maybe UTCTime -> m [StatusChangeEvent UserId]
 ticketStatusChangeEventsByTicketId ticketId mayFromExclusive untilInclusive = do
   PG.queryListRows
     [PG.sql|
@@ -166,13 +169,13 @@ ticketStatusChangeEventsByTicketId ticketId mayFromExclusive untilInclusive = do
 
 -- | Fetch comments within the given range, returning the latest revision of each comment, and
 -- any comments in range that were deleted (without leaking information)
-ticketCommentsByTicketId :: TicketId -> Maybe UTCTime -> Maybe UTCTime -> PG.Transaction e [CommentEvent UserId]
+ticketCommentsByTicketId :: forall m. (PG.QueryM m) => TicketId -> Maybe UTCTime -> Maybe UTCTime -> m [CommentEvent UserId]
 ticketCommentsByTicketId ticketId mayFromExclusive untilInclusive = do
   commentEvents <- fmap CommentEvent <$> getComments
   deletedCommentEvents <- fmap DeletedCommentEvent <$> getDeletedComments
   pure . List.sortOn commentEventTimestamp $ commentEvents <> deletedCommentEvents
   where
-    getComments :: PG.Transaction e [Comment UserId]
+    getComments :: m [Comment UserId]
     getComments =
       PG.queryListRows @(Comment UserId)
         [PG.sql|
@@ -201,7 +204,7 @@ ticketCommentsByTicketId ticketId mayFromExclusive untilInclusive = do
                   AND (#{untilInclusive} IS NULL OR comment.created_at <= #{untilInclusive})
             ORDER BY comment.created_at ASC
           |]
-    getDeletedComments :: PG.Transaction e [DeletedComment]
+    getDeletedComments :: m [DeletedComment]
     getDeletedComments =
       PG.queryListRows @DeletedComment
         [PG.sql|
@@ -218,12 +221,13 @@ ticketCommentsByTicketId ticketId mayFromExclusive untilInclusive = do
           |]
 
 listTicketsByUserId ::
+  (PG.QueryA m) =>
   Maybe UserId ->
   UserId ->
   Limit ->
   Maybe (Cursor (UTCTime, TicketId)) ->
   Maybe TicketStatus ->
-  PG.Transaction e (Paged (UTCTime, TicketId) (ShareTicket UserId))
+  m (Paged (UTCTime, TicketId) (ShareTicket UserId))
 listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
   let cursorFilter = case mayCursor of
         Nothing -> "true"
@@ -295,7 +299,7 @@ getPagedShareTicketTimelineByProjectIdAndNumber projectId ticketNumber mayFromEx
     --
     -- We can't just grab 'at most N' elements from each table because it may result in some
     -- events appearing to be missing from the timeline.
-    determineUpperDateBound :: TicketId -> PG.Transaction e (Maybe UTCTime)
+    determineUpperDateBound :: TicketId -> PG.Transaction SomeServerError (Maybe UTCTime)
     determineUpperDateBound ticketId = do
       PG.query1Col
         [PG.sql|

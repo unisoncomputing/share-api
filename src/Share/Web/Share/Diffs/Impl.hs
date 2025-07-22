@@ -44,6 +44,7 @@ import Unison.Util.Pretty (Width)
 
 -- | Diff two causals and store the diff in the database.
 computeAndStoreCausalDiff ::
+  (Exception e) =>
   AuthZReceipt ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime from IO, CausalId) ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, CausalId) ->

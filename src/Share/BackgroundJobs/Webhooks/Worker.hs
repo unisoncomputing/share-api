@@ -394,11 +394,12 @@ buildWebhookRequest webhookId uri event defaultPayload = do
               )
 
 attemptWebhookSend ::
+  (PG.QueryM m) =>
   AuthZ.AuthZReceipt ->
   (NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
   NotificationEventId ->
   NotificationWebhookId ->
-  PG.Transaction e (Maybe WebhookSendFailure)
+  m (Maybe WebhookSendFailure)
 attemptWebhookSend _authZReceipt tryWebhookIO eventId webhookId = do
   event <- NQ.expectEvent eventId
   hydratedEventPayload <- forOf eventData_ event NQ.hydrateEventPayload

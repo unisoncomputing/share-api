@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Share.Web.UCM.SyncV2.Impl (server) where
@@ -148,6 +149,7 @@ data CodebaseLoadingError
   | CodebaseLoadingErrorNoReadPermission SyncV2.BranchRef
   | CodebaseLoadingErrorInvalidBranchRef Text SyncV2.BranchRef
   deriving stock (Show)
+  deriving anyclass (Exception)
   deriving (Logging.Loggable) via Logging.ShowLoggable Logging.UserFault CodebaseLoadingError
 
 instance ToServerError CodebaseLoadingError where

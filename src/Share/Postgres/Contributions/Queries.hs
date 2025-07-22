@@ -31,6 +31,7 @@ import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Contribution (Contribution (..), ContributionStatus (..))
 import Share.IDs
 import Share.Notifications.Types (ContributionData (..))
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Comments.Queries (commentsByTicketOrContribution)
 import Share.Postgres.IDs
@@ -43,9 +44,10 @@ import Share.Web.Share.Contributions.API (ContributionTimelineCursor, ListContri
 import Share.Web.Share.Contributions.Types
 
 contributionByProjectIdAndNumber ::
+  (QueryM m) =>
   ProjectId ->
   ContributionNumber ->
-  PG.Transaction e (Maybe Contribution)
+  m (Maybe Contribution)
 contributionByProjectIdAndNumber projectId contributionNumber = do
   PG.query1Row @Contribution
     [PG.sql|
@@ -70,9 +72,10 @@ contributionByProjectIdAndNumber projectId contributionNumber = do
       |]
 
 shareContributionByProjectIdAndNumber ::
+  (QueryM m) =>
   ProjectId ->
   ContributionNumber ->
-  PG.Transaction e (Maybe (ShareContribution UserId))
+  m (Maybe (ShareContribution UserId))
 shareContributionByProjectIdAndNumber projectId contributionNumber = do
   PG.query1Row
     [PG.sql|
@@ -106,13 +109,14 @@ shareContributionByProjectIdAndNumber projectId contributionNumber = do
 -- | Lists all contributions for a project which match the provided filters.
 --   Most recently updated first.
 listContributionsByProjectId ::
+  (QueryM m) =>
   ProjectId ->
   Limit ->
   Maybe (Cursor ListContributionsCursor) ->
   Maybe UserId ->
   Maybe ContributionStatus ->
   Maybe ContributionKindFilter ->
-  PG.Transaction e (Paged ListContributionsCursor (ShareContribution UserId))
+  m (Paged ListContributionsCursor (ShareContribution UserId))
 listContributionsByProjectId projectId limit mayCursor mayUserFilter mayStatusFilter mayKindFilter = do
   let kindFilter = case mayKindFilter of
         Nothing -> "true"
@@ -199,7 +203,7 @@ contributionById contributionId = do
         WHERE contribution.id = #{contributionId}
       |]
 
-contributionStatusChangeEventsByContributionId :: ContributionId -> Maybe UTCTime -> Maybe UTCTime -> PG.Transaction e [StatusChangeEvent UserId]
+contributionStatusChangeEventsByContributionId :: (QueryM m) => ContributionId -> Maybe UTCTime -> Maybe UTCTime -> m [StatusChangeEvent UserId]
 contributionStatusChangeEventsByContributionId contributionId mayFromExclusive untilInclusive = do
   PG.queryListRows
     [PG.sql|
@@ -216,13 +220,14 @@ contributionStatusChangeEventsByContributionId contributionId mayFromExclusive u
       |]
 
 listContributionsByUserId ::
+  (QueryM m) =>
   Maybe UserId ->
   UserId ->
   Limit ->
   Maybe (Cursor (UTCTime, ContributionId)) ->
   Maybe ContributionStatus ->
   Maybe ContributionKindFilter ->
-  PG.Transaction e (Paged (UTCTime, ContributionId) (ShareContribution UserId))
+  m (Paged (UTCTime, ContributionId) (ShareContribution UserId))
 listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter mayKindFilter = do
   let kindFilter = case mayKindFilter of
         Nothing -> "true"
@@ -283,7 +288,7 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
 
 -- | Note: Doesn't perform auth checks, the assumption is that if you already have access to
 -- the branchId you have access to all associated contributions.
-shareContributionsByBranchOf :: Traversal s t BranchId [ShareContribution UserId] -> s -> PG.Transaction e t
+shareContributionsByBranchOf :: (QueryM m) => Traversal s t BranchId [ShareContribution UserId] -> s -> m t
 shareContributionsByBranchOf trav s =
   s
     & asListOf trav %%~ \branchIds -> do
@@ -356,7 +361,7 @@ getPagedShareContributionTimelineByProjectIdAndNumber projectId contributionNumb
     --
     -- We can't just grab 'at most N' elements from each table because it may result in some
     -- events appearing to be missing from the timeline.
-    determineUpperDateBound :: ContributionId -> PG.Transaction e (Maybe UTCTime)
+    determineUpperDateBound :: (QueryM m) => ContributionId -> m (Maybe UTCTime)
     determineUpperDateBound contributionId = do
       PG.query1Col @(UTCTime)
         [PG.sql|
@@ -381,7 +386,7 @@ data NewBCAs = NewBCAs
   }
   deriving (Show)
 
-rebaseContributionsFromMergedBranches :: Set ContributionId -> PG.Transaction e (Set ContributionId)
+rebaseContributionsFromMergedBranches :: (QueryM m) => Set ContributionId -> m (Set ContributionId)
 rebaseContributionsFromMergedBranches mergedContributions = do
   PG.queryListCol @ContributionId
     [PG.sql|
@@ -405,7 +410,7 @@ rebaseContributionsFromMergedBranches mergedContributions = do
     |]
     <&> Set.fromList
 
-contributionStateTokenById :: ContributionId -> PG.Transaction e ContributionStateToken
+contributionStateTokenById :: (QueryM m) => ContributionId -> m ContributionStateToken
 contributionStateTokenById contributionId = do
   PG.queryExpect1Row @ContributionStateToken
     [PG.sql|
@@ -423,7 +428,7 @@ contributionStateTokenById contributionId = do
       |]
 
 -- | Get whether a precomputed namespace diff exists.
-existsPrecomputedNamespaceDiff :: (CodebaseEnv, CausalId) -> (CodebaseEnv, CausalId) -> PG.Transaction e Bool
+existsPrecomputedNamespaceDiff :: (QueryM m) => (CodebaseEnv, CausalId) -> (CodebaseEnv, CausalId) -> m Bool
 existsPrecomputedNamespaceDiff
   (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId)
   (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) = do
@@ -458,10 +463,11 @@ getPrecomputedNamespaceDiff
         |]
 
 savePrecomputedNamespaceDiff ::
+  (QueryM m) =>
   (CodebaseEnv, CausalId) ->
   (CodebaseEnv, CausalId) ->
   Text ->
-  PG.Transaction e ()
+  m ()
 savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, leftCausalId) (CodebaseEnv {codebaseOwner = rightCodebaseUser}, rightCausalId) diff = do
   PG.execute_
     [PG.sql|
@@ -472,7 +478,7 @@ savePrecomputedNamespaceDiff (CodebaseEnv {codebaseOwner = leftCodebaseUser}, le
 
 -- | Get all draft and in-review contribution IDs for contributions which have a source or target branch in the
 -- provided set.
-contributionsRelatedToBranches :: Set BranchId -> PG.Transaction e [ContributionId]
+contributionsRelatedToBranches :: (QueryM m) => Set BranchId -> m [ContributionId]
 contributionsRelatedToBranches branchIds = do
   PG.queryListCol @ContributionId
     [PG.sql|
@@ -487,7 +493,7 @@ contributionsRelatedToBranches branchIds = do
             AND contr.status IN (#{Draft}, #{InReview})
       |]
 
-contributionNotificationData :: ContributionId -> PG.Transaction e ContributionData
+contributionNotificationData :: (QueryM m) => ContributionId -> m ContributionData
 contributionNotificationData contributionId = do
   Contribution {..} <- contributionById contributionId
   pure

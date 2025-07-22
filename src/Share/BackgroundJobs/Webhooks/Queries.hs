@@ -23,7 +23,7 @@ queueWebhook eventId webhookId = do
   Notif.notifyChannel Notif.WebhooksChannel
 
 -- | Claim the oldest unsent webhook with some delivery attempts left.
-getUnsentWebhook :: Transaction e (Maybe (NotificationEventId, NotificationWebhookId))
+getUnsentWebhook :: (QueryA m) => m (Maybe (NotificationEventId, NotificationWebhookId))
 getUnsentWebhook = do
   query1Row @(NotificationEventId, NotificationWebhookId)
     [sql|

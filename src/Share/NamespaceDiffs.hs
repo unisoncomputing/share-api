@@ -54,6 +54,7 @@ import Data.Set.NonEmpty qualified as NESet
 import Servant (err400, err404, err500)
 import Share.Codebase qualified as Codebase
 import Share.Names.Postgres qualified as PGNames
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Definitions.Queries qualified as DefnsQ
 import Share.Postgres.IDs (BranchHash, BranchHashId)
@@ -815,9 +816,10 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           (TypeReferenceId, Decl Symbol Ann)
       ) <- PG.transactionSpan "hydratedDefns3" mempty do
     let hydrateTerms ::
+          (QueryM m) =>
           Codebase.CodebaseEnv ->
           BiMultimap Referent Name ->
-          PG.Transaction e (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
+          m (Map Name (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)))
         hydrateTerms codebase termReferents = PG.transactionSpan "hydrateTerms" mempty do
           let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range termReferents)
           v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed termReferenceIds
@@ -825,9 +827,10 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, ((Reference.idToHash refId), term, typ))
           Codebase.convertTerms2to1Of (traversed . _2) refHashes
         hydrateTypes ::
+          (QueryM m) =>
           Codebase.CodebaseEnv ->
           BiMultimap TypeReference Name ->
-          PG.Transaction e (Map Name (TypeReferenceId, Decl Symbol Ann))
+          m (Map Name (TypeReferenceId, Decl Symbol Ann))
         hydrateTypes codebase typeReferences = PG.transactionSpan "hydrateTypes" mempty do
           let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range typeReferences)
           typeIdsWithComponents <- Align.zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
@@ -836,10 +839,10 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
               let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
                in (refId, v1Decl)
         f ::
+          (QueryM m) =>
           Codebase.CodebaseEnv ->
           Defns (BiMultimap Referent Name) (BiMultimap TypeReference Name) ->
-          PG.Transaction
-            e
+          m
             ( DefnsF
                 (Map Name)
                 (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
