@@ -34,7 +34,6 @@ import Data.Aeson (ToJSON, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (ToJSON (..))
 import Data.Foldable qualified as Foldable
-import Data.Functor.Compose (Compose (..))
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
@@ -524,7 +523,8 @@ namespaceTreeDiffReferents_ =
 namespaceTreeDiffReferences_ :: (Ord reference', Ord typeDiff, Ord renderedType) => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference' renderedTerm renderedType termDiff typeDiff) reference reference'
 namespaceTreeDiffReferences_ = traversed . traversed . diffAtPathReferences_
 
-namespaceTreeDiffTermDiffs_ :: (Ord termDiff', Ord referent, Ord renderedTerm) => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff' typeDiff) termDiff termDiff'
+-- | Traversal over all the term diffs in a `NamespaceTreeDiff`.
+namespaceTreeDiffTermDiffs_ :: (Ord termDiff', Ord referent, Ord renderedTerm) => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff' typeDiff) termDiff termDiff'
 namespaceTreeDiffTermDiffs_ = traversed . traversed . diffAtPathTermDiffs_
 
 witherNamespaceTreeDiffTermDiffs ::
@@ -582,8 +582,8 @@ witherNamespaceTreeTermDiffKinds f =
 namespaceTreeTypeDiffKinds_ :: (Ord renderedType', Ord typeDiff', Ord reference') => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference' renderedTerm renderedType' termDiff typeDiff') (DefinitionDiffKind reference renderedType typeDiff) (DefinitionDiffKind reference' renderedType' typeDiff')
 namespaceTreeTypeDiffKinds_ = traversed . traversed . diffAtPathTypeDiffKinds_
 
-namespaceTreeDiffRenderedTerms_ :: (Ord termDiff, Ord referent, Ord renderedTerm') => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm' renderedType termDiff typeDiff) renderedTerm renderedTerm'
+namespaceTreeDiffRenderedTerms_ :: (Ord termDiff, Ord referent, Ord renderedTerm') => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference renderedTerm' renderedType termDiff typeDiff) renderedTerm renderedTerm'
 namespaceTreeDiffRenderedTerms_ = traversed . traversed . diffAtPathRenderedTerms_
 
-namespaceTreeDiffRenderedTypes_ :: (Ord typeDiff, Ord reference, Ord renderedType') => Traversal (NamespaceTreeDiff referent reference renderedTerm renderedType termDiff typeDiff) (NamespaceTreeDiff referent reference renderedTerm renderedType' termDiff typeDiff) renderedType renderedType'
+namespaceTreeDiffRenderedTypes_ :: (Ord typeDiff, Ord reference, Ord renderedType') => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference renderedTerm renderedType' termDiff typeDiff) renderedType renderedType'
 namespaceTreeDiffRenderedTypes_ = traversed . traversed . diffAtPathRenderedTypes_
