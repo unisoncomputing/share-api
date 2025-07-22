@@ -8,6 +8,14 @@ Set up some shared names so we can do interesting transcript tests
 ```unison
 structural type names.Thing = This | That
 
+type lib.data.Tuple a b = Tuple a b
+
+lib.data.Tuple.fst = cases
+  Tuple a _ -> a
+
+lib.data.Tuple.snd = cases
+  Tuple _ b -> b
+
 names.apples.compoundTerm = 1 + names.apples.two
 names.apples.two = 2
 names.referencesExternal = 10 + names.apples.two + external.two
