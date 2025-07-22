@@ -279,8 +279,7 @@ listNameLookupMounts !_nameLookupReceipt rootBranchHashId =
          in (mountPath, mountedRootBranchHashId)
 
 -- | Larger is better.
-data FuzzySearchScore
-  = FuzzySearchScore
+data FuzzySearchScore = FuzzySearchScore
   { exactLastSegmentMatch :: Bool,
     lastSegmentInfixMatch :: Bool,
     lastSegmentMatchPos :: Int64,
@@ -290,10 +289,14 @@ data FuzzySearchScore
 
 instance Ord FuzzySearchScore where
   compare (FuzzySearchScore exact1 infix1 pos1 len1) (FuzzySearchScore exact2 infix2 pos2 len2) =
-    exact1 `compare` exact2
-      <> infix1 `compare` infix2
-      <> pos1 `compare` pos2
-      <> len1 `compare` len2
+    exact1
+      `compare` exact2
+        <> infix1
+      `compare` infix2
+        <> pos1
+      `compare` pos2
+        <> len1
+      `compare` len2
 
 instance DecodeRow FuzzySearchScore where
   decodeRow =
