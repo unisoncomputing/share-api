@@ -46,7 +46,7 @@ namesPerspectiveForRoot rootBranchHashId = do
 namesPerspectiveForRootAndPath :: forall m. (QueryM m) => BranchHashId -> PathSegments -> m (NamesPerspective m)
 namesPerspectiveForRootAndPath rootBhId pathSegments = do
   rootNP@NamesPerspective {relativePerspective} <- namesPerspectiveForRoot rootBhId
-  NPQ.resolvePathToMount rootNP (mounts rootNP) mempty (relativePerspective <> pathSegments)
+  NPQ.resolvePathToMount rootNP (relativePerspective <> pathSegments)
 
 -- | Build a 'MountTree' for the given root branch hash ID.
 -- The MountTree is a tree of mounted namespace indexes, where each node is a branch hash ID of that namespace,
