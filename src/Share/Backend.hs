@@ -44,6 +44,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Conversions (namespaceStatsPgToV2)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Prelude
+import Share.Utils.Lens (asListOfDeduped)
 import U.Codebase.Branch qualified as V2Branch
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.Causal qualified as V2Causal
@@ -220,7 +221,7 @@ getTypeTag r = do
 displayTermsOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann)) -> s -> m t
 displayTermsOf codebase trav s =
   s
-    & asListOf trav %%~ \refs -> do
+    & asListOfDeduped trav %%~ \refs -> do
       let partitionedRefs =
             refs <&> \case
               ref@(Reference.Builtin _) -> do

@@ -51,6 +51,7 @@ import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
+import Share.Utils.Lens (asListOfDeduped)
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
@@ -268,7 +269,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
           PG.Transaction e t
         hydrateTermsOf codebase trav s = PG.transactionSpan "hydrateTerms" mempty do
           s
-            & asListOf trav %%~ \refs -> do
+            & asListOfDeduped trav %%~ \refs -> do
               v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed refs
               let v2TermsWithRef = zip refs v2Terms
               let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, ((Reference.idToHash refId), term, typ))
