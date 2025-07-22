@@ -55,6 +55,7 @@ import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType)
 import U.Codebase.Referent qualified as V2
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
+import Unison.Debug qualified as Debug
 import Unison.Name (Name)
 import Unison.Referent qualified as V1
 import Unison.Util.Monoid qualified as Monoid
@@ -178,6 +179,7 @@ transitiveDependenciesSql rootBranchHashId =
           |]
 
 newtype NamedReferentResult = NamedReferentResult (NamedRef (PGReferent, (Maybe ConstructorType)))
+  deriving (Show)
 
 instance Hasql.DecodeValue NamedReferentResult where
   decodeValue = Decoders.composite $ do
@@ -199,7 +201,10 @@ termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t 
 termRefsForExactNamesOf np trav s = do
   s
     & asListOf trav %%~ \fqns -> do
+      Debug.debugM Debug.Temp "termRefsForExactNamesOf: np" np
+      Debug.debugM Debug.Temp "termRefsForExactNamesOf: fqns" fqns
       relocatedNames <- relocateReversedNamesToMountsOf np traversed fqns
+      Debug.debugM Debug.Temp "termRefsForExactNamesOf: relocatedNames" relocatedNames
       let (scopedPerspectives, _) = unzip relocatedNames
       let scopedNamesTable =
             ordered relocatedNames
@@ -220,6 +225,7 @@ termRefsForExactNamesOf np trav s = do
           ) FROM scoped_names
           ORDER BY scoped_names.ord ASC
         |]
+      Debug.debugM Debug.Temp "termRefsForExactNamesOf: results" results
       results
         & coerce @[[NamedReferentResult]] @[[(NamedRef (PGReferent, (Maybe ConstructorType)))]]
         & zipWith (\np namedRefs -> over (traversed . namedRefReversedName_) (qualifyNameToPerspective np) namedRefs) scopedPerspectives
@@ -581,14 +587,15 @@ namesPerspectiveForRoot rootBranchHashId = do
 -- | Resolve the root branch hash a given name is located within, and the name prefix the
 -- mount is located at, as well as the name relative to that mount.
 relocateReversedNamesToMountsOf :: forall m s t. (QueryM m) => NamesPerspective m -> Traversal s t ReversedName (NamesPerspective m, ReversedName) -> s -> m t
-relocateReversedNamesToMountsOf rootNamesPerspective@NamesPerspective {mounts, relativePerspective = namespacePrefix} trav s =
+relocateReversedNamesToMountsOf rootNamesPerspective@NamesPerspective {relativePerspective = namespacePrefix} trav s = do
+  mountTree <- currentMountTree rootNamesPerspective
   s
     & asListOf trav
       %%~ \reversedNames -> do
         for reversedNames \(ReversedName revFqn) ->
           do
             let (lastNameSegment :| revNamePath) = revFqn
-            np@NamesPerspective {relativePerspective} <- resolvePathToMount rootNamesPerspective mounts [] (namespacePrefix <> PathSegments (reverse revNamePath))
+            np@NamesPerspective {relativePerspective} <- resolvePathToMount rootNamesPerspective mountTree [] (namespacePrefix <> PathSegments (reverse revNamePath))
             let (PathSegments relativePath) = relativePerspective
             pure
               ( np {relativePerspective = mempty},

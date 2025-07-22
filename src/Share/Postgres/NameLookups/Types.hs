@@ -10,6 +10,7 @@ module Share.Postgres.NameLookups.Types
     NamespaceText,
     NameLookupReceipt (..),
     MountTree,
+    currentMountTree,
     qualifyNameToPerspective,
     perspectiveRootBranchHashId,
     perspectiveCurrentMountPathPrefix,
@@ -39,6 +40,7 @@ import Data.Foldable qualified as Foldable
 import Data.Functor.Compose (Compose (..))
 import Data.List.Extra qualified as List
 import Data.List.NonEmpty.Extra qualified as NonEmpty
+import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as Decoders
 import Hasql.Interpolate qualified as Hasql
@@ -99,6 +101,26 @@ instance Show (NamesPerspective m) where
   show NamesPerspective {currentMount, relativePerspective} =
     "(NamesPerspective {currentMount = " <> show currentMount <> ", relativePerspective = " <> show (relativePerspective) <> "})"
 
+-- | Get the mount tree we're currently mounted at.
+currentMountTree :: forall m. (HasCallStack, Monad m) => NamesPerspective m -> m (MountTree m)
+currentMountTree NamesPerspective {mounts = mounts@(rootBranchHashId Cofree.:< _), currentMount = (mountPath, _)} =
+  go mountPath mounts
+  where
+    go :: [PathSegments] -> MountTree m -> m (MountTree m)
+    go [] tree = pure tree
+    go (x : xs) (_ Cofree.:< (Compose mountMap)) =
+      case Map.lookup x mountMap of
+        Nothing ->
+          error $
+            "Mount path "
+              <> show x
+              <> " not found in root branch hash ID"
+              <> show rootBranchHashId
+              <> " with current mount "
+              <> show mountPath
+        Just nextMountsM ->
+          nextMountsM >>= go xs
+
 perspectiveRootBranchHashId :: NamesPerspective m -> BranchHashId
 perspectiveRootBranchHashId NamesPerspective {mounts = root Cofree.:< _} = root
 
@@ -110,9 +132,10 @@ perspectiveCurrentMountPathPrefix NamesPerspective {currentMount = (mountPaths, 
 
 qualifyNameToPerspective :: NamesPerspective m -> ReversedName -> ReversedName
 qualifyNameToPerspective np =
-  let prefix = perspectiveCurrentMountPathPrefix np
+  let mountPrefix = perspectiveCurrentMountPathPrefix np
+      relativePrefix = relativePerspective np
    in -- This func is often partially applied, so the closure avoids re-computing the prefix over and over.
-      \reversedName -> prefixReversedName prefix reversedName
+      \reversedName -> prefixReversedName (mountPrefix <> relativePrefix) reversedName
 
 data NameWithSuffix = NameWithSuffix
   { reversedName :: ReversedName,

@@ -77,6 +77,7 @@ nameSearchForPerspective namesPerspective =
     hqTermSearch :: HQ'.HashQualified Name -> m (Set V1Referent.Referent)
     hqTermSearch hqName = do
       Debug.debugM Debug.Temp "namesearch:hqTermSearch: searching for hqName:" hqName
+      Debug.debugM Debug.Temp "namesearch:hqTermSearch: perspective" namesPerspective
       case hqName of
         HQ'.NameOnly name -> do
           namedRefs <- NLOps.termRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
