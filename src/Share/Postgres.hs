@@ -103,8 +103,6 @@ import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Hasql
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Hasql
-import OpenTelemetry.Context qualified as Trace
-import OpenTelemetry.Context.ThreadLocal qualified as Trace
 import OpenTelemetry.Trace qualified as Trace
 import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Safe (headMay)
@@ -678,27 +676,12 @@ transactionSpan name spanTags action = do
   tags <- askTags
   let (_mayFuncName, callSiteInfo) = spanInfo
   let spanAttributes = spanTags <> callSiteInfo <> HM.fromList (Map.toList (Trace.toAttribute <$> tags))
-
-  let spanArguments =
-        Trace.SpanArguments
-          { kind = Trace.Server,
-            attributes = spanAttributes,
-            links = [],
-            startTime = Nothing -- This will be set automatically
-          }
-
-  tracer <- getTracer
-  (s, parent) <- transactionUnsafeIO do
-    ctx <- Trace.getContext
-    s <- Trace.createSpanWithoutCallStack tracer ctx name spanArguments
-    Trace.adjustContext (Trace.insertSpan s)
-    let parent = Trace.lookupSpan ctx
-    pure (s, parent)
-  action
-  transactionUnsafeIO $ do
-    Trace.endSpan s Nothing
-    Trace.adjustContext $ \ctx -> maybe (Trace.removeSpan ctx) (`Trace.insertSpan` ctx) parent
-  action
+  Trace.withSpan' name spanAttributes \span -> do
+    r <- action
+    numQueriesVar <- asks (numQueriesVar . Env.ctx)
+    nq <- liftIO $ UnliftIO.readTVarIO numQueriesVar
+    Trace.addAttribute span "numQueries" (Trace.toAttribute nq)
+    pure r
 
 -- | Helper to treat composite types as Values, useful when decoding arrays of rows.
 --
