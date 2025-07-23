@@ -39,18 +39,15 @@ docsForDefinitionNamesOf ::
   Traversal s t Name [TermReference] ->
   s ->
   m t
-docsForDefinitionNamesOf codebase namesPerpsective trav s = do
+docsForDefinitionNamesOf codebase namesPerspective trav s = do
   s
     & asListOf trav %%~ \names -> do
-      let potentialDocNames = names <&> \name -> [name, name Cons.:> NameSegment "doc"]
-      -- TODO: Batchify this
-      refs <-
-        for
-          potentialDocNames
-          ( foldMapM \name ->
-              NS.termRefsByHQName namesPerpsective (HQ'.NameOnly name)
-          )
-      filterForDocs (Set.toList <$> refs)
+      let potentialDocNames =
+            names <&> \name ->
+              [name, name Cons.:> NameSegment "doc"]
+                <&> HQ'.NameOnly
+      refs <- NS.termRefsByHQNamesOf namesPerspective (traversed . traversed) potentialDocNames
+      filterForDocs (Set.toList <$> (fold <$> refs))
   where
     filterForDocs :: [[V1Referent.Referent]] -> m [[TermReference]]
     filterForDocs refs = do

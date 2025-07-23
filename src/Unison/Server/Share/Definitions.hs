@@ -218,8 +218,7 @@ termDisplayObjectsByNameOf ::
 termDisplayObjectsByNameOf codebase namesPerspective trav s = do
   s
     & asListOfDeduped trav %%~ \names -> do
-      -- TODO: batchify this:
-      allRefs <- traverse (PGNameSearch.termRefsByHQName namesPerspective) (HQ'.NameOnly <$> names)
+      allRefs <- PGNameSearch.termRefsByHQNamesOf namesPerspective traversed (HQ'.NameOnly <$> names)
       let partitionedRefs =
             allRefs <&> \refs ->
               do
@@ -274,7 +273,8 @@ termDisplayObjectLabeledDependencies termRef displayObject = do
 
 typeDisplayObjectByName :: (QueryM m) => Codebase.CodebaseEnv -> NamesPerspective m -> Name -> m (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann)))
 typeDisplayObjectByName codebase namesPerspective name = runMaybeT do
-  refs <- lift $ PGNameSearch.typeRefsByHQName namesPerspective (HQ'.NameOnly name)
+  -- TODO: batchify this properly
+  refs <- lift $ PGNameSearch.typeRefsByHQNamesOf namesPerspective id (HQ'.NameOnly name)
   ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
   fmap (ref,) . lift $ Backend.displayType codebase ref
 
