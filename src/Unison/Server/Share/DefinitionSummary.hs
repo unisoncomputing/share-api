@@ -82,7 +82,7 @@ termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayW
   pped <- PPEPostgres.ppedForReferences namesPerspective deps
   let formattedTypeSig = Backend.formatSuffixedType pped width typeSig
   let summary = mkSummary termReference formattedTypeSig
-  tag <- Backend.getTermTag referent typeSig
+  tag <- Backend.getTermTagsOf id (referent, typeSig)
   pure $ TermSummary displayName shortHash summary tag
   where
     width = mayDefaultWidth mayWidth

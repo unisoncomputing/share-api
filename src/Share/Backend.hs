@@ -9,7 +9,7 @@ module Share.Backend
     displayType,
     evalDocRef,
     lsBranch,
-    getTermTag,
+    getTermTagsOf,
     getTypeTag,
     typeDeclHeader,
 
@@ -129,22 +129,22 @@ mkTermDefinition codebase termPPED width r docs tm = do
   -- TODO: batchify this properly
   termType <- Codebase.expectTypesOfTermsOf codebase id r
   let bn = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE termPPED) width (Referent.Ref r)
-  tag <- getTermTag referent termType
-  mk termType bn tag
+  -- TODO: batchify this properly
+  tag <- getTermTagsOf id (referent, termType)
+  pure $ mk termType bn tag
   where
     fqnTermPPE = PPED.unsuffixifiedPPE termPPED
-    mk termType bn tag = do
+    mk termType bn tag =
       -- We don't ever display individual constructors (they're shown as part of their
       -- type), so term references are never constructors.
       let referent = Referent.Ref r
-      pure $
-        TermDefinition
-          (HQ'.toText <$> PPE.allTermNames fqnTermPPE referent)
-          bn
-          tag
-          (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tm)
-          (Backend.formatSuffixedType termPPED width termType)
-          docs
+       in TermDefinition
+            (HQ'.toText <$> PPE.allTermNames fqnTermPPE referent)
+            bn
+            tag
+            (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tm)
+            (Backend.formatSuffixedType termPPED width termType)
+            docs
 
 termListEntry ::
   (PG.QueryM m) =>
@@ -153,7 +153,7 @@ termListEntry ::
   m (Backend.TermEntry Symbol Ann)
 termListEntry typ (ExactName nameSegment ref) = do
   -- TODO: batchify this properly
-  tag <- getTermTag ref typ
+  tag <- getTermTagsOf id (ref, typ)
   pure $
     Backend.TermEntry
       { termEntryReferent = ref,
@@ -182,30 +182,34 @@ typeListEntry (ExactName nameSegment ref) = do
         typeEntryHash = SH.shortenTo Codebase.shorthashLength $ Reference.toShortHash ref
       }
 
-getTermTag ::
+getTermTagsOf ::
   (PG.QueryM m, Var v) =>
-  V2Referent.Referent ->
-  Type v Ann ->
-  m TermTag
-getTermTag r termType = do
-  -- A term is a doc if its type conforms to the `Doc` type.
-  let isDoc =
-        Typechecker.isEqual termType (Type.ref mempty Decls.docRef)
-          || Typechecker.isEqual termType (Type.ref mempty DD.doc2Ref)
-  -- A term is a test if it has the type [test.Result]
-  let isTest = Typechecker.isEqual termType (Decls.testResultListType mempty)
-  constructorType <- case r of
-    V2Referent.Ref {} -> pure Nothing
-    V2Referent.Con ref _ ->
-      -- TODO: batchify this properly
-      Just <$> Codebase.expectDeclKindsOf id ref
-  pure $
-    if
-      | isDoc -> Doc
-      | isTest -> Test
-      | Just CT.Effect <- constructorType -> Constructor Ability
-      | Just CT.Data <- constructorType -> Constructor Data
-      | otherwise -> Plain
+  Traversal s t (V2Referent.Referent, Type v Ann) TermTag ->
+  s ->
+  m t
+getTermTagsOf trav s = do
+  s
+    & asListOfDeduped trav %%~ \inputs -> do
+      let withConstructorRefs =
+            inputs <&> \(ref, termType) -> case ref of
+              (V2Referent.Ref _ref) -> (termType, Nothing)
+              (V2Referent.Con ref _) -> (termType, Just ref)
+      Codebase.expectDeclKindsOf (traversed . _2 . _Just) withConstructorRefs
+        <&> fmap computeTag
+  where
+    -- A term is a doc if its type conforms to the `Doc` type.
+    isDoc termType =
+      Typechecker.isEqual termType (Type.ref mempty Decls.docRef)
+        || Typechecker.isEqual termType (Type.ref mempty DD.doc2Ref)
+    -- A term is a test if it has the type [test.Result]
+    isTest termType = Typechecker.isEqual termType (Decls.testResultListType mempty)
+    computeTag (termType, mayConstructorType) =
+      if
+        | isDoc termType -> Doc
+        | isTest termType -> Test
+        | Just CT.Effect <- mayConstructorType -> Constructor Ability
+        | Just CT.Data <- mayConstructorType -> Constructor Data
+        | otherwise -> Plain
 
 getTypeTag ::
   (PG.QueryM m) =>

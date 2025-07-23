@@ -144,6 +144,7 @@ computeUpdatedDefinitionDiffs ::
     NamespaceDiffError
     (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
 computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromPerspective) (toCodebase, toRuntime, toPerspective) diff0 = PG.transactionSpan "computeUpdatedDefinitionDiffs" mempty $ do
+  -- TODO: We can clean this up, and can cut down on the number of traversals.
   diff1 <- PG.transactionSpan "termDiffs" mempty $ do
     diff0
       & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %~ (\name -> (name, name))
