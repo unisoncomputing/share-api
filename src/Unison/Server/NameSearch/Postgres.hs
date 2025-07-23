@@ -1,12 +1,17 @@
 module Unison.Server.NameSearch.Postgres
   ( NameSearch (..),
     nameSearchForPerspective,
+
+    -- * Searches are also exported A'la carte.
+    termRefsByHQName,
+    typeRefsByHQName,
   )
 where
 
 import Control.Lens
 import Data.Set qualified as Set
 import Share.Codebase qualified as Codebase
+import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops as NLOps
@@ -39,7 +44,7 @@ nameSearchForPerspective namesPerspective =
         { lookupNames = lookupNamesForTypes,
           lookupRelativeHQRefs' = \searchType hqname ->
             case searchType of
-              ExactName -> hqTypeSearch . fmap stripMountPathPrefix $ hqname
+              ExactName -> typeRefsByHQName namesPerspective . fmap stripMountPathPrefix $ hqname
               -- We can implement this, but it's not currently used anywhere on share.
               IncludeSuffixes -> error "Suffix search not yet implemented on Share",
           makeResult = \hqname r names -> pure $ SR.typeResult hqname r names,
@@ -50,7 +55,7 @@ nameSearchForPerspective namesPerspective =
         { lookupNames = lookupNamesForTerms,
           lookupRelativeHQRefs' = \searchType hqname ->
             case searchType of
-              ExactName -> hqTermSearch . fmap stripMountPathPrefix $ hqname
+              ExactName -> termRefsByHQName namesPerspective . fmap stripMountPathPrefix $ hqname
               -- We can implement this, but it's not currently used anywhere on share.
               IncludeSuffixes -> error "Suffix search not yet implemented on Share",
           makeResult = \hqname r names -> pure $ SR.termResult hqname r names,
@@ -73,68 +78,68 @@ nameSearchForPerspective namesPerspective =
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Referent.toShortHash ref))
         & Set.fromList
         & pure
-    -- Search the codebase for matches to the given hq name.
-    hqTermSearch :: HQ'.HashQualified Name -> m (Set V1Referent.Referent)
-    hqTermSearch hqName = do
-      case hqName of
-        HQ'.NameOnly name -> do
-          namedRefs <- NLOps.termRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
-          namedRefs
-            & fmap (\(NamedRef {ref}) -> ref)
-            & Set.fromList
-            & pure
-        HQ'.HashQualified name sh -> do
-          let fqn = fullyQualifyName name
-          termRefsV1 <-
-            Set.toList <$> Codebase.termReferentsByShortHash sh
-          termRefsPG <- catMaybes <$> CV.referents1ToPGOf traversed termRefsV1
-          names <-
-            NLOps.termNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) NoSuffixify traversed termRefsPG
-              <&> (fmap . fmap) fst -- Only need the fqn
-          zip termRefsV1 names
-            & mapMaybe
-              ( \(termRef, matches) ->
-                  -- Return a valid ref if at least one match was found.
-                  if any (\n -> ReversedName (coerce @(NonEmpty NameSegment) @(NonEmpty Text) $ Name.reverseSegments fqn) == n) matches
-                    then (Just termRef)
-                    else Nothing
-              )
-            & Set.fromList
-            & pure
-
-    -- Search the codebase for matches to the given hq name.
-    hqTypeSearch :: HQ'.HashQualified Name -> m (Set V1.Reference)
-    hqTypeSearch hqName = do
-      case hqName of
-        HQ'.NameOnly name -> do
-          namedRefs <- NLOps.typeRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
-          namedRefs
-            & fmap (\NamedRef {ref} -> ref)
-            & Set.fromList
-            & pure
-        HQ'.HashQualified name sh -> do
-          let fqn = fullyQualifyName name
-          typeRefs <- Set.toList <$> Codebase.typeReferencesByShortHash sh
-          typeRefsPG <- catMaybes <$> CV.references1ToPGOf traversed typeRefs
-          names <-
-            NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) NoSuffixify traversed typeRefsPG
-              <&> (fmap . fmap) fst -- Only need the fqn
-          zip typeRefs names
-            & mapMaybe
-              ( \(typeRef, matches) ->
-                  -- Return a valid ref if at least one match was found.
-                  if any (\n -> ReversedName (coerce @(NonEmpty NameSegment) @(NonEmpty Text) $ Name.reverseSegments fqn) == n) matches
-                    then Just typeRef
-                    else Nothing
-              )
-            & Set.fromList
-            & pure
 
     reversedSegmentsToName :: ReversedName -> Name
     reversedSegmentsToName = Name.fromReverseSegments . coerce
 
-    -- Fully qualify a name by prepending the current namespace perspective's path
-    fullyQualifyName :: Name -> Name
-    fullyQualifyName name =
-      -- TODO: Is it actually correct to do this?
-      fromMaybe name $ Path.maybePrefixName (Path.AbsolutePath' $ Path.Absolute (Path.fromList . (fmap NameSegment) . into @[Text] $ perspectiveCurrentMountPathPrefix namesPerspective)) name
+-- Fully qualify a name by prepending the current namespace perspective's path
+fullyQualifyName :: NamesPerspective m -> Name -> Name
+fullyQualifyName namesPerspective name =
+  fromMaybe name $ Path.maybePrefixName (Path.AbsolutePath' $ Path.Absolute (Path.fromList . (fmap NameSegment) . into @[Text] $ perspectiveCurrentMountPathPrefix namesPerspective)) name
+
+-- | Search the codebase for terms which exactly match the hq name.
+termRefsByHQName :: (QueryM m) => NamesPerspective m -> HQ'.HashQualified Name -> m (Set V1Referent.Referent)
+termRefsByHQName namesPerspective hqName = do
+  case hqName of
+    HQ'.NameOnly name -> do
+      namedRefs <- NLOps.termRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
+      namedRefs
+        & fmap (\(NamedRef {ref}) -> ref)
+        & Set.fromList
+        & pure
+    HQ'.HashQualified name sh -> do
+      let fqn = fullyQualifyName namesPerspective name
+      termRefsV1 <-
+        Set.toList <$> Codebase.termReferentsByShortHash sh
+      termRefsPG <- catMaybes <$> CV.referents1ToPGOf traversed termRefsV1
+      names <-
+        NLOps.termNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) NoSuffixify traversed termRefsPG
+          <&> (fmap . fmap) fst -- Only need the fqn
+      zip termRefsV1 names
+        & mapMaybe
+          ( \(termRef, matches) ->
+              -- Return a valid ref if at least one match was found.
+              if any (\n -> ReversedName (coerce @(NonEmpty NameSegment) @(NonEmpty Text) $ Name.reverseSegments fqn) == n) matches
+                then (Just termRef)
+                else Nothing
+          )
+        & Set.fromList
+        & pure
+
+-- | Search the codebase for types which exactly match the hq name.
+typeRefsByHQName :: (QueryM m) => NamesPerspective m -> HQ'.HashQualified Name -> m (Set V1.Reference)
+typeRefsByHQName namesPerspective hqName = do
+  case hqName of
+    HQ'.NameOnly name -> do
+      namedRefs <- NLOps.typeRefsForExactNamesOf namesPerspective id (coerce $ Name.reverseSegments name)
+      namedRefs
+        & fmap (\NamedRef {ref} -> ref)
+        & Set.fromList
+        & pure
+    HQ'.HashQualified name sh -> do
+      let fqn = fullyQualifyName namesPerspective name
+      typeRefs <- Set.toList <$> Codebase.typeReferencesByShortHash sh
+      typeRefsPG <- catMaybes <$> CV.references1ToPGOf traversed typeRefs
+      names <-
+        NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective (Just . coerce $ Name.reverseSegments name) NoSuffixify traversed typeRefsPG
+          <&> (fmap . fmap) fst -- Only need the fqn
+      zip typeRefs names
+        & mapMaybe
+          ( \(typeRef, matches) ->
+              -- Return a valid ref if at least one match was found.
+              if any (\n -> ReversedName (coerce @(NonEmpty NameSegment) @(NonEmpty Text) $ Name.reverseSegments fqn) == n) matches
+                then Just typeRef
+                else Nothing
+          )
+        & Set.fromList
+        & pure

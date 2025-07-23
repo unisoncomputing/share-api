@@ -9,6 +9,7 @@ import Share.Codebase (loadTypesOfTermsOf)
 import Share.Codebase qualified as Codebase
 import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
+import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
 import Share.Web.Errors (SomeServerError)
 import Unison.HashQualifiedPrime qualified as HQ'
@@ -20,6 +21,7 @@ import Unison.Referent qualified as V1Referent
 import Unison.Runtime.IOSource qualified as DD
 import Unison.Server.NameSearch (NameSearch (..), lookupRelativeHQRefs')
 import Unison.Server.NameSearch qualified as NameSearch
+import Unison.Server.NameSearch.Postgres qualified as NS
 import Unison.Sqlite qualified as Sqlite
 import Unison.Symbol (Symbol)
 import Unison.Type qualified as Type
@@ -33,19 +35,20 @@ docsForDefinitionNamesOf ::
   forall m s t.
   (QueryM m) =>
   Codebase.CodebaseEnv ->
-  NameSearch m ->
+  NamesPerspective m ->
   Traversal s t Name [TermReference] ->
   s ->
   m t
-docsForDefinitionNamesOf codebase (NameSearch {termSearch}) trav s = do
+docsForDefinitionNamesOf codebase namesPerpsective trav s = do
   s
     & asListOf trav %%~ \names -> do
       let potentialDocNames = names <&> \name -> [name, name Cons.:> NameSegment "doc"]
+      -- TODO: Batchify this
       refs <-
         for
           potentialDocNames
           ( foldMapM \name ->
-              lookupRelativeHQRefs' termSearch ExactName (HQ'.NameOnly name)
+              NS.termRefsByHQName namesPerpsective (HQ'.NameOnly name)
           )
       filterForDocs (Set.toList <$> refs)
   where
