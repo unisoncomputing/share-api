@@ -88,6 +88,7 @@ import Share.Prelude
 import Share.Project (Project (..))
 import Share.Utils.Caching (Cached)
 import Share.Utils.Caching qualified as Caching
+import Share.Utils.Lens (asListOfDeduped)
 import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
@@ -240,7 +241,7 @@ convertTerms2to1Of trav s = do
 
 expectTermsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
 expectTermsByRefIdsOf codebase trav s = do
-  s & asListOf trav \refIds -> do
+  s & asListOfDeduped trav \refIds -> do
     termsAndTypes <- loadTermAndTypeByRefIdsOf codebase traversed refIds
     for (zip refIds termsAndTypes) \case
       (refId, Nothing) -> unrecoverableError (MissingTerm refId)

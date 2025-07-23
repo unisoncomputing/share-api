@@ -5,7 +5,7 @@ module Share.Backend
     mkTermDefinition,
     typeListEntry,
     termListEntry,
-    displayTerm,
+    displayTermsOf,
     displayType,
     evalDocRef,
     lsBranch,
@@ -44,6 +44,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Conversions (namespaceStatsPgToV2)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Prelude
+import Share.Utils.Lens (asListOfDeduped)
 import U.Codebase.Branch qualified as V2Branch
 import U.Codebase.Causal qualified as Causal
 import U.Codebase.Causal qualified as V2Causal
@@ -217,21 +218,29 @@ getTypeTag r = do
     Just CT.Data -> Data
     Just CT.Effect -> Ability
 
-displayTerm :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann))
-displayTerm codebase = \case
-  ref@(Reference.Builtin _) -> do
-    pure case Map.lookup ref B.termRefTypes of
-      -- This would be better as a `MissingBuiltin` constructor; `MissingObject` is kind of being
-      -- misused here. Is `MissingObject` even possible anymore?
-      Nothing -> MissingObject $ Reference.toShortHash ref
-      Just typ -> BuiltinObject (mempty <$ typ)
-  Reference.DerivedId rid -> do
-    -- TODO: batchify this properly
-    (term, ty) <- Codebase.expectTermsByRefIdsOf codebase id rid
-    pure case term of
-      V1Term.Ann' _ _ -> UserObject term
-      -- manually annotate if necessary
-      _ -> UserObject (V1Term.ann (ABT.annotation term) term ty)
+displayTermsOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann)) -> s -> m t
+displayTermsOf codebase trav s =
+  s
+    & asListOfDeduped trav %%~ \refs -> do
+      let partitionedRefs =
+            refs <&> \case
+              ref@(Reference.Builtin _) -> do
+                case Map.lookup ref B.termRefTypes of
+                  -- This would be better as a `MissingBuiltin` constructor; `MissingObject` is kind of being
+                  -- misused here. Is `MissingObject` even possible anymore?
+                  Nothing -> Left $ MissingObject $ Reference.toShortHash ref
+                  Just typ -> Left $ BuiltinObject (mempty <$ typ)
+              Reference.DerivedId rid -> Right rid
+      r <- Codebase.expectTermsByRefIdsOf codebase (traversed . _Right) partitionedRefs
+      r
+        & traversed
+          %~ \case
+            Right (term, ty) -> case term of
+              V1Term.Ann' _ _ -> UserObject term
+              -- manually annotate if necessary
+              _ -> UserObject (V1Term.ann (ABT.annotation term) term ty)
+            Left obj -> obj
+        & pure
 
 displayType :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObject () (DD.Decl Symbol Ann))
 displayType codebase = \case

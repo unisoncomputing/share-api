@@ -50,6 +50,7 @@ library
       Share.Monitoring
       Share.Names.Postgres
       Share.NamespaceDiffs
+      Share.NamespaceDiffs.Types
       Share.Notifications.API
       Share.Notifications.Impl
       Share.Notifications.Ops

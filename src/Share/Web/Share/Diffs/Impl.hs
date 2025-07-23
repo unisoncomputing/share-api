@@ -24,6 +24,7 @@ import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Aeson (PreEncoded (PreEncoded))
+import Share.Utils.Lens (asListOfDeduped)
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
@@ -103,7 +104,7 @@ tryComputeCausalDiff !authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newCo
     diff0
       & asListOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
         %%~ \refs -> do
-          termTags <- Codebase.termTagsByReferentsOf (\f -> traverse (f . referent1to2)) refs
+          termTags <- Codebase.termTagsByReferentsOf traversed (referent1to2 <$> refs)
           pure $ zip termTags (refs <&> Referent.toShortHash)
   -- Resolve the type references to tag + hash
   diff2 <-
@@ -143,14 +144,16 @@ computeUpdatedDefinitionDiffs ::
     NamespaceDiffError
     (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
 computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromPerspective) (toCodebase, toRuntime, toPerspective) diff0 = PG.transactionSpan "computeUpdatedDefinitionDiffs" mempty $ do
-  diff1 <- PG.transactionSpan "termDiffs" mempty $ do
-    NamespaceDiffs.witherNamespaceTreeDiffTermDiffs
-      (\name -> diffTerms authZReceipt (fromCodebase, fromRuntime, fromPerspective, name) (toCodebase, toRuntime, toPerspective, name))
-      diff0
+  diff1 <-
+    diff0
+      & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %~ (\name -> (name, name))
+      & expectTermDefinitionsOf fromCodebase fromRuntime fromPerspective (NamespaceDiffs.namespaceTreeDiffTermDiffs_ . _1)
+      >>= expectTermDefinitionsOf toCodebase toRuntime toPerspective (NamespaceDiffs.namespaceTreeDiffTermDiffs_ . _2)
+      >>= NamespaceDiffs.witherNamespaceTreeDiffTermDiffs (pure . diffTermsPure)
   diff2 <- PG.transactionSpan "termDiffKinds" mempty $ do
     NamespaceDiffs.witherNamespaceTreeTermDiffKinds
       -- TODO: Batchify this properly
-      (fmap throwAwayConstructorDiffs . renderDiffKind getTermDefinition)
+      (fmap throwAwayConstructorDiffs . renderDiffKind (\(codebase, rt, np, name) -> getTermDefinitionsOf codebase rt np id name))
       diff1
   diff3 <- PG.transactionSpan "typeDiffs" mempty $ do
     NamespaceDiffs.namespaceTreeDiffTypeDiffs_
@@ -163,6 +166,19 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromPers
   pure (NamespaceDiffs.compressNameTree diff4)
   where
     notFound name t = MissingEntityError $ EntityMissing (ErrorID "definition-not-found") (t <> ": Definition not found: " <> Name.toText name)
+
+    -- Splits the diff kind into the parts from the 'from' and 'to' sections of a diff.
+    --
+    -- Left = From, Right = To
+    _partitionDiffKind :: DefinitionDiffKind r rendered diff -> DefinitionDiffKind r (Either rendered rendered) diff
+    _partitionDiffKind = \case
+      Added r name -> Added r (Right name)
+      NewAlias r existingNames name -> NewAlias r existingNames (Right name)
+      Removed r name -> Removed r (Left name)
+      Updated oldRef newRef diff -> Updated oldRef newRef diff
+      Propagated oldRef newRef diff -> Propagated oldRef newRef diff
+      RenamedTo r names name -> RenamedTo r names (Right name)
+      RenamedFrom r names name -> RenamedFrom r names (Left name)
 
     renderDiffKind ::
       forall diff r x.
@@ -195,14 +211,16 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromPers
       RenamedFrom _ _ (Left _) -> Nothing
       RenamedTo _ _ (Left _) -> Nothing
 
+-- | Note: Only use this if you're diffing a single definition, otherwise batch operations are
+-- more efficient.
 diffTerms ::
   AuthZReceipt ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime old IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
   PG.Transaction NamespaceDiffError (Maybe TermDefinitionDiff)
-diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
-  oldTerm <- getTermDefinition old `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
-  newTerm <- getTermDefinition new `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
+diffTerms !_authZReceipt (oldCodebase, oldRt, oldNp, oldName) (newCodebase, newRt, newNp, newName) = do
+  oldTerm <- getTermDefinitionsOf oldCodebase oldRt oldNp id oldName `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
+  newTerm <- getTermDefinitionsOf newCodebase newRt newNp id newName `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
   case (oldTerm, newTerm) of
     (Right oldTerm, Right newTerm) -> do
       let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
@@ -211,18 +229,43 @@ diffTerms !_authZReceipt old@(_, _, _, oldName) new@(_, _, _, newName) = do
     -- Just dropping them from the diff for now
     _ -> pure Nothing
 
--- | Get the term definition for a given name. Note: This assumes all names are within the
--- same names perspective.
---
--- TODO: batchify this
-getTermDefinition :: (PG.QueryM m) => (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, NamesPerspective m, Name) -> m (Maybe (Either ConstructorReference TermDefinition))
-getTermDefinition (codebase, rt, namesPerspective, name) = do
-  let ppedBuilder deps = PPED.biasTo [name] <$> PPEPostgres.ppedForReferences namesPerspective deps
-  let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  Definitions.termDefinitionByName codebase ppedBuilder nameSearch renderWidth rt name
+diffTermsPure ::
+  (Either a2 TermDefinition, Either a3 TermDefinition) -> (Maybe TermDefinitionDiff)
+diffTermsPure = \case
+  (Right oldTerm, Right newTerm) ->
+    let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
+     in (Just TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject})
+  -- For later: decide how to render a constructor-to-term or constructor-to-constructor diff
+  -- Just dropping them from the diff for now
+  _ -> Nothing
+
+-- | Get definitions for a batch of terms within a codebase and perspective.
+-- NOTE: The names should already be properly scoped to the names perspective.
+getTermDefinitionsOf :: (PG.QueryM m) => Codebase.CodebaseEnv -> Codebase.CodebaseRuntime sym IO -> NamesPerspective m -> Traversal s t Name (Maybe (Either ConstructorReference TermDefinition)) -> s -> m t
+getTermDefinitionsOf codebase rt namesPerspective trav s = do
+  s
+    & asListOfDeduped trav %%~ \names -> do
+      Definitions.termDefinitionByNamesOf codebase ppedBuilder nameSearch renderWidth rt traversed names
   where
+    ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
+    nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
     renderWidth :: Width
     renderWidth = 80
+
+expectTermDefinitionsOf ::
+  Codebase.CodebaseEnv ->
+  Codebase.CodebaseRuntime sym IO ->
+  NamesPerspective (PG.Transaction NamespaceDiffError) ->
+  Traversal s t Name (Either ConstructorReference TermDefinition) ->
+  s ->
+  PG.Transaction NamespaceDiffError t
+expectTermDefinitionsOf codebase rt np trav s =
+  s
+    & asListOf trav %%~ \names -> do
+      results <- getTermDefinitionsOf codebase rt np traversed names
+      for (zip names results) \case
+        (name, Nothing) -> throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("Term not found: " <> Name.toText name <> ", in names perspective: " <> tShow np))
+        (_, Just termDef) -> pure termDef
 
 diffTypes ::
   AuthZReceipt ->

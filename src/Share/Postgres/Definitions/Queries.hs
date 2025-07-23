@@ -16,7 +16,7 @@ module Share.Postgres.Definitions.Queries
     loadDeclKindsOf,
     loadDeclsByRefIdsOf,
     expectDeclsByRefIdsOf,
-    loadDeclByTypeComponentElementAndTypeId,
+    loadDeclByTypeComponentElementAndTypeIdsOf,
     expectTypeComponentElementsAndTypeIdsOf,
     loadCachedEvalResult,
     saveCachedEvalResult,
@@ -57,6 +57,7 @@ import Share.Postgres.Definitions.Types qualified as DefnTypes
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Prelude
+import Share.Utils.Lens (asListOfDeduped)
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (OrdBy, RawBytes (..), ordered)
 import Share.Web.Errors (ErrorID (..), InternalServerError (InternalServerError), ToServerError (..))
@@ -162,7 +163,7 @@ expectTermIdsByRefIdsOf trav s =
 
 expectTermsByRefIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
 expectTermsByRefIdsOf codebase trav s = do
-  s & asListOf trav \termRefs -> do
+  s & asListOfDeduped trav \termRefs -> do
     termIds <- expectTermIdsByRefIdsOf traversed termRefs
     expectTermsByIdsOf codebase traversed termIds
 
@@ -243,7 +244,7 @@ loadTermsByIdsOf ::
   s ->
   m t
 loadTermsByIdsOf codebase trav s = do
-  s & asListOf trav \termIds -> do
+  s & asListOfDeduped trav \termIds -> do
     zipWith combine
       <$> (loadTermComponentElementByTermIdsOf codebase traversed termIds)
       <*> (termLocalReferencesOf traversed termIds)
@@ -267,7 +268,7 @@ loadTermsByRefIdsOf ::
   s ->
   m t
 loadTermsByRefIdsOf codebase trav s = do
-  s & asListOf trav \termRefs -> do
+  s & asListOfDeduped trav \termRefs -> do
     termIds <- loadTermIdsByRefIdsOf traversed termRefs
     terms <- loadTermsByIdsOf codebase (traversed . _Just) termIds
     -- Flatten the nested maybes.
@@ -446,8 +447,8 @@ loadDeclsByRefIdsOf codebase trav s = do
           let localIds = LocalIds.LocalIds {textLookup = Vector.fromList texts, defnLookup = Vector.fromList hashes}
            in s2cDecl localIds decl
 
-loadDeclByTypeComponentElementAndTypeId :: (QueryA m) => Traversal s t (TypeComponentElement, TypeId) (V2.Decl Symbol) -> s -> m t
-loadDeclByTypeComponentElementAndTypeId trav s =
+loadDeclByTypeComponentElementAndTypeIdsOf :: (QueryA m) => Traversal s t (TypeComponentElement, TypeId) (V2.Decl Symbol) -> s -> m t
+loadDeclByTypeComponentElementAndTypeIdsOf trav s =
   s
     & asListOf trav %%~ \ids -> do
       typeLocalReferencesOf (traversed . _2) ids
@@ -480,7 +481,7 @@ loadTypeComponentElementsAndTypeIdsOf (CodebaseEnv codebaseUser) trav s = do
 expectTypeComponentElementsAndTypeIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TypeReferenceId (TypeComponentElement, TypeId) -> s -> m t
 expectTypeComponentElementsAndTypeIdsOf codebase trav s =
   s
-    & asListOf trav %%~ \refs -> do
+    & asListOfDeduped trav %%~ \refs -> do
       unrecoverableEitherMap
         ( \elems -> for (zip refs elems) \case
             (refId, Nothing) -> Left (expectedTypeError $ Right refId)
