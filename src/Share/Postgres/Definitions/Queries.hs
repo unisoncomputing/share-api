@@ -43,6 +43,7 @@ where
 import Control.Lens
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy.Char8 qualified as BL
+import Data.List.Extra (nubOrd)
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
@@ -1156,22 +1157,29 @@ termTagsByReferentsOf trav s = do
                 SELECT t.ord, component_hashes.id, t.component_index, t.constructor_index
                   FROM ^{toTable refsTable} AS t(ord, component_hash, component_index, constructor_index)
                   JOIN component_hashes ON t.component_hash = component_hashes.base32
-              ) -- If we have a special-cased known tag, use that first, then if it's a constructor, build the tag from the kind, otherwise it's just a 'plain' term.
-                SELECT COALESCE(known_tag.tag :: text, constructor_type.kind :: text, 'plain' :: text)
-                  FROM refs_table
-                    -- Each ref should match either a term or a type.
-                    -- First we try to find a matching term
-                    LEFT JOIN terms term ON (refs_table.constructor_index IS NULL AND refs_table.component_hash_id = term.component_hash_id AND refs_table.component_index = term.component_index)
-                    -- Now we get data about its type if it was a constructor instead.
-                    -- We don't actually need to care which constructor it is, we just need
-                    -- the kind of the type.
-                    LEFT JOIN types constructor_type ON (refs_table.constructor_index IS NOT NULL AND refs_table.component_hash_id = constructor_type.component_hash_id AND refs_table.component_index = constructor_type.component_index)
-                    -- We special case specific types like docs and tests.
-                    -- If we have a match in the known component hashes, we can use that tag.
-                    LEFT JOIN known_type_hashes known_tag
-                                ON  known_tag.component_hash_id = COALESCE(term.term_type_component_hash_id, constructor_type.component_hash_id)
-                                    AND known_tag.component_index = COALESCE(term.term_type_component_index, constructor_type.component_index)
-                    ORDER BY refs_table.ord ASC
+              ), constructor_tags(ord, tag) AS (
+                -- If we have a special-cased known tag, use that first, then if it's a constructor, build the tag from the kind
+                  SELECT refs_table.ord, COALESCE(known_tag_constructor.tag :: text, constructor_type.kind :: text) AS tag
+                    FROM refs_table
+                      JOIN types constructor_type ON (refs_table.constructor_index IS NOT NULL AND refs_table.component_hash_id = constructor_type.component_hash_id AND refs_table.component_index = constructor_type.component_index)
+                      LEFT JOIN known_type_hashes known_tag_constructor
+                                  ON  known_tag_constructor.component_hash_id = constructor_type.component_hash_id
+                                  AND known_tag_constructor.component_index = constructor_type.component_index
+              ), term_tags(ord, tag) AS (
+                -- If we have a special-cased known tag, use that first, otherwise it's just a 'plain' term.
+                  SELECT refs_table.ord, COALESCE(known_tag_term.tag :: text, 'plain' :: text) AS tag
+                    FROM refs_table
+                      JOIN terms term ON (refs_table.constructor_index IS NULL AND refs_table.component_hash_id = term.component_hash_id AND refs_table.component_index = term.component_index)
+                      LEFT JOIN known_type_hashes known_tag_term
+                                  ON  known_tag_term.component_hash_id = term.term_type_component_hash_id
+                                  AND known_tag_term.component_index = term.term_type_component_index
+              )
+                 SELECT tag FROM (
+                    SELECT ord, tag FROM constructor_tags
+                    UNION ALL
+                    SELECT ord, tag FROM term_tags
+                 ) AS tags
+                    ORDER BY tags.ord ASC
             |]
                   if length results /= length refsTable
                     then error "termTagsByReferentsOf: Missing expected term tag"
