@@ -47,21 +47,23 @@ docsForDefinitionNamesOf codebase (NameSearch {termSearch}) trav s = do
           ( foldMapM \name ->
               lookupRelativeHQRefs' termSearch ExactName (HQ'.NameOnly name)
           )
-      filterForDocsOf (traversed . traversed) (fmap Set.toList refs)
-        <&> fmap catMaybes
+      filterForDocs (Set.toList <$> refs)
   where
-    filterForDocsOf :: forall s t. Traversal s t V1Referent.Referent (Maybe TermReference) -> s -> m t
-    filterForDocsOf trav s = do
-      s
-        & asListOf trav %%~ \refs -> do
-          let references =
-                refs & mapMaybe \case
-                  V1Referent.Ref r -> Just r
-                  _ -> Nothing
-          termsWithTypes <- zip references <$> Codebase.loadTypesOfTermsOf codebase traversed references
-          pure $
-            termsWithTypes <&> \(r, mayType) -> do
-              typ <- mayType
-              if Typechecker.isSubtype typ (Type.ref mempty DD.doc2Ref)
-                then Just r
-                else Nothing
+    filterForDocs :: [[V1Referent.Referent]] -> m [[TermReference]]
+    filterForDocs refs = do
+      let references =
+            refs <&> mapMaybe \case
+              V1Referent.Ref r -> Just r
+              _ -> Nothing
+      termsWithTypes <- zipWith zip references <$> Codebase.loadTypesOfTermsOf codebase (traversed . traversed) references
+      pure $
+        termsWithTypes
+          <&> fmap
+            ( \(r, mayType) ->
+                do
+                  typ <- mayType
+                  if Typechecker.isSubtype typ (Type.ref mempty DD.doc2Ref)
+                    then Just r
+                    else Nothing
+            )
+          <&> catMaybes
