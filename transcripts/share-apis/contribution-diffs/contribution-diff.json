@@ -1250,25 +1250,7 @@
                     ],
                     "tag": "UserObject"
                   },
-                  "termDocs": [
-                    [
-                      "aDoc",
-                      "#areni4s9liksvfs3923a4ub81qpu37f964fqhbq832artpff8vm1em45ic0k2hlkv4nn08u712ibvjo9b4fl5u19o65g9medo7645i8",
-                      {
-                        "contents": [
-                          {
-                            "contents": "Test",
-                            "tag": "Word"
-                          },
-                          {
-                            "contents": "Doc",
-                            "tag": "Word"
-                          }
-                        ],
-                        "tag": "Paragraph"
-                      }
-                    ]
-                  ],
+                  "termDocs": [],
                   "termNames": [
                     "aDoc"
                   ]
