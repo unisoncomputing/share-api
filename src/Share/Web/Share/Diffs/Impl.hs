@@ -144,17 +144,22 @@ computeUpdatedDefinitionDiffs ::
     NamespaceDiffError
     (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
 computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromPerspective) (toCodebase, toRuntime, toPerspective) diff0 = PG.transactionSpan "computeUpdatedDefinitionDiffs" mempty $ do
-  diff1 <-
+  -- TODO: We can clean this up, and can cut down on the number of traversals.
+  diff1 <- PG.transactionSpan "termDiffs" mempty $ do
     diff0
       & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %~ (\name -> (name, name))
       & expectTermDefinitionsOf fromCodebase fromRuntime fromPerspective (NamespaceDiffs.namespaceTreeDiffTermDiffs_ . _1)
       >>= expectTermDefinitionsOf toCodebase toRuntime toPerspective (NamespaceDiffs.namespaceTreeDiffTermDiffs_ . _2)
       >>= NamespaceDiffs.witherNamespaceTreeDiffTermDiffs (pure . diffTermsPure)
+
   diff2 <- PG.transactionSpan "termDiffKinds" mempty $ do
-    NamespaceDiffs.witherNamespaceTreeTermDiffKinds
-      -- TODO: Batchify this properly
-      (fmap throwAwayConstructorDiffs . renderDiffKind (\(codebase, rt, np, name) -> getTermDefinitionsOf codebase rt np id name))
-      diff1
+    diff1
+      & NamespaceDiffs.namespaceTreeTermDiffKinds_ %~ partitionDiffKind
+      & expectTermDefinitionsOf fromCodebase fromRuntime fromPerspective (NamespaceDiffs.namespaceTreeDiffRenderedTerms_ . _Left)
+      >>= expectTermDefinitionsOf toCodebase toRuntime toPerspective (NamespaceDiffs.namespaceTreeDiffRenderedTerms_ . _Right)
+      <&> NamespaceDiffs.namespaceTreeDiffRenderedTerms_ %~ either id id
+      >>= NamespaceDiffs.witherNamespaceTreeTermDiffKinds (pure . throwAwayConstructorDiffs)
+
   diff3 <- PG.transactionSpan "typeDiffs" mempty $ do
     NamespaceDiffs.namespaceTreeDiffTypeDiffs_
       (\name -> diffTypes authZReceipt (fromCodebase, fromRuntime, fromPerspective, name) (toCodebase, toRuntime, toPerspective, name))
@@ -170,15 +175,15 @@ computeUpdatedDefinitionDiffs !authZReceipt (fromCodebase, fromRuntime, fromPers
     -- Splits the diff kind into the parts from the 'from' and 'to' sections of a diff.
     --
     -- Left = From, Right = To
-    _partitionDiffKind :: DefinitionDiffKind r rendered diff -> DefinitionDiffKind r (Either rendered rendered) diff
-    _partitionDiffKind = \case
+    partitionDiffKind :: DefinitionDiffKind r rendered diff -> DefinitionDiffKind r (Either rendered rendered) diff
+    partitionDiffKind = \case
       Added r name -> Added r (Right name)
       NewAlias r existingNames name -> NewAlias r existingNames (Right name)
       Removed r name -> Removed r (Left name)
       Updated oldRef newRef diff -> Updated oldRef newRef diff
       Propagated oldRef newRef diff -> Propagated oldRef newRef diff
-      RenamedTo r names name -> RenamedTo r names (Right name)
-      RenamedFrom r names name -> RenamedFrom r names (Left name)
+      RenamedTo r names name -> RenamedTo r names (Left name)
+      RenamedFrom r names name -> RenamedFrom r names (Right name)
 
     renderDiffKind ::
       forall diff r x.

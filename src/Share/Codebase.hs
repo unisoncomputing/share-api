@@ -273,7 +273,7 @@ loadTypesOfTermsOf codebase trav s =
 expectTypesOfTermsOf :: (QueryM m) => CodebaseEnv -> Traversal s t V2.Reference (V1.Type Symbol Ann) -> s -> m t
 expectTypesOfTermsOf codebase trav s = do
   s
-    & asListOf trav %%~ \refs -> do
+    & asListOfDeduped trav %%~ \refs -> do
       results <- loadTypesOfTermsOf codebase traversed refs
       for (zip refs results) \case
         (r, Nothing) -> unrecoverableError (MissingTypeForTerm r)

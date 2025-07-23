@@ -2,15 +2,15 @@
 
 module Share.Backend
   ( mkTypeDefinition,
-    mkTermDefinition,
+    mkTermDefinitionsOf,
     typeListEntry,
     termListEntry,
     displayTermsOf,
     displayType,
     evalDocRef,
     lsBranch,
-    getTermTag,
-    getTypeTag,
+    getTermTagsOf,
+    getTypeTagsOf,
     typeDeclHeader,
 
     -- * Re-exports, mostly code with no SQLite dependencies
@@ -35,6 +35,7 @@ module Share.Backend
 where
 
 import Control.Lens hiding ((??))
+import Data.List (unzip4, zipWith5)
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Share.Codebase qualified as Codebase
@@ -102,7 +103,8 @@ mkTypeDefinition ::
   m TypeDefinition
 mkTypeDefinition pped width r docs tp = do
   let bn = Backend.bestNameForType @Symbol (PPED.suffixifiedPPE pped) width r
-  tag <- getTypeTag r
+  -- TODO: batchify this properly
+  tag <- getTypeTagsOf id r
   pure $
     TypeDefinition
       (HQ'.toText <$> PPE.allTypeNames fqnPPE r)
@@ -113,38 +115,47 @@ mkTypeDefinition pped width r docs tp = do
   where
     fqnPPE = PPED.unsuffixifiedPPE pped
 
-mkTermDefinition ::
+mkTermDefinitionsOf ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
   PPED.PrettyPrintEnvDecl ->
   Width ->
-  Reference ->
-  [(HashQualifiedName, UnisonHash, Doc.Doc)] ->
-  DisplayObject
-    (AnnotatedText (UST.Element Reference))
-    (AnnotatedText (UST.Element Reference)) ->
-  m TermDefinition
-mkTermDefinition codebase termPPED width r docs tm = do
-  let referent = V2Referent.Ref r
-  -- TODO: batchify this properly
-  termType <- Codebase.expectTypesOfTermsOf codebase id r
-  let bn = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE termPPED) width (Referent.Ref r)
-  tag <- getTermTag referent termType
-  mk termType bn tag
+  Traversal
+    s
+    t
+    ( Maybe Name.Name,
+      Reference,
+      [(HashQualifiedName, UnisonHash, Doc.Doc)],
+      DisplayObject
+        (AnnotatedText (UST.Element Reference))
+        (AnnotatedText (UST.Element Reference))
+    )
+    TermDefinition ->
+  s ->
+  m t
+mkTermDefinitionsOf codebase pped width trav s = do
+  s
+    & asListOf trav %%~ \inputs -> do
+      let (_names, refs, _docs, _dispObs) = unzip4 inputs
+      termTypes <- Codebase.expectTypesOfTermsOf codebase traversed refs
+      let biasedPPEDs = inputs <&> \(mayName, _, _, _) -> maybe pped (\name -> PPED.biasTo [name] pped) mayName
+      let getBestName ppe r = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE ppe) width (Referent.Ref r)
+      let bestNames = zipWith getBestName biasedPPEDs refs
+      tags <- getTermTagsOf traversed (zipWith (\ref typ -> (V2Referent.Ref ref, typ)) refs termTypes)
+      pure $ zipWith5 mk inputs termTypes bestNames tags biasedPPEDs
   where
-    fqnTermPPE = PPED.unsuffixifiedPPE termPPED
-    mk termType bn tag = do
-      -- We don't ever display individual constructors (they're shown as part of their
-      -- type), so term references are never constructors.
-      let referent = Referent.Ref r
-      pure $
-        TermDefinition
-          (HQ'.toText <$> PPE.allTermNames fqnTermPPE referent)
-          bn
-          tag
-          (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tm)
-          (Backend.formatSuffixedType termPPED width termType)
-          docs
+    mk (_, ref, docs, tmDispObj) termType bn tag termPPED =
+      let fqnTermPPE = PPED.unsuffixifiedPPE termPPED
+          -- We don't ever display individual constructors (they're shown as part of their
+          -- type), so term references are never constructors.
+          referent = Referent.Ref ref
+       in TermDefinition
+            (HQ'.toText <$> PPE.allTermNames fqnTermPPE referent)
+            bn
+            tag
+            (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tmDispObj)
+            (Backend.formatSuffixedType termPPED width termType)
+            docs
 
 termListEntry ::
   (PG.QueryM m) =>
@@ -153,7 +164,7 @@ termListEntry ::
   m (Backend.TermEntry Symbol Ann)
 termListEntry typ (ExactName nameSegment ref) = do
   -- TODO: batchify this properly
-  tag <- getTermTag ref typ
+  tag <- getTermTagsOf id (ref, typ)
   pure $
     Backend.TermEntry
       { termEntryReferent = ref,
@@ -171,7 +182,7 @@ typeListEntry ::
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
   -- TODO: batchify this properly
-  tag <- getTypeTag ref
+  tag <- getTypeTagsOf id ref
   pure $
     Backend.TypeEntry
       { typeEntryReference = ref,
@@ -182,41 +193,47 @@ typeListEntry (ExactName nameSegment ref) = do
         typeEntryHash = SH.shortenTo Codebase.shorthashLength $ Reference.toShortHash ref
       }
 
-getTermTag ::
+getTermTagsOf ::
   (PG.QueryM m, Var v) =>
-  V2Referent.Referent ->
-  Type v Ann ->
-  m TermTag
-getTermTag r termType = do
-  -- A term is a doc if its type conforms to the `Doc` type.
-  let isDoc =
-        Typechecker.isEqual termType (Type.ref mempty Decls.docRef)
-          || Typechecker.isEqual termType (Type.ref mempty DD.doc2Ref)
-  -- A term is a test if it has the type [test.Result]
-  let isTest = Typechecker.isEqual termType (Decls.testResultListType mempty)
-  constructorType <- case r of
-    V2Referent.Ref {} -> pure Nothing
-    V2Referent.Con ref _ ->
-      -- TODO: batchify this properly
-      Just <$> Codebase.expectDeclKindsOf id ref
-  pure $
-    if
-      | isDoc -> Doc
-      | isTest -> Test
-      | Just CT.Effect <- constructorType -> Constructor Ability
-      | Just CT.Data <- constructorType -> Constructor Data
-      | otherwise -> Plain
+  Traversal s t (V2Referent.Referent, Type v Ann) TermTag ->
+  s ->
+  m t
+getTermTagsOf trav s = do
+  s
+    & asListOfDeduped trav %%~ \inputs -> do
+      let withConstructorRefs =
+            inputs <&> \(ref, termType) -> case ref of
+              (V2Referent.Ref _ref) -> (termType, Nothing)
+              (V2Referent.Con ref _) -> (termType, Just ref)
+      Codebase.expectDeclKindsOf (traversed . _2 . _Just) withConstructorRefs
+        <&> fmap computeTag
+  where
+    -- A term is a doc if its type conforms to the `Doc` type.
+    isDoc termType =
+      Typechecker.isEqual termType (Type.ref mempty Decls.docRef)
+        || Typechecker.isEqual termType (Type.ref mempty DD.doc2Ref)
+    -- A term is a test if it has the type [test.Result]
+    isTest termType = Typechecker.isEqual termType (Decls.testResultListType mempty)
+    computeTag (termType, mayConstructorType) =
+      if
+        | isDoc termType -> Doc
+        | isTest termType -> Test
+        | Just CT.Effect <- mayConstructorType -> Constructor Ability
+        | Just CT.Data <- mayConstructorType -> Constructor Data
+        | otherwise -> Plain
 
-getTypeTag ::
+getTypeTagsOf ::
   (PG.QueryM m) =>
-  Reference.TypeReference ->
-  m TypeTag
-getTypeTag r = do
-  -- TODO: batchify this properly
-  Codebase.loadDeclKindsOf id r <&> \case
-    Nothing -> Data
-    Just CT.Data -> Data
-    Just CT.Effect -> Ability
+  Traversal s t Reference.TypeReference TypeTag ->
+  s ->
+  m t
+getTypeTagsOf trav s = do
+  s
+    & asListOf trav %%~ \refs -> do
+      Codebase.loadDeclKindsOf traversed refs <&> fmap \case
+        Nothing -> Data
+        Just CT.Data -> Data
+        Just CT.Effect -> Ability
 
 displayTermsOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann)) -> s -> m t
 displayTermsOf codebase trav s =

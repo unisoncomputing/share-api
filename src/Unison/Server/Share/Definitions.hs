@@ -143,7 +143,7 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
           let referent = Referent.Ref reference
           let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
           docs <- maybe (pure []) docResults (HQ.toName hqTermName)
-          Backend.mkTermDefinition codebase termAndTypePPED width reference docs trm
+          Backend.mkTermDefinitionsOf codebase termAndTypePPED width id (Nothing, reference, docs, trm)
       let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
           renderedDisplayTypes = Map.mapKeys Reference.toText typeDefinitions
           renderedMisses = fmap HQ.toText misses
@@ -264,13 +264,8 @@ termDefinitionByNamesOf codebase ppedBuilder nameSearch width rt includeDocs tra
                 -- TODO: properly batchify this
                 for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
               else pure (names $> [])
-          let syntaxDOs =
-                Backend.termsToSyntaxOf (Suffixify False) width pped traversed (zip refs dos)
-                  <&> snd
-          -- TODO: properly batchify this
-          for (zip4 names refs allRenderedDocs syntaxDOs) \(name, ref, renderedDocs, syntaxDO) -> do
-            let biasedPPED = PPED.biasTo [name] pped
-            Backend.mkTermDefinition codebase biasedPPED width ref renderedDocs syntaxDO
+          let syntaxDOs = snd <$> Backend.termsToSyntaxOf (Suffixify False) width pped traversed (zip refs dos)
+          Backend.mkTermDefinitionsOf codebase pped width traversed (zip4 (Just <$> names) refs allRenderedDocs syntaxDOs)
 
 termDisplayObjectLabeledDependencies :: TermReference -> DisplayObject (Type Symbol Ann) (Term Symbol Ann) -> (Set LD.LabeledDependency)
 termDisplayObjectLabeledDependencies termRef displayObject = do

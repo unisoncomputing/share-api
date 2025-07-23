@@ -187,7 +187,7 @@ expectShareTermComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
       `whenNothingM` do
         unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentHashId)
   second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) ->
-    (,bytes) <$> termLocalReferences termId
+    (,bytes) <$> termLocalReferencesOf id termId
   where
     checkElements :: [(TermId, Maybe LocalTermBytes)] -> Maybe (NonEmpty (TermId, LocalTermBytes))
     checkElements rows =
@@ -304,12 +304,6 @@ loadTermComponentElementByTermIdsOf CodebaseEnv {codebaseOwner} trav s = do
           ORDER BY term_ids.ord ASC
       |]
 
-termLocalReferences :: (QueryA m) => TermId -> m (Share.LocalIds Text ComponentHash)
-termLocalReferences termId =
-  Share.LocalIds
-    <$> termLocalTextReferences termId
-    <*> termLocalComponentReferences termId
-
 termLocalReferencesOf ::
   (QueryA m, HasCallStack) =>
   Traversal s t TermId (Share.LocalIds Text ComponentHash) ->
@@ -320,17 +314,6 @@ termLocalReferencesOf trav s = do
     zipWith Share.LocalIds
       <$> termLocalTextReferencesOf traversed termIds
       <*> termLocalComponentReferencesOf traversed termIds
-
-termLocalTextReferences :: (QueryA m) => TermId -> m [Text]
-termLocalTextReferences termId =
-  queryListCol
-    [sql|
-      SELECT text
-        FROM term_local_text_references
-          JOIN text ON term_local_text_references.text_id = text.id
-        WHERE term_id = #{termId}
-          ORDER BY local_index ASC
-      |]
 
 termLocalTextReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [Text] -> s -> m t
 termLocalTextReferencesOf trav s = do
@@ -351,17 +334,6 @@ termLocalTextReferencesOf trav s = do
         ) AS texts
         FROM term_ids
         ORDER BY term_ids.ord ASC
-      |]
-
-termLocalComponentReferences :: (QueryA m) => TermId -> m [ComponentHash]
-termLocalComponentReferences termId =
-  queryListCol
-    [sql|
-      SELECT component_hashes.base32
-        FROM term_local_component_references
-          JOIN component_hashes ON term_local_component_references.component_hash_id = component_hashes.id
-        WHERE term_id = #{termId}
-          ORDER BY local_index ASC
       |]
 
 termLocalComponentReferencesOf :: (QueryA m, HasCallStack) => Traversal s t TermId [ComponentHash] -> s -> m t
