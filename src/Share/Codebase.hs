@@ -101,6 +101,7 @@ import U.Codebase.Decl qualified as V2
 import U.Codebase.Reference qualified as V2
 import U.Codebase.Referent qualified as V2
 import U.Codebase.Sqlite.Symbol qualified as V2
+import U.Codebase.Term qualified as TermV2
 import U.Codebase.Term qualified as V2.Term
 import Unison.Builtin qualified as Builtin
 import Unison.Builtin qualified as Builtins
@@ -229,15 +230,29 @@ loadTermAndTypeByRefIdsOf codebase trav s = do
               (h, Just (v2Term, v2Type)) -> Just (h, v2Term, v2Type)
       convertTerms2to1Of (traversed . _Just) termInfo
 
-convertTerms2to1Of :: (PG.QueryM m) => Traversal s t (Hash, V2.Term.Term V2.Symbol, V2.Term.Type V2.Symbol) (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
+convertTerms2to1Of :: (PG.QueryM m, HasCallStack) => Traversal s t (Hash, V2.Term.Term V2.Symbol, V2.Term.Type V2.Symbol) (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
 convertTerms2to1Of trav s = do
   s
     & asListOf trav %%~ \termInfos -> do
-      for termInfos \(h, v2Term, v2Type) -> do
-        -- TODO: We need to batchify both term2to1 and have it accept a batched 'expectDeclKind' so we're not making a separate query for every decl!
-        v1Term <- Cv.term2to1 h (expectDeclKindsOf id) v2Term
-        let v1Type = Cv.ttype2to1 v2Type
-        pure (v1Term, v1Type)
+      let (hashes, v2Terms, v2Types) = unzip3 termInfos
+      -- Grab all referenced types in any of the terms, we need to know what
+      -- kind of types they are so we can load constructor types.
+      --
+      -- TODO: Ideally we'd either NOT need to convert to v1 at all, or we can get the
+      -- required dependency type references from the DB via local component references rather than doing a manual dependency
+      -- collection.
+      let (_termRefs, Set.toList -> typeRefs, _termLink, _typeLink) = foldMap TermV2.dependencies v2Terms
+      -- Batch up ALL the type references and get all their kinds at once.
+      typeToCTKindMap <- expectDeclKindsOf traversed (Map.fromList (zip typeRefs typeRefs))
+      let lookupCT :: V2.Term.TypeRef -> Identity CT.ConstructorType
+          lookupCT ref = pure $ Map.findWithDefault (error $ "Needed constructor type for ref: " <> show ref) ref typeToCTKindMap
+      let v1Terms :: [V1.Term Symbol Ann]
+          v1Terms =
+            zipWith (\h tm -> Cv.term2to1 h lookupCT tm) hashes v2Terms
+              & coerce @[Identity (V1.Term Symbol Ann)] @[V1.Term Symbol Ann]
+      let v1Types :: [V1.Type Symbol Ann]
+          v1Types = Cv.ttype2to1 <$> v2Types
+      pure (zip v1Terms v1Types)
 
 expectTermsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
 expectTermsByRefIdsOf codebase trav s = do
