@@ -238,10 +238,11 @@ termDefinitionByNamesOf ::
   NameSearch m ->
   Width ->
   CodebaseRuntime sym IO ->
+  Bool ->
   Traversal s t Name (Maybe (Either ConstructorReference TermDefinition)) ->
   s ->
   m t
-termDefinitionByNamesOf codebase ppedBuilder nameSearch width rt trav s = do
+termDefinitionByNamesOf codebase ppedBuilder nameSearch width rt includeDocs trav s = do
   s
     & asListOfDeduped trav %%~ \allNames -> do
       constructorsAndRendered <- termDisplayObjectsByNameOf codebase nameSearch traversed allNames
@@ -256,9 +257,13 @@ termDefinitionByNamesOf codebase ppedBuilder nameSearch width rt trav s = do
           let allDeps = refsDO & foldMap \(_name, ref, displayObject) -> termDisplayObjectLabeledDependencies ref displayObject
           pped <- ppedBuilder allDeps
           let (names, refs, dos) = unzip3 refsDO
-          allDocRefs <- Docs.docsForDefinitionNamesOf codebase nameSearch traversed names
-          -- TODO: properly batchify this
-          allRenderedDocs <- for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
+          allRenderedDocs <-
+            if includeDocs
+              then do
+                allDocRefs <- Docs.docsForDefinitionNamesOf codebase nameSearch traversed names
+                -- TODO: properly batchify this
+                for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
+              else pure (names $> [])
           let syntaxDOs =
                 Backend.termsToSyntaxOf (Suffixify False) width pped traversed (zip refs dos)
                   <&> snd
@@ -288,15 +293,20 @@ typeDefinitionByName ::
   NameSearch m ->
   Width ->
   CodebaseRuntime s IO ->
+  Bool ->
   Name ->
   m (Maybe TypeDefinition)
-typeDefinitionByName codebase ppedBuilder nameSearch width rt name = runMaybeT $ do
+typeDefinitionByName codebase ppedBuilder nameSearch width rt includeDocs name = runMaybeT $ do
   (ref, displayObject) <- MaybeT $ typeDisplayObjectByName codebase nameSearch name
   let deps = typeDisplayObjectLabeledDependencies ref displayObject
   pped <- lift $ ppedBuilder deps
   let biasedPPED = PPED.biasTo [name] pped
-  docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase nameSearch id name
-  renderedDocs <- lift $ renderDocRefs codebase ppedBuilder width rt docRefs
+  renderedDocs <-
+    if includeDocs
+      then do
+        docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase nameSearch id name
+        lift $ renderDocRefs codebase ppedBuilder width rt docRefs
+      else pure []
   let (_ref, syntaxDO) = Backend.typesToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
   lift $ Backend.mkTypeDefinition biasedPPED width ref renderedDocs syntaxDO
 

@@ -245,8 +245,9 @@ getTermDefinitionsOf :: (PG.QueryM m) => Codebase.CodebaseEnv -> Codebase.Codeba
 getTermDefinitionsOf codebase rt namesPerspective trav s = do
   s
     & asListOfDeduped trav %%~ \names -> do
-      Definitions.termDefinitionByNamesOf codebase ppedBuilder nameSearch renderWidth rt traversed names
+      Definitions.termDefinitionByNamesOf codebase ppedBuilder nameSearch renderWidth rt includeDocs traversed names
   where
+    includeDocs = False
     ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
     nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
     renderWidth :: Width
@@ -290,7 +291,8 @@ getTypeDefinition :: (PG.QueryM m) => (Codebase.CodebaseEnv, Codebase.CodebaseRu
 getTypeDefinition (codebase, rt, namesPerspective, name) = do
   let ppedBuilder deps = (PPED.biasTo [name]) <$> (PPEPostgres.ppedForReferences namesPerspective deps)
   let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  Definitions.typeDefinitionByName codebase ppedBuilder nameSearch renderWidth rt name
+  Definitions.typeDefinitionByName codebase ppedBuilder nameSearch renderWidth rt includeDocs name
   where
+    includeDocs = False
     renderWidth :: Width
     renderWidth = 80
