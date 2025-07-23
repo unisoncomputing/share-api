@@ -43,7 +43,6 @@ where
 import Control.Lens
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy.Char8 qualified as BL
-import Data.List.Extra (nubOrd)
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
