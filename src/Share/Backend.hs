@@ -10,7 +10,7 @@ module Share.Backend
     evalDocRef,
     lsBranch,
     getTermTagsOf,
-    getTypeTag,
+    getTypeTagsOf,
     typeDeclHeader,
 
     -- * Re-exports, mostly code with no SQLite dependencies
@@ -102,7 +102,8 @@ mkTypeDefinition ::
   m TypeDefinition
 mkTypeDefinition pped width r docs tp = do
   let bn = Backend.bestNameForType @Symbol (PPED.suffixifiedPPE pped) width r
-  tag <- getTypeTag r
+  -- TODO: batchify this properly
+  tag <- getTypeTagsOf id r
   pure $
     TypeDefinition
       (HQ'.toText <$> PPE.allTypeNames fqnPPE r)
@@ -171,7 +172,7 @@ typeListEntry ::
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
   -- TODO: batchify this properly
-  tag <- getTypeTag ref
+  tag <- getTypeTagsOf id ref
   pure $
     Backend.TypeEntry
       { typeEntryReference = ref,
@@ -211,16 +212,18 @@ getTermTagsOf trav s = do
         | Just CT.Data <- mayConstructorType -> Constructor Data
         | otherwise -> Plain
 
-getTypeTag ::
+getTypeTagsOf ::
   (PG.QueryM m) =>
-  Reference.TypeReference ->
-  m TypeTag
-getTypeTag r = do
-  -- TODO: batchify this properly
-  Codebase.loadDeclKindsOf id r <&> \case
-    Nothing -> Data
-    Just CT.Data -> Data
-    Just CT.Effect -> Ability
+  Traversal s t Reference.TypeReference TypeTag ->
+  s ->
+  m t
+getTypeTagsOf trav s = do
+  s
+    & asListOf trav %%~ \refs -> do
+      Codebase.loadDeclKindsOf traversed refs <&> fmap \case
+        Nothing -> Data
+        Just CT.Data -> Data
+        Just CT.Effect -> Ability
 
 displayTermsOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann)) -> s -> m t
 displayTermsOf codebase trav s =
