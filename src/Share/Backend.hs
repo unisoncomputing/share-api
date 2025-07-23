@@ -2,7 +2,7 @@
 
 module Share.Backend
   ( mkTypeDefinition,
-    mkTermDefinition,
+    mkTermDefinitionsOf,
     typeListEntry,
     termListEntry,
     displayTermsOf,
@@ -35,6 +35,7 @@ module Share.Backend
 where
 
 import Control.Lens hiding ((??))
+import Data.List (unzip4, zipWith5)
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Share.Codebase qualified as Codebase
@@ -114,36 +115,45 @@ mkTypeDefinition pped width r docs tp = do
   where
     fqnPPE = PPED.unsuffixifiedPPE pped
 
-mkTermDefinition ::
+mkTermDefinitionsOf ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
   PPED.PrettyPrintEnvDecl ->
   Width ->
-  Reference ->
-  [(HashQualifiedName, UnisonHash, Doc.Doc)] ->
-  DisplayObject
-    (AnnotatedText (UST.Element Reference))
-    (AnnotatedText (UST.Element Reference)) ->
-  m TermDefinition
-mkTermDefinition codebase termPPED width r docs tm = do
-  let referent = V2Referent.Ref r
-  -- TODO: batchify this properly
-  termType <- Codebase.expectTypesOfTermsOf codebase id r
-  let bn = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE termPPED) width (Referent.Ref r)
-  -- TODO: batchify this properly
-  tag <- getTermTagsOf id (referent, termType)
-  pure $ mk termType bn tag
+  Traversal
+    s
+    t
+    ( Maybe Name.Name,
+      Reference,
+      [(HashQualifiedName, UnisonHash, Doc.Doc)],
+      DisplayObject
+        (AnnotatedText (UST.Element Reference))
+        (AnnotatedText (UST.Element Reference))
+    )
+    TermDefinition ->
+  s ->
+  m t
+mkTermDefinitionsOf codebase pped width trav s = do
+  s
+    & asListOf trav %%~ \inputs -> do
+      let (_names, refs, _docs, _dispObs) = unzip4 inputs
+      termTypes <- Codebase.expectTypesOfTermsOf codebase traversed refs
+      let biasedPPEDs = inputs <&> \(mayName, _, _, _) -> maybe pped (\name -> PPED.biasTo [name] pped) mayName
+      let getBestName ppe r = Backend.bestNameForTerm @Symbol (PPED.suffixifiedPPE ppe) width (Referent.Ref r)
+      let bestNames = zipWith getBestName biasedPPEDs refs
+      tags <- getTermTagsOf traversed (zipWith (\ref typ -> (V2Referent.Ref ref, typ)) refs termTypes)
+      pure $ zipWith5 mk inputs termTypes bestNames tags biasedPPEDs
   where
-    fqnTermPPE = PPED.unsuffixifiedPPE termPPED
-    mk termType bn tag =
-      -- We don't ever display individual constructors (they're shown as part of their
-      -- type), so term references are never constructors.
-      let referent = Referent.Ref r
+    mk (_, ref, docs, tmDispObj) termType bn tag termPPED =
+      let fqnTermPPE = PPED.unsuffixifiedPPE termPPED
+          -- We don't ever display individual constructors (they're shown as part of their
+          -- type), so term references are never constructors.
+          referent = Referent.Ref ref
        in TermDefinition
             (HQ'.toText <$> PPE.allTermNames fqnTermPPE referent)
             bn
             tag
-            (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tm)
+            (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tmDispObj)
             (Backend.formatSuffixedType termPPED width termType)
             docs
 
