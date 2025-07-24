@@ -66,6 +66,16 @@ You may wish to run `make fixtures` to fill some in some data for local testing.
 
 See `./docker/docker-compose.yml` to see how the postgres and redis services are configured.
 
+### Debugging and observability
+
+Open telemetry tracing:
+
+When using docker compose locally, there's a Jaeger instance running at `http://localhost:16686` which you can use to view traces for your local requests.
+
+Flags:
+
+* Build with `--flag share-api:queryspans` to enable spans for every single database query. Useful for local debugging, but don't enable this in production as it's way too much data and processing.
+
 
 ## Self Hosting
 

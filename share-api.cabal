@@ -22,6 +22,10 @@ source-repository head
   type: git
   location: https://github.com/unisoncomputing/share-api
 
+flag queryspans
+  manual: True
+  default: False
+
 library
   exposed-modules:
       Share
@@ -351,6 +355,8 @@ library
     , x509
     , x509-store
   default-language: Haskell2010
+  if flag(queryspans)
+    cpp-options: -DQUERY_SPANS
 
 executable share-api
   main-is: Main.hs
@@ -506,3 +512,5 @@ executable share-api
     , x509
     , x509-store
   default-language: Haskell2010
+  if flag(queryspans)
+    cpp-options: -DQUERY_SPANS

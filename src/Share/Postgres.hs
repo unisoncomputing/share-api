@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -328,12 +329,32 @@ rollback :: e -> Transaction e x
 rollback e = Transaction do
   pure (Left (Err e))
 
-transactionStatement :: a -> Hasql.Statement a b -> Transaction e b
-transactionStatement v stmt = Transaction do
-  env <- ask
-  let nqVar = numQueriesVar . Env.ctx $ env
-  liftIO $ UnliftIO.atomically $ UnliftIO.modifyTVar' nqVar (+ 1)
-  Right <$> (lift . lift $ (Session.statement v stmt))
+-- Ormolu doesn't like CPP
+{- ORMOLU_DISABLE -}
+-- | This is called on every single query, so it needs to be fast.
+-- However, it's really nice to track exactly which queries are being run (and how long they
+-- each take)
+-- for debugging and optimization purposes, so we conditionally track a span here
+-- depending on a preprocessor flag.
+-- See package.yaml to enable it.
+transactionStatement ::
+#ifdef QUERY_SPANS
+  (HasCallStack) =>
+#endif
+  a ->
+  Hasql.Statement a b ->
+  Transaction e b
+transactionStatement v stmt = do
+#ifdef QUERY_SPANS
+  let (mayFuncName, spanTags) = spanInfo
+   in transactionSpan (fromMaybe "transactionStatement" mayFuncName) spanTags $ do
+#endif
+      Transaction do
+          env <- ask
+          let nqVar = numQueriesVar . Env.ctx $ env
+          liftIO $ UnliftIO.atomically $ UnliftIO.modifyTVar' nqVar (+ 1)
+          Right <$> (lift . lift $ (Session.statement v stmt))
+{- ORMOLU_ENABLE -}
 
 spanInfo :: (HasCallStack) => (Maybe Text, Trace.AttributeMap)
 spanInfo =
