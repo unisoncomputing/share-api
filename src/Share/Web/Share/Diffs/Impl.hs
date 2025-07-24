@@ -36,7 +36,6 @@ import Unison.NameSegment (NameSegment)
 import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.Referent qualified as Referent
 import Unison.Server.Backend.DefinitionDiff qualified as DefinitionDiff
-import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
 import Unison.Server.Share.Definitions qualified as Definitions
 import Unison.Server.Types
 import Unison.ShortHash (ShortHash)
@@ -250,11 +249,10 @@ getTermDefinitionsOf :: (PG.QueryM m) => Codebase.CodebaseEnv -> Codebase.Codeba
 getTermDefinitionsOf codebase rt namesPerspective trav s = do
   s
     & asListOfDeduped trav %%~ \names -> do
-      Definitions.termDefinitionByNamesOf codebase ppedBuilder nameSearch renderWidth rt includeDocs traversed names
+      Definitions.termDefinitionByNamesOf codebase ppedBuilder namesPerspective renderWidth rt includeDocs traversed names
   where
     includeDocs = False
     ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
-    nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
     renderWidth :: Width
     renderWidth = 80
 
@@ -295,8 +293,7 @@ diffTypes !_authZReceipt old@(_, _, _, oldTypeName) new@(_, _, _, newTypeName) =
 getTypeDefinition :: (PG.QueryM m) => (Codebase.CodebaseEnv, Codebase.CodebaseRuntime s IO, NamesPerspective m, Name) -> m (Maybe TypeDefinition)
 getTypeDefinition (codebase, rt, namesPerspective, name) = do
   let ppedBuilder deps = (PPED.biasTo [name]) <$> (PPEPostgres.ppedForReferences namesPerspective deps)
-  let nameSearch = PGNameSearch.nameSearchForPerspective namesPerspective
-  Definitions.typeDefinitionByName codebase ppedBuilder nameSearch renderWidth rt includeDocs name
+  Definitions.typeDefinitionByName codebase ppedBuilder namesPerspective renderWidth rt includeDocs name
   where
     includeDocs = False
     renderWidth :: Width

@@ -22,6 +22,7 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Types (pathToPathSegments)
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
+import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Caching.JSON qualified as Caching
@@ -46,7 +47,6 @@ import Unison.Reference qualified as V1
 import Unison.Referent qualified as Referent
 import Unison.Server.Doc qualified as Doc
 import Unison.Server.NameSearch (NameSearch (..))
-import Unison.Server.NameSearch qualified as NS
 import Unison.Server.NameSearch qualified as NameSearch
 import Unison.Server.NameSearch.Postgres qualified as PGNameSearch
 import Unison.Server.QueryResult (QueryResult (..))
@@ -122,9 +122,8 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
             -- We need to re-lookup the names perspective here because the name we've found
             -- may now be in a lib.
             (scopedPerspective, relativeName) <- NPOps.relocateNamesToMountsOf perspectiveNP id name
-            let nameSearch = PGNameSearch.nameSearchForPerspective scopedPerspective
             -- TODO: properly batchify this
-            docRefs <- Docs.docsForDefinitionNamesOf codebase nameSearch id relativeName
+            docRefs <- Docs.docsForDefinitionNamesOf codebase scopedPerspective id relativeName
             -- TODO: properly batchify this
             renderDocRefs codebase ppedBuilder width rt docRefs
 
@@ -212,15 +211,14 @@ mkDefinitionsForQuery codebase nameSearch query = do
 termDisplayObjectsByNameOf ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
-  NameSearch m ->
+  NamesPerspective m ->
   Traversal s t Name (Maybe (Either ConstructorReference (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann)))) ->
   s ->
   m t
-termDisplayObjectsByNameOf codebase nameSearch trav s = do
+termDisplayObjectsByNameOf codebase namesPerspective trav s = do
   s
     & asListOfDeduped trav %%~ \names -> do
-      -- TODO: batchify this:
-      allRefs <- traverse (NameSearch.lookupRelativeHQRefs' (termSearch nameSearch) NS.ExactName) (HQ'.NameOnly <$> names)
+      allRefs <- PGNameSearch.termRefsByHQNamesOf namesPerspective traversed (HQ'.NameOnly <$> names)
       let partitionedRefs =
             allRefs <&> \refs ->
               do
@@ -235,17 +233,17 @@ termDefinitionByNamesOf ::
   (QueryM m) =>
   CodebaseEnv ->
   PPEDBuilder m ->
-  NameSearch m ->
+  NamesPerspective m ->
   Width ->
   CodebaseRuntime sym IO ->
   Bool ->
   Traversal s t Name (Maybe (Either ConstructorReference TermDefinition)) ->
   s ->
   m t
-termDefinitionByNamesOf codebase ppedBuilder nameSearch width rt includeDocs trav s = do
+termDefinitionByNamesOf codebase ppedBuilder namesPerspective width rt includeDocs trav s = do
   s
     & asListOfDeduped trav %%~ \allNames -> do
-      constructorsAndRendered <- termDisplayObjectsByNameOf codebase nameSearch traversed allNames
+      constructorsAndRendered <- termDisplayObjectsByNameOf codebase namesPerspective traversed allNames
       let addName name = \case
             Just (Right (termRef, displayObject)) -> Just (Right (name, termRef, displayObject))
             Just (Left constructorRef) -> Just (Left constructorRef)
@@ -260,7 +258,7 @@ termDefinitionByNamesOf codebase ppedBuilder nameSearch width rt includeDocs tra
           allRenderedDocs <-
             if includeDocs
               then do
-                allDocRefs <- Docs.docsForDefinitionNamesOf codebase nameSearch traversed names
+                allDocRefs <- Docs.docsForDefinitionNamesOf codebase namesPerspective traversed names
                 -- TODO: properly batchify this
                 for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
               else pure (names $> [])
@@ -273,9 +271,10 @@ termDisplayObjectLabeledDependencies termRef displayObject = do
     & bifoldMap (Type.labeledDependencies) (Term.labeledDependencies)
     & Set.insert (LD.TermReference termRef)
 
-typeDisplayObjectByName :: (QueryM m) => Codebase.CodebaseEnv -> NameSearch m -> Name -> m (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann)))
-typeDisplayObjectByName codebase nameSearch name = runMaybeT do
-  refs <- lift $ NameSearch.lookupRelativeHQRefs' (typeSearch nameSearch) NS.ExactName (HQ'.NameOnly name)
+typeDisplayObjectByName :: (QueryM m) => Codebase.CodebaseEnv -> NamesPerspective m -> Name -> m (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann)))
+typeDisplayObjectByName codebase namesPerspective name = runMaybeT do
+  -- TODO: batchify this properly
+  refs <- lift $ PGNameSearch.typeRefsByHQNamesOf namesPerspective id (HQ'.NameOnly name)
   ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
   fmap (ref,) . lift $ Backend.displayType codebase ref
 
@@ -285,21 +284,21 @@ typeDefinitionByName ::
   (QueryM m) =>
   CodebaseEnv ->
   PPEDBuilder m ->
-  NameSearch m ->
+  NamesPerspective m ->
   Width ->
   CodebaseRuntime s IO ->
   Bool ->
   Name ->
   m (Maybe TypeDefinition)
-typeDefinitionByName codebase ppedBuilder nameSearch width rt includeDocs name = runMaybeT $ do
-  (ref, displayObject) <- MaybeT $ typeDisplayObjectByName codebase nameSearch name
+typeDefinitionByName codebase ppedBuilder namesPerspective width rt includeDocs name = runMaybeT $ do
+  (ref, displayObject) <- MaybeT $ typeDisplayObjectByName codebase namesPerspective name
   let deps = typeDisplayObjectLabeledDependencies ref displayObject
   pped <- lift $ ppedBuilder deps
   let biasedPPED = PPED.biasTo [name] pped
   renderedDocs <-
     if includeDocs
       then do
-        docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase nameSearch id name
+        docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase namesPerspective id name
         lift $ renderDocRefs codebase ppedBuilder width rt docRefs
       else pure []
   let (_ref, syntaxDO) = Backend.typesToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
