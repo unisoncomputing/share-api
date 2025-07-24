@@ -6,6 +6,8 @@
 {-# LANGUAGE LiberalTypeSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+-- For the empty constraint introduced by DebugCallStack
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- | Postgres helpers
 module Share.Postgres
@@ -85,7 +87,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.HashMap.Lazy qualified as HM
-import Data.Kind (Type)
+import Data.Kind (Constraint, Type)
 import Data.Map qualified as Map
 import Data.Maybe
 import Data.Text qualified as Text
@@ -125,14 +127,36 @@ import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServ
 import System.CPUTime (getCPUTime)
 import UnliftIO qualified
 
--- | Returns the first non Postgres module in the call stack.
-getExternalCallsite :: (HasCallStack) => Maybe (String, Stack.SrcLoc)
-getExternalCallsite = headMay $ dropWhile (\(_, Stack.SrcLoc {srcLocModule}) -> srcLocModule == thisModuleName) (Stack.getCallStack Stack.callStack)
+#ifdef QUERY_SPANS
+type DebugCallStack = HasCallStack :: Constraint
+#else
+type DebugCallStack = () :: Constraint
+#endif
 
--- | Returns the loc of when we entered the Postgres module.
-_getModuleEntrypoint :: (HasCallStack) => Maybe (String, Stack.SrcLoc)
-_getModuleEntrypoint = headMay $ takeWhile (\(_, Stack.SrcLoc {srcLocModule}) -> srcLocModule /= thisModuleName) (reverse $ Stack.getCallStack Stack.callStack)
+-- | Returns the name of the function which contains the transaction call.
+-- This is useful when qualifying queries, e.g. "getUsers:queryListCol"
+getQualifiedExternalCallsite :: (HasCallStack) => Maybe (String, Stack.SrcLoc)
+getQualifiedExternalCallsite =
+  cs
+    & dropWhile (\(_, Stack.SrcLoc {srcLocModule}) -> srcLocModule == thisModuleName)
+    & \case
+      ((innerFunc, innerCallstack) : (outerFunc, _) : _) -> Just (innerFunc <> ":" <> outerFunc, innerCallstack)
+      [(func, funcCallstack)] -> Just (func, funcCallstack)
+      [] -> Nothing
   where
+    cs = Stack.getCallStack Stack.callStack
+
+-- | Get span info which includes the function name and call site of the first call site
+-- that's NOT in the Postgres module.
+spanInfo :: (HasCallStack) => (Text, Trace.AttributeMap)
+spanInfo =
+  ( maybe "<unknown>" (Text.pack . fst) cs,
+    HM.fromList $
+      [ ("loc.callSite", maybe "<unknown-callsite>" (Trace.toAttribute . prettySrcLoc) cs)
+      ]
+  )
+  where
+    cs = getQualifiedExternalCallsite
 
 thisModuleName :: (HasCallStack) => String
 thisModuleName =
@@ -338,16 +362,14 @@ rollback e = Transaction do
 -- depending on a preprocessor flag.
 -- See package.yaml to enable it.
 transactionStatement ::
-#ifdef QUERY_SPANS
-  (HasCallStack) =>
-#endif
+  DebugCallStack =>
   a ->
   Hasql.Statement a b ->
   Transaction e b
 transactionStatement v stmt = do
 #ifdef QUERY_SPANS
-  let (mayFuncName, spanTags) = spanInfo
-   in transactionSpan (fromMaybe "transactionStatement" mayFuncName) spanTags $ do
+  let (funcName, spanTags) = spanInfo
+   in transactionSpan funcName spanTags $ do
 #endif
       Transaction do
           env <- ask
@@ -355,18 +377,6 @@ transactionStatement v stmt = do
           liftIO $ UnliftIO.atomically $ UnliftIO.modifyTVar' nqVar (+ 1)
           Right <$> (lift . lift $ (Session.statement v stmt))
 {- ORMOLU_ENABLE -}
-
-spanInfo :: (HasCallStack) => (Maybe Text, Trace.AttributeMap)
-spanInfo =
-  ( funcName,
-    HM.fromList $
-      [ ("loc.callSite", maybe "<unknown-callsite>" (Trace.toAttribute . prettySrcLoc) postgresFuncLoc)
-      ]
-  )
-  where
-    postgresFuncLoc = getExternalCallsite
-    -- If we don't have a call site, we just use the default name.
-    funcName = Text.pack . fst <$> postgresFuncLoc
 
 prettySrcLoc :: (String, SrcLoc) -> Text
 prettySrcLoc (funcName, Stack.SrcLoc {Stack.srcLocFile, Stack.srcLocStartLine}) =
@@ -430,7 +440,7 @@ runSessionWithEnv env s = either absurd id <$> tryRunSessionWithEnv env s
 
 -- | Manually run a session, using the connection pool from the provided env, returning an Either error.
 tryRunSessionWithEnv :: (HasCallStack, MonadTags m, MonadUnliftIO m, MonadTracer m) => Env.Env ctx -> Session e a -> m (Either e a)
-tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = flip runReaderT env $ Trace.withSpan' entryPointName spanTags $ \span -> do
+tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logger, timeCache}) (Session s) = flip runReaderT env $ Trace.withSpan' entryPointName spanAttrs $ \span -> do
   tags <- askTags
   numQueriesVar <- liftIO $ UnliftIO.newTVarIO 0
   let transactionContext =
@@ -452,13 +462,7 @@ tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logg
     Right (Left (Err e)) -> pure (Left e)
     Right (Right a) -> pure (Right a)
   where
-    postgresFuncLoc = getExternalCallsite
-    entryPointName = Text.pack $ maybe "transaction" fst postgresFuncLoc
-    spanTags :: Trace.AttributeMap
-    spanTags =
-      HM.fromList $
-        [ ("loc.callSite", maybe "<unknown-callsite>" (Trace.toAttribute . prettySrcLoc) postgresFuncLoc)
-        ]
+    (entryPointName, spanAttrs) = spanInfo
 
 -- | Run a session in the App monad, responding to the request with an error if it fails.
 runSessionOrRespondError :: (HasCallStack, ToServerError e, Loggable e) => Session e a -> WebApp a
@@ -467,7 +471,7 @@ runSessionOrRespondError t = tryRunSession t >>= either respondError pure
 -- | Represents anywhere we can run a statement
 class (Applicative m) => QueryA m where
   type TError m :: Type
-  statement :: q -> Hasql.Statement q r -> m r
+  statement :: (DebugCallStack) => q -> Hasql.Statement q r -> m r
 
   -- | Fail the transaction and whole request with an unrecoverable server error.
   unrecoverableError :: (HasCallStack, ToServerError e, Loggable e, Show e) => e -> m a
@@ -562,22 +566,22 @@ instance (QueryM m) => QueryM (MaybeT m) where
 prepareStatements :: Bool
 prepareStatements = True
 
-queryListRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m [r]
+queryListRows :: forall r m. (Interp.DecodeRow r, QueryA m, DebugCallStack) => Interp.Sql -> m [r]
 queryListRows sql = statement () (Interp.interp prepareStatements sql)
 
-queryVectorRows :: forall r m. (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m (Vector r)
+queryVectorRows :: forall r m. (Interp.DecodeRow r, QueryA m, DebugCallStack) => Interp.Sql -> m (Vector r)
 queryVectorRows sql = statement () (Interp.interp prepareStatements sql)
 
-query1Row :: forall r m. (QueryA m) => (Interp.DecodeRow r) => Interp.Sql -> m (Maybe r)
+query1Row :: forall r m. (QueryA m) => (Interp.DecodeRow r, DebugCallStack) => Interp.Sql -> m (Maybe r)
 query1Row sql = listToMaybe <$> queryListRows sql
 
-query1Col :: forall a m. (QueryA m, Interp.DecodeField a) => Interp.Sql -> m (Maybe a)
+query1Col :: forall a m. (QueryA m, Interp.DecodeField a, DebugCallStack) => Interp.Sql -> m (Maybe a)
 query1Col sql = listToMaybe <$> queryListCol sql
 
-queryListCol :: forall a m. (QueryA m) => (Interp.DecodeField a) => Interp.Sql -> m [a]
+queryListCol :: forall a m. (QueryA m) => (Interp.DecodeField a, DebugCallStack) => Interp.Sql -> m [a]
 queryListCol sql = queryListRows @(Interp.OneColumn a) sql <&> coerce @[Interp.OneColumn a] @[a]
 
-execute_ :: (QueryA m) => Interp.Sql -> m ()
+execute_ :: (QueryA m, DebugCallStack) => Interp.Sql -> m ()
 execute_ sql = statement () (Interp.interp prepareStatements sql)
 
 queryExpect1Row :: forall r m. (HasCallStack) => (Interp.DecodeRow r, QueryA m) => Interp.Sql -> m r
