@@ -6,7 +6,7 @@ module Share.Backend
     typeListEntry,
     termListEntry,
     displayTermsOf,
-    displayType,
+    displayTypesOf,
     evalDocRef,
     lsBranch,
     getTermTagsOf,
@@ -271,13 +271,18 @@ displayTermsOf codebase trav s =
             Left obj -> obj
         & pure
 
-displayType :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObject () (DD.Decl Symbol Ann))
-displayType codebase = \case
-  Reference.Builtin _ -> pure (BuiltinObject ())
-  Reference.DerivedId rid -> do
-    -- TODO: batchify this properly
-    decl <- Codebase.expectTypeDeclarationsByRefIdsOf codebase id rid
-    pure (UserObject decl)
+displayTypesOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject () (DD.Decl Symbol Ann)) -> s -> m t
+displayTypesOf codebase trav s =
+  s
+    & asListOf trav %%~ \refs -> do
+      let partitionedRefs =
+            refs <&> \case
+              Reference.Builtin _ -> Left (BuiltinObject ())
+              Reference.DerivedId rid -> Right rid
+      Codebase.expectTypeDeclarationsByRefIdsOf codebase (traversed . _Right) partitionedRefs
+        <&> fmap \case
+          Left obj -> obj
+          Right decl -> (UserObject decl)
 
 evalDocRef ::
   forall m s.

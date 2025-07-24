@@ -119,6 +119,7 @@ library
       Share.Utils.API
       Share.Utils.Caching
       Share.Utils.Caching.JSON
+      Share.Utils.Data
       Share.Utils.Lens
       Share.Utils.Logging
       Share.Utils.Logging.Types
