@@ -66,7 +66,7 @@ import Unison.Util.Pretty (Width)
 
 -- | Renders a definition for the given name or hash alongside its documentation.
 definitionForHQName ::
-  forall m s.
+  forall m sym.
   (QueryM m) =>
   Codebase.CodebaseEnv ->
   -- | The path representing the user's current namesRoot.
@@ -79,7 +79,7 @@ definitionForHQName ::
   -- | Whether to suffixify bindings in the rendered syntax
   Suffixify ->
   -- | Runtime used to evaluate docs. This should be sandboxed if run on the server.
-  CodebaseRuntime s IO ->
+  CodebaseRuntime sym IO ->
   -- | The name, hash, or both, of the definition to display.
   HQ.HashQualified Name ->
   m DefinitionDisplayResults
@@ -159,7 +159,7 @@ renderDocRefs ::
   Codebase.CodebaseEnv ->
   PPEDBuilder (m) ->
   Width ->
-  CodebaseRuntime s IO ->
+  CodebaseRuntime sym IO ->
   [TermReference] ->
   m [(HashQualifiedName, UnisonHash, Doc.Doc)]
 renderDocRefs _codebase _ppedBuilder _width _rt [] = pure []
@@ -288,7 +288,7 @@ typeDefinitionsByNamesOf ::
   PPEDBuilder m ->
   NamesPerspective m ->
   Width ->
-  CodebaseRuntime s IO ->
+  CodebaseRuntime sym IO ->
   Bool ->
   Traversal s t Name (Maybe TypeDefinition) ->
   s ->

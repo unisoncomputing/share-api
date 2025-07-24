@@ -113,7 +113,8 @@ typeSummaryForReference codebase reference mayName mayWidth = do
   let shortHash = Reference.toShortHash reference
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   tag <- Backend.getTypeTagsOf id reference
-  displayDecl <- Backend.displayType codebase reference
+  -- TODO: batchify this
+  displayDecl <- Backend.displayTypesOf codebase id reference
   let syntaxHeader = Backend.typeToSyntaxHeader width displayName displayDecl
   pure $
     TypeSummary
