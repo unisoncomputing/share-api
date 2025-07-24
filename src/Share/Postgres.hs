@@ -708,11 +708,11 @@ transactionSpan name spanTags action = do
     Trace.adjustContext (Trace.insertSpan s)
     let parent = Trace.lookupSpan ctx
     pure (s, parent)
-  action
+  r <- action
   transactionUnsafeIO $ do
     Trace.endSpan s Nothing
     Trace.adjustContext $ \ctx -> maybe (Trace.removeSpan ctx) (`Trace.insertSpan` ctx) parent
-  action
+  pure r
 
 -- | Helper to treat composite types as Values, useful when decoding arrays of rows.
 --
