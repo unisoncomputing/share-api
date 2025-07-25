@@ -1,7 +1,7 @@
 module Unison.Server.Share.Definitions
   ( definitionForHQName,
     termDefinitionByNamesOf,
-    typeDefinitionByName,
+    typeDefinitionsByNamesOf,
   )
 where
 
@@ -26,6 +26,7 @@ import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Caching.JSON qualified as Caching
+import Share.Utils.Data qualified as Data
 import Share.Utils.Lens (asListOfDeduped)
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
@@ -65,7 +66,7 @@ import Unison.Util.Pretty (Width)
 
 -- | Renders a definition for the given name or hash alongside its documentation.
 definitionForHQName ::
-  forall m s.
+  forall m sym.
   (QueryM m) =>
   Codebase.CodebaseEnv ->
   -- | The path representing the user's current namesRoot.
@@ -78,7 +79,7 @@ definitionForHQName ::
   -- | Whether to suffixify bindings in the rendered syntax
   Suffixify ->
   -- | Runtime used to evaluate docs. This should be sandboxed if run on the server.
-  CodebaseRuntime s IO ->
+  CodebaseRuntime sym IO ->
   -- | The name, hash, or both, of the definition to display.
   HQ.HashQualified Name ->
   m DefinitionDisplayResults
@@ -116,33 +117,33 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
       let nameSearch = PGNameSearch.nameSearchForPerspective perspectiveNP
       dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery codebase nameSearch [query]
       let width = mayDefaultWidth renderWidth
-      -- TODO: properly batchify this
-      let docResults :: Name -> m [(HashQualifiedName, UnisonHash, Doc.Doc)]
-          docResults name = do
-            -- We need to re-lookup the names perspective here because the name we've found
-            -- may now be in a lib.
-            (scopedPerspective, relativeName) <- NPOps.relocateNamesToMountsOf perspectiveNP id name
-            -- TODO: properly batchify this
-            docRefs <- Docs.docsForDefinitionNamesOf codebase scopedPerspective id relativeName
-            -- TODO: properly batchify this
-            renderDocRefs codebase ppedBuilder width rt docRefs
+      let docResultsOf :: forall s t. Traversal s t Name [(HashQualifiedName, UnisonHash, Doc.Doc)] -> s -> m t
+          docResultsOf trav s = do
+            s
+              & asListOf trav %%~ \names -> do
+                allDocRefs <- Docs.docsForDefinitionNamesOf codebase perspectiveNP traversed names
+                -- TODO: properly batchify this
+                for allDocRefs \drs -> renderDocRefs codebase ppedBuilder width rt drs
 
       let drDeps = Backend.definitionResultsDependencies dr
       termAndTypePPED <- ppedBuilder drDeps
-      let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
-      -- TODO: properly batchify this
-      typeDefinitions <-
-        ifor (Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types) \ref tp -> do
-          let hqTypeName = PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
-          docs <- maybe (pure []) docResults (HQ.toName hqTypeName)
-          Backend.mkTypeDefinition termAndTypePPED width ref docs tp
-      -- TODO: properly batchify this
-      termDefinitions <-
-        ifor (Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms) \reference trm -> do
-          let referent = Referent.Ref reference
-          let hqTermName = PPE.termNameOrHashOnly fqnTermAndTypePPE referent
-          docs <- maybe (pure []) docResults (HQ.toName hqTermName)
-          Backend.mkTermDefinitionsOf codebase termAndTypePPED width id (Nothing, reference, docs, trm)
+      typeDefinitions <- do
+        let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
+        let typeDisplayObjs = Backend.typesToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) types
+        let typeRefs = types & imap \ref _ -> ref
+        let typeMayNames = typeDisplayObjs & imap \ref _ -> HQ.toName $ PPE.typeNameOrHashOnly fqnTermAndTypePPE ref
+        allDocs <- fmap (fromMaybe []) <$> docResultsOf (traversed . _Just) typeMayNames
+        let typeInfos = Data.zip4 typeMayNames typeRefs allDocs typeDisplayObjs
+        Backend.mkTypeDefinitionsOf termAndTypePPED width traversed typeInfos
+
+      termDefinitions <- do
+        let fqnTermAndTypePPE = PPED.unsuffixifiedPPE termAndTypePPED
+        let termDisplayObjs = Backend.termsToSyntaxOf suffixifyBindings width termAndTypePPED (Map.asList_ . traversed) terms
+        let termRefs = terms & imap \ref _ -> ref
+        let termMayNames = termDisplayObjs & imap \ref _ -> HQ.toName $ PPE.termNameOrHashOnly fqnTermAndTypePPE (Referent.Ref ref)
+        allDocs <- fmap (fromMaybe []) <$> docResultsOf (traversed . _Just) termMayNames
+        let termInfos = Data.zip4 termMayNames termRefs allDocs termDisplayObjs
+        Backend.mkTermDefinitionsOf codebase termAndTypePPED width traversed termInfos
       let renderedDisplayTerms = Map.mapKeys Reference.toText termDefinitions
           renderedDisplayTypes = Map.mapKeys Reference.toText typeDefinitions
           renderedMisses = fmap HQ.toText misses
@@ -157,7 +158,7 @@ renderDocRefs ::
   Codebase.CodebaseEnv ->
   PPEDBuilder (m) ->
   Width ->
-  CodebaseRuntime s IO ->
+  CodebaseRuntime sym IO ->
   [TermReference] ->
   m [(HashQualifiedName, UnisonHash, Doc.Doc)]
 renderDocRefs _codebase _ppedBuilder _width _rt [] = pure []
@@ -187,9 +188,8 @@ mkDefinitionsForQuery codebase nameSearch query = do
   -- and maybe even remove getComponentLength from Codebase interface altogether
   displayedTerms <- Backend.displayTermsOf codebase traversed termRefs
   let termsMap = Map.fromList (zip termRefs displayedTerms)
-  typesMap <- do
-    typeRefs <- pure $ searchResultsToTypeRefs results
-    Map.foldMapM (\ref -> (ref,) <$> Backend.displayType codebase ref) typeRefs
+  let typeRefsMap = Data.mapFromSelf . Set.toList $ searchResultsToTypeRefs results
+  typesMap <- Backend.displayTypesOf codebase traversed typeRefsMap
   pure (Backend.DefinitionResults termsMap typesMap misses)
   where
     searchResultsToTermRefs :: [SR.SearchResult] -> Set V1.Reference
@@ -208,14 +208,14 @@ mkDefinitionsForQuery codebase nameSearch query = do
 -- Nothing means not found
 -- Just Left means constructor
 -- Just Right means term
-termDisplayObjectsByNameOf ::
+termDisplayObjectsByNamesOf ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
   NamesPerspective m ->
   Traversal s t Name (Maybe (Either ConstructorReference (TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann)))) ->
   s ->
   m t
-termDisplayObjectsByNameOf codebase namesPerspective trav s = do
+termDisplayObjectsByNamesOf codebase namesPerspective trav s = do
   s
     & asListOfDeduped trav %%~ \names -> do
       allRefs <- PGNameSearch.termRefsByHQNamesOf namesPerspective traversed (HQ'.NameOnly <$> names)
@@ -242,8 +242,8 @@ termDefinitionByNamesOf ::
   m t
 termDefinitionByNamesOf codebase ppedBuilder namesPerspective width rt includeDocs trav s = do
   s
-    & asListOfDeduped trav %%~ \allNames -> do
-      constructorsAndRendered <- termDisplayObjectsByNameOf codebase namesPerspective traversed allNames
+    & asListOf trav %%~ \allNames -> do
+      constructorsAndRendered <- termDisplayObjectsByNamesOf codebase namesPerspective traversed allNames
       let addName name = \case
             Just (Right (termRef, displayObject)) -> Just (Right (name, termRef, displayObject))
             Just (Left constructorRef) -> Just (Left constructorRef)
@@ -271,38 +271,49 @@ termDisplayObjectLabeledDependencies termRef displayObject = do
     & bifoldMap (Type.labeledDependencies) (Term.labeledDependencies)
     & Set.insert (LD.TermReference termRef)
 
-typeDisplayObjectByName :: (QueryM m) => Codebase.CodebaseEnv -> NamesPerspective m -> Name -> m (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann)))
-typeDisplayObjectByName codebase namesPerspective name = runMaybeT do
-  -- TODO: batchify this properly
-  refs <- lift $ PGNameSearch.typeRefsByHQNamesOf namesPerspective id (HQ'.NameOnly name)
-  ref <- fmap NESet.findMin . hoistMaybe $ NESet.nonEmptySet refs
-  fmap (ref,) . lift $ Backend.displayType codebase ref
+typeDisplayObjectsByNamesOf :: (QueryM m) => Codebase.CodebaseEnv -> NamesPerspective m -> Traversal s t Name (Maybe (TypeReference, DisplayObject () (DD.Decl Symbol Ann))) -> s -> m t
+typeDisplayObjectsByNamesOf codebase namesPerspective trav s = do
+  s
+    & asListOf trav %%~ \names -> do
+      foundRefs <- PGNameSearch.typeRefsByHQNamesOf namesPerspective traversed (HQ'.NameOnly <$> names)
+      let refs = fmap (\ref -> (ref, ref)) . Set.lookupMin <$> foundRefs
+      Backend.displayTypesOf codebase (traversed . _Just . _2) refs
 
 -- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
 -- share among all of them, it would be more efficient than generating a PPED per definition.
-typeDefinitionByName ::
+typeDefinitionsByNamesOf ::
   (QueryM m) =>
   CodebaseEnv ->
   PPEDBuilder m ->
   NamesPerspective m ->
   Width ->
-  CodebaseRuntime s IO ->
+  CodebaseRuntime sym IO ->
   Bool ->
-  Name ->
-  m (Maybe TypeDefinition)
-typeDefinitionByName codebase ppedBuilder namesPerspective width rt includeDocs name = runMaybeT $ do
-  (ref, displayObject) <- MaybeT $ typeDisplayObjectByName codebase namesPerspective name
-  let deps = typeDisplayObjectLabeledDependencies ref displayObject
-  pped <- lift $ ppedBuilder deps
-  let biasedPPED = PPED.biasTo [name] pped
-  renderedDocs <-
-    if includeDocs
-      then do
-        docRefs <- lift $ Docs.docsForDefinitionNamesOf codebase namesPerspective id name
-        lift $ renderDocRefs codebase ppedBuilder width rt docRefs
-      else pure []
-  let (_ref, syntaxDO) = Backend.typesToSyntaxOf (Suffixify False) width pped id (ref, displayObject)
-  lift $ Backend.mkTypeDefinition biasedPPED width ref renderedDocs syntaxDO
+  Traversal s t Name (Maybe TypeDefinition) ->
+  s ->
+  m t
+typeDefinitionsByNamesOf codebase ppedBuilder namesPerspective width rt includeDocs trav s = do
+  s
+    & asListOfDeduped trav %%~ \allNames -> do
+      typeDisplayObjs <- typeDisplayObjectsByNamesOf codebase namesPerspective traversed allNames
+      let addName name = \case
+            Just (ref, displayObject) -> Just (name, ref, displayObject)
+            Nothing -> Nothing
+      let withNames = zipWith addName allNames typeDisplayObjs
+      withNames
+        & asListOf (traversed . _Just) %%~ \displayInfos -> do
+          let (names, refs, displayObjects) = unzip3 displayInfos
+          let allDeps = displayInfos & foldMap \(_name, ref, dispObj) -> typeDisplayObjectLabeledDependencies ref dispObj
+          pped <- ppedBuilder allDeps
+          allRenderedDocs <-
+            if includeDocs
+              then do
+                allDocRefs <- Docs.docsForDefinitionNamesOf codebase namesPerspective traversed names
+                -- TODO: properly batchify this
+                for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
+              else pure (names $> [])
+          let syntaxDOs = snd <$> Backend.typesToSyntaxOf (Suffixify False) width pped traversed (zip refs displayObjects)
+          Backend.mkTypeDefinitionsOf pped width traversed (zip4 (Just <$> names) refs allRenderedDocs syntaxDOs)
 
 typeDisplayObjectLabeledDependencies :: TypeReference -> DisplayObject () (DD.Decl Symbol Ann) -> Set LD.LabeledDependency
 typeDisplayObjectLabeledDependencies typeRef displayObject = do

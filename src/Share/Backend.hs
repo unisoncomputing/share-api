@@ -1,12 +1,12 @@
 {-# LANGUAGE MultiWayIf #-}
 
 module Share.Backend
-  ( mkTypeDefinition,
+  ( mkTypeDefinitionsOf,
     mkTermDefinitionsOf,
     typeListEntry,
     termListEntry,
     displayTermsOf,
-    displayType,
+    displayTypesOf,
     evalDocRef,
     lsBranch,
     getTermTagsOf,
@@ -35,7 +35,7 @@ module Share.Backend
 where
 
 import Control.Lens hiding ((??))
-import Data.List (unzip4, zipWith5)
+import Data.List (unzip4, zipWith4, zipWith5)
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Share.Codebase qualified as Codebase
@@ -91,29 +91,41 @@ import Unison.Util.Pretty qualified as Pretty
 import Unison.Util.SyntaxText qualified as UST
 import Unison.Var (Var)
 
-mkTypeDefinition ::
+mkTypeDefinitionsOf ::
   (QueryM m) =>
   PPED.PrettyPrintEnvDecl ->
   Width ->
-  Reference ->
-  [(HashQualifiedName, UnisonHash, Doc.Doc)] ->
-  DisplayObject
-    (AnnotatedText (UST.Element Reference))
-    (AnnotatedText (UST.Element Reference)) ->
-  m TypeDefinition
-mkTypeDefinition pped width r docs tp = do
-  let bn = Backend.bestNameForType @Symbol (PPED.suffixifiedPPE pped) width r
-  -- TODO: batchify this properly
-  tag <- getTypeTagsOf id r
-  pure $
-    TypeDefinition
-      (HQ'.toText <$> PPE.allTypeNames fqnPPE r)
-      bn
-      tag
-      (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tp)
-      docs
+  Traversal
+    s
+    t
+    ( Maybe Name.Name,
+      Reference,
+      [(HashQualifiedName, UnisonHash, Doc.Doc)],
+      DisplayObject
+        (AnnotatedText (UST.Element Reference))
+        (AnnotatedText (UST.Element Reference))
+    )
+    TypeDefinition ->
+  s ->
+  m t
+mkTypeDefinitionsOf pped width trav s =
+  s
+    & asListOf trav %%~ \inputs -> do
+      let (_, refs, _, _) = unzip4 inputs
+      tags <- getTypeTagsOf traversed refs
+      let biasedPPEDs = inputs <&> \(mayName, _, _, _) -> maybe pped (\name -> PPED.biasTo [name] pped) mayName
+      let getBestName ppe r = Backend.bestNameForType @Symbol (PPED.suffixifiedPPE ppe) width r
+      let bestNames = zipWith getBestName biasedPPEDs refs
+      pure $ zipWith4 buildTypeDefinition tags bestNames biasedPPEDs inputs
   where
-    fqnPPE = PPED.unsuffixifiedPPE pped
+    buildTypeDefinition tag bn biasedPPE (_mayName, ref, docs, tp) =
+      let fqnPPE = PPED.unsuffixifiedPPE biasedPPE
+       in TypeDefinition
+            (HQ'.toText <$> PPE.allTypeNames fqnPPE ref)
+            bn
+            tag
+            (bimap Backend.mungeSyntaxText Backend.mungeSyntaxText tp)
+            docs
 
 mkTermDefinitionsOf ::
   (QueryM m) =>
@@ -163,7 +175,6 @@ termListEntry ::
   ExactName NameSegment V2Referent.Referent ->
   m (Backend.TermEntry Symbol Ann)
 termListEntry typ (ExactName nameSegment ref) = do
-  -- TODO: batchify this properly
   tag <- getTermTagsOf id (ref, typ)
   pure $
     Backend.TermEntry
@@ -181,7 +192,6 @@ typeListEntry ::
   ExactName NameSegment Reference ->
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
-  -- TODO: batchify this properly
   tag <- getTypeTagsOf id ref
   pure $
     Backend.TypeEntry
@@ -259,13 +269,18 @@ displayTermsOf codebase trav s =
             Left obj -> obj
         & pure
 
-displayType :: (QueryM m) => Codebase.CodebaseEnv -> Reference -> m (DisplayObject () (DD.Decl Symbol Ann))
-displayType codebase = \case
-  Reference.Builtin _ -> pure (BuiltinObject ())
-  Reference.DerivedId rid -> do
-    -- TODO: batchify this properly
-    decl <- Codebase.expectTypeDeclarationsByRefIdsOf codebase id rid
-    pure (UserObject decl)
+displayTypesOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject () (DD.Decl Symbol Ann)) -> s -> m t
+displayTypesOf codebase trav s =
+  s
+    & asListOf trav %%~ \refs -> do
+      let partitionedRefs =
+            refs <&> \case
+              Reference.Builtin _ -> Left (BuiltinObject ())
+              Reference.DerivedId rid -> Right rid
+      Codebase.expectTypeDeclarationsByRefIdsOf codebase (traversed . _Right) partitionedRefs
+        <&> fmap \case
+          Left obj -> obj
+          Right decl -> (UserObject decl)
 
 evalDocRef ::
   forall m s.
@@ -353,7 +368,6 @@ lsBranch codebase b0 = do
       ++ branchEntries
       ++ patchEntries
 
--- TODO: batchify this
 typeDeclHeader ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->

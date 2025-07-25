@@ -32,6 +32,17 @@ ghc-options:
 - -O2
 - -funbox-strict-fields
 
+flags:
+  # Enable tracking and reporting spans of every query.
+  # Useful for debugging and performance analysis, but leave it off in production.
+  queryspans:
+    manual: true
+    default: false
+
+when:
+  - condition: flag(queryspans)
+    cpp-options: -DQUERY_SPANS
+
 dependencies:
 - MonadRandom
 - aeson

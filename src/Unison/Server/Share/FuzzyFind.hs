@@ -227,7 +227,6 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
           let namedType = Backend.typeEntryToNamedType typeEntry
           -- Use the name from the search here rather than the pretty printer best-name
           let typeName = (Name.toText $ HQ'.toName $ UBackend.typeEntryHQName typeEntry)
-          -- TODO batchify this
           typeHeader <- Backend.typeDeclHeader codebase ppe r
           let ft = FoundType typeName typeHeader namedType
           pure (a, FoundTypeResult ft)
