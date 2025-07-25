@@ -289,24 +289,24 @@ evalDocRef ::
   Codebase.CodebaseRuntime s IO ->
   V2.TermReference ->
   m (Doc.EvaluatedDoc Symbol)
-evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
+evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = PG.transactionSpan "evalDocRef" mempty do
   let tm = Term.ref () termRef
   -- TODO: batchify evalDoc.
   Doc.evalDoc terms typeOf eval decls tm
   where
     terms :: Reference -> m (Maybe (V1.Term Symbol ()))
     terms termRef@(Reference.Builtin _) = pure (Just (Term.ref () termRef))
-    terms (Reference.DerivedId termRef) =
+    terms (Reference.DerivedId termRef) = PG.transactionSpan "terms" mempty do
       -- TODO: batchify properly
       fmap (Term.unannotate . fst) <$> (Codebase.loadTermAndTypeByRefIdsOf codebase id termRef)
 
     typeOf :: Referent.Referent -> m (Maybe (V1.Type Symbol ()))
-    typeOf termRef =
+    typeOf termRef = PG.transactionSpan "typeOf" mempty do
       -- TODO: batchify properly
       fmap void <$> Codebase.loadTypesOfReferentsOf codebase id (Cv.referent1to2 termRef)
 
     eval :: V1.Term Symbol a -> m (Maybe (V1.Term Symbol ()))
-    eval (Term.amap (const mempty) -> tm) = do
+    eval (Term.amap (const mempty) -> tm) = PG.transactionSpan "eval" mempty do
       -- We use an empty ppe for evalutation, it's only used for adding additional context to errors.
       let evalPPE = PPE.empty
       termRef <- fmap eitherToMaybe . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE unisonRuntime tm
@@ -321,7 +321,7 @@ evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntim
       pure $ termRef <&> Term.amap (const mempty) . snd
 
     decls :: Reference -> m (Maybe (DD.Decl Symbol ()))
-    decls (Reference.DerivedId typeRef) =
+    decls (Reference.DerivedId typeRef) = PG.transactionSpan "decls" mempty do
       -- TODO: batchify properly
       fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclarationsByRefIdsOf codebase id typeRef)
     decls _ = pure Nothing
