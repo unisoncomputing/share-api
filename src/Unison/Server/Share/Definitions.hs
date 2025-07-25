@@ -117,7 +117,6 @@ definitionForHQName codebase@(CodebaseEnv {codebaseOwner}) perspective rootCausa
       let nameSearch = PGNameSearch.nameSearchForPerspective perspectiveNP
       dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery codebase nameSearch [query]
       let width = mayDefaultWidth renderWidth
-      -- TODO: properly batchify this
       let docResultsOf :: forall s t. Traversal s t Name [(HashQualifiedName, UnisonHash, Doc.Doc)] -> s -> m t
           docResultsOf trav s = do
             s

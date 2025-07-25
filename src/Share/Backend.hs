@@ -175,7 +175,6 @@ termListEntry ::
   ExactName NameSegment V2Referent.Referent ->
   m (Backend.TermEntry Symbol Ann)
 termListEntry typ (ExactName nameSegment ref) = do
-  -- TODO: batchify this properly
   tag <- getTermTagsOf id (ref, typ)
   pure $
     Backend.TermEntry
@@ -193,7 +192,6 @@ typeListEntry ::
   ExactName NameSegment Reference ->
   m Backend.TypeEntry
 typeListEntry (ExactName nameSegment ref) = do
-  -- TODO: batchify this properly
   tag <- getTypeTagsOf id ref
   pure $
     Backend.TypeEntry
@@ -370,7 +368,6 @@ lsBranch codebase b0 = do
       ++ branchEntries
       ++ patchEntries
 
--- TODO: batchify this
 typeDeclHeader ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->

@@ -55,11 +55,9 @@ serveTermSummary ::
 serveTermSummary codebase referent mayName rootCausalId relativeTo mayWidth = do
   rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
   let v2Referent = CV.referent1to2 referent
-  -- TODO: properly batchify this
   sig <-
     Codebase.loadTypesOfReferentsOf codebase id v2Referent
       `whenNothingM` unrecoverableError (MissingSignatureForTerm $ V2Referent.toReference v2Referent)
-  -- TODO: batchify this
   termSummaryForReferent v2Referent sig mayName rootBranchHashId relativeTo mayWidth
 
 termSummaryForReferent ::
@@ -77,7 +75,6 @@ termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayW
   let relativeToPath = fromMaybe mempty relativeTo
   let termReference = V2Referent.toReference referent
   let deps = Type.labeledDependencies typeSig
-  -- TODO: find a way to batchify namesPerspectiveForRootAndPath
   namesPerspective <- NPOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
   pped <- PPEPostgres.ppedForReferences namesPerspective deps
   let formattedTypeSig = Backend.formatSuffixedType pped width typeSig
@@ -113,7 +110,6 @@ typeSummaryForReference codebase reference mayName mayWidth = do
   let shortHash = Reference.toShortHash reference
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   tag <- Backend.getTypeTagsOf id reference
-  -- TODO: batchify this
   displayDecl <- Backend.displayTypesOf codebase id reference
   let syntaxHeader = Backend.typeToSyntaxHeader width displayName displayDecl
   pure $
