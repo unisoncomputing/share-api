@@ -29,6 +29,7 @@ module Share.Postgres.Definitions.Queries
     ensureBytesIdsOf,
     expectTextsOf,
     saveTypeComponent,
+    termTransitiveDependencies,
 
     -- * For Migrations
     saveSerializedComponent,
@@ -1240,6 +1241,63 @@ saveSerializedComponent (CodebaseEnv {codebaseOwner}) chId (CBORBytes bytes) = d
         VALUES (#{codebaseOwner}, #{chId}, #{bytesId})
       ON CONFLICT DO NOTHING
     |]
+
+termTransitiveDependencies :: Set TermId -> Transaction e (Set.Set TermId, Set.Set TypeId)
+termTransitiveDependencies termIds = do
+  queryExpect1Row @([TermId], [TypeId])
+    [sql|
+WITH
+input_terms(term_id) AS (
+  #^{singleColumnTable (toList termIds)} AS t(term_id)
+),
+-- Get the component hash IDs for the input terms
+base_term_components(component_hash_id) AS (
+    SELECT DISTINCT term.component_hash_id
+    FROM input_terms it
+        JOIN terms term ON it.term_id = term.id
+),
+-- Recursively find all transitive component dependencies
+transitive_components(component_hash_id) AS (
+    -- Base case: start with the components of our input terms
+    SELECT DISTINCT btc.component_hash_id
+    FROM base_term_components btc
+    UNION
+    -- Recursive case: find dependencies of current components
+    ( WITH rec AS (
+        SELECT component_hash_id
+        FROM transitive_components tc
+    )
+        -- Get term dependencies from current components
+        SELECT DISTINCT ref.component_hash_id
+        FROM rec atc
+            -- Get all terms from the component
+            JOIN terms term ON atc.component_hash_id = term.component_hash_id
+            -- Get their component references
+            JOIN term_local_component_references ref ON term.id = ref.term_id
+        UNION
+        -- Get type dependencies from current components
+        SELECT DISTINCT ref.component_hash_id
+        FROM rec atc
+            -- Get all types from the component
+            JOIN types typ ON atc.component_hash_id = typ.component_hash_id
+            -- Get their component references
+            JOIN type_local_component_references ref ON typ.id = ref.type_id
+    )
+)
+-- Final result: single row with arrays of term_ids and type_ids
+SELECT
+    ARRAY(
+        SELECT term.id
+        FROM transitive_components tc
+        JOIN terms term ON tc.component_hash_id = term.component_hash_id
+    ) AS term_ids,
+    ARRAY(
+        SELECT type.id
+        FROM transitive_components tc
+        JOIN types type ON tc.component_hash_id = type.component_hash_id
+    ) AS type_ids;
+    |]
+    <&> bimap Set.fromList Set.fromList
 
 expectedTermError :: Either TermId TermReferenceId -> InternalServerError DefinitionQueryError
 expectedTermError refId =
