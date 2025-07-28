@@ -388,7 +388,7 @@ syncTypes codebase namesPerspective rootBranchHashId typesCursor = do
             Reference.Builtin _ -> pure (mempty, Arity 0)
             Reference.DerivedId refId -> do
               -- TODO: batchify this
-              decl <- lift (Codebase.loadTypeDeclarationsByRefIdsOf codebase id refId) `whenNothingM` throwError (NoDeclForType fqn ref)
+              decl <- lift (Codebase.loadV1TypeDeclarationsByRefIdsOf codebase id refId) `whenNothingM` throwError (NoDeclForType fqn ref)
               pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
           let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
           typeSummary <- lift $ Summary.typeSummaryForReference codebase ref (Just fqn) Nothing

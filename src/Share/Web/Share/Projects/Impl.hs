@@ -17,6 +17,7 @@ import Share.Branch (defaultBranchShorthand)
 import Share.Branch qualified as Branch
 import Share.Codebase (CodebaseEnv)
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
@@ -182,8 +183,8 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
         ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
           Just diff -> pure (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
           Nothing -> do
-            Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
-              Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
+            CR.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
+              CR.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
                 Diffs.computeAndStoreCausalDiff
                   authZReceipt
                   (oldCodebase, oldRuntime, oldCausalId)
@@ -227,8 +228,8 @@ projectDiffTermsEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
     unisonRuntime <- asks Env.sandboxedRuntime
     Caching.cachedResponse authZReceipt "project-diff-terms" cacheKeys do
       result <- PG.tryRunTransaction $ do
-        Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
-          Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
+        CR.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
+          CR.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
             Diffs.diffTerms authZReceipt (oldCodebase, oldRuntime, oldNamesPerspective, oldTermName) (newCodebase, newRuntime, newNamesPerspective, newTermName)
       termDiff <- case result of
         Left err -> respondError err
@@ -274,8 +275,8 @@ projectDiffTypesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle proje
     unisonRuntime <- asks Env.sandboxedRuntime
     Caching.cachedResponse authZReceipt "project-diff-types" cacheKeys do
       result <- PG.tryRunTransaction do
-        Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
-          Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
+        CR.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
+          CR.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
             Diffs.diffTypes
               authZReceipt
               (oldCodebase, oldRuntime, oldNamesPerspective, oldTypeName)

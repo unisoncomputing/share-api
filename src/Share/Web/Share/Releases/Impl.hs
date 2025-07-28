@@ -15,6 +15,7 @@ import Control.Monad.Trans.Maybe
 import Data.Set qualified as Set
 import Servant
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Env qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
@@ -150,7 +151,7 @@ projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-name" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+      CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
         ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -178,7 +179,7 @@ projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-hash" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+      CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
         ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
@@ -276,7 +277,7 @@ projectReleaseNamespacesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-namespaces-by-name" cacheParams releaseHead $ do
     PG.runTransactionModeOrRespondError PG.ReadCommitted PG.ReadWrite $ do
-      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+      CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
         ND.namespaceDetails codebase rt (fromMaybe mempty path) releaseHead renderWidth `whenNothingM` throwSomeServerError (EntityMissing (ErrorID "missing-namespace") "Namespace could not be found")
   where
     cacheParams = [IDs.toText projectReleaseShortHand, tShow path, foldMap (toUrlPiece . Pretty.widthToInt) renderWidth]
@@ -319,7 +320,7 @@ getProjectReleaseReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandl
   unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "get-project-release-doc" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+      CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
         mayNamespaceDetails <- ND.namespaceDetails codebase rt rootPath releaseHead Nothing
         let mayReadme = do
               NamespaceDetails {readme} <- mayNamespaceDetails
@@ -357,7 +358,7 @@ getProjectReleaseDocEndpoint cacheKey docNames (AuthN.MaybeAuthedUserID callerUs
   unisonRuntime <- asks Env.sandboxedRuntime
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc cacheKey cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      Codebase.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
+      CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
         doc <- findAndRenderDoc codebase docNames rt rootPath releaseHead Nothing
         pure $ DocResponse {doc}
   where
