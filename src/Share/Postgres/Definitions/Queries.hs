@@ -1266,7 +1266,7 @@ saveSerializedComponent (CodebaseEnv {codebaseOwner}) chId (CBORBytes bytes) = d
       ON CONFLICT DO NOTHING
     |]
 
-termTransitiveDependencies :: Set TermId -> Transaction e (Set.Set TermId, Set.Set TypeId)
+termTransitiveDependencies :: (QueryM m) => Set TermId -> m (Set.Set TermId, Set.Set TypeId)
 termTransitiveDependencies termIds = do
   queryExpect1Row @([TermId], [TypeId])
     [sql|

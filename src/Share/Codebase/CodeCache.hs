@@ -6,7 +6,8 @@ module Share.Codebase.CodeCache
     termsForRefsOf,
     typesOfReferentsOf,
     getTermsAndTypesByRefIdsOf,
-    getTypeDeclsOf,
+    getTypeDeclsByRefIdsOf,
+    getTypeDeclsByRefsOf,
     cacheTermAndTypes,
     cacheDecls,
   )
@@ -89,7 +90,7 @@ toCodeLookup :: CodeCache s -> CL.CodeLookup Symbol (PG.Transaction e) Ann
 toCodeLookup codeCache = do
   let getTerm refId = fmap fst <$> getTermsAndTypesByRefIdsOf codeCache id refId
   let getTypeOfTerm refId = fmap snd <$> getTermsAndTypesByRefIdsOf codeCache id refId
-  let getTypeDeclaration refId = getTypeDeclsOf codeCache id refId
+  let getTypeDeclaration refId = getTypeDeclsByRefIdsOf codeCache id refId
   CL.CodeLookup {getTerm, getTypeOfTerm, getTypeDeclaration}
     <> builtinsCodeLookup
 
@@ -131,13 +132,13 @@ getTermsAndTypesByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s =
       typ <- runIdentity $ CL.getTypeOfTerm builtinsCodeLookup refId
       pure (tm, typ)
 
-getTypeDeclsOf ::
+getTypeDeclsByRefIdsOf ::
   (QueryM m) =>
   CodeCache scope ->
   Traversal s t Reference.Id (Maybe (V1.Decl Symbol Ann)) ->
   s ->
   m t
-getTypeDeclsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
+getTypeDeclsByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
   CodeCacheData {typeCache} <- readCodeCache codeCache
   s
     & asListOfDeduped trav %%~ \refs -> do
@@ -166,6 +167,24 @@ getTypeDeclsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
     findBuiltinDecl :: Reference.Id -> Maybe (V1.Decl Symbol Ann)
     findBuiltinDecl refId = do
       runIdentity $ CL.getTypeDeclaration builtinsCodeLookup refId
+
+getTypeDeclsByRefsOf ::
+  (QueryM m) =>
+  CodeCache scope ->
+  Traversal s t Reference (Maybe (V1.Decl Symbol Ann)) ->
+  s ->
+  m t
+getTypeDeclsByRefsOf codeCache trav s = do
+  s
+    & asListOf trav %%~ \refs ->
+      do
+        let derivedIds_ :: Traversal Reference (Maybe (V1.Decl Symbol Ann)) Reference.Id (Maybe (V1.Decl Symbol Ann))
+            derivedIds_ f = \case
+              -- Builtins don't have decls
+              (Reference.Builtin _) -> pure Nothing
+              -- Otherwise look up the declaration by its derived id
+              Reference.DerivedId refId -> f refId
+        getTypeDeclsByRefIdsOf codeCache (traversed . derivedIds_) refs
 
 termsForRefsOf ::
   (QueryM m) =>
@@ -235,7 +254,7 @@ typesOfReferentsOf codeCache trav s = do
                 (Maybe (V1.Decl Symbol Ann), V1Decl.ConstructorId)
             )
         ] <-
-        getTypeDeclsOf codeCache (traversed . _Right . _Right . _1) withTermTypes
+        getTypeDeclsByRefIdsOf codeCache (traversed . _Right . _Right . _1) withTermTypes
       withTypeDecls
         <&> ( \case
                 Left typ -> Just typ
