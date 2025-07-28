@@ -48,7 +48,6 @@ import Share.Postgres.Causal.Conversions (namespaceStatsPgToV2)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Definitions.Queries qualified as DefnQ
 import Share.Prelude
-import Share.Utils.Data qualified as Data
 import Share.Utils.Lens (asListOfDeduped)
 import U.Codebase.Branch qualified as V2Branch
 import U.Codebase.Causal qualified as Causal
@@ -299,12 +298,13 @@ evalDocRef codebase (CodebaseRuntime {codeLookup, codeCache, cachedEvalResult, u
     Reference.Builtin _ -> Doc.evalDoc terms typeOf eval decls tm
     Reference.DerivedId refId -> do
       termId <- DefnQ.expectTermIdsByRefIdsOf id refId
-      (termDeps, typeDeps) <- DefnQ.termTransitiveDependencies (Set.singleton termId)
-      termComponentHashIds <- DefnQ.expectComponentHashIdsByTermIdsOf traversed (toList termDeps)
-      typeComponentHashIds <- DefnQ.expectComponentHashIdsByTypeIdsOf traversed (toList typeDeps)
-
-      dependencyTerms <- DefnQ.loadTermsByIdsOf codebase traversed (Data.mapFromSelf $ Set.toList termDeps)
-      -- TODO: batchify evalDoc.
+      (termDeps, typeDeps) <- DefnQ.termTransitiveDependencyRefs (Set.singleton termId)
+      -- Prime the cache with all the terms and types we know we'll need.
+      -- No need to store them manually, they'll be persistently cached automatically just by
+      -- fetching
+      _ <- CC.getTermsAndTypesByRefIdsOf codeCache traversed (Set.toList termDeps)
+      _ <- CC.getTypeDeclsByRefIdsOf codeCache traversed (Set.toList typeDeps)
+      -- TODO: batchify evalDoc within unison
       Doc.evalDoc terms typeOf eval decls tm
   where
     -- Loading one at a time is inefficient, so we prime the cache above.
