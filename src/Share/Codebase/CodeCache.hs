@@ -60,6 +60,9 @@ builtinsCodeLookup =
   Builtin.codeLookup
     <> IOSource.codeLookupM
 
+-- | Build a Unison 'CodeLookup' which is backed by the given 'CodeCache'.
+-- The TVar will be baked in, so it will still share the cache with the CodeCache it's
+-- built from.
 toCodeLookup :: CodeCache s -> CL.CodeLookup Symbol (PG.Transaction e) Ann
 toCodeLookup codeCache = do
   let getTerm refId = fmap fst <$> getTermsAndTypesOf codeCache id refId

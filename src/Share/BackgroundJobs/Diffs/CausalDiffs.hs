@@ -9,6 +9,7 @@ import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Env qualified as Env
 import Share.IDs qualified as IDs
 import Share.Metrics qualified as Metrics
@@ -98,8 +99,8 @@ maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime (CausalDiffInfo {fromC
   let toCodebase = Codebase.codebaseEnv authZReceipt $ Codebase.codebaseLocationForUserCodebase toCodebaseOwner
   ContributionsQ.existsPrecomputedNamespaceDiff (fromCodebase, fromCausalId) (toCodebase, toCausalId) >>= \case
     True -> pure False
-    False -> Codebase.withCodebaseRuntime fromCodebase unisonRuntime \fromRuntime -> do
-      Codebase.withCodebaseRuntime toCodebase unisonRuntime \toRuntime -> do
+    False -> CR.withCodebaseRuntime fromCodebase unisonRuntime \fromRuntime -> do
+      CR.withCodebaseRuntime toCodebase unisonRuntime \toRuntime -> do
         _ <-
           Diffs.computeAndStoreCausalDiff
             authZReceipt
