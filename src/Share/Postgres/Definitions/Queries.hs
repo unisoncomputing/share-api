@@ -1273,9 +1273,9 @@ termTransitiveDependenciesIds :: (QueryM m) => Set TermId -> m (Set.Set TermId, 
 termTransitiveDependenciesIds termIds = do
   queryExpect1Row @([TermId], [TypeId])
     [sql|
-WITH
+WITH RECURSIVE
 input_terms(term_id) AS (
-  #^{singleColumnTable (toList termIds)} AS t(term_id)
+  SELECT * FROM ^{singleColumnTable (toList termIds)} AS t(term_id)
 ),
 -- Get the component hash IDs for the input terms
 base_term_components(component_hash_id) AS (
@@ -1342,9 +1342,9 @@ termTransitiveDependencyRefs :: (QueryM m) => Set TermId -> m (Set.Set TermRefer
 termTransitiveDependencyRefs termIds = do
   queryExpect1Row @([ReferenceIdTuple], [ReferenceIdTuple])
     [sql|
-WITH
+WITH RECURSIVE
 input_terms(term_id) AS (
-  #^{singleColumnTable (toList termIds)} AS t(term_id)
+  SELECT * FROM ^{singleColumnTable (toList termIds)} AS t(term_id)
 ),
 -- Get the component hash IDs for the input terms
 base_term_components(component_hash_id) AS (
@@ -1383,13 +1383,13 @@ transitive_components(component_hash_id) AS (
 -- Final result: single row with arrays of term_ids and type_ids
 SELECT
     ARRAY(
-        SELECT ch.base32, term.component_index
+        SELECT (ch.base32, term.component_index)
         FROM transitive_components tc
         JOIN terms term ON tc.component_hash_id = term.component_hash_id
         JOIN component_hashes ch ON term.component_hash_id = ch.id
     ) AS term_ids,
     ARRAY(
-        SELECT ch.base32, type.component_index
+        SELECT (ch.base32, type.component_index)
         FROM transitive_components tc
         JOIN types type ON tc.component_hash_id = type.component_hash_id
         JOIN component_hashes ch ON type.component_hash_id = ch.id
