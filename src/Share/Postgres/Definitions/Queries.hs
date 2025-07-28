@@ -7,6 +7,8 @@ module Share.Postgres.Definitions.Queries
     expectTermsByIdsOf,
     expectTermsByRefIdsOf,
     expectTermIdsByRefIdsOf,
+    expectComponentHashIdsByTermIdsOf,
+    expectComponentHashIdsByTypeIdsOf,
     saveTermComponent,
     saveEncodedTermComponent,
     termTagsByReferentsOf,
@@ -161,6 +163,28 @@ expectTermIdsByRefIdsOf trav s =
                 (refId, Nothing) -> Left (expectedTermError $ Right refId)
                 (_refId, Just termId) -> Right termId
           )
+
+expectComponentHashIdsByTermIdsOf :: (QueryA m) => Traversal s t TermId ComponentHashId -> s -> m t
+expectComponentHashIdsByTermIdsOf trav s = do
+  s
+    & asListOf trav %%~ \termIds -> do
+      queryListCol @ComponentHashId
+        [sql| SELECT term.component_hash_id
+              FROM ^{toTable (ordered termIds)} AS term_ids(ord, term_id)
+              JOIN terms term ON term.id = term_ids.term_id
+              ORDER BY term_ids.ord ASC
+            |]
+
+expectComponentHashIdsByTypeIdsOf :: (QueryA m) => Traversal s t TypeId ComponentHashId -> s -> m t
+expectComponentHashIdsByTypeIdsOf trav s = do
+  s
+    & asListOf trav %%~ \typeIds -> do
+      queryListCol @ComponentHashId
+        [sql| SELECT typ.component_hash_id
+              FROM ^{toTable (ordered typeIds)} AS type_ids(ord, type_id)
+              JOIN types typ ON typ.id = type_ids.type_id
+              ORDER BY type_ids.ord ASC
+            |]
 
 expectTermsByRefIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
 expectTermsByRefIdsOf codebase trav s = do
