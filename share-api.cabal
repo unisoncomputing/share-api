@@ -45,6 +45,8 @@ library
       Share.Branch
       Share.ChatApps
       Share.Codebase
+      Share.Codebase.CodebaseRuntime
+      Share.Codebase.CodeCache
       Share.Codebase.Types
       Share.Contribution
       Share.Env

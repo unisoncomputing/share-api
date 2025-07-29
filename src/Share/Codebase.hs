@@ -9,8 +9,6 @@ module Share.Codebase
     codebaseOwner,
     CodebaseRuntime (..),
     codebaseEnv,
-    withCodebaseRuntime,
-    codebaseRuntimeTransaction,
     codebaseForProjectBranch,
     codebaseLocationForUserCodebase,
     codebaseLocationForProjectBranchCodebase,
@@ -18,7 +16,7 @@ module Share.Codebase
     CodebaseLocation (..),
 
     -- * Definitions
-    loadTermAndTypeByRefIdsOf,
+    loadV1TermAndTypeByRefIdsOf,
     expectTermsByRefIdsOf,
     loadTypesOfTermsOf,
     expectTypesOfTermsOf,
@@ -26,7 +24,7 @@ module Share.Codebase
     expectTypesOfConstructorsOf,
     loadTypesOfConstructorsOf,
     loadTypesOfReferentsOf,
-    loadTypeDeclarationsByRefIdsOf,
+    loadV1TypeDeclarationsByRefIdsOf,
     expectTypeDeclarationsByRefIdsOf,
     loadDeclKindsOf,
     expectDeclKindsOf,
@@ -38,7 +36,6 @@ module Share.Codebase
     -- * Eval
     loadCachedEvalResult,
     saveCachedEvalResult,
-    codeLookupForUser,
 
     -- * Causals
     CausalQ.loadCausalNamespace,
@@ -62,7 +59,6 @@ module Share.Codebase
   )
 where
 
-import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Lens
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map qualified as Map
@@ -105,8 +101,6 @@ import U.Codebase.Term qualified as TermV2
 import U.Codebase.Term qualified as V2.Term
 import Unison.Builtin qualified as Builtin
 import Unison.Builtin qualified as Builtins
-import Unison.Codebase.CodeLookup qualified as CL
-import Unison.Codebase.Runtime (Runtime)
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
@@ -119,14 +113,11 @@ import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 import Unison.Referent qualified as V1Referent
-import Unison.Runtime.IOSource qualified as IOSource
 import Unison.ShortHash
 import Unison.ShortHash qualified as ShortHash
 import Unison.Symbol (Symbol)
-import Unison.Term qualified as Term
 import Unison.Term qualified as V1
 import Unison.Type qualified as V1
-import UnliftIO qualified
 
 data CodebaseError
   = MissingTypeForTerm Reference.Reference
@@ -170,30 +161,6 @@ codebaseEnv !_authZReceipt codebaseLoc = do
   let codebaseOwner = Codebase.codebaseOwnerUserId codebaseLoc
    in CodebaseEnv {codebaseOwner}
 
--- | Construct a Runtime linked to a specific codebase and transaction.
--- Don't use the runtime for one codebase with another codebase.
--- Don't use this runtime in any transaction other than the one where it's created.
-withCodebaseRuntime :: (Exception e) => CodebaseEnv -> Runtime Symbol -> (forall s. CodebaseRuntime s IO -> PG.Transaction e r) -> PG.Transaction e r
-withCodebaseRuntime codebaseEnv sandboxedRuntime f = do
-  rt <- PG.transactionUnsafeIO (codebaseRuntimeTransaction sandboxedRuntime codebaseEnv)
-  PG.asUnliftIOTransaction $ do
-    UnliftIO.withRunInIO \toIO -> do
-      toIO . PG.UnliftIOTransaction $ f $ hoistCodebaseRuntime (toIO . PG.UnliftIOTransaction) rt
-
--- | Ideally, we'd use this – a runtime with lookup actions in transaction, not IO. But that will require refactoring to
--- the runtime interface in ucm, so we can't use it for now. That's bad: we end up unsafely running separate
--- transactions for inner calls to 'codeLookup' / 'cachedEvalResult', which can lead to deadlock due to a starved
--- connection pool.
-codebaseRuntimeTransaction :: Runtime Symbol -> CodebaseEnv -> IO (CodebaseRuntime s (PG.Transaction e))
-codebaseRuntimeTransaction unisonRuntime codebase = do
-  cacheVar <- newTVarIO (CodeLookupCache mempty mempty)
-  pure
-    CodebaseRuntime
-      { codeLookup = codeLookupForUser cacheVar codebase,
-        cachedEvalResult = (fmap . fmap) Term.unannotate . loadCachedEvalResult codebase,
-        unisonRuntime
-      }
-
 -- | Wrap a response in caching.
 -- This combinator respects the cachability stored on the provided auth receipt.
 cachedCodebaseResponse ::
@@ -218,8 +185,8 @@ cachedCodebaseResponse authzReceipt codebaseOwner endpointName providedCachePara
     codebaseViewCacheKey = IDs.toText (codebaseOwnerUserId codebaseOwner)
 
 -- | Load terms and type.
-loadTermAndTypeByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann)) -> s -> m t
-loadTermAndTypeByRefIdsOf codebase trav s = do
+loadV1TermAndTypeByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann)) -> s -> m t
+loadV1TermAndTypeByRefIdsOf codebase trav s = do
   s
     & asListOf trav %%~ \refs -> do
       let hashes = refs <&> \(Reference.Id h _) -> h
@@ -257,7 +224,7 @@ convertTerms2to1Of trav s = do
 expectTermsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
 expectTermsByRefIdsOf codebase trav s = do
   s & asListOfDeduped trav \refIds -> do
-    termsAndTypes <- loadTermAndTypeByRefIdsOf codebase traversed refIds
+    termsAndTypes <- loadV1TermAndTypeByRefIdsOf codebase traversed refIds
     for (zip refIds termsAndTypes) \case
       (refId, Nothing) -> unrecoverableError (MissingTerm refId)
       (_, Just (term, typ)) -> pure (term, typ)
@@ -277,7 +244,7 @@ loadTypesOfTermsOf codebase trav s =
                         <&> \typ ->
                           (typ $> builtinAnnotation)
                  in Left builtinType
-      results <- loadTermAndTypeByRefIdsOf codebase (traversed . _Right) partitionedRefs
+      results <- loadV1TermAndTypeByRefIdsOf codebase (traversed . _Right) partitionedRefs
       pure $
         results <&> \case
           Left builtin -> builtin
@@ -329,8 +296,8 @@ loadDeclKindsOf trav s =
           & DefnQ.loadDeclKindsOf (traversed . _Right)
       pure (fmap (either id id) xs)
 
-loadTypeDeclarationsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t Reference.Id (Maybe (V1.Decl Symbol Ann)) -> s -> m t
-loadTypeDeclarationsByRefIdsOf codebase trav s =
+loadV1TypeDeclarationsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t Reference.Id (Maybe (V1.Decl Symbol Ann)) -> s -> m t
+loadV1TypeDeclarationsByRefIdsOf codebase trav s =
   s
     & asListOf trav %%~ \refIds -> do
       DefnQ.loadDeclsByRefIdsOf codebase traversed refIds
@@ -343,7 +310,7 @@ expectTypeDeclarationsByRefIdsOf :: (QueryM m) => CodebaseEnv -> Traversal s t R
 expectTypeDeclarationsByRefIdsOf codebase trav s = do
   s
     & asListOf trav %%~ \refIds -> do
-      results <- loadTypeDeclarationsByRefIdsOf codebase traversed refIds
+      results <- loadV1TypeDeclarationsByRefIdsOf codebase traversed refIds
       for (zip refIds results) \case
         (refId, Nothing) -> unrecoverableError (MissingDecl refId)
         (_, Just decl) -> pure decl
@@ -398,7 +365,7 @@ loadTypesOfConstructorsOf codebase trav s =
             refs <&> \case
               (Reference.Builtin _t, _conId) -> Left Nothing
               (Reference.DerivedId refId, conId) -> Right ((refId, conId), refId)
-      results <- loadTypeDeclarationsByRefIdsOf codebase (traversed . _Right . _2) partitionedRefs
+      results <- loadV1TypeDeclarationsByRefIdsOf codebase (traversed . _Right . _2) partitionedRefs
       for results \case
         (Right ((refId, _conId), Nothing)) -> (unrecoverableError (MissingDecl refId))
         (Right ((_refId, conId), (Just decl))) -> do
@@ -413,49 +380,6 @@ expectTypesOfConstructorsOf codebase trav s =
       for (zip refs results) \case
         ((ref, conId), Nothing) -> unrecoverableError (MissingTypeForConstructor ref conId)
         (_, Just r) -> pure r
-
-data CodeLookupCache = CodeLookupCache
-  { termCache :: Map Reference.Id (V1.Term Symbol Ann, V1.Type Symbol Ann),
-    typeCache :: Map Reference.Id (V1.Decl Symbol Ann)
-  }
-
--- | TODO: The code lookup should either be batchified or we should preload the cache with
--- everything we think we'll need.
-codeLookupForUser :: TVar CodeLookupCache -> CodebaseEnv -> CL.CodeLookup Symbol (PG.Transaction e) Ann
-codeLookupForUser cacheVar codebaseOwner = do
-  CL.CodeLookup (fmap (fmap fst) . getTermAndType) (fmap (fmap snd) . getTermAndType) getTypeDecl
-    <> Builtin.codeLookup
-    <> IOSource.codeLookupM
-  where
-    getTermAndType ::
-      Reference.Id ->
-      PG.Transaction e (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
-    getTermAndType r = do
-      CodeLookupCache {termCache} <- PG.transactionUnsafeIO (readTVarIO cacheVar)
-      case Map.lookup r termCache of
-        Just termAndType -> pure (Just termAndType)
-        Nothing -> do
-          maybeTermAndType <- loadTermAndTypeByRefIdsOf codebaseOwner id r
-          whenJust maybeTermAndType \termAndType -> do
-            PG.transactionUnsafeIO do
-              atomically do
-                modifyTVar' cacheVar \CodeLookupCache {termCache, ..} ->
-                  CodeLookupCache {termCache = Map.insert r termAndType termCache, ..}
-          pure maybeTermAndType
-
-    getTypeDecl :: Reference.Id -> PG.Transaction e (Maybe (V1.Decl Symbol Ann))
-    getTypeDecl r = do
-      CodeLookupCache {typeCache} <- PG.transactionUnsafeIO (readTVarIO cacheVar)
-      case Map.lookup r typeCache of
-        Just typ -> pure (Just typ)
-        Nothing -> do
-          maybeType <- loadTypeDeclarationsByRefIdsOf codebaseOwner id r
-          whenJust maybeType \typ ->
-            PG.transactionUnsafeIO do
-              atomically do
-                modifyTVar' cacheVar \CodeLookupCache {typeCache, ..} ->
-                  CodeLookupCache {typeCache = Map.insert r typ typeCache, ..}
-          pure maybeType
 
 -- | Look up the result of evaluating a term if we have it cached.
 --

@@ -38,12 +38,15 @@ import Control.Lens hiding ((??))
 import Data.List (unzip4, zipWith4, zipWith5)
 import Data.List qualified as List
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodeCache qualified as CC
 import Share.Codebase.Types (CodebaseRuntime (CodebaseRuntime, cachedEvalResult))
 import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Conversions (namespaceStatsPgToV2)
 import Share.Postgres.Causal.Queries qualified as CausalQ
+import Share.Postgres.Definitions.Queries qualified as DefnQ
 import Share.Prelude
 import Share.Utils.Lens (asListOfDeduped)
 import U.Codebase.Branch qualified as V2Branch
@@ -289,24 +292,35 @@ evalDocRef ::
   Codebase.CodebaseRuntime s IO ->
   V2.TermReference ->
   m (Doc.EvaluatedDoc Symbol)
-evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntime}) termRef = do
+evalDocRef codebase (CodebaseRuntime {codeLookup, codeCache, cachedEvalResult, unisonRuntime}) termRef = PG.transactionSpan "evalDocRef" mempty do
   let tm = Term.ref () termRef
-  -- TODO: batchify evalDoc.
-  Doc.evalDoc terms typeOf eval decls tm
+  case termRef of
+    Reference.Builtin _ -> Doc.evalDoc terms typeOf eval decls tm
+    Reference.DerivedId refId -> do
+      termId <- DefnQ.expectTermIdsByRefIdsOf id refId
+      (termDeps, typeDeps) <- DefnQ.termTransitiveDependencyRefs (Set.singleton termId)
+      -- Prime the cache with all the terms and types we know we'll need.
+      -- No need to store them manually, they'll be persistently cached automatically just by
+      -- fetching
+      _ <- CC.getTermsAndTypesByRefIdsOf codeCache traversed (Set.toList termDeps)
+      _ <- CC.getTypeDeclsByRefIdsOf codeCache traversed (Set.toList typeDeps)
+      -- TODO: batchify evalDoc within unison
+      Doc.evalDoc terms typeOf eval decls tm
   where
+    -- Loading one at a time is inefficient, so we prime the cache above.
     terms :: Reference -> m (Maybe (V1.Term Symbol ()))
-    terms termRef@(Reference.Builtin _) = pure (Just (Term.ref () termRef))
-    terms (Reference.DerivedId termRef) =
-      -- TODO: batchify properly
-      fmap (Term.unannotate . fst) <$> (Codebase.loadTermAndTypeByRefIdsOf codebase id termRef)
+    terms = CC.termsForRefsOf codeCache id
 
+    -- Loading one at a time is inefficient, so we prime the cache above.
     typeOf :: Referent.Referent -> m (Maybe (V1.Type Symbol ()))
-    typeOf termRef =
-      -- TODO: batchify properly
-      fmap void <$> Codebase.loadTypesOfReferentsOf codebase id (Cv.referent1to2 termRef)
+    typeOf = CC.typesOfReferentsOf codeCache id
+
+    -- Loading one at a time is inefficient, so we prime the cache above.
+    decls :: Reference -> m (Maybe (DD.Decl Symbol ()))
+    decls ref = fmap (DD.amap (const ())) <$> CC.getTypeDeclsByRefsOf codeCache id ref
 
     eval :: V1.Term Symbol a -> m (Maybe (V1.Term Symbol ()))
-    eval (Term.amap (const mempty) -> tm) = do
+    eval (Term.amap (const mempty) -> tm) = PG.transactionSpan "eval" mempty do
       -- We use an empty ppe for evalutation, it's only used for adding additional context to errors.
       let evalPPE = PPE.empty
       termRef <- fmap eitherToMaybe . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE unisonRuntime tm
@@ -319,12 +333,6 @@ evalDocRef codebase (CodebaseRuntime {codeLookup, cachedEvalResult, unisonRuntim
             (Term.amap (const mempty) tmr)
         _ -> pure ()
       pure $ termRef <&> Term.amap (const mempty) . snd
-
-    decls :: Reference -> m (Maybe (DD.Decl Symbol ()))
-    decls (Reference.DerivedId typeRef) =
-      -- TODO: batchify properly
-      fmap (DD.amap (const ())) <$> (Codebase.loadTypeDeclarationsByRefIdsOf codebase id typeRef)
-    decls _ = pure Nothing
 
 -- | Find all definitions and children reachable from the given 'V2Branch.Branch',
 lsBranch ::
@@ -376,7 +384,7 @@ typeDeclHeader ::
   m (DisplayObject Syntax.SyntaxText Syntax.SyntaxText)
 typeDeclHeader codebase ppe r = case Reference.toId r of
   Just rid ->
-    Codebase.loadTypeDeclarationsByRefIdsOf codebase id rid <&> \case
+    Codebase.loadV1TypeDeclarationsByRefIdsOf codebase id rid <&> \case
       Nothing -> DisplayObject.MissingObject (Reference.toShortHash r)
       Just decl ->
         DisplayObject.UserObject $

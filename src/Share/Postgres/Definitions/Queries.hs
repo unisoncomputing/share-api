@@ -7,6 +7,8 @@ module Share.Postgres.Definitions.Queries
     expectTermsByIdsOf,
     expectTermsByRefIdsOf,
     expectTermIdsByRefIdsOf,
+    expectComponentHashIdsByTermIdsOf,
+    expectComponentHashIdsByTypeIdsOf,
     saveTermComponent,
     saveEncodedTermComponent,
     termTagsByReferentsOf,
@@ -29,6 +31,8 @@ module Share.Postgres.Definitions.Queries
     ensureBytesIdsOf,
     expectTextsOf,
     saveTypeComponent,
+    termTransitiveDependenciesIds,
+    termTransitiveDependencyRefs,
 
     -- * For Migrations
     saveSerializedComponent,
@@ -48,6 +52,8 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
+import Hasql.Decoders qualified as Decoders
+import Hasql.Interpolate qualified as Hasql
 import Servant (err500)
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres
@@ -160,6 +166,28 @@ expectTermIdsByRefIdsOf trav s =
                 (refId, Nothing) -> Left (expectedTermError $ Right refId)
                 (_refId, Just termId) -> Right termId
           )
+
+expectComponentHashIdsByTermIdsOf :: (QueryA m) => Traversal s t TermId ComponentHashId -> s -> m t
+expectComponentHashIdsByTermIdsOf trav s = do
+  s
+    & asListOf trav %%~ \termIds -> do
+      queryListCol @ComponentHashId
+        [sql| SELECT term.component_hash_id
+              FROM ^{toTable (ordered termIds)} AS term_ids(ord, term_id)
+              JOIN terms term ON term.id = term_ids.term_id
+              ORDER BY term_ids.ord ASC
+            |]
+
+expectComponentHashIdsByTypeIdsOf :: (QueryA m) => Traversal s t TypeId ComponentHashId -> s -> m t
+expectComponentHashIdsByTypeIdsOf trav s = do
+  s
+    & asListOf trav %%~ \typeIds -> do
+      queryListCol @ComponentHashId
+        [sql| SELECT typ.component_hash_id
+              FROM ^{toTable (ordered typeIds)} AS type_ids(ord, type_id)
+              JOIN types typ ON typ.id = type_ids.type_id
+              ORDER BY type_ids.ord ASC
+            |]
 
 expectTermsByRefIdsOf :: (HasCallStack, QueryM m) => CodebaseEnv -> Traversal s t TermReferenceId (V2.Term Symbol, V2.Type Symbol) -> s -> m t
 expectTermsByRefIdsOf codebase trav s = do
@@ -1240,6 +1268,138 @@ saveSerializedComponent (CodebaseEnv {codebaseOwner}) chId (CBORBytes bytes) = d
         VALUES (#{codebaseOwner}, #{chId}, #{bytesId})
       ON CONFLICT DO NOTHING
     |]
+
+termTransitiveDependenciesIds :: (QueryM m) => Set TermId -> m (Set.Set TermId, Set.Set TypeId)
+termTransitiveDependenciesIds termIds = do
+  queryExpect1Row @([TermId], [TypeId])
+    [sql|
+WITH RECURSIVE
+input_terms(term_id) AS (
+  SELECT * FROM ^{singleColumnTable (toList termIds)} AS t(term_id)
+),
+-- Get the component hash IDs for the input terms
+base_term_components(component_hash_id) AS (
+    SELECT DISTINCT term.component_hash_id
+    FROM input_terms it
+        JOIN terms term ON it.term_id = term.id
+),
+-- Recursively find all transitive component dependencies
+transitive_components(component_hash_id) AS (
+    -- Base case: start with the components of our input terms
+    SELECT DISTINCT btc.component_hash_id
+    FROM base_term_components btc
+    UNION
+    -- Recursive case: find dependencies of current components
+    ( WITH rec AS (
+        SELECT component_hash_id
+        FROM transitive_components tc
+    )
+        -- Get term dependencies from current components
+        SELECT DISTINCT ref.component_hash_id
+        FROM rec atc
+            -- Get all terms from the component
+            JOIN terms term ON atc.component_hash_id = term.component_hash_id
+            -- Get their component references
+            JOIN term_local_component_references ref ON term.id = ref.term_id
+        UNION
+        -- Get type dependencies from current components
+        SELECT DISTINCT ref.component_hash_id
+        FROM rec atc
+            -- Get all types from the component
+            JOIN types typ ON atc.component_hash_id = typ.component_hash_id
+            -- Get their component references
+            JOIN type_local_component_references ref ON typ.id = ref.type_id
+    )
+)
+-- Final result: single row with arrays of term_ids and type_ids
+SELECT
+    ARRAY(
+        SELECT term.id
+        FROM transitive_components tc
+        JOIN terms term ON tc.component_hash_id = term.component_hash_id
+    ) AS term_ids,
+    ARRAY(
+        SELECT type.id
+        FROM transitive_components tc
+        JOIN types type ON tc.component_hash_id = type.component_hash_id
+    ) AS type_ids;
+    |]
+    <&> bimap Set.fromList Set.fromList
+
+data ReferenceIdTuple = ReferenceIdTuple
+  { tupleComponentHash :: ComponentHash,
+    tupleComponentIndex :: PgComponentIndex
+  }
+  deriving (Eq, Show)
+
+instance Hasql.DecodeValue ReferenceIdTuple where
+  decodeValue = Decoders.composite $ do
+    tupleComponentHash <- Decoders.field $ Hasql.decodeField
+    tupleComponentIndex <- Decoders.field $ Hasql.decodeField
+    pure ReferenceIdTuple {tupleComponentHash, tupleComponentIndex}
+
+termTransitiveDependencyRefs :: (QueryM m) => Set TermId -> m (Set.Set TermReferenceId, Set.Set TypeReferenceId)
+termTransitiveDependencyRefs termIds = do
+  queryExpect1Row @([ReferenceIdTuple], [ReferenceIdTuple])
+    [sql|
+WITH RECURSIVE
+input_terms(term_id) AS (
+  SELECT * FROM ^{singleColumnTable (toList termIds)} AS t(term_id)
+),
+-- Get the component hash IDs for the input terms
+base_term_components(component_hash_id) AS (
+    SELECT DISTINCT term.component_hash_id
+    FROM input_terms it
+        JOIN terms term ON it.term_id = term.id
+),
+-- Recursively find all transitive component dependencies
+transitive_components(component_hash_id) AS (
+    -- Base case: start with the components of our input terms
+    SELECT DISTINCT btc.component_hash_id
+    FROM base_term_components btc
+    UNION
+    -- Recursive case: find dependencies of current components
+    ( WITH rec AS (
+        SELECT component_hash_id
+        FROM transitive_components tc
+    )
+        -- Get term dependencies from current components
+        SELECT DISTINCT ref.component_hash_id
+        FROM rec atc
+            -- Get all terms from the component
+            JOIN terms term ON atc.component_hash_id = term.component_hash_id
+            -- Get their component references
+            JOIN term_local_component_references ref ON term.id = ref.term_id
+        UNION
+        -- Get type dependencies from current components
+        SELECT DISTINCT ref.component_hash_id
+        FROM rec atc
+            -- Get all types from the component
+            JOIN types typ ON atc.component_hash_id = typ.component_hash_id
+            -- Get their component references
+            JOIN type_local_component_references ref ON typ.id = ref.type_id
+    )
+)
+-- Final result: single row with arrays of term_ids and type_ids
+SELECT
+    ARRAY(
+        SELECT (ch.base32, term.component_index)
+        FROM transitive_components tc
+        JOIN terms term ON tc.component_hash_id = term.component_hash_id
+        JOIN component_hashes ch ON term.component_hash_id = ch.id
+    ) AS term_ids,
+    ARRAY(
+        SELECT (ch.base32, type.component_index)
+        FROM transitive_components tc
+        JOIN types type ON tc.component_hash_id = type.component_hash_id
+        JOIN component_hashes ch ON type.component_hash_id = ch.id
+    ) AS type_ids;
+    |]
+    <&> bothMap (Set.fromList . fmap mkReference)
+  where
+    mkReference :: ReferenceIdTuple -> Reference.Id
+    mkReference (ReferenceIdTuple {tupleComponentHash, tupleComponentIndex}) =
+      Reference.Id (unComponentHash tupleComponentHash) (unPgComponentIndex tupleComponentIndex)
 
 expectedTermError :: Either TermId TermReferenceId -> InternalServerError DefinitionQueryError
 expectedTermError refId =

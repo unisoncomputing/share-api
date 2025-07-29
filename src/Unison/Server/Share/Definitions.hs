@@ -17,7 +17,7 @@ import Share.Backend qualified as Backend
 import Share.Codebase (CodebaseEnv, CodebaseRuntime)
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseEnv (..))
-import Share.Postgres (QueryM)
+import Share.Postgres (QueryM, transactionSpan)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
 import Share.Postgres.NameLookups.Types (pathToPathSegments)
@@ -162,7 +162,7 @@ renderDocRefs ::
   [TermReference] ->
   m [(HashQualifiedName, UnisonHash, Doc.Doc)]
 renderDocRefs _codebase _ppedBuilder _width _rt [] = pure []
-renderDocRefs codebase ppedBuilder width rt docRefs = do
+renderDocRefs codebase ppedBuilder width rt docRefs = transactionSpan "" mempty do
   eDocs <- for docRefs \ref -> (ref,) <$> (Backend.evalDocRef codebase rt ref)
   let docDeps = foldMap (Doc.dependencies . snd) eDocs <> Set.fromList (LD.TermReference <$> docRefs)
   docsPPED <- ppedBuilder docDeps

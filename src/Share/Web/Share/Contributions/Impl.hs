@@ -23,6 +23,7 @@ import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
 import Share.Branch (Branch (..))
 import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Contribution
 import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle)
@@ -364,8 +365,8 @@ contributionDiffTermsEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
         unisonRuntime <- asks Env.sandboxedRuntime
         result <-
           PG.tryRunTransaction do
-            Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
-              Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
+            CR.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
+              CR.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
                 (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
                 (oldPerspective, newPerspective) <- (oldBranchHashId, newBranchHashId) & traverseOf both NPOps.namesPerspectiveForRoot
                 Diffs.diffTerms
@@ -424,8 +425,8 @@ contributionDiffTypesEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) userHand
       typeDiff <-
         (either respondError pure =<<) do
           PG.tryRunTransaction do
-            Codebase.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
-              Codebase.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
+            CR.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime -> do
+              CR.withCodebaseRuntime newCodebase unisonRuntime \newRuntime -> do
                 (oldBranchHashId, newBranchHashId) <- CausalQ.expectNamespaceIdsByCausalIdsOf both (oldCausalId, newBranchCausalId)
                 (oldPerspective, newPerspective) <- (oldBranchHashId, newBranchHashId) & traverseOf both NPOps.namesPerspectiveForRoot
                 Diffs.diffTypes authZReceipt (oldCodebase, oldRuntime, oldPerspective, oldTypeName) (newCodebase, newRuntime, newPerspective, newTypeName)
