@@ -25,17 +25,15 @@ ys = [!a, !b] :+ 3
 ``` ucm :added-by-ucm
   Loading changes detected in scratch.u.
 
-  I found and typechecked these definitions in scratch.u. If you
-  do an `update`, here's how your codebase would change:
+  + type A
+  + type B
 
-    ⍟ These new definitions are ok to `update`:
-    
-      type A
-      type B
-      a  : 'Nat
-      b  : 'Nat
-      xs : ['{g} Nat]
-      ys : [Nat]
+  + a  : 'Nat
+  + b  : 'Nat
+  + xs : ['{g} Nat]
+  + ys : [Nat]
+
+  Run `update` to apply these changes to your codebase.
 ```
 
 ``` ucm :hide
@@ -47,7 +45,7 @@ Push and pull it back.
 ``` ucm
 proj/main> push @transcripts/proj/main
 
-  Uploaded 372 entities.
+  Uploaded 443 entities.
 
   I just created @transcripts/proj on http://localhost:5424
 
@@ -73,7 +71,7 @@ proj/pulled> ls .
   4. B/       (2 terms)
   5. a        ('Nat)
   6. b        ('Nat)
-  7. builtin/ (483 terms, 78 types)
+  7. builtin/ (582 terms, 100 types)
   8. xs       (['{g} Nat])
   9. ys       ([Nat])
 ```
