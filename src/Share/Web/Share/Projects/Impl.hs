@@ -13,6 +13,7 @@ import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Servant
+import Share.BackgroundJobs.Diffs.Queries qualified as DiffsQ
 import Share.Branch (defaultBranchShorthand)
 import Share.Branch qualified as Branch
 import Share.Codebase (CodebaseEnv)
@@ -170,35 +171,29 @@ diffNamespacesEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle project
   (newCodebase, newCausalId, _newBranchId) <- namespaceHashForBranchOrRelease authZReceipt project newShortHand
 
   let cacheKeys = [IDs.toText projectId, IDs.toText oldShortHand, IDs.toText newShortHand, Caching.causalIdCacheKey oldCausalId, Caching.causalIdCacheKey newCausalId]
-  Caching.cachedResponse authZReceipt "project-diff-namespaces" cacheKeys do
-    ((oldCausalHash, newCausalHash), maybeLcaCausalId) <-
-      PG.runTransaction do
-        PG.pipelined do
-          (,)
-            <$> CausalQ.expectCausalHashesByIdsOf each (oldCausalId, newCausalId)
-            <*> CausalQ.bestCommonAncestor oldCausalId newCausalId
-    unisonRuntime <- asks Env.sandboxedRuntime
-    diff <-
+
+  Caching.conditionallyCachedResponse authZReceipt "project-diff-namespaces" cacheKeys do
+    ((oldCausalHash, newCausalHash)) <- PG.runTransaction do
+      CausalQ.expectCausalHashesByIdsOf both (oldCausalId, newCausalId)
+    (diff, shouldCache) <-
       PG.runTransaction do
         ContributionsQ.getPrecomputedNamespaceDiff (oldCodebase, oldCausalId) (newCodebase, newCausalId) >>= \case
-          Just diff -> pure (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff)))
+          Just diff -> do
+            pure $ (ShareNamespaceDiffStatus'Done (PreEncoded (ByteString.Lazy.fromStrict (Text.encodeUtf8 diff))), True)
           Nothing -> do
-            CR.withCodebaseRuntime oldCodebase unisonRuntime \oldRuntime ->
-              CR.withCodebaseRuntime newCodebase unisonRuntime \newRuntime ->
-                Diffs.computeAndStoreCausalDiff
-                  authZReceipt
-                  (oldCodebase, oldRuntime, oldCausalId)
-                  (newCodebase, newRuntime, newCausalId)
-                  maybeLcaCausalId
+            DiffsQ.submitCausalsToBeDiffed (oldCodebase, oldCausalId) (newCodebase, newCausalId)
+            pure (ShareNamespaceDiffStatus'StillComputing, False)
     pure
-      ShareNamespaceDiffResponse
-        { project = projectShortHand,
-          oldRef = oldShortHand,
-          oldRefHash = Just $ PrefixedHash oldCausalHash,
-          newRef = newShortHand,
-          newRefHash = Just $ PrefixedHash newCausalHash,
-          diff = ShareNamespaceDiffStatus'Done diff
-        }
+      ( ShareNamespaceDiffResponse
+          { project = projectShortHand,
+            oldRef = oldShortHand,
+            oldRefHash = Just $ PrefixedHash oldCausalHash,
+            newRef = newShortHand,
+            newRefHash = Just $ PrefixedHash newCausalHash,
+            diff = diff
+          },
+        shouldCache
+      )
   where
     projectShortHand = IDs.ProjectShortHand {userHandle, projectSlug}
 
