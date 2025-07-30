@@ -38,6 +38,7 @@ import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
+import UnliftIO (MonadUnliftIO (..))
 
 -- Orphans for 'Hash'
 instance Hasql.EncodeValue Hash where
