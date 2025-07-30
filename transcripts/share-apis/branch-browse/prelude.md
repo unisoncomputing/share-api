@@ -30,6 +30,11 @@ Update a few things so we can verify that pushing to an existing branch works.
 other.remoteMap = 10
 something.Remote.map = 20
 some.other.thing = 30
+
+
+-- A definition named `.`, this is a regression test since there are old definitions named `.`
+-- in the history of some code on Share.
+g `.` f = a -> g (f a)
 ```
 
 ```ucm
