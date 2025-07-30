@@ -38,6 +38,7 @@ import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
+import Unison.Syntax.NameSegment qualified as NameSegment
 import UnliftIO (MonadUnliftIO (..))
 
 -- Orphans for 'Hash'
@@ -102,19 +103,43 @@ deriving via Hash instance FromHttpApiData ComponentHash
 
 deriving via Hash instance ToHttpApiData ComponentHash
 
-deriving via Text instance Hasql.DecodeValue NameSegment
+-- | We require that dots in names in the DB represent namespace separators,
+-- so we swap them for a literal "\_" for storage and map back on decoding.
+--
+-- >>> unescapeDots "`\\_~`"
+-- "`.~`"
+unescapeDots :: Text -> Text
+unescapeDots =
+  Text.replace "\\_" "."
 
-deriving via Text instance Hasql.EncodeValue NameSegment
+-- | We require that dots in names in the DB represent namespace separators,
+-- so we swap them for a literal "\_" for storage and map back on decoding.
+--
+-- >>> escapeDots "`.~`"
+-- "`\\_~`"
+escapeDots :: Text -> Text
+escapeDots =
+  Text.replace "." "\\_"
+
+instance Hasql.DecodeValue NameSegment where
+  decodeValue =
+    Hasql.decodeValue @Text
+      & Decoders.refine (unescapeDots >>> NameSegment.parseText)
+
+instance Hasql.EncodeValue NameSegment where
+  encodeValue =
+    Hasql.encodeValue @Text
+      & contramap (NameSegment.toEscapedText >>> escapeDots)
 
 instance Hasql.DecodeValue Name where
   decodeValue =
     Hasql.decodeValue @Text
-      & Decoders.refine Name.parseTextEither
+      & Decoders.refine (unescapeDots >>> Name.parseTextEither)
 
 instance Hasql.EncodeValue Name where
   encodeValue =
     Hasql.encodeValue @Text
-      & contramap Name.toText
+      & contramap (Name.toText >>> escapeDots)
 
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.DecodeRow (Reference' t h) where
   decodeRow = do
