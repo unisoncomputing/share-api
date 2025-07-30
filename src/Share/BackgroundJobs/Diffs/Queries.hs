@@ -22,13 +22,12 @@ submitCausalsToBeDiffed (CodebaseEnv {codebaseOwner = fromCodebase}, fromCausalI
     [sql|
       INSERT INTO causal_diff_queue (from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner)
         SELECT #{fromCausalId}, #{toCausalId}, #{fromCodebase}, #{toCodebase}
-        FROM diff_info
           WHERE NOT EXISTS (
             SELECT FROM namespace_diffs nd
-              WHERE nd.left_causal_id = diff_info.from_causal_id
-              AND nd.right_causal_id = diff_info.to_causal_id
-              AND nd.left_codebase_owner_user_id = diff_info.from_codebase_owner
-              AND nd.right_codebase_owner_user_id = diff_info.to_codebase_owner
+              WHERE nd.left_causal_id = #{fromCausalId}
+              AND nd.right_causal_id = #{toCausalId}
+              AND nd.left_codebase_owner_user_id = #{fromCodebase}
+              AND nd.right_codebase_owner_user_id = #{toCodebase}
           )
         ON CONFLICT DO NOTHING
     |]
