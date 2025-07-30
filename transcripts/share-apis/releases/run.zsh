@@ -15,6 +15,13 @@ fetch "$test_user" POST project-release-ucm-create '/ucm/v1/projects/create-proj
     "branch-head": "sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg"
 }'
 
+# Create another one to diff against later
+fetch "$test_user" POST project-release-ucm-create-2 '/ucm/v1/projects/create-project-branch' '{
+    "project-id": "P-cdad39a9-9ed2-4a5e-b2d7-62bbe81446dd",
+    "branch-name": "releases/5.6.7",
+    "branch-head": "sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg"
+}'
+
 fetch "$test_user" GET release-prefix-search '/users/test/projects/publictestproject/releases?version-prefix=4.5.'
 
 # Deprecate a release
@@ -39,7 +46,7 @@ fetch "$test_user" POST project-release-api-create '/users/unison/projects/priva
 }'
 
 # Initial fetch of the release diff should just kick off a background diff computation.
-fetch "$test_user" GET release-diff-kickoff '/users/unison/projects/privateorgproject/diff/namespaces?old=releases%2F1.2.3&new=releases%2F4.5.6'
+fetch "$test_user" GET release-diff-kickoff '/users/test/projects/publictestproject/diff/namespaces?old=releases%2F4.5.6&new=releases%2F5.6.7'
 
 # Since namespace diffs are computed asynchronously, we just block here until there are no diffs left in
 # the causal_diff_queue.
@@ -53,4 +60,4 @@ done
 
 # We expect the release diff to be computed now, even though it'll just be empty in this case, since the releases
 # are the same.
-fetch "$test_user" GET release-diff-done '/users/unison/projects/privateorgproject/diff/namespaces?old=releases%2F1.2.3&new=releases%2F4.5.6'
+fetch "$test_user" GET release-diff-done '/users/test/projects/publictestproject/diff/namespaces?old=releases%2F4.5.6&new=releases%2F5.6.7'
