@@ -1,19 +1,11 @@
 {
   "body": {
-    "diff": {
-      "defns": {
-        "changes": [],
-        "children": []
-      },
-      "libdeps": [],
-      "tag": "ok"
-    },
     "newRef": "releases/5.6.7",
     "newRefHash": "#sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg",
     "oldRef": "releases/4.5.6",
     "oldRefHash": "#sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg",
     "project": "@test/publictestproject",
-    "tag": "done"
+    "tag": "computing"
   },
   "status": [
     {
