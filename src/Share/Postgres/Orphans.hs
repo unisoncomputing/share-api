@@ -35,12 +35,9 @@ import Unison.Hash qualified as Hash
 import Unison.Hash32 (Hash32)
 import Unison.Hash32 qualified as Hash32
 import Unison.Name (Name)
-import Unison.NameSegment qualified as NameSegment
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
-import Unison.Syntax.NameSegment qualified as NameSegment
-import UnliftIO (MonadUnliftIO (..))
 
 -- Orphans for 'Hash'
 instance Hasql.EncodeValue Hash where
@@ -104,15 +101,9 @@ deriving via Hash instance FromHttpApiData ComponentHash
 
 deriving via Hash instance ToHttpApiData ComponentHash
 
-instance Hasql.DecodeValue NameSegment where
-  decodeValue =
-    Hasql.decodeValue @Text
-      & Decoders.refine NameSegment.parseText
+deriving via Text instance Hasql.DecodeValue NameSegment
 
-instance Hasql.EncodeValue NameSegment where
-  encodeValue =
-    Hasql.encodeValue @Text
-      & contramap NameSegment.toUnescapedText
+deriving via Text instance Hasql.EncodeValue NameSegment
 
 instance Hasql.DecodeValue Name where
   decodeValue =
