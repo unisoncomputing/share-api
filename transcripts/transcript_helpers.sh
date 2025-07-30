@@ -234,3 +234,15 @@ EOF
 }
 
 login_user_for_ucm 'transcripts'
+
+wait_for_diffs() {
+# Since namespace diffs are computed asynchronously, we just block here until there are no diffs left in
+# the causal_diff_queue.
+for i in {1..5}; do
+  if [[ $(pg_sql "select count(*) from causal_diff_queue;") -ne 0 ]]; then
+    sleep 1
+  else
+    break
+  fi
+done
+}

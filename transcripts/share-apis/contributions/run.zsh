@@ -118,15 +118,7 @@ transcript_ucm transcript merge-contribution-branches.md
 # Fetch the contribution to see that it's been marked as merged.
 fetch "$transcripts_user" GET merged-contribution '/users/transcripts/projects/bca-updates/contributions/1'
 
-# Since namespace diffs are computed asynchronously, we just block here until there are no diffs left in
-# the causal_diff_queue.
-for i in {1..5}; do
-  if [[ $(pg_sql "select count(*) from causal_diff_queue;") -ne 0 ]]; then
-    sleep 1
-  else
-    break
-  fi
-done
+wait_for_diffs
 
 # BCA of contribution diff should still be frozen at it's pre-merge hash. The bca and source hash should be different (or else we'd see no diff!)
 fetch "$transcripts_user" GET merged-contribution-diff '/users/transcripts/projects/bca-updates/contributions/1/diff'
