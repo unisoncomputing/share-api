@@ -31,6 +31,7 @@ transcripts=(
     sync-apis transcripts/sync-apis/
     orgs transcripts/share-apis/orgs/
     notifications transcripts/share-apis/notifications/
+    escaped-names transcripts/share-apis/escaped-names/
 )
 
 for transcript dir in "${(@kv)transcripts}"; do

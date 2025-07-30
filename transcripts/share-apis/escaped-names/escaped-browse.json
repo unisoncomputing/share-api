@@ -1,0 +1,437 @@
+{
+  "body": {
+    "namespaceListingChildren": [
+      {
+        "contents": {
+          "termHash": "#r91vu8v76092pse82l1gm1euf1r7ve25fu7etfta1det345fgvm1ccin9p296b586693fv6ktl092clq8k2rsjgqbl1ci8n47luep70",
+          "termName": "`.!~`",
+          "termTag": "Plain",
+          "termType": [
+            {
+              "annotation": null,
+              "segment": "("
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i1"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "{"
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g1"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "}"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "t"
+            },
+            {
+              "annotation": null,
+              "segment": ")"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": null,
+              "segment": "("
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "{"
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "}"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i1"
+            },
+            {
+              "annotation": null,
+              "segment": ")"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "{"
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g1"
+            },
+            {
+              "annotation": null,
+              "segment": ","
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "}"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "t"
+            }
+          ]
+        },
+        "tag": "TermObject"
+      },
+      {
+        "contents": {
+          "namespaceHash": "#bfacnujp9mdt0vgfokj53j6vbioafuvlrd0ju5a5eph2jk2e4sooeldh55hij4bm732rtb0snimvntj43gfka2qun4r7djrs1irog5g",
+          "namespaceName": "`.!~`",
+          "namespaceSize": 1
+        },
+        "tag": "Subnamespace"
+      },
+      {
+        "contents": {
+          "termHash": "#srpc2uag5p1grvshbcm3urjntakgi3g3dthfse2cp38sd6uestd5neseces5ue7kum2ca0gsg9i0cilkl0gn8dn3q5dn86v4r8lbha0",
+          "termName": "`.`",
+          "termTag": "Plain",
+          "termType": [
+            {
+              "annotation": null,
+              "segment": "("
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i1"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "{"
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g1"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "}"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "o"
+            },
+            {
+              "annotation": null,
+              "segment": ")"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": null,
+              "segment": "("
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "{"
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "}"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i1"
+            },
+            {
+              "annotation": null,
+              "segment": ")"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "i"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "TypeOperator"
+              },
+              "segment": "->"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "{"
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g1"
+            },
+            {
+              "annotation": null,
+              "segment": ","
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "g"
+            },
+            {
+              "annotation": {
+                "tag": "AbilityBraces"
+              },
+              "segment": "}"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "Var"
+              },
+              "segment": "o"
+            }
+          ]
+        },
+        "tag": "TermObject"
+      },
+      {
+        "contents": {
+          "namespaceHash": "#aqunkem8h8o7ga5mdtn192fpm4dd14ibkhhtlbmivb659s94plfp64fc61jo883o8d3cdnq50g68btlgdp34h76u1o9114b912832k0",
+          "namespaceName": "`.`",
+          "namespaceSize": 1
+        },
+        "tag": "Subnamespace"
+      },
+      {
+        "contents": {
+          "namespaceHash": "#j7vqk3gpphqb6g2615mub4iq35lpr5pjv7i8bti6uocskslm3nvqfd25hrgr9jesklhcnn5440cs3cg1304il60tkvb7fvcgb1vbiv8",
+          "namespaceName": "builtin",
+          "namespaceSize": 753
+        },
+        "tag": "Subnamespace"
+      }
+    ],
+    "namespaceListingFQN": "",
+    "namespaceListingHash": "#3mjs71tifoqnsttqlu91r0gs7v6n9hheocdl822ijqbr4jcjfhbdo7e8fjkk3vmn71hgodseaa8iaof0dh5co7feo45hcb6uoln7bso"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
