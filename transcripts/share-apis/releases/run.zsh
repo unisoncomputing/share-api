@@ -37,3 +37,20 @@ fetch "$test_user" POST project-release-api-create '/users/unison/projects/priva
     "minor": 2,
     "patch": 3
 }'
+
+# Initial fetch of the release diff should just kick off a background diff computation.
+fetch "$test_user" GET release-diff-kickoff '/users/unison/projects/privateorgproject/diff/namespaces?old=releases%2F1.2.3&new=releases%2F4.5.6'
+
+# Since namespace diffs are computed asynchronously, we just block here until there are no diffs left in
+# the causal_diff_queue.
+for i in {1..5}; do
+  if [[ $(pg_sql "select count(*) from causal_diff_queue;") -ne 0 ]]; then
+    sleep 1
+  else
+    break
+  fi
+done
+
+# We expect the release diff to be computed now, even though it'll just be empty in this case, since the releases
+# are the same.
+fetch "$test_user" GET release-diff-done '/users/unison/projects/privateorgproject/diff/namespaces?old=releases%2F1.2.3&new=releases%2F4.5.6'
