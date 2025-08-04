@@ -197,7 +197,7 @@ loadV1TermAndTypeByRefIdsOf codebase trav s = do
               (h, Just (v2Term, v2Type)) -> Just (h, v2Term, v2Type)
       convertTerms2to1Of (traversed . _Just) termInfo
 
-convertTerms2to1Of :: (PG.QueryM m, HasCallStack) => Traversal s t (Hash, V2.Term.Term V2.Symbol, V2.Term.Type V2.Symbol) (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
+convertTerms2to1Of :: forall m s t. (PG.QueryM m, HasCallStack) => Traversal s t (Hash, V2.Term.Term V2.Symbol, V2.Term.Type V2.Symbol) (V1.Term Symbol Ann, V1.Type Symbol Ann) -> s -> m t
 convertTerms2to1Of trav s = do
   s
     & asListOf trav %%~ \termInfos -> do
@@ -211,12 +211,15 @@ convertTerms2to1Of trav s = do
       let (_termRefs, Set.toList -> typeRefs, _termLink, _typeLink) = foldMap TermV2.dependencies v2Terms
       -- Batch up ALL the type references and get all their kinds at once.
       typeToCTKindMap <- expectDeclKindsOf traversed (Map.fromList (zip typeRefs typeRefs))
-      let lookupCT :: V2.Term.TypeRef -> Identity CT.ConstructorType
-          lookupCT ref = pure $ Map.findWithDefault (error $ "Needed constructor type for ref: " <> show ref) ref typeToCTKindMap
-      let v1Terms :: [V1.Term Symbol Ann]
-          v1Terms =
-            zipWith (\h tm -> Cv.term2to1 h lookupCT tm) hashes v2Terms
-              & coerce @[Identity (V1.Term Symbol Ann)] @[V1.Term Symbol Ann]
+      let lookupCT :: V2.Term.TypeRef -> m CT.ConstructorType
+          lookupCT ref = case Map.lookup ref typeToCTKindMap of
+            -- In theory, all relevant refs _should_ be in the map, but they're not.
+            -- I suspect TermV2.dependencies is under-reporting actual type dependencies.
+            Nothing -> expectDeclKindsOf id ref
+            Just ct -> pure ct
+      v1Terms :: [V1.Term Symbol Ann] <-
+        zipWith (\h tm -> Cv.term2to1 h lookupCT tm) hashes v2Terms
+          & sequenceA
       let v1Types :: [V1.Type Symbol Ann]
           v1Types = Cv.ttype2to1 <$> v2Types
       pure (zip v1Terms v1Types)
