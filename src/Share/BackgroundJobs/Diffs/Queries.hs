@@ -1,16 +1,39 @@
 module Share.BackgroundJobs.Diffs.Queries
   ( submitContributionsToBeDiffed,
+    submitCausalsToBeDiffed,
     claimCausalDiff,
     deleteClaimedCausalDiff,
   )
 where
 
 import Share.BackgroundJobs.Diffs.Types
+import Share.Codebase (CodebaseEnv)
+import Share.Codebase.Types (CodebaseEnv (..))
 import Share.IDs
 import Share.Postgres
+import Share.Postgres.IDs (CausalId)
 import Share.Postgres.Notifications qualified as Notif
 import Unison.Prelude
 
+-- | Enqueue any arbitrary causal IDs to be diffed.
+submitCausalsToBeDiffed :: (QueryM m) => (CodebaseEnv, CausalId) -> (CodebaseEnv, CausalId) -> m ()
+submitCausalsToBeDiffed (CodebaseEnv {codebaseOwner = fromCodebase}, fromCausalId) (CodebaseEnv {codebaseOwner = toCodebase}, toCausalId) = do
+  execute_
+    [sql|
+      INSERT INTO causal_diff_queue (from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner)
+        SELECT #{fromCausalId}, #{toCausalId}, #{fromCodebase}, #{toCodebase}
+          WHERE NOT EXISTS (
+            SELECT FROM namespace_diffs nd
+              WHERE nd.left_causal_id = #{fromCausalId}
+              AND nd.right_causal_id = #{toCausalId}
+              AND nd.left_codebase_owner_user_id = #{fromCodebase}
+              AND nd.right_codebase_owner_user_id = #{toCodebase}
+          )
+        ON CONFLICT DO NOTHING
+    |]
+  Notif.notifyChannel Notif.CausalDiffChannel
+
+-- | Enqueue a set of contributions to be diffed.
 submitContributionsToBeDiffed :: (QueryM m) => Set ContributionId -> m ()
 submitContributionsToBeDiffed contributions = do
   execute_
