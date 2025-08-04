@@ -106,5 +106,10 @@ maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime (CausalDiffInfo {fromC
             authZReceipt
             (fromCodebase, fromRuntime, fromCausalId)
             (toCodebase, toRuntime, toCausalId)
-            bestCommonAncestorCausalId
+            -- This is a little strange. At the moment, if we don't have a proper LCA we
+            -- revert to a two-way diff. The other option would be to diff both from an empty
+            -- branch, but that's not typically what the user meant.
+            -- If this assumption no longer holds true in the future, feel free to change it
+            -- to be more explicit about which diff we're calculating.
+            (Just $ fromMaybe fromCausalId bestCommonAncestorCausalId)
         pure True
