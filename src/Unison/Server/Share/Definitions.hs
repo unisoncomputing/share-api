@@ -142,6 +142,7 @@ definitionDependencyResults codebase hqName project branchRef np mayWidth = do
   let nameSearch = PGNameSearch.nameSearchForPerspective np
   deps <- definitionDependencies codebase hqName nameSearch
   ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
+  -- TODO: batchify this
   forMaybe (Set.toList $ dependenciesToReferences deps) \dep -> runMaybeT $ case dep of
     Left termRef -> do
       let referent = Referent.fromTermReference termRef
