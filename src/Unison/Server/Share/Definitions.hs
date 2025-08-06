@@ -5,6 +5,7 @@ module Unison.Server.Share.Definitions
     termDefinitionByNamesOf,
     typeDefinitionsByNamesOf,
     definitionDependencyResults,
+    definitionDependentResults,
   )
 where
 
@@ -129,6 +130,7 @@ definitionDependencies codebase name nameSearch = do
       Right Nothing -> mempty
       Right (Just (term, _)) -> Term.labeledDependencies term
 
+-- | Returns all the definitions which the query depends on.
 definitionDependencyResults ::
   (QueryM m) =>
   CodebaseEnv ->
