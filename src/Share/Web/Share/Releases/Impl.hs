@@ -25,6 +25,8 @@ import Share.Postgres.Hashes.Queries qualified as CausalQ
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NLOps
+import Share.Postgres.NameLookups.Types (pathToPathSegments)
+import Share.Postgres.NamesPerspective.Ops qualified as NP
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Ops qualified as ReleaseOps
 import Share.Postgres.Releases.Queries qualified as ReleasesQ
@@ -59,7 +61,7 @@ import Unison.Server.Doc.Markdown.Render qualified as MD
 import Unison.Server.Doc.Markdown.Types qualified as MD
 import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
-import Unison.Server.Share.Definitions qualified as ShareBackend
+import Unison.Server.Share.Definitions qualified as Defns
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceDetails qualified as ND
 import Unison.Server.Share.NamespaceListing (NamespaceListing (..))
@@ -153,7 +155,7 @@ projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-name" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
+        Defns.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -181,7 +183,7 @@ projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-hash" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
+        Defns.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -205,7 +207,9 @@ projectReleaseTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-term-summary" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      serveTermSummary codebase ref mayName releaseHead relativeTo renderWidth
+      rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id releaseHead
+      np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
+      serveTermSummary codebase ref mayName np renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
