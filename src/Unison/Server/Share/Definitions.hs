@@ -96,9 +96,9 @@ dependenciesToReferences ::
   Set (Either Reference.TermReference Reference.TypeReference)
 dependenciesToReferences deps =
   deps & Set.mapMaybe \case
-    LD.ConReference (ConstructorReference typeRef _) _ -> Just $ Left typeRef
-    LD.TypeReference typeRef -> Just $ Left typeRef
-    LD.TermReference termRef -> Just $ Right termRef
+    LD.ConReference (ConstructorReference typeRef _) _ -> Just $ Right typeRef
+    LD.TypeReference typeRef -> Just $ Right typeRef
+    LD.TermReference termRef -> Just $ Left termRef
 
 -- Ideally we'd do this via the database, but we actually _can't_, since the database only
 -- stores relationships to components, not specific definitions.
@@ -116,18 +116,18 @@ definitionDependencies codebase name nameSearch = do
         definitions
           & dependenciesToReferences
           & Set.mapMaybe \case
-            Left (ref@(Reference.DerivedId typeRefId)) -> Just $ Left (ref, typeRefId)
-            Right (Reference.DerivedId termRefId) -> Just $ Right termRefId
+            Left (Reference.DerivedId termRefId) -> Just $ Left termRefId
+            Right (ref@(Reference.DerivedId typeRefId)) -> Just $ Right (ref, typeRefId)
             _ -> Nothing
   let refList = Set.toList refs
   refList
-    & Codebase.loadV1TypeDeclarationsByRefIdsOf codebase (traversed . _Left . _2)
-    >>= Codebase.loadV1TermAndTypeByRefIdsOf codebase (traversed . _Right)
+    & Codebase.loadV1TypeDeclarationsByRefIdsOf codebase (traversed . _Right . _2)
+    >>= Codebase.loadV1TermAndTypeByRefIdsOf codebase (traversed . _Left)
     <&> foldMap \case
-      Left (_, Nothing) -> mempty
-      Left (refId, Just decl) -> DD.labeledDeclDependenciesIncludingSelfAndFieldAccessors refId decl
-      Right Nothing -> mempty
-      Right (Just (term, _)) -> Term.labeledDependencies term
+      Right (_, Nothing) -> mempty
+      Right (refId, Just decl) -> DD.labeledDeclDependenciesIncludingSelfAndFieldAccessors refId decl
+      Left Nothing -> mempty
+      Left (Just (term, _)) -> Term.labeledDependencies term
 
 -- | Returns all the definitions which the query depends on.
 definitionDependencyResults ::
