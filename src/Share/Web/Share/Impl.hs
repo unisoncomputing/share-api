@@ -85,6 +85,8 @@ userCodebaseServer session handle =
         :<|> definitionsByHashEndpoint session handle
         :<|> termSummaryEndpoint session handle
         :<|> typeSummaryEndpoint session handle
+        :<|> definitionDependenciesByNameEndpoint session handle
+        :<|> definitionDependenciesByHashEndpoint session handle
         :<|> findEndpoint session handle
         :<|> namespacesByNameEndpoint session handle
     )
@@ -252,6 +254,30 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
       let prefix = fromMaybe mempty relativeTo
           suffix = maybe mempty Path.fromName mayName
        in prefix <> suffix
+
+definitionDependenciesByNameEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  HQ.HashQualified Name ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+definitionDependenciesByNameEndpoint _ _userHandle _name _relativeTo _renderWidth _rootHash = do
+  -- The user endpoints are deprecated, no point maintaining them.
+  respondError Unimplemented
+
+definitionDependenciesByHashEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  Referent ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+definitionDependenciesByHashEndpoint _ _userHandle _referent _relativeTo _renderWidth _rootHash = do
+  -- The user endpoints are deprecated, no point maintaining them.
+  respondError Unimplemented
 
 findEndpoint ::
   Maybe Session ->
