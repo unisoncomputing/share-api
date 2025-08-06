@@ -53,6 +53,7 @@ serveTermSummary codebase referent mayName np mayWidth = do
       `whenNothingM` unrecoverableError (MissingSignatureForTerm $ V2Referent.toReference v2Referent)
   termSummaryForReferent v2Referent sig mayName np mayWidth
 
+-- TODO: batchify this
 termSummaryForReferent ::
   (QueryM m) =>
   V2Referent.Referent ->
@@ -89,6 +90,7 @@ serveTypeSummary ::
 serveTypeSummary codebase reference mayName mayWidth = do
   typeSummaryForReference codebase reference mayName mayWidth
 
+-- TODO: batchify this
 typeSummaryForReference ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
