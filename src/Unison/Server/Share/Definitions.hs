@@ -5,7 +5,6 @@ module Unison.Server.Share.Definitions
     termDefinitionByNamesOf,
     typeDefinitionsByNamesOf,
     definitionDependencyResults,
-    definitionDependentResults,
   )
 where
 
