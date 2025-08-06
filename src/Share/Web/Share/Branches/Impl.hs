@@ -22,6 +22,8 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (CausalId)
+import Share.Postgres.NameLookups.Types (pathToPathSegments)
+import Share.Postgres.NamesPerspective.Ops qualified as NP
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
@@ -154,7 +156,7 @@ projectBranchDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-name" cacheParams causalId $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime \rt ->
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
+        ShareBackend.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt name
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -181,7 +183,7 @@ projectBranchDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) us
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definitions-by-hash" cacheParams causalId $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime \rt ->
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
+        ShareBackend.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) causalId renderWidth (Suffixify False) rt query
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -205,7 +207,9 @@ projectBranchTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHand
   causalId <- resolveRootHash codebase branchHead rootHash
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-term-summary" cacheParams causalId $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      serveTermSummary codebase ref mayName causalId relativeTo renderWidth
+      rootBHId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+      np <- NP.namesPerspectiveForRootAndPath rootBHId (maybe mempty pathToPathSegments relativeTo)
+      serveTermSummary codebase ref mayName np renderWidth
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]

@@ -26,6 +26,8 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalHash)
+import Share.Postgres.NameLookups.Types (pathToPathSegments)
+import Share.Postgres.NamesPerspective.Ops qualified as NP
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Projects.Queries qualified as PQ
 import Share.Postgres.Queries qualified as Q
@@ -160,7 +162,7 @@ definitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle name
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-name" cacheParams rootCausalId $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime \rt -> do
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+        ShareBackend.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
     cacheParams = [HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
@@ -191,7 +193,7 @@ definitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle refe
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "definitions-by-hash" cacheParams rootCausalId $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime \rt -> do
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
+        ShareBackend.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) rootCausalId renderWidth (Suffixify False) rt query
   where
     cacheParams = [toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
@@ -213,7 +215,9 @@ termSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
   (rootCausalId, _rootCausalHash) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ Codebase.expectLooseCodeRoot codebase
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "term-summary" cacheParams rootCausalId $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      serveTermSummary codebase ref mayName rootCausalId relativeTo renderWidth
+      rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
+      np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
+      serveTermSummary codebase ref mayName np renderWidth
   where
     cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path
