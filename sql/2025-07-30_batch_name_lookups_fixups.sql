@@ -42,9 +42,9 @@ BEGIN
                 AND (arg_namespace_prefix = '' OR namespace LIKE like_escape(arg_namespace_prefix) || '%')
                 AND (arg_reversed_name_prefix = '' OR stnl.reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%')
           UNION ALL
-          SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name, 
+          SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name,
             CASE
-              WHEN suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, mount.reversed_mount_path, ROW(names.*))
+              WHEN arg_should_suffixify THEN suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, mount.reversed_mount_path, ROW(names.*))
               ELSE names.reversed_name || mount.reversed_mount_path
             END AS suffixified_name
           FROM name_lookup_mounts mount
@@ -72,9 +72,9 @@ BEGIN
       FROM unnest(names) AS n(reversed_name, suffixified_name);
   ELSE
     RETURN QUERY
-      SELECT (stnl.reversed_name || reversed_mount_path) AS reversed_name, 
+      SELECT (stnl.reversed_name || reversed_mount_path) AS reversed_name,
         CASE
-          WHEN arg_should_suffixify THEN suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, reversed_mount_path, ROW(stnl.*)) 
+          WHEN arg_should_suffixify THEN suffixify_term_fqn(arg_bh_id, arg_namespace_prefix, reversed_mount_path, ROW(stnl.*))
           ELSE stnl.reversed_name || reversed_mount_path
         END AS suffixified_name
         FROM transitive_dependency_mounts(arg_bh_id)
@@ -138,8 +138,8 @@ BEGIN
                 AND (arg_namespace_prefix = '' OR namespace LIKE like_escape(arg_namespace_prefix) || '%')
                 AND (arg_reversed_name_prefix = '' OR stnl.reversed_name LIKE like_escape(arg_reversed_name_prefix) || '%')
           UNION ALL
-          SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name, 
-            CASE 
+          SELECT (names.reversed_name || mount.reversed_mount_path) AS reversed_name,
+            CASE
               WHEN arg_should_suffixify THEN suffixify_type_fqn(arg_bh_id, arg_namespace_prefix, mount.reversed_mount_path, ROW(names.*))
               ELSE names.reversed_name || mount.reversed_mount_path
             END AS suffixified_name
@@ -166,9 +166,9 @@ BEGIN
       FROM unnest(names) AS n(reversed_name, suffixified_name);
   ELSE
     RETURN QUERY
-      SELECT (stnl.reversed_name || reversed_mount_path) AS reversed_name, 
-        CASE 
-          WHEN arg_should_suffixify THEN suffixify_type_fqn(arg_bh_id, arg_namespace_prefix, reversed_mount_path, ROW(stnl.*)) 
+      SELECT (stnl.reversed_name || reversed_mount_path) AS reversed_name,
+        CASE
+          WHEN arg_should_suffixify THEN suffixify_type_fqn(arg_bh_id, arg_namespace_prefix, reversed_mount_path, ROW(stnl.*))
           ELSE stnl.reversed_name || reversed_mount_path
         END AS suffixified_name
         FROM transitive_dependency_mounts(arg_bh_id)
