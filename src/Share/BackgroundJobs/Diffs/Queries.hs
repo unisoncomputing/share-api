@@ -29,6 +29,13 @@ submitCausalsToBeDiffed (CodebaseEnv {codebaseOwner = fromCodebase}, fromCausalI
               AND nd.left_codebase_owner_user_id = #{fromCodebase}
               AND nd.right_codebase_owner_user_id = #{toCodebase}
           )
+          -- This check prevents the insert from blocking on a row lock
+          -- if the row already exists and is being processed by another worker.
+          AND NOT EXISTS (
+            SELECT FROM causal_diff_queue cdq
+              WHERE cdq.from_causal_id = #{fromCausalId}
+              AND cdq.to_causal_id = #{toCausalId}
+          )
         ON CONFLICT DO NOTHING
     |]
   Notif.notifyChannel Notif.CausalDiffChannel
@@ -58,6 +65,13 @@ submitContributionsToBeDiffed contributions = do
               AND nd.right_causal_id = diff_info.to_causal_id
               AND nd.left_codebase_owner_user_id = diff_info.from_codebase_owner
               AND nd.right_codebase_owner_user_id = diff_info.to_codebase_owner
+          )
+          -- This check prevents the insert from blocking on a row lock
+          -- if the row already exists and is being processed by another worker.
+          AND NOT EXISTS (
+            SELECT FROM causal_diff_queue cdq
+              WHERE cdq.from_causal_id = diff_info.from_causal_id
+              AND cdq.to_causal_id = diff_info.to_causal_id
           )
         ON CONFLICT DO NOTHING
     |]
