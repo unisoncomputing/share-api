@@ -104,7 +104,7 @@ CREATE INDEX scoped_definition_search_docs_name_trigram ON scoped_definition_sea
 CREATE OR REPLACE FUNCTION scoped_definition_search_queue_on_branch_change_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Check if this is an INSERT or if the 
+    -- Check if this is an INSERT or if the causal has changed.
     IF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.causal_id IS DISTINCT FROM NEW.causal_id) THEN
         INSERT INTO scoped_definition_search_queue (root_namespace_hash_id, codebase_user_id)
           SELECT c.namespace_hash_id AS root_namespace_hash_id,
