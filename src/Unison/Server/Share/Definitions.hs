@@ -116,15 +116,15 @@ definitionDependencies codebase name nameSearch = do
           & dependenciesToReferences
           & Set.mapMaybe \case
             Left (Reference.DerivedId termRefId) -> Just $ Left termRefId
-            Right (ref@(Reference.DerivedId typeRefId)) -> Just $ Right (ref, typeRefId)
+            Right (Reference.DerivedId typeRefId) -> Just $ Right (typeRefId)
             _ -> Nothing
   let refList = Set.toList refs
   refList
-    & Codebase.loadV1TypeDeclarationsByRefIdsOf codebase (traversed . _Right . _2)
+    & Codebase.loadV1TypeDeclarationsByRefIdsOf codebase (traversed . _Right)
     >>= Codebase.loadV1TermAndTypeByRefIdsOf codebase (traversed . _Left)
     <&> foldMap \case
-      Right (_, Nothing) -> mempty
-      Right (refId, Just decl) -> DD.labeledDeclDependenciesIncludingSelfAndFieldAccessors refId decl
+      Right Nothing -> mempty
+      Right (Just decl) -> DD.labeledDeclTypeDependencies decl
       Left Nothing -> mempty
       Left (Just (term, _)) -> Term.labeledDependencies term
 
