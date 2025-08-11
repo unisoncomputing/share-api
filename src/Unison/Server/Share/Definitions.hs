@@ -127,6 +127,7 @@ definitionDependencies codebase name nameSearch = do
       Right (Just decl) -> DD.labeledDeclTypeDependencies decl
       Left Nothing -> mempty
       Left (Just (term, _)) -> Term.labeledDependencies term
+    <&> \results -> Set.difference results definitions -- Don't include any of the definitions we're getting the dependencies of. Sometimes type constructors contain self-references.
 
 -- | Returns all the definitions which the query depends on.
 definitionDependencyResults ::
