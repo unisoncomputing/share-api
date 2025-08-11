@@ -2,10 +2,6 @@ Add a bunch of nonsense types and terms so we can test search.
 
 We use structural types and abilities.
 
-```ucm
-@transcripts/branch-browse/main> builtins.merge
-```
-
 ```unison
 structural type Remote.Location = Location
 
@@ -17,11 +13,6 @@ structural type MyType = MyType
 other.remoteMap = 1
 something.Remote.map = 2
 some.other.thing = 3
-
-termWithDependencies = 
-  dependsOnType = match MyType with
-      MyType -> 42
-  other.remoteMap + something.Remote.map + some.other.thing + dependsOnType
 ```
 
 

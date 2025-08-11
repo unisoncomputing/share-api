@@ -23,14 +23,7 @@ names.oranges.two = 2
 names.readme = {{ Hello! }}
 external.two = 2
 external.externalName = 99
-```
 
-
-```ucm
-code-browse/main> update
-```
-
-```unison
 -- Helpful for testing proper query encoding/decoding for a name that must be
 -- uri encoded
 a names./+% b = 10
@@ -38,5 +31,6 @@ a names./+% b = 10
 
 ```ucm
 code-browse/main> update
+code-browse/main> names names.referencesExternal
 code-browse/main> push
 ```
