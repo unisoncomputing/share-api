@@ -2,6 +2,10 @@ Add a bunch of nonsense types and terms so we can test search.
 
 We use structural types and abilities.
 
+```ucm
+@transcripts/branch-browse/main> builtins.merge
+```
+
 ```unison
 structural type Remote.Location = Location
 
