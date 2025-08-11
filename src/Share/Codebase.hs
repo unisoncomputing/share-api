@@ -419,7 +419,7 @@ squashCausalAndAddToCodebase ::
   -- Returns the new causal hash if successful, or Nothing if the source causal doesn't
   -- exist.
   m (Maybe CausalId)
-squashCausalAndAddToCodebase codebase causalId = runMaybeT $ do
+squashCausalAndAddToCodebase codebase causalId = PG.transactionSpan "squashCausalAndAddToCodebase" mempty $ runMaybeT $ do
   causalBranch <- MaybeT (CausalQ.loadCausalNamespace causalId)
   (squashedCausalId, _squashedCausal) <- lift $ squashCausal codebase causalBranch
   squashedBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id squashedCausalId

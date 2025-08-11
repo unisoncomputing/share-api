@@ -32,6 +32,7 @@ import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project (Project (..))
 import Share.Release (Release (..), releaseCausals_, releaseUsers_)
+import Share.Telemetry qualified as Telemetry
 import Share.User (User (..))
 import Share.User qualified as User
 import Share.Utils.API
@@ -446,7 +447,7 @@ createRelease session userHandle projectSlug CreateReleaseRequest {releaseVersio
         )
     pure (nlReceipt, squashedCausalId, unsquashedCausalId)
   -- Separate transaction to ensure squashing and name lookups make progress even on failure.
-  PG.runTransactionOrRespondError $ do
+  Telemetry.withSpan "create-release" mempty $ PG.runTransactionOrRespondError $ do
     release <- ReleaseOps.createRelease nlReceipt projectId releaseVersion squashedCausalId unsquashedCausalId callerUserId
     releaseWithHandles <- forOf releaseUsers_ release \userId -> (fmap User.handle <$> UserQ.userByUserId userId) `whenNothingM` throwError (EntityMissing (ErrorID "user:missing") "Project owner not found")
     releaseWithCausalHashes <- CausalQ.expectCausalHashesByIdsOf releaseCausals_ releaseWithHandles

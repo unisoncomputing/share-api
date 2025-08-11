@@ -40,6 +40,7 @@ import Share.Postgres.Sync.Queries qualified as SyncQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
 import Share.Project (Project (..))
+import Share.Telemetry qualified as Telemetry
 import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant (parseParam)
@@ -312,7 +313,7 @@ insertEntitiesToCodebase codebase entities = do
 -- in temp, and this can also happen if certain requests get interrupted.
 -- Ideally we wouldn't need this, but it's easy enough to add and addresses this problem.
 ensureCausalIsFlushed :: (HasTags r) => CodebaseEnv -> CausalHash -> AppM r (Maybe CausalId)
-ensureCausalIsFlushed codebase causalHash = do
+ensureCausalIsFlushed codebase causalHash = Telemetry.withSpan "ensureCausalIsFlushed" mempty $ do
   PG.runTransaction (CausalQ.loadCausalIdByHash codebase causalHash) >>= \case
     Just cid -> pure (Just cid)
     -- It's possible we have the causal in temp storage but just not flushed, so we'll try to flush it.

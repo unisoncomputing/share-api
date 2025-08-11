@@ -556,7 +556,7 @@ createBranch ::
   Maybe BranchId ->
   UserId ->
   PG.Transaction e BranchId
-createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget creatorId = do
+createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget creatorId = PG.transactionSpan "createBranch" mempty $ do
   branchId <- PG.queryExpect1Col createBranchSQL
   PG.execute_ (updateReflogSQL branchId ("Branch Created" :: Text))
   recordNotificationEvent branchId contributorId
