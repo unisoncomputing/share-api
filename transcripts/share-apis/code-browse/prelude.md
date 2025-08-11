@@ -10,6 +10,8 @@ structural type names.Thing = This | That
 
 type lib.data.Tuple a b = Tuple a b
 
+structural type names.WithDependencies = WithDependencies (lib.data.Tuple names.Thing names.Thing)
+
 lib.data.Tuple.fst = cases
   Tuple a _ -> a
 
@@ -32,5 +34,6 @@ a names./+% b = 10
 ```ucm
 code-browse/main> update
 code-browse/main> names names.referencesExternal
+code-browse/main> names names.WithDependencies
 code-browse/main> push
 ```

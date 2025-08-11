@@ -76,6 +76,22 @@
       },
       {
         "contents": {
+          "typeHash": "#td8k7obtba",
+          "typeName": "WithDependencies",
+          "typeTag": "Data"
+        },
+        "tag": "TypeObject"
+      },
+      {
+        "contents": {
+          "namespaceHash": "#k4vg4mmbd2ish9u2p5tdulcgi0loggbrvbagrsd2l7lf3uus41snm6jf12i9vsb60a1u3n6scvgm6o6vd97ptdni8j97thon1pnaa50",
+          "namespaceName": "WithDependencies",
+          "namespaceSize": 1
+        },
+        "tag": "Subnamespace"
+      },
+      {
+        "contents": {
           "namespaceHash": "#1h1k33aq3evri8h1pbil2ipeq7tah7dundnp1188pl2sb2a3nkn6dhbtt5dpmvf4nrhgldpddtr07erfosegootd8ushnt3cchc1bf0",
           "namespaceName": "apples",
           "namespaceSize": 2
@@ -126,7 +142,7 @@
       }
     ],
     "namespaceListingFQN": "names",
-    "namespaceListingHash": "#60l36vapqvnolp3nk9tf0vrkgacd4ed2iuo1si0jspocm54fs87itbm8q3do4g0bg3hitcg3otl3ha4o2qrliupobrtn0qrcsjo8m50"
+    "namespaceListingHash": "#635g8oj2feilos2q2an2l2f147dqeej5ulgqkv955nblrg917i3v23kq98lqrbbho80n1qphsqh6j1012681cojn82hc68qfl2guqj8"
   },
   "status": [
     {

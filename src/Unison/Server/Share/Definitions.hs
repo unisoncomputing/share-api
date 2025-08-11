@@ -80,7 +80,6 @@ resolveHQName ::
   NameSearch m ->
   m (Set LD.LabeledDependency)
 resolveHQName name nameSearch = do
-  -- namesPerspective@NamesPerspective {relativePerspective} <- namesPerspectiveForRootAndPath rootBh (PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ fullPath)
   QueryResult {hits} <- hqNameQuery nameSearch [name]
   hits
     & fmap
