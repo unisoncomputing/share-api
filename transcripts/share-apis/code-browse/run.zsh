@@ -21,7 +21,7 @@ fetch "$transcripts_user" GET codebase-lib-type-definition-from-lib-perspective 
 fetch "$transcripts_user" GET codebase-term-dependencies-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-name/names.referencesExternal"
 fetch "$transcripts_user" GET codebase-type-dependencies-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-name/names.WithDependencies"
 fetch "$transcripts_user" GET codebase-term-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@v1b6qqrnco"
-fetch "$transcripts_user" GET codebase-type-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@td8k7obtba"
+fetch "$transcripts_user" GET codebase-type-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@ubgchdcrut1hdslavceo1465klhig9u20c94pdsnps4828h7lc6ik506ccvqlktpssiimam8gjuhskuqkihptl6qctcoabvbfp2gdg8"
 
 
 fetch "$transcripts_user" GET codebase-find "/users/transcripts/projects/code-browse/branches/main/find?query=oranges.tw"

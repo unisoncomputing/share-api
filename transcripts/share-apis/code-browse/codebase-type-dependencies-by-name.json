@@ -4,10 +4,20 @@
       {
         "branchRef": "main",
         "definition": {
-          "displayName": "lib.data.Tuple",
-          "hash": "#37avk6c16m9c3342o2i77so3fcb4tq2l72qblg5l0di98avr5ms92h6j90e57vch5aabo6fe9dn9tj701nvt5p5ro67spivndok50fo",
+          "displayName": "builtin.Tuple",
+          "hash": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8",
           "summary": {
             "contents": [
+              {
+                "annotation": {
+                  "tag": "DataTypeModifier"
+                },
+                "segment": "structural"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
               {
                 "annotation": {
                   "tag": "DataTypeKeyword"
@@ -20,10 +30,10 @@
               },
               {
                 "annotation": {
-                  "contents": "lib.data.Tuple",
+                  "contents": "builtin.Tuple",
                   "tag": "HashQualifier"
                 },
-                "segment": "lib.data.Tuple"
+                "segment": "builtin.Tuple"
               },
               {
                 "annotation": null,
@@ -50,7 +60,7 @@
           },
           "tag": "Data"
         },
-        "fqn": "lib.data.Tuple",
+        "fqn": "builtin.Tuple",
         "kind": "type",
         "projectRef": "@transcripts/code-browse"
       },
@@ -101,7 +111,7 @@
         "branchRef": "main",
         "definition": {
           "displayName": "names.WithDependencies",
-          "hash": "#td8k7obtbafpf9jiusb4bo78uetpivvtkt6qd9t93d2iub2i6v1f6iqop8fhuolnh1ncqc9b5j9dcgm21t8v88ro52ogjqlndgr3si0",
+          "hash": "#ubgchdcrut1hdslavceo1465klhig9u20c94pdsnps4828h7lc6ik506ccvqlktpssiimam8gjuhskuqkihptl6qctcoabvbfp2gdg8",
           "summary": {
             "contents": [
               {

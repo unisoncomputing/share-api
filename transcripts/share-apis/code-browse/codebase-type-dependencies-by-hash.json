@@ -1,6 +1,156 @@
 {
   "body": {
-    "results": []
+    "results": [
+      {
+        "branchRef": "main",
+        "definition": {
+          "displayName": "builtin.Tuple",
+          "hash": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "tag": "DataTypeModifier"
+                },
+                "segment": "structural"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "DataTypeKeyword"
+                },
+                "segment": "type"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "contents": "builtin.Tuple",
+                  "tag": "HashQualifier"
+                },
+                "segment": "builtin.Tuple"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "DataTypeParams"
+                },
+                "segment": "a"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "DataTypeParams"
+                },
+                "segment": "b"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Data"
+        },
+        "fqn": "builtin.Tuple",
+        "kind": "type",
+        "projectRef": "@transcripts/code-browse"
+      },
+      {
+        "branchRef": "main",
+        "definition": {
+          "displayName": "names.Thing",
+          "hash": "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "tag": "DataTypeModifier"
+                },
+                "segment": "structural"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "DataTypeKeyword"
+                },
+                "segment": "type"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "contents": "names.Thing",
+                  "tag": "HashQualifier"
+                },
+                "segment": "names.Thing"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Data"
+        },
+        "fqn": "names.Thing",
+        "kind": "type",
+        "projectRef": "@transcripts/code-browse"
+      },
+      {
+        "branchRef": "main",
+        "definition": {
+          "displayName": "names.WithDependencies",
+          "hash": "#ubgchdcrut1hdslavceo1465klhig9u20c94pdsnps4828h7lc6ik506ccvqlktpssiimam8gjuhskuqkihptl6qctcoabvbfp2gdg8",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "tag": "DataTypeModifier"
+                },
+                "segment": "structural"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "DataTypeKeyword"
+                },
+                "segment": "type"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "contents": "names.WithDependencies",
+                  "tag": "HashQualifier"
+                },
+                "segment": "names.WithDependencies"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Data"
+        },
+        "fqn": "names.WithDependencies",
+        "kind": "type",
+        "projectRef": "@transcripts/code-browse"
+      }
+    ]
   },
   "status": [
     {

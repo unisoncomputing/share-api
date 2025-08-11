@@ -8,7 +8,7 @@ Set up some shared names so we can do interesting transcript tests
 ```unison
 structural type names.Thing = This | That
 
-type lib.data.Tuple a b = Tuple a b
+structural type lib.data.Tuple a b = Tuple a b
 
 structural type names.WithDependencies = WithDependencies (lib.data.Tuple names.Thing names.Thing)
 
