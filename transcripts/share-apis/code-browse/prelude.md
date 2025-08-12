@@ -35,5 +35,7 @@ a names./+% b = 10
 code-browse/main> update
 code-browse/main> names names.referencesExternal
 code-browse/main> names names.WithDependencies
+code-browse/main> names names.Thing
+code-browse/main> names names.apples.two
 code-browse/main> push
 ```

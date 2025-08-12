@@ -20,8 +20,13 @@ fetch "$transcripts_user" GET codebase-lib-term-definition-from-lib-perspective 
 fetch "$transcripts_user" GET codebase-lib-type-definition-from-lib-perspective "/users/transcripts/projects/code-browse/branches/main/definitions/by-name/Tuple?relativeTo=lib.data"
 fetch "$transcripts_user" GET codebase-term-dependencies-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-name/names.referencesExternal"
 fetch "$transcripts_user" GET codebase-type-dependencies-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-name/names.WithDependencies"
-fetch "$transcripts_user" GET codebase-term-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@v1b6qqrnco"
+fetch "$transcripts_user" GET codebase-term-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@v1b6qqrncoug00008ouve8gdnf8mtrvv3mrr34jct7h2elm5g56s4d8shkirh49r0i3h7aeebiua9icas6ptp1ap82g4q7n3gvq5l18"
 fetch "$transcripts_user" GET codebase-type-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@ubgchdcrut1hdslavceo1465klhig9u20c94pdsnps4828h7lc6ik506ccvqlktpssiimam8gjuhskuqkihptl6qctcoabvbfp2gdg8"
+
+fetch "$transcripts_user" GET codebase-term-dependents-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependents/by-name/names.apples.two"
+fetch "$transcripts_user" GET codebase-type-dependents-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependents/by-name/names.Thing"
+fetch "$transcripts_user" GET codebase-term-dependents-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependents/by-hash/@dcgdua2lj6upd1ah5v0qp09gjsej0d77d87fu6qn8e2qrssnlnmuinoio46hiu53magr7qn8vnqke8ndt0v76700o5u8gcvo7st28jg"
+fetch "$transcripts_user" GET codebase-type-dependents-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependents/by-hash/@6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0"
 
 
 fetch "$transcripts_user" GET codebase-find "/users/transcripts/projects/code-browse/branches/main/find?query=oranges.tw"

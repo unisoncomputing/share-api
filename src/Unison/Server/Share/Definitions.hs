@@ -5,6 +5,7 @@ module Unison.Server.Share.Definitions
     termDefinitionByNamesOf,
     typeDefinitionsByNamesOf,
     definitionDependencyResults,
+    definitionDependentResults,
   )
 where
 
@@ -23,8 +24,9 @@ import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.IDs
 import Share.Postgres (QueryM, transactionSpan)
+import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
-import Share.Postgres.IDs (CausalId)
+import Share.Postgres.IDs (CausalId, ComponentHash (..))
 import Share.Postgres.NameLookups.Types (pathToPathSegments)
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Postgres.NamesPerspective.Types (NamesPerspective)
@@ -33,6 +35,7 @@ import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Caching.JSON qualified as Caching
 import Share.Utils.Data qualified as Data
 import Share.Utils.Lens (asListOfDeduped)
+import Share.Utils.Logging qualified as Logging
 import Share.Web.Share.Types (DefinitionSearchResult (..))
 import Unison.Codebase.Editor.DisplayObject (DisplayObject)
 import Unison.Codebase.Path (Path)
@@ -142,6 +145,86 @@ definitionDependencyResults ::
 definitionDependencyResults codebase hqName project branchRef np mayWidth = do
   let nameSearch = PGNameSearch.nameSearchForPerspective np
   deps <- definitionDependencies codebase hqName nameSearch
+  ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
+  -- TODO: batchify this
+  forMaybe (Set.toList $ dependenciesToReferences deps) \dep -> runMaybeT $ case dep of
+    Left termRef -> do
+      let referent = Referent.fromTermReference termRef
+      let v2Referent = CV.referent1to2 referent
+      hqFqn <- hoistMaybe $ PPE.terms ppe referent
+      let fqn = HQ'.toName hqFqn
+      typ <- MaybeT $ (Codebase.loadTypesOfReferentsOf codebase id (CV.referent1to2 referent))
+      summary <- fmap ToTTermSummary . lift $ Summary.termSummaryForReferent v2Referent typ (Just fqn) np mayWidth
+      pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
+    Right typeRef -> do
+      hqFqn <- hoistMaybe $ PPE.types ppe typeRef
+      let fqn = HQ'.toName hqFqn
+      summary <- fmap ToTTypeSummary . lift $ Summary.typeSummaryForReference codebase typeRef (Just fqn) mayWidth
+      pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
+
+-- Ideally we'd do this via the database, but we actually _can't_, since the database only
+-- stores relationships to components, not specific definitions.
+definitionDependents ::
+  (QueryM m) =>
+  CodebaseEnv ->
+  -- | The name, hash, or both, of the definition to display.
+  HQ.HashQualified Name ->
+  NameSearch m ->
+  m (Set LD.LabeledDependency)
+definitionDependents codebase name nameSearch = do
+  definitions <- resolveHQName name nameSearch
+  -- Collapse constructor referents into just the containing type.
+  let componentHashes =
+        definitions
+          & Set.mapMaybe dependencyToComponentHash
+          & Set.toList
+  -- Check whether the components we're getting dependents of contain multiple elements.
+  containsMultiElementComponent <- any (> 1) <$> Codebase.componentSizeOf traversed componentHashes
+  (dependentTerms, dependentTypes) <- fold <$> Codebase.definitionComponentDirectDependentsOf codebase traversed componentHashes
+  -- TODO: If the component we're getting dependents of contains multiple elements then we should really
+  -- fully load each of the dependents and check whether they depend on the correct component
+  -- element, but this going to significantly slow things down and the results will be
+  -- _mostly_ right without it, so we can likely put this off until later.
+  -- If we end up changing the storage format we may be able to do this check directly in the
+  -- DB instead.
+  when containsMultiElementComponent do
+    Logging.logInfoText "Encountered a multi-element component when getting definition dependents. Results may be inaccurate."
+  (termRefIds, typeRefIds) <- PG.pipelined $ do
+    termRefIds <- Codebase.expectRefIdsByTermIdsOf traversed (Set.toList dependentTerms)
+    typeRefIds <- Codebase.expectRefIdsByTypeIdsOf traversed (Set.toList dependentTypes)
+    pure (termRefIds, typeRefIds)
+  let termLDs =
+        termRefIds
+          <&> (LD.TermReference . Reference.DerivedId)
+          & Set.fromList
+  let typeLDs =
+        typeRefIds
+          <&> (LD.TypeReference . Reference.DerivedId)
+          & Set.fromList
+  pure $ Set.difference (termLDs <> typeLDs) definitions
+  where
+    dependencyToComponentHash :: LD.LabeledDependency -> Maybe ComponentHash
+    dependencyToComponentHash = \case
+      LD.ConReference (ConstructorReference typeRef _) _ -> do
+        ComponentHash . Reference.idToHash <$> Reference.toId typeRef
+      LD.TypeReference typeRef -> do
+        ComponentHash . Reference.idToHash <$> Reference.toId typeRef
+      LD.TermReference termRef -> do
+        ComponentHash . Reference.idToHash <$> Reference.toId termRef
+
+-- | Returns all the definitions which depend on the query.
+definitionDependentResults ::
+  (QueryM m) =>
+  CodebaseEnv ->
+  HQ.HashQualified Name ->
+  ProjectShortHand ->
+  BranchOrReleaseShortHand ->
+  NamesPerspective m ->
+  Maybe Width ->
+  m [DefinitionSearchResult]
+definitionDependentResults codebase hqName project branchRef np mayWidth = do
+  let nameSearch = PGNameSearch.nameSearchForPerspective np
+  deps <- definitionDependents codebase hqName nameSearch
   ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
   -- TODO: batchify this
   forMaybe (Set.toList $ dependenciesToReferences deps) \dep -> runMaybeT $ case dep of

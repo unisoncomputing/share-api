@@ -32,6 +32,10 @@ module Share.Codebase
     typeReferencesByShortHash,
     DefnQ.termTagsByReferentsOf,
     DefnQ.typeTagsByReferencesOf,
+    DefnQ.definitionComponentDirectDependentsOf,
+    DefnQ.componentSizeOf,
+    DefnQ.expectRefIdsByTermIdsOf,
+    DefnQ.expectRefIdsByTypeIdsOf,
 
     -- * Eval
     loadCachedEvalResult,
