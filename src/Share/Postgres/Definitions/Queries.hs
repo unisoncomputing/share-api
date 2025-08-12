@@ -1489,10 +1489,10 @@ definitionComponentDirectDependentsOf CodebaseEnv {codebaseOwner} trav s = do
                 AND term_ownership.user_id = #{codebaseOwner}
         ) AS term_ids,
         ARRAY(
-          SELECT type.id
+          SELECT ref.type_id
             FROM component_hashes ch
-              JOIN types type ON ch.id = type.component_hash_id
-              JOIN type_ownership ON type_ownership.type_id = type.id
+              JOIN type_local_component_references ref ON ch.id = ref.component_hash_id
+              JOIN type_ownership ON type_ownership.type_id = ref.type_id
               WHERE ch.base32 = components.base32
                 AND type_ownership.user_id = #{codebaseOwner}
         ) AS type_ids
