@@ -29,6 +29,8 @@ type CodeBrowseAPI =
       :<|> ("definitions" :> "types" :> "by-hash" :> TypeSummaryEndpoint)
       :<|> ("definitions" :> "dependencies" :> "by-name" :> DefinitionDependenciesByNameEndpoint)
       :<|> ("definitions" :> "dependencies" :> "by-hash" :> DefinitionDependenciesByHashEndpoint)
+      :<|> ("definitions" :> "dependents" :> "by-name" :> DefinitionDependentsByNameEndpoint)
+      :<|> ("definitions" :> "dependents" :> "by-hash" :> DefinitionDependentsByHashEndpoint)
       :<|> ("find" :> FindEndpoint)
       :<|> ("namespaces" :> "by-name" :> NamespaceByNameEndpoint)
   )
