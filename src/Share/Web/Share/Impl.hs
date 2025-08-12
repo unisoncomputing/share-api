@@ -87,6 +87,8 @@ userCodebaseServer session handle =
         :<|> typeSummaryEndpoint session handle
         :<|> definitionDependenciesByNameEndpoint session handle
         :<|> definitionDependenciesByHashEndpoint session handle
+        :<|> definitionDependentsByNameEndpoint session handle
+        :<|> definitionDependentsByHashEndpoint session handle
         :<|> findEndpoint session handle
         :<|> namespacesByNameEndpoint session handle
     )
@@ -276,6 +278,30 @@ definitionDependenciesByHashEndpoint ::
   Maybe CausalHash ->
   WebApp (Cached JSON DefinitionSearchResults)
 definitionDependenciesByHashEndpoint _ _userHandle _referent _relativeTo _renderWidth _rootHash = do
+  -- The user endpoints are deprecated, no point maintaining them.
+  respondError Unimplemented
+
+definitionDependentsByNameEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  HQ.HashQualified Name ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+definitionDependentsByNameEndpoint _ _userHandle _name _relativeTo _renderWidth _rootHash = do
+  -- The user endpoints are deprecated, no point maintaining them.
+  respondError Unimplemented
+
+definitionDependentsByHashEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  Referent ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+definitionDependentsByHashEndpoint _ _userHandle _referent _relativeTo _renderWidth _rootHash = do
   -- The user endpoints are deprecated, no point maintaining them.
   respondError Unimplemented
 
