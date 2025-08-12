@@ -87,9 +87,9 @@
               {
                 "annotation": {
                   "contents": "##Nat",
-                  "tag": "TypeReference"
+                  "tag": "HashQualifier"
                 },
-                "segment": "Nat"
+                "segment": "##Nat"
               }
             ]
           }
@@ -253,9 +253,9 @@
               {
                 "annotation": {
                   "contents": "##Nat",
-                  "tag": "TypeReference"
+                  "tag": "HashQualifier"
                 },
-                "segment": "Nat"
+                "segment": "##Nat"
               }
             ]
           }
