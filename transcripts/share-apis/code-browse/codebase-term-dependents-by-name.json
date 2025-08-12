@@ -4,21 +4,47 @@
       {
         "branchRef": "main",
         "definition": {
-          "displayName": "builtin.Nat",
-          "hash": "##Nat",
+          "displayName": "names.apples.compoundTerm",
+          "hash": "#g4jit20l7qu6uv4aqfbv6dkjscvemhq8vltaa9t0vkq0itqg0g25sh18bdtjh2a0ki76eu1pdb3t365ei8pomg6mrk5njdlmdd1g9bo",
           "summary": {
             "contents": [
               {
-                "annotation": null,
-                "segment": "builtin.Nat"
+                "annotation": {
+                  "contents": "##Nat",
+                  "tag": "TypeReference"
+                },
+                "segment": "Nat"
               }
             ],
-            "tag": "BuiltinObject"
+            "tag": "UserObject"
           },
-          "tag": "Data"
+          "tag": "Plain"
         },
-        "fqn": "builtin.Nat",
-        "kind": "type",
+        "fqn": "names.apples.compoundTerm",
+        "kind": "term",
+        "projectRef": "@transcripts/code-browse"
+      },
+      {
+        "branchRef": "main",
+        "definition": {
+          "displayName": "names.referencesExternal",
+          "hash": "#v1b6qqrncoug00008ouve8gdnf8mtrvv3mrr34jct7h2elm5g56s4d8shkirh49r0i3h7aeebiua9icas6ptp1ap82g4q7n3gvq5l18",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "contents": "##Nat",
+                  "tag": "TypeReference"
+                },
+                "segment": "Nat"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Plain"
+        },
+        "fqn": "names.referencesExternal",
+        "kind": "term",
         "projectRef": "@transcripts/code-browse"
       }
     ]

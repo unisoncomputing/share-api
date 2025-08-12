@@ -1,6 +1,50 @@
 {
   "body": {
-    "results": []
+    "results": [
+      {
+        "branchRef": "main",
+        "definition": {
+          "displayName": "names.WithDependencies",
+          "hash": "#ubgchdcrut1hdslavceo1465klhig9u20c94pdsnps4828h7lc6ik506ccvqlktpssiimam8gjuhskuqkihptl6qctcoabvbfp2gdg8",
+          "summary": {
+            "contents": [
+              {
+                "annotation": {
+                  "tag": "DataTypeModifier"
+                },
+                "segment": "structural"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "tag": "DataTypeKeyword"
+                },
+                "segment": "type"
+              },
+              {
+                "annotation": null,
+                "segment": " "
+              },
+              {
+                "annotation": {
+                  "contents": "names.WithDependencies",
+                  "tag": "HashQualifier"
+                },
+                "segment": "names.WithDependencies"
+              }
+            ],
+            "tag": "UserObject"
+          },
+          "tag": "Data"
+        },
+        "fqn": "names.WithDependencies",
+        "kind": "type",
+        "projectRef": "@transcripts/code-browse"
+      }
+    ]
   },
   "status": [
     {
