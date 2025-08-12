@@ -1,0 +1,31 @@
+{
+  "body": {
+    "results": [
+      {
+        "branchRef": "main",
+        "definition": {
+          "displayName": "builtin.Nat",
+          "hash": "##Nat",
+          "summary": {
+            "contents": [
+              {
+                "annotation": null,
+                "segment": "builtin.Nat"
+              }
+            ],
+            "tag": "BuiltinObject"
+          },
+          "tag": "Data"
+        },
+        "fqn": "builtin.Nat",
+        "kind": "type",
+        "projectRef": "@transcripts/code-browse"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
