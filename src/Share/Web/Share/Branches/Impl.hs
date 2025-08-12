@@ -318,7 +318,7 @@ projectBranchDefinitionDependentsByNameEndpoint (AuthN.MaybeAuthedUserID callerU
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
       np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
-      DefinitionSearchResults <$> ShareBackend.definitionDependencyResults codebase name projectShorthand branchOrReleaseShortHand np renderWidth
+      DefinitionSearchResults <$> ShareBackend.definitionDependentResults codebase name projectShorthand branchOrReleaseShortHand np renderWidth
   where
     branchOrReleaseShortHand = IDs.IsBranchShortHand bsh
     projectShorthand = ProjectShortHand {userHandle, projectSlug}
@@ -347,7 +347,7 @@ projectBranchDefinitionDependentsByHashEndpoint (AuthN.MaybeAuthedUserID callerU
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
       np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
-      DefinitionSearchResults <$> ShareBackend.definitionDependencyResults codebase query projectShorthand branchOrReleaseShortHand np renderWidth
+      DefinitionSearchResults <$> ShareBackend.definitionDependentResults codebase query projectShorthand branchOrReleaseShortHand np renderWidth
   where
     branchOrReleaseShortHand = IDs.IsBranchShortHand bsh
     projectShorthand = ProjectShortHand {userHandle, projectSlug}
