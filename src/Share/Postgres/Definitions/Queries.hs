@@ -33,8 +33,10 @@ module Share.Postgres.Definitions.Queries
     saveTypeComponent,
     termTransitiveDependenciesIds,
     termTransitiveDependencyRefs,
-    expandComponentIndicesOf,
+    componentSizeOf,
     definitionComponentDirectDependentsOf,
+    expectRefIdsByTermIdsOf,
+    expectRefIdsByTypeIdsOf,
 
     -- * For Migrations
     saveSerializedComponent,
@@ -188,6 +190,30 @@ expectComponentHashIdsByTypeIdsOf trav s = do
         [sql| SELECT typ.component_hash_id
               FROM ^{toTable (ordered typeIds)} AS type_ids(ord, type_id)
               JOIN types typ ON typ.id = type_ids.type_id
+              ORDER BY type_ids.ord ASC
+            |]
+
+expectRefIdsByTermIdsOf :: (QueryA m) => Traversal s t TermId V2Reference.TermReferenceId -> s -> m t
+expectRefIdsByTermIdsOf trav s = do
+  s
+    & asListOf trav %%~ \termIds -> do
+      queryListRows @V2Reference.TermReferenceId
+        [sql| SELECT ch.base32, term.component_index
+              FROM ^{toTable (ordered termIds)} AS term_ids(ord, term_id)
+              JOIN terms term ON term.id = term_ids.term_id
+              JOIN component_hashes ch ON ch.id = term.component_hash_id
+              ORDER BY term_ids.ord ASC
+            |]
+
+expectRefIdsByTypeIdsOf :: (QueryA m) => Traversal s t TypeId V2Reference.TypeReferenceId -> s -> m t
+expectRefIdsByTypeIdsOf trav s = do
+  s
+    & asListOf trav %%~ \typeIds -> do
+      queryListRows @V2Reference.TypeReferenceId
+        [sql| SELECT ch.base32, typ.component_index
+              FROM ^{toTable (ordered typeIds)} AS type_ids(ord, type_id)
+              JOIN types typ ON typ.id = type_ids.type_id
+              JOIN component_hashes ch ON ch.id = typ.component_hash_id
               ORDER BY type_ids.ord ASC
             |]
 
@@ -1416,8 +1442,8 @@ missingDeclKindError r =
   InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r
 
 -- | Collect the number of component elements for each component hash.
-expandComponentIndicesOf :: (QueryM m) => Traversal s t ComponentHash Int32 -> s -> m t
-expandComponentIndicesOf trav s = do
+componentSizeOf :: (QueryM m) => Traversal s t ComponentHash Int32 -> s -> m t
+componentSizeOf trav s = do
   s
     & asListOf trav %%~ \componentHashes -> do
       let componentHashTable = ordered componentHashes
@@ -1440,9 +1466,11 @@ expandComponentIndicesOf trav s = do
         ) AS all_component_indices
       |]
 
--- | Fetch all definitions which depend on the provided component
-definitionComponentDirectDependentsOf :: (QueryM m) => Traversal s t ComponentHash (Set TermId, Set TypeId) -> s -> m t
-definitionComponentDirectDependentsOf trav s = do
+-- | Fetch all definitions which depend on the provided component.
+--
+-- This requires a codebase because otherwise it would include dependents from all codebases.
+definitionComponentDirectDependentsOf :: (QueryM m) => CodebaseEnv -> Traversal s t ComponentHash (Set TermId, Set TypeId) -> s -> m t
+definitionComponentDirectDependentsOf CodebaseEnv {codebaseOwner} trav s = do
   s
     & asListOf trav %%~ \componentHashes ->
       do
@@ -1456,13 +1484,17 @@ definitionComponentDirectDependentsOf trav s = do
           SELECT ref.term_id
             FROM component_hashes ch
               JOIN term_local_component_references ref ON ch.id = ref.component_hash_id
+              JOIN term_ownership ON term_ownership.term_id = ref.term_id
               WHERE ch.base32 = components.base32
+                AND term_ownership.user_id = #{codebaseOwner}
         ) AS term_ids,
         ARRAY(
           SELECT type.id
             FROM component_hashes ch
               JOIN types type ON ch.id = type.component_hash_id
+              JOIN type_ownership ON type_ownership.type_id = type.id
               WHERE ch.base32 = components.base32
+                AND type_ownership.user_id = #{codebaseOwner}
         ) AS type_ids
         FROM components
         ORDER BY ord ASC
