@@ -18,10 +18,16 @@ fetch "$transcripts_user" GET codebase-definition-by-hash-term "/users/transcrip
 fetch "$transcripts_user" GET codebase-definition-by-hash-constructor "/users/transcripts/projects/code-browse/branches/main/definitions/by-hash/@6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0@d0"
 fetch "$transcripts_user" GET codebase-lib-term-definition-from-lib-perspective "/users/transcripts/projects/code-browse/branches/main/definitions/by-name/Tuple.fst?relativeTo=lib.data"
 fetch "$transcripts_user" GET codebase-lib-type-definition-from-lib-perspective "/users/transcripts/projects/code-browse/branches/main/definitions/by-name/Tuple?relativeTo=lib.data"
+fetch "$transcripts_user" GET codebase-term-dependencies-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-name/names.referencesExternal"
+fetch "$transcripts_user" GET codebase-type-dependencies-by-name "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-name/names.WithDependencies"
+fetch "$transcripts_user" GET codebase-term-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@v1b6qqrnco"
+fetch "$transcripts_user" GET codebase-type-dependencies-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependencies/by-hash/@ubgchdcrut1hdslavceo1465klhig9u20c94pdsnps4828h7lc6ik506ccvqlktpssiimam8gjuhskuqkihptl6qctcoabvbfp2gdg8"
+
 
 fetch "$transcripts_user" GET codebase-find "/users/transcripts/projects/code-browse/branches/main/find?query=oranges.tw"
 fetch "$transcripts_user" GET codebase-namespace-by-name "/users/transcripts/projects/code-browse/branches/main/namespaces/by-name/names"
 fetch "$transcripts_user" GET codebase-namespace-by-name-root "/users/transcripts/projects/code-browse/branches/main/namespaces/by-name/"
+
 fetch "$transcripts_user" GET search "/search?query=tes"
 fetch "$transcripts_user" GET account "/account"
 fetch "$transcripts_user" GET user-info "/user-info"

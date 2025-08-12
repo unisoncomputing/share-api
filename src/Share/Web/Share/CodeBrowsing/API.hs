@@ -7,6 +7,7 @@ import Data.Text (Text)
 import Servant
 import Share.Utils.Caching
 import Share.Utils.Servant (OptionalCapture, RequiredQueryParam)
+import Share.Web.Share.Types (DefinitionSearchResults)
 import U.Codebase.HashTags (CausalHash)
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
@@ -26,6 +27,8 @@ type CodeBrowseAPI =
       :<|> ("definitions" :> "by-hash" :> DefinitionsByHashEndpoint)
       :<|> ("definitions" :> "terms" :> "by-hash" :> TermSummaryEndpoint)
       :<|> ("definitions" :> "types" :> "by-hash" :> TypeSummaryEndpoint)
+      :<|> ("definitions" :> "dependencies" :> "by-name" :> DefinitionDependenciesByNameEndpoint)
+      :<|> ("definitions" :> "dependencies" :> "by-hash" :> DefinitionDependenciesByHashEndpoint)
       :<|> ("find" :> FindEndpoint)
       :<|> ("namespaces" :> "by-name" :> NamespaceByNameEndpoint)
   )
@@ -68,6 +71,34 @@ type DefinitionsByHashEndpoint =
     :> QueryParam "renderWidth" Width
     :> QueryParam "rootHash" CausalHash
     :> Get '[JSON] (Cached JSON DefinitionDisplayResults)
+
+type DefinitionDependenciesByNameEndpoint =
+  Capture "name" (HQ.HashQualified Name)
+    :> QueryParam "relativeTo" Path.Path
+    :> QueryParam "renderWidth" Width
+    :> QueryParam "rootHash" CausalHash
+    :> Get '[JSON] (Cached JSON DefinitionSearchResults)
+
+type DefinitionDependenciesByHashEndpoint =
+  Capture "hash" Referent
+    :> QueryParam "relativeTo" Path.Path
+    :> QueryParam "renderWidth" Width
+    :> QueryParam "rootHash" CausalHash
+    :> Get '[JSON] (Cached JSON DefinitionSearchResults)
+
+type DefinitionDependentsByNameEndpoint =
+  Capture "name" (HQ.HashQualified Name)
+    :> QueryParam "relativeTo" Path.Path
+    :> QueryParam "renderWidth" Width
+    :> QueryParam "rootHash" CausalHash
+    :> Get '[JSON] (Cached JSON DefinitionSearchResults)
+
+type DefinitionDependentsByHashEndpoint =
+  Capture "hash" Referent
+    :> QueryParam "relativeTo" Path.Path
+    :> QueryParam "renderWidth" Width
+    :> QueryParam "rootHash" CausalHash
+    :> Get '[JSON] (Cached JSON DefinitionSearchResults)
 
 type FindEndpoint =
   QueryParam "relativeTo" Path.Path
