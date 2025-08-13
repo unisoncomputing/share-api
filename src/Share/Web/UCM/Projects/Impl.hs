@@ -133,7 +133,7 @@ getProjectBranchEndpoint (AuthN.MaybeAuthedUserID mayCallerUserId) projectIdPara
       maySquashedBranchHead <-
         if includeSquashedHead
           then lift $ do
-            PG.runTransactionMode PG.RepeatableRead PG.ReadWrite $ do
+            PG.runTransaction $ do
               maySquashedCausalId <- Codebase.squashCausalAndAddToCodebase codebaseEnv causalId
               -- Join in the hash
               for maySquashedCausalId \cid -> (cid,) <$> HashQ.expectCausalHashesByIdsOf id cid
