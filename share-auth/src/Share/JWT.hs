@@ -40,6 +40,7 @@ where
 
 import Control.Lens
 import Control.Monad.Except
+import Control.Monad.Trans.Except (except)
 import Crypto.Error (CryptoError (..), CryptoFailable (..))
 import Crypto.JOSE.JWA.JWS qualified as JWS
 import Crypto.JOSE.JWK qualified as JWK
@@ -50,32 +51,41 @@ import Data.Aeson qualified as Aeson
 import Data.ByteArray qualified as ByteArray
 import Data.ByteString qualified as BS
 import Data.ByteString.Base64.URL qualified as Base64URL
+import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import Data.Traversable (for)
 import Servant
 import Share.JWT.Types
 import Share.OAuth.Orphans ()
 import Share.Utils.Servant.Cookies qualified as Cookies
 import UnliftIO (MonadIO (..))
+import UnliftIO.STM
 
--- | Get the JWK Set value which is safe to expose to the public, e.g. in a JWKS endpoint.
+-- | Get the JWK Set for an issuer which is safe to expose to the public, e.g. in a JWKS endpoint.
 -- This will only include public keys.
 --
 -- Note that this will not include the legacy key or any HS256 keys, since those don't have a
 -- safe public component.
-publicJWKSet :: JWTSettings -> JWK.JWKSet
-publicJWKSet JWTSettings {validationKeys = KeyMap {byKeyId}} =
-  JWK.JWKSet
-    ( byKeyId
-        & foldMap (\jwk -> jwk ^.. JWK.asPublicKey . _Just)
-    )
+publicJWKSet :: (MonadIO m) => JWTSettings -> Issuer -> m JWK.JWKSet
+publicJWKSet JWTSettings {validationKeys = KeyMap {keysVar}} issuer = do
+  keyMap <- liftIO $ readTVarIO keysVar
+  pure $
+    JWK.JWKSet
+      ( keyMap
+          & Map.lookup issuer
+          & foldMap (\jwk -> jwk ^.. folded . JWK.asPublicKey . _Just)
+      )
 
 -- | Create a 'JWTSettings' using the required information.
 defaultJWTSettings ::
+  (MonadIO m) =>
+  -- | Which issuer is the current service
+  Issuer ->
   -- | The key used to sign JWTs.
   KeyDescription ->
   -- | The legacy key used to verify old JWTs from before key IDs were used. This will be used to verify tokens that don't have a key id.
@@ -86,25 +96,40 @@ defaultJWTSettings ::
   -- Tokens must have an audience which is present in this set.
   --
   -- E.g. https://api.unison.cloud
-  Set URI ->
+  Set Audience ->
   -- | Valid issuers when validating tokens
-  Set URI ->
-  Either CryptoError JWTSettings
-defaultJWTSettings signingKey legacyKey oldValidKeys acceptedAudiences acceptedIssuers = do
-  sjwk@(_, signingJWK) <- keyDescToJWK signingKey
-  verificationJWKs <- (sjwk :) <$> traverse keyDescToJWK (Set.toList oldValidKeys)
-  let byKeyId = Map.fromList verificationJWKs
-  legacyKey <- traverse keyDescToJWK legacyKey <&> fmap snd
+  Set Issuer ->
+  -- | Mapping of issuers to either their:
+  --   * JWK json endpoint.
+  --   * JWK set.
+  --
+  -- If a JWK URI is provided for an issuer it will be fetched and kept up to date as needed.
+  Map Issuer (Either URI JWT.JWKSet) ->
+  m (Either CryptoError JWTSettings)
+defaultJWTSettings myIssuer signingKey legacyKey oldValidKeys acceptedAudiences acceptedIssuers externalJWKsMap = runExceptT $ do
+  signingJWK <- except $ keyDescToJWK signingKey
+  myVerificationJWKs <- (signingJWK :) <$> traverse (except . keyDescToJWK) (Set.toList oldValidKeys)
+  let (externalJWKs, externalJWKLocations) =
+        externalJWKsMap
+          & foldMap \case
+            Left uri -> (mempty, Map.singleton myIssuer uri)
+            Right (JWT.JWKSet jwks) -> (Map.singleton myIssuer jwks, mempty)
+
+  let myJWKs = Map.singleton myIssuer myVerificationJWKs
+  let keysMap = myJWKs <> externalJWKs
+  keysVar <- liftIO $ newTVarIO keysMap
+  legacyKey <- for legacyKey (except . keyDescToJWK)
   pure $
     JWTSettings
       { signingJWK,
-        validationKeys = KeyMap {byKeyId, legacyKey},
+        validationKeys = KeyMap {keysVar, legacyKey},
+        externalJWKLocations,
         acceptedAudiences,
         acceptedIssuers
       }
 
 -- | Converts a 'KeyDescription' to a 'JWK' and a 'KeyThumbprint'.
-keyDescToJWK :: KeyDescription -> Either CryptoError (KeyThumbprint, JWK.JWK)
+keyDescToJWK :: KeyDescription -> Either CryptoError JWK.JWK
 keyDescToJWK (KeyDescription {key, alg}) = cryptoFailableToEither $ do
   case alg of
     HS256 -> do
@@ -113,7 +138,7 @@ keyDescToJWK (KeyDescription {key, alg}) = cryptoFailableToEither $ do
               & JWK.jwkUse .~ Just JWK.Sig
               & JWK.jwkAlg .~ Just (JWK.JWSAlg JWS.HS256)
       let thumbprint = jwkThumbprint jwk
-      pure (KeyThumbprint thumbprint, jwk & JWK.jwkKid .~ Just thumbprint)
+      pure (jwk & JWK.jwkKid .~ Just thumbprint)
     Ed25519 -> do
       privKey <- Ed25519.secretKey key
       let pubKey = Ed25519.toPublic privKey
@@ -124,7 +149,7 @@ keyDescToJWK (KeyDescription {key, alg}) = cryptoFailableToEither $ do
               & JWK.jwkUse .~ Just JWK.Sig
               & JWK.jwkAlg .~ Just (JWK.JWSAlg JWS.EdDSA)
       let thumbprint = jwkThumbprint jwk
-      pure (KeyThumbprint thumbprint, jwk & JWK.jwkKid .~ Just thumbprint)
+      pure (jwk & JWK.jwkKid .~ Just thumbprint)
   where
     cryptoFailableToEither :: CryptoFailable a -> Either CryptoError a
     cryptoFailableToEither (CryptoFailed err) = Left err
@@ -160,8 +185,8 @@ signJWTWithJWK jwk v = runExceptT $ do
 --
 -- Any other checks should be performed on the returned claims.
 verifyJWT :: forall claims m. (AsJWTClaims claims, MonadIO m) => JWTSettings -> JWT.SignedJWT -> m (Either JWT.JWTError claims)
-verifyJWT JWTSettings {validationKeys, acceptedAudiences, acceptedIssuers} signedJWT = runExceptT do
-  jwtClaimsMap <- ExceptT . liftIO . runExceptT $ JWT.verifyJWT validators validationKeys signedJWT
+verifyJWT jwtSettings@JWTSettings {acceptedAudiences, acceptedIssuers} signedJWT = runExceptT do
+  jwtClaimsMap <- ExceptT . liftIO . runExceptT $ JWT.verifyJWT validators jwtSettings signedJWT
   case fromClaims jwtClaimsMap of
     Left err -> throwError $ JWT.JWTClaimsSetDecodeError (Text.unpack err)
     Right claims -> pure claims
@@ -170,12 +195,12 @@ verifyJWT JWTSettings {validationKeys, acceptedAudiences, acceptedIssuers} signe
     auds =
       -- Annoyingly StringOrURI doesn't have an ord instance.
       Set.toList acceptedAudiences
-        & map (review CryptoJWT.uri)
+        & map (\(Audience aud) -> review CryptoJWT.uri aud)
     issuers :: [CryptoJWT.StringOrURI]
     issuers =
       -- Annoyingly StringOrURI doesn't have an ord instance.
       Set.toList acceptedIssuers
-        & map (review CryptoJWT.uri)
+        & map (\(Issuer iss) -> review CryptoJWT.uri iss)
     validators =
       CryptoJWT.defaultJWTValidationSettings (`elem` auds)
         & CryptoJWT.issuerPredicate .~ (`elem` issuers)
