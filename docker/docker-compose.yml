@@ -86,6 +86,8 @@ services:
       - SHARE_CLOUD_UI_ORIGIN=http://localhost:5678
       - SHARE_HOMEPAGE_ORIGIN=http://localhost:1111
       - SHARE_CLOUD_HOMEPAGE_ORIGIN=http://localhost:2222
+      - SHARE_CLOUD_API_ORIGIN=http://localhost:3333
+      - SHARE_CLOUD_API_JWKS_ENDPOINT=http://localhost:3333/.well-known/jwks.json
       - SHARE_LOG_LEVEL=DEBUG
       - SHARE_COMMIT=dev
       - SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST=1
