@@ -23,25 +23,33 @@ module Share.Utils.API
   )
 where
 
+import Control.Applicative ((<|>))
+import Control.Monad
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Aeson.Key
 import Data.Aeson.Types
+import Data.Bifunctor (Bifunctor (..))
 import Data.ByteString.Base64.URL.Lazy qualified as Base64URL
 import Data.Foldable qualified as Foldable
+import Data.Functor ((<&>))
+import Data.Int (Int64)
+import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Maybe (fromMaybe, isNothing)
+import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.String qualified as String
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
-import Data.Typeable (typeRep)
+import Data.Typeable (Typeable, typeRep)
 import GHC.TypeLits (Symbol)
 import GHC.TypeLits qualified as TypeLits
+import Hasql.Interpolate (EncodeValue)
 import Safe (headMay, lastMay)
 import Servant
-import Share.Postgres qualified as PG
-import Share.Prelude
 
 -- | Type for updating of nullable fields.
 --
@@ -195,8 +203,8 @@ instance (FromJSON a) => FromHttpApiData (Cursor a) where
       "p" -> pure Previous
       "n" -> pure Next
       _ -> Left $ "Invalid or missing cursor direction: " <> dirTxt
-    jsonBytes <- mapLeft Text.pack . Base64URL.decodeUnpadded . TL.encodeUtf8 . TL.fromStrict $ locTxt
-    loc <- mapLeft Text.pack (Aeson.eitherDecode jsonBytes)
+    jsonBytes <- first Text.pack . Base64URL.decodeUnpadded . TL.encodeUtf8 . TL.fromStrict $ locTxt
+    loc <- first Text.pack (Aeson.eitherDecode jsonBytes)
     pure $ Cursor loc dir
 
 -- |
@@ -243,14 +251,14 @@ maxLimit = 100
 
 newtype Limit = Limit {getLimit :: Int64}
   deriving stock (Eq, Show)
-  deriving newtype (ToJSON, ToHttpApiData, PG.EncodeValue, Num)
+  deriving newtype (ToJSON, ToHttpApiData, EncodeValue, Num)
 
 instance FromHttpApiData Limit where
   parseUrlPiece txt = do
     n <- parseUrlPiece @Int64 txt
     case n of
       0 -> Left "limit must be positive"
-      n | n > maxLimit -> Left $ "limit must be less than " <> tShow maxLimit
+      n | n > maxLimit -> Left $ "limit must be less than " <> Text.pack (show maxLimit)
       _ -> Right $ Limit n
 
 instance FromJSON Limit where
