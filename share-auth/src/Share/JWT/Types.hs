@@ -23,6 +23,8 @@ where
 import Control.Applicative
 import Control.Lens
 import Control.Monad
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Maybe (MaybeT (..), hoistMaybe)
 import Crypto.JOSE qualified as Jose
 import Crypto.JWT (HasClaimsSet)
 import Crypto.JWT qualified as JWT
@@ -33,7 +35,6 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (FromJSON (..))
 import Data.Binary
 import Data.ByteString qualified as BS
-import Data.List qualified as List
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
@@ -45,9 +46,13 @@ import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Time (UTCTime)
+import Network.HTTP.Client qualified as HTTP
+import Network.HTTP.Client.TLS qualified as HTTPTLS
 import Network.URI qualified as URI
 import Servant
 import Share.Utils.Show (Censored (..))
+import UnliftIO (MonadIO (..))
+import UnliftIO.STM
 import Prelude hiding (exp)
 
 -- | A map of claims which represent a JWT
@@ -135,6 +140,9 @@ data JWTSettings = JWTSettings
     signingJWK :: Jose.JWK,
     -- | Keys used to validate JWT.
     validationKeys :: KeyMap,
+    -- | Locations to fetch external JWKs from.
+    -- Typically this will be a map of issuer: "<issuer>/.well-known/jwks.json"
+    externalJWKLocations :: Map Issuer URI,
     -- | The set of audiences the app accepts tokens for.
     acceptedAudiences :: Set URI,
     -- | The set of issuers the app accepts tokens from.
@@ -203,12 +211,22 @@ data KeyDescription = KeyDescription {alg :: SupportedAlg, key :: BS.ByteString}
 newtype KeyThumbprint = KeyThumbprint Text
   deriving newtype (Eq, Ord)
 
+newtype Issuer = Issuer URI
+  deriving newtype (Eq, Ord)
+
 -- | Storage mechanism for keys used to sign and verify JWTs.
 --
 -- Mostly exists just to implement the 'JWT.VerificationKeyStore' instance for interop with
 -- jose.
 data KeyMap = KeyMap
-  { byKeyId :: (Map KeyThumbprint JWT.JWK),
+  { -- It's important that we verify that the issuer, key id, and algorithm all match
+    -- what we expect. Otherwise there are attacks where the caller can create a collision by
+    -- using a given key id using a different algorithm, or using a key from one issuer against
+    -- another issuer.
+    --
+    -- This is a TVar so we can auto-update keys from supported issuers when we get validation
+    -- failures.
+    keysVar :: TVar (Map Issuer [JWT.JWK]),
     -- | The key from before the introduction of key ids.
     -- This will be used to verify legacy tokens, but is also used to sign HashJWTs on share.
     legacyKey :: Maybe JWT.JWK
@@ -217,17 +235,57 @@ data KeyMap = KeyMap
 
 -- | This instance is used to look up the verification keys for a given JWT, assuring that the
 -- expected algorithm and key id matches.
-instance (Applicative m) => JWT.VerificationKeyStore m (JWT.JWSHeader ()) payload KeyMap where
-  getVerificationKeys header _claims (KeyMap km legacyKey) =
-    case (header ^? JWT.kid . _Just . JWT.param) of
+instance (MonadIO m, HasClaimsSet payload) => JWT.VerificationKeyStore m (JWT.JWSHeader ()) payload JWTSettings where
+  getVerificationKeys header claims (JWTSettings {validationKeys = KeyMap {keysVar, legacyKey}, externalJWKLocations}) = do
+    -- Issuer is required on normal claims, but old hashJWTs may not have one.
+    let mayIssuer = claims ^? JWT.claimIss . _Just . JWT.uri . to Issuer
+    case mayIssuer of
       Nothing -> pure $ maybeToList legacyKey
-      Just jwtKid -> pure . maybe [] List.singleton $ do
+      Just jwtIssuer -> do
+        matchingJWKs <- getJwksForIssuer jwtIssuer
+        case matchingJWKs of
+          [] -> refreshExternalJWKs jwtIssuer
+          matchingJWKs -> pure matchingJWKs
+    where
+      getJwksForIssuer :: Issuer -> m [JWT.JWK]
+      getJwksForIssuer jwtIssuer = do
+        keys <- readTVarIO keysVar
+        let mayKid = header ^? JWT.kid . _Just . JWT.param
         let jwtAlg = header ^. JWT.alg . JWT.param
-        case Map.lookup (KeyThumbprint jwtKid) km of
-          Just key | Just (JWT.JWSAlg keyAlg) <- key ^. JWT.jwkAlg -> do
-            guard (keyAlg == jwtAlg)
-            pure key
-          _ -> empty
+        case mayKid of
+          -- If we don't have a kid and issuer, it must be a legacy token.
+          Nothing -> pure $ maybeToList legacyKey
+          Just jwtKid -> do
+            case Map.lookup jwtIssuer keys of
+              Just issKeys -> do
+                pure $ do
+                  jwk <- issKeys
+                  -- Assert that the key id matches the one in the JWT header.
+                  guard (Just jwtKid == jwk ^? JWT.jwkKid . _Just)
+                  case jwk ^. JWT.jwkAlg of
+                    Just (JWT.JWSAlg jwkAlg)
+                      | jwkAlg == jwtAlg ->
+                          pure jwk
+                    _ -> empty
+              _ -> pure mempty
+      refreshExternalJWKs :: (MonadIO m) => Issuer -> m [JWT.JWK]
+      refreshExternalJWKs iss = fmap (fromMaybe []) . runMaybeT $ do
+        uri <- hoistMaybe $ Map.lookup iss externalJWKLocations
+        -- We only fetch external JWKs from manually configured trusted jwk URIs
+        -- so it's safe not to use a proxy.
+        httpMan <- liftIO $ HTTPTLS.getGlobalManager
+        req <- hoistMaybe $ HTTP.requestFromURI uri
+        respBytes <- liftIO $ HTTP.httpLbs req httpMan
+        case Aeson.eitherDecode (HTTP.responseBody respBytes) of
+          Left _ -> empty
+          Right (JWT.JWKSet jwks) -> do
+            -- Add new keys to the key map.
+            atomically $ modifyTVar' keysVar $ \m -> do
+              Map.insert (iss) jwks m
+            -- After refreshing keys, try again to find a match.
+            lift $ getJwksForIssuer iss
+
+-- Make an http request to fetch the JWKs from the issuer.
 
 -- | A newtype for JWTs which provides the appropriate encoding/decoding instances.
 newtype JWTParam = JWTParam JWT.SignedJWT

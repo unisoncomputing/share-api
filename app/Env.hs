@@ -73,6 +73,7 @@ withEnv action = do
   maxParallelismPerDownloadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" . readMaybe)
   maxParallelismPerUploadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" . readMaybe)
   cloudWebsiteOrigin <- fromEnv "SHARE_CLOUD_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_HOMEPAGE_ORIGIN" . parseURI)
+  cloudAPIOrigin <- fromEnv "SHARE_CLOUD_API_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_API_ORIGIN" . parseURI)
 
   sentryService <-
     lookupEnv "SHARE_SENTRY_DSN" >>= \case
@@ -91,7 +92,7 @@ withEnv action = do
             | otherwise = Nothing
        in r {Redis.connectTLSParams = tlsParams}
   let acceptedAudiences = Set.singleton apiOrigin
-  let acceptedIssuers = Set.singleton apiOrigin
+  let acceptedIssuers = Set.fromList [apiOrigin, cloudAPIOrigin]
   let legacyKey = JWT.KeyDescription {JWT.key = hs256Key, JWT.alg = JWT.HS256}
   let signingKey = JWT.KeyDescription {JWT.key = edDSAKey, JWT.alg = JWT.Ed25519}
   hashJWTJWK <- case JWT.keyDescToJWK legacyKey of
