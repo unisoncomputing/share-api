@@ -53,6 +53,7 @@ import Network.HTTP.Client.TLS qualified as HTTPTLS
 import Network.URI qualified as URI
 import Servant
 import Share.Utils.Show (Censored (..))
+import Share.Utils.URI (URIParam (..))
 import UnliftIO (MonadIO (..))
 import UnliftIO.STM
 import Prelude hiding (exp)
@@ -157,8 +158,8 @@ data StandardClaims = StandardClaims
   { sub :: Text,
     iat :: UTCTime,
     exp :: UTCTime,
-    iss :: URI,
-    aud :: Set URI,
+    iss :: Issuer,
+    aud :: Set Audience,
     jti :: Text
   }
   deriving stock (Show, Eq, Ord)
@@ -178,8 +179,8 @@ standardClaimsToClaimsSet StandardClaims {..} =
     & JWT.claimSub ?~ (JWT.string # sub)
     & JWT.claimIat ?~ JWT.NumericDate iat
     & JWT.claimExp ?~ JWT.NumericDate exp
-    & JWT.claimIss ?~ (JWT.uri # iss)
-    & JWT.claimAud ?~ JWT.Audience (review JWT.uri <$> Set.toList aud)
+    & JWT.claimIss ?~ (JWT.uri # issuerURI iss)
+    & JWT.claimAud ?~ JWT.Audience (review JWT.uri . audienceURI <$> Set.toList aud)
     & JWT.claimJti ?~ jti
 
 standardClaimsFromClaimsSet :: JWT.ClaimsSet -> Either Text StandardClaims
@@ -187,8 +188,8 @@ standardClaimsFromClaimsSet claims = do
   sub <- maybe (Left "Invalid 'sub' claim.") Right $ (claims ^? JWT.claimSub . _Just . JWT.string)
   JWT.NumericDate iat <- maybe (Left "Invalid 'iat' claim.") Right $ (claims ^? JWT.claimIat . _Just)
   JWT.NumericDate exp <- maybe (Left "Invalid 'exp' claim.") Right $ (claims ^? JWT.claimExp . _Just)
-  iss <- maybe (Left "Invalid 'iss' claim.") Right $ (claims ^? JWT.claimIss . _Just . re JWT.stringOrUri . folding URI.parseURI)
-  let aud = (claims & setOf (JWT.claimAud . _Just . folding (\(JWT.Audience auds) -> auds) . JWT.uri))
+  iss <- maybe (Left "Invalid 'iss' claim.") Right $ (claims ^? JWT.claimIss . _Just . re JWT.stringOrUri . folding URI.parseURI . to Issuer)
+  let aud = claims & setOf (JWT.claimAud . _Just . folding (\(JWT.Audience auds) -> auds) . JWT.uri . to Audience)
   when (null aud) $ Left "Invalid 'aud' claim."
   jti <- maybe (Left "Invalid 'jti' claim.") Right $ (claims ^? JWT.claimJti . _Just)
   pure StandardClaims {..}
@@ -213,11 +214,13 @@ data KeyDescription = KeyDescription {alg :: SupportedAlg, key :: BS.ByteString}
 newtype KeyThumbprint = KeyThumbprint Text
   deriving newtype (Eq, Ord)
 
-newtype Issuer = Issuer URI
-  deriving newtype (Eq, Ord)
+newtype Issuer = Issuer {issuerURI :: URI}
+  deriving newtype (Eq, Ord, Show)
+  deriving (FromJSON, ToJSON) via (URIParam)
 
-newtype Audience = Audience URI
-  deriving newtype (Eq, Ord)
+newtype Audience = Audience {audienceURI :: URI}
+  deriving newtype (Eq, Ord, Show)
+  deriving (FromJSON, ToJSON) via (URIParam)
 
 -- | Storage mechanism for keys used to sign and verify JWTs.
 --

@@ -8,7 +8,6 @@ import Control.Lens hiding ((.=))
 import Data.Either (fromRight)
 import Data.Set qualified as Set
 import Data.Time
-import Network.URI (URI)
 import Share.App
 import Share.IDs (SessionId, UserId (..))
 import Share.IDs qualified as IDs
@@ -78,7 +77,7 @@ userForAccessToken token = do
   userID <- accessTokenUser <$> verifyAccessToken mempty token
   PGO.expectUserById userID
 
-createAccessToken :: Set URI -> UserId -> SessionId -> Scopes -> WebApp AccessToken
+createAccessToken :: Set JWT.Audience -> UserId -> SessionId -> Scopes -> WebApp AccessToken
 createAccessToken aud userID sessionID scope = do
   standardClaims <- JWT.shareStandardClaims aud userID accessTokenTTL sessionID
   let accessTokenClaims = AccessTokenClaims {scope, standardClaims}

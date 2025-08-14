@@ -29,6 +29,8 @@ module Share.JWT
 
     -- * Utilities
     JWTParam (..),
+    Issuer (..),
+    Audience (..),
     textToSignedJWT,
     signedJWTToText,
     createSignedCookie,

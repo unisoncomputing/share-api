@@ -18,6 +18,7 @@ where
 import Control.Monad (void)
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
+import Share.JWT
 import Data.Binary
 import Data.Binary qualified as Binary
 import Data.ByteString qualified as BS
@@ -163,7 +164,7 @@ instance Aeson.FromJSON CodeExchange where
 instance RedisKey CodeExchange where
   redisKey CodeExchange {code} = codeExchangeKey code
 
-createOAuth2Code :: ServiceName -> URI -> Set URI -> UserId -> OAuth2.AuthenticationRequest -> R.Redis (Session, OAuth2.Code)
+createOAuth2Code :: ServiceName -> Issuer -> Set Audience -> UserId -> OAuth2.AuthenticationRequest -> R.Redis (Session, OAuth2.Code)
 createOAuth2Code serviceName issuer aud userId authRequest = do
   code <- OAuth2.Code <$> newSecureToken
   session@(Session {sessionId}) <- liftIO $ Session.createSession serviceName issuer aud userId

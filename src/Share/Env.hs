@@ -1,6 +1,6 @@
 module Share.Env
   ( Env (..),
-serviceName,
+    serviceName,
   )
 where
 

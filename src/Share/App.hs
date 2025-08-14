@@ -15,9 +15,9 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Database.Redis qualified as R
 import OpenTelemetry.Trace.Monad (MonadTracer (..))
-import Servant
 import Share.Env (Env (..))
 import Share.Env qualified as Env
+import Share.JWT.Types (Audience (..), Issuer (..))
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Tags (HasTags (..), MonadTags (..))
@@ -59,10 +59,13 @@ instance R.RedisCtx (AppM reqCtx) (Either R.Reply) where
     R.liftRedis $ R.returnDecode r
 
 -- | JWT Issuer, currently just root URI
-shareIssuer :: AppM reqCtx URI
+shareIssuer :: AppM reqCtx Issuer
 shareIssuer = do
-  asks Env.apiOrigin
+  Issuer <$> asks Env.apiOrigin
 
 -- | JWT Audience, currently the same as the issuer.
-shareAud :: AppM reqCtx (Set URI)
-shareAud = Set.singleton <$> shareIssuer
+shareAud :: AppM reqCtx (Set Audience)
+shareAud =
+  shareIssuer
+    <&> (\(Issuer uri) -> Audience uri)
+    <&> Set.singleton
