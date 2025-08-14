@@ -9,6 +9,7 @@
 
 module Share.OAuth.Session
   ( Session (..),
+    ServiceName (..),
     AdditionalSessionClaims (..),
     PendingSession (..),
     LoginRequest (..),
@@ -29,6 +30,7 @@ import Control.Applicative
 import Control.Monad.Random
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.Aeson
+import Data.Aeson qualified as Aeson
 import Data.Binary
 import Data.Binary.Instances.Time ()
 import Data.ByteString qualified as BS
@@ -47,6 +49,7 @@ import Servant
 import Servant.Server.Experimental.Auth qualified as ServantAuth
 import Share.JWT
 import Share.OAuth.Types
+import Share.Utils.API ((:++) (..))
 import Share.Utils.Binary
 import Share.Utils.IDs qualified as IDs
 import Share.Utils.Servant.Cookies qualified as Cookies
@@ -204,11 +207,20 @@ data AdditionalSessionClaims = AdditionalSessionClaims
   }
   deriving stock (Show, Eq, Ord)
 
+-- | The service which proxied a user request to us, if any.
+-- E.g. A user may make a call to the cloud-api backend, which then may
+-- proxy that request to the share-api backend, in which case the ServiceName
+-- would be "cloud-api".
+newtype ServiceName = ServiceName Text
+  deriving stock (Show, Eq, Ord)
+  deriving newtype (FromJSON, ToJSON)
+
 -- | Note: This session will be signed into the user's cookie unencrypted.
 -- Don't put anything sensitive in here.
 data Session = Session
   { sessionId :: SessionId,
     sessionUserId :: UserId,
+    sessionServiceName :: Maybe ServiceName,
     sessionCreated :: UTCTime,
     sessionExpiry :: UTCTime,
     sessionIssuer :: URI,
@@ -229,13 +241,15 @@ instance ToJSON Session where
           aud = sessionAudience,
           jti = IDs.toText (coerce @SessionId @JTI sessionId)
         }
+        :++ Aeson.object ["serviceName" .= sessionServiceName]
 
 instance FromJSON Session where
   parseJSON v = do
-    StandardClaims {..} <- parseJSON v
+    StandardClaims {..} :++ obj <- parseJSON v
     JTI sessionId <- either (fail . Text.unpack) pure $ IDs.fromText jti
     sessionUserId <- either (fail . Text.unpack) pure $ IDs.fromText sub
-    pure Session {sessionId = SessionId sessionId, sessionUserId, sessionCreated = iat, sessionExpiry = exp, sessionIssuer = iss, sessionAudience = aud}
+    sessionServiceName <- obj Aeson..:? "serviceName"
+    pure Session {sessionId = SessionId sessionId, sessionUserId, sessionCreated = iat, sessionExpiry = exp, sessionIssuer = iss, sessionAudience = aud, sessionServiceName}
 
 data PendingSession = PendingSession
   { pendingId :: PendingSessionId,
@@ -266,8 +280,9 @@ sessionTTL :: NominalDiffTime
 sessionTTL =
   (365 * nominalDay)
 
-createSession :: (MonadIO m) => URI -> Set URI -> UserId -> m Session
-createSession sessionIssuer sessionAudience sessionUserId = do
+createSession :: (MonadIO m) => ServiceName -> URI -> Set URI -> UserId -> m Session
+createSession serviceName sessionIssuer sessionAudience sessionUserId = do
+  let sessionServiceName = Just serviceName
   sessionId <- randomIO
   sessionCreated <- liftIO getCurrentTime
   let sessionExpiry = addUTCTime sessionTTL sessionCreated
