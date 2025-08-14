@@ -5,6 +5,8 @@
 module Share.JWT.Types
   ( JWTParam (..),
     JWTSettings (..),
+    Issuer (..),
+    Audience (..),
     StandardClaims (..),
     SupportedAlg (..),
     KeyDescription (..),
@@ -138,15 +140,15 @@ textToSignedJWT jwtText = JWT.decodeCompact (TL.encodeUtf8 . TL.fromStrict $ jwt
 data JWTSettings = JWTSettings
   { -- | Key used to sign JWT.
     signingJWK :: Jose.JWK,
-    -- | Keys used to validate JWT.
+    -- | Keys used to validate JWTs.
     validationKeys :: KeyMap,
     -- | Locations to fetch external JWKs from.
     -- Typically this will be a map of issuer: "<issuer>/.well-known/jwks.json"
     externalJWKLocations :: Map Issuer URI,
     -- | The set of audiences the app accepts tokens for.
-    acceptedAudiences :: Set URI,
+    acceptedAudiences :: Set Audience,
     -- | The set of issuers the app accepts tokens from.
-    acceptedIssuers :: Set URI
+    acceptedIssuers :: Set Issuer
   }
   deriving (Show) via Censored JWTSettings
 
@@ -212,6 +214,9 @@ newtype KeyThumbprint = KeyThumbprint Text
   deriving newtype (Eq, Ord)
 
 newtype Issuer = Issuer URI
+  deriving newtype (Eq, Ord)
+
+newtype Audience = Audience URI
   deriving newtype (Eq, Ord)
 
 -- | Storage mechanism for keys used to sign and verify JWTs.
