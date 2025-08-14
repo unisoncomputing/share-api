@@ -223,8 +223,8 @@ data Session = Session
     sessionServiceName :: Maybe ServiceName,
     sessionCreated :: UTCTime,
     sessionExpiry :: UTCTime,
-    sessionIssuer :: URI,
-    sessionAudience :: Set URI
+    sessionIssuer :: Issuer,
+    sessionAudience :: Set Audience
   }
   deriving stock (Show)
   deriving (Binary) via JSONBinary Session
@@ -280,7 +280,7 @@ sessionTTL :: NominalDiffTime
 sessionTTL =
   (365 * nominalDay)
 
-createSession :: (MonadIO m) => ServiceName -> URI -> Set URI -> UserId -> m Session
+createSession :: (MonadIO m) => ServiceName -> Issuer -> Set Audience -> UserId -> m Session
 createSession serviceName sessionIssuer sessionAudience sessionUserId = do
   let sessionServiceName = Just serviceName
   sessionId <- randomIO

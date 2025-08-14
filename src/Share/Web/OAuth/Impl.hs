@@ -116,7 +116,7 @@ tokenEndpoint :: TokenRequest -> WebApp (Headers '[Header "Cache-Control" String
 tokenEndpoint (TokenRequest AuthorizationCode code redirectURI pkceVerifier callerClientId mayClientSecret) = do
   OAuthClientConfig {audience = URIParam aud} <- validateOAuthClientForTokenExchange callerClientId mayClientSecret redirectURI
   (sid, uid, authRequest) <- Redis.liftRedis $ Redis.exchangeOAuth2Code code callerClientId redirectURI pkceVerifier
-  accessToken <- AccessToken.createAccessToken (Set.singleton aud) uid sid (scopes authRequest)
+  accessToken <- AccessToken.createAccessToken (Set.singleton $ JWT.Audience aud) uid sid (scopes authRequest)
   tokenResponse <- newTokenResponse accessToken authRequest
   pure (withHeaders tokenResponse)
   where
@@ -215,7 +215,7 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
       OAuthClientConfig {audience = URIParam aud} <- validateOAuthClientRedirectURI clientId redirectURI
       landingPageURI <- Links.ucmConnected
       let AuthenticationRequest {redirectURI = URI.URIParam redirectURI, state = clientOAuthState, scopes = _scopes} = authRequest
-      (session, code) <- Redis.liftRedis $ Redis.createOAuth2Code (Session.ServiceName Env.serviceName) iss (Set.singleton aud) uid authRequest
+      (session, code) <- Redis.liftRedis $ Redis.createOAuth2Code (Session.ServiceName Env.serviceName) iss (Set.singleton $ JWT.Audience aud) uid authRequest
       let redirectURIWithParams = addParamsToRedirectURI redirectURI landingPageURI clientOAuthState code
       let response = addHeader @"Location" (URI.uriToString redirectURIWithParams) $ NoContent
       setSessionCookie session >>= \case

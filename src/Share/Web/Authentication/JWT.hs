@@ -4,22 +4,21 @@
 module Share.Web.Authentication.JWT where
 
 import Control.Lens hiding ((.=))
-import Crypto.JWT
+import Crypto.JWT (SignedJWT)
 import Data.Either.Combinators qualified as Either
 import Data.Time (NominalDiffTime, addUTCTime, getCurrentTime)
-import Network.URI (URI)
 import Share.App
 import Share.Env qualified as Env
 import Share.IDs (JTI (..), SessionId (..), UserId (..))
 import Share.IDs qualified as IDs
-import Share.JWT qualified
+import Share.JWT
 import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Web.App
 import Share.Web.Authentication.Types
 import Share.Web.Errors
 
-shareStandardClaims :: Set URI -> UserId -> NominalDiffTime -> SessionId -> AppM reqCtx JWT.StandardClaims
+shareStandardClaims :: Set Audience -> UserId -> NominalDiffTime -> SessionId -> AppM reqCtx JWT.StandardClaims
 shareStandardClaims aud sub ttl (SessionId sessionIdUUID) = do
   let jti = IDs.toText $ JTI sessionIdUUID
   iss <- shareIssuer
