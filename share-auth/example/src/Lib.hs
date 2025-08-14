@@ -3,7 +3,6 @@
 
 module Lib (main) where
 
-import Crypto.JOSE.JWK (JWKSet)
 import Data.Aeson qualified as Aeson
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -155,11 +154,13 @@ main = do
           ),
           -- This will use the provided static JWK set.
           ( JWT.Issuer $ unsafeURI "https://api.unison.cloud",
-            fromJust $
-              Aeson.decode @JWT.JWKSet $
-                -- This is a sample JWK set, replace with your own.
-                -- The key is an Ed25519 key, which is used for signing JWTs.
-                [r|
+            Right
+              . fromJust
+              . Aeson.decode @JWT.JWKSet
+              $
+              -- This is a sample JWK set, replace with your own.
+              -- The key is an Ed25519 key, which is used for signing JWTs.
+              [r|
         {
           "keys": [
             {
