@@ -3,6 +3,10 @@
 
 module Lib (main) where
 
+import Crypto.JOSE.JWK (JWKSet)
+import Data.Aeson qualified as Aeson
+import Data.Map (Map)
+import Data.Map qualified as Map
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -22,6 +26,7 @@ import Share.OAuth.ServiceProvider qualified as Auth
 import Share.OAuth.Session (AuthCheckCtx, AuthenticatedUserId, MaybeAuthenticatedUserId, addAuthCheckCtx)
 import Share.OAuth.Types (OAuthClientId (..), OAuthClientSecret (OAuthClientSecret), RedirectReceiverErr, UserId)
 import Share.Utils.Servant.Cookies qualified as Cookies
+import Text.RawString.QQ (r)
 import UnliftIO
 
 -- | An example application endpoint which is optionally authenticated.
@@ -78,10 +83,11 @@ main = do
   redisConn <- R.checkedConnect R.defaultConnectInfo
   putStrLn "booting up"
 
-  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) rotatedKeys acceptedAudiences acceptedIssuers of
-    Left cryptoError -> throwIO cryptoError
-    Right jwtS -> do
-      pure jwtS
+  jwtSettings <-
+    JWT.defaultJWTSettings issuer signingKey (Just legacyKey) rotatedKeys acceptedAudiences acceptedIssuers externalJWKs >>= \case
+      Left cryptoError -> throwIO cryptoError
+      Right jwtS -> do
+        pure jwtS
 
   Warp.run 3030 $ serveWithContext (Proxy @MyAPI) (ctx jwtSettings) (myServer redisConn jwtSettings)
   putStrLn "exiting"
@@ -135,7 +141,37 @@ main = do
     signingKey = JWT.KeyDescription {JWT.key = edDSAKey, JWT.alg = JWT.Ed25519}
     rotatedKeys = Set.empty
     api = unsafeURI "http://cloud:3030"
-    serviceAudience = api
+    serviceAudience = JWT.Audience api
     acceptedAudiences = Set.singleton serviceAudience
-    issuer = unsafeURI "http://localhost:5424"
+    issuer = JWT.Issuer $ unsafeURI "http://localhost:5424"
     acceptedIssuers = Set.singleton issuer
+    externalJWKs :: Map JWT.Issuer (Either URI JWT.JWKSet)
+    externalJWKs =
+      Map.fromList
+        [ -- This will fetch jwks from the identity provider directly, and keep them up to
+          -- date.
+          ( JWT.Issuer $ unsafeURI "http://cloud:3030",
+            Left $ unsafeURI "http://cloud:3030/.well-known/jwks.json"
+          ),
+          -- This will use the provided static JWK set.
+          ( JWT.Issuer $ unsafeURI "https://api.unison.cloud",
+            fromJust $
+              Aeson.decode @JWT.JWKSet $
+                -- This is a sample JWK set, replace with your own.
+                -- The key is an Ed25519 key, which is used for signing JWTs.
+                [r|
+        {
+          "keys": [
+            {
+              "alg": "EdDSA",
+              "crv": "Ed25519",
+              "kid": "ZGRwKNuN0LlKkg2WCm4ZSQ1IRzBS2ej5NCTJW1KhFOY",
+              "kty": "OKP",
+              "use": "sig",
+              "x": "rl4D9BawfhIP5M2UEKn30QG1BD3rjQMSLE9oFiUEJpo"
+            }
+          ]
+        }
+        |]
+          )
+        ]

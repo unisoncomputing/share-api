@@ -37,6 +37,8 @@ module Share.JWT
 
     -- * Re-exports
     CryptoError (..),
+    JWK.JWK,
+    JWK.JWKSet,
   )
 where
 

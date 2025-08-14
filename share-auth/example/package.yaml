@@ -22,8 +22,11 @@ dependencies:
 - containers
 - share-auth
 - share-utils
+- jose
+- aeson
 - hedis
 - network-uri
+- raw-strings-qq
 - servant
 - servant-auth-server
 - servant-server
