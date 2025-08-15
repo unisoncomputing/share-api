@@ -49,19 +49,20 @@ import Share.Postgres.NameLookups.Ops qualified as NL
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
-import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
-import Share.Utils.Lens (asListOfDeduped)
 import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.DataDeclaration (Decl)
+import Unison.DeclCoherencyCheck (checkDeclCoherency, lenientCheckDeclCoherency)
 import Unison.LabeledDependency (LabeledDependency)
-import Unison.Merge (Mergeblob0, Mergeblob1, ThreeWay (..), TwoOrThreeWay (..), TwoWay (..))
 import Unison.Merge qualified as Merge
-import Unison.Merge.HumanDiffOp (HumanDiffOp (..))
-import Unison.Merge.Mergeblob1 qualified as Mergeblob1
+import Unison.Merge.EitherWay qualified as EitherWay
+import Unison.Merge.Synhashed (Synhashed)
 import Unison.Merge.ThreeWay qualified as ThreeWay
+import Unison.Merge.TwoOrThreeWay qualified as TwoOrThreeWay
+import Unison.Merge.TwoWay qualified as TwoWay
+import Unison.Merge.Updated qualified as Updated
 import Unison.Name (Name)
 import Unison.Name qualified as Name
 import Unison.NameSegment (NameSegment (..))
@@ -72,15 +73,15 @@ import Unison.Parser.Ann (Ann)
 import Unison.Reference (Reference, TermReferenceId, TypeReference, TypeReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Referent (Referent)
-import Unison.Referent qualified as Referent
 import Unison.Symbol (Symbol)
 import Unison.Syntax.NameSegment qualified as NameSegment
 import Unison.Term (Term)
 import Unison.Type (Type)
+import Unison.UnconflictedLocalDefnsView qualified as UnconflictedLocalDefnsView
 import Unison.Util.BiMultimap (BiMultimap)
 import Unison.Util.BiMultimap qualified as BiMultimap
 import Unison.Util.Defns (Defns (..), DefnsF, DefnsF3, alignDefnsWith)
-import Unison.Util.Nametree (Nametree (..))
+import Unison.Util.Defns qualified as Defns
 
 -- | Convert a `DefinitionDiffs` into a tree of differences.
 definitionDiffsToTree ::
@@ -210,24 +211,13 @@ compressNameTree (diffs Cofree.:< children) =
    in diffs Cofree.:< compressedChildren
 
 computeThreeWayNamespaceDiff ::
-  TwoWay Codebase.CodebaseEnv ->
-  TwoOrThreeWay BranchHashId ->
-  TwoOrThreeWay NameLookupReceipt ->
+  Merge.TwoWay Codebase.CodebaseEnv ->
+  Merge.TwoOrThreeWay BranchHashId ->
+  Merge.TwoOrThreeWay NameLookupReceipt ->
   PG.Transaction NamespaceDiffError (GNamespaceAndLibdepsDiff NameSegment Referent Reference Name Name Name Name BranchHashId)
-computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = PG.transactionSpan "computeThreeWayNamespaceDiff" mempty $ do
-  -- Load a flat definitions names (no lib) for Alice/Bob/LCA
-  defnsNames3 :: TwoOrThreeWay Names <-
-    sequence (NL.projectNamesWithoutLib <$> nameLookupReceipts3 <*> branchHashIds3)
-
-  -- Unflatten each Names to a Nametree (leniently). Really, only the LCA is "allowed" to break the diff/merge rules of
-  -- no conflicted names, but we don't enforce that here. If Alice or Bob have a conflicted name for some reason, we'll
-  -- just silently pick one of the refs and move on.
-  let defnsNametrees3 :: TwoOrThreeWay (Nametree (DefnsF (Map NameSegment) Referent TypeReference))
-      defnsNametrees3 =
-        Names.lenientToNametree <$> defnsNames3
-
+computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds nameLookupReceipts = PG.transactionSpan "computeThreeWayNamespaceDiff" mempty $ do
   -- Load the shallow libdeps for Alice/Bob/LCA. This can fail with "lib at unexpected path"
-  libdeps3 :: TwoOrThreeWay (Map NameSegment BranchHashId) <- do
+  libdeps :: Merge.ThreeWay (Map NameSegment BranchHashId) <- do
     let f :: NameLookupReceipt -> BranchHashId -> PG.Transaction NamespaceDiffError (Map NameSegment BranchHashId)
         f nameLookupReceipt branchHashId = do
           mounts <- NL.listNameLookupMounts nameLookupReceipt branchHashId
@@ -237,132 +227,110 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
                 [NameSegment.LibSegment, dep] -> pure (dep, libBhId)
                 p -> throwError $ LibFoundAtUnexpectedPath (Path.fromList p)
           pure $ Map.fromList libDepsList
-    sequence (f <$> nameLookupReceipts3 <*> branchHashIds3)
+    TwoOrThreeWay.toThreeWay Map.empty <$> sequence (f <$> nameLookupReceipts <*> branchHashIds)
 
-  -- Make that 0th mergeblob
-  let blob0 :: Mergeblob0 BranchHashId
-      blob0 =
-        Merge.makeMergeblob0
-          ThreeWay
-            { alice = defnsNametrees3.alice,
-              bob = defnsNametrees3.bob,
-              lca = fromMaybe Nametree {value = Defns Map.empty Map.empty, children = Map.empty} defnsNametrees3.lca
-            }
-          ThreeWay
-            { alice = libdeps3.alice,
-              bob = libdeps3.bob,
-              lca = fromMaybe Map.empty libdeps3.lca
-            }
+  -- Load all local definition names (outside lib) for Alice/Bob/LCA.
+  --
+  -- FIXME In a normal diff+merge, we require that the local names are unconflicted: each name may only refer to one
+  -- thing. However, we currently don't represent that in the `NamespaceDiffError` type. We should, but for now, we
+  -- instead just ignore conflicted names, if they exist.
+  defnsList <- sequence (NL.projectNamesWithoutLib <$> nameLookupReceipts <*> branchHashIds)
+  let defns =
+        let f = foldr (uncurry Map.insert) Map.empty
+         in TwoOrThreeWay.toThreeWay
+              UnconflictedLocalDefnsView.empty
+              (UnconflictedLocalDefnsView.fromDefns . bimap f f <$> defnsList)
 
-  -- Hydrate defns in Alice/Bob/LCA
-  hydratedDefns3 ::
-    ThreeWay
-      ( DefnsF
-          (Map Name)
-          (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
-          (TypeReferenceId, Decl Symbol Ann)
-      ) <- PG.transactionSpan "hydratedDefns3" mempty do
-    let hydrateTermsOf ::
-          Codebase.CodebaseEnv ->
-          Traversal s t TermReferenceId (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)) ->
-          s ->
-          PG.Transaction e t
-        hydrateTermsOf codebase trav s = PG.transactionSpan "hydrateTerms" mempty do
-          s
-            & asListOfDeduped trav %%~ \refs -> do
-              v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed refs
-              let v2TermsWithRef = zip refs v2Terms
-              let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, ((Reference.idToHash refId), term, typ))
-              Codebase.convertTerms2to1Of (traversed . _2) refHashes
-        hydrateTypesOf ::
-          Codebase.CodebaseEnv ->
-          Traversal s t TypeReferenceId (TypeReferenceId, Decl Symbol Ann) ->
-          s ->
-          PG.Transaction e t
-        hydrateTypesOf codebase trav s = PG.transactionSpan "hydrateTypes" mempty do
-          s
-            & asListOf trav %%~ \typeReferenceIds -> do
-              typeIdsWithComponents <- zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
-              DefnsQ.loadDeclByTypeComponentElementAndTypeIdsOf (traversed . _2) typeIdsWithComponents
-                <&> fmap \(refId, v2Decl) ->
-                  let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
-                   in (refId, v1Decl)
-        hydrateDefns ::
-          Codebase.CodebaseEnv ->
-          Defns (BiMultimap Referent Name) (BiMultimap TypeReference Name) ->
-          PG.Transaction
-            e
-            ( DefnsF
-                (Map Name)
-                (TermReferenceId, (Term Symbol Ann, Type Symbol Ann))
-                (TypeReferenceId, Decl Symbol Ann)
-            )
-        hydrateDefns codebase (Defns {terms, types}) = PG.transactionSpan "hydrateDefns" mempty do
-          let termReferenceIds = Map.mapMaybe Referent.toTermReferenceId (BiMultimap.range terms)
-          hydratedTerms <- hydrateTermsOf codebase traversed termReferenceIds
-          let typeReferenceIds = Map.mapMaybe Reference.toId (BiMultimap.range types)
-          hydratedTypes <- hydrateTypesOf codebase traversed typeReferenceIds
-          pure
-            Defns
-              { terms = hydratedTerms,
-                types = hydratedTypes
-              }
+  -- Load decl name lookups for Alice/Bob/LCA. This can fail with "incoherent decl".
+  declNameLookups <- do
+    numConstructors <-
+      TwoOrThreeWay.toThreeWay Map.empty
+        <$> sequence (NL.projectConstructorCountsWithoutLib <$> nameLookupReceipts <*> branchHashIds)
+    declNameLookups <-
+      sequence $
+        ( \v c e ->
+            checkDeclCoherency v.nametree c
+              & mapLeft (IncoherentDecl . e)
+              & liftEither
+        )
+          <$> ThreeWay.forgetLca defns
+          <*> ThreeWay.forgetLca numConstructors
+          <*> Merge.TwoWay EitherWay.Alice EitherWay.Bob
+    let lcaDeclNameLookup =
+          lenientCheckDeclCoherency defns.lca.nametree numConstructors.lca
+    pure (TwoWay.gtoThreeWay lcaDeclNameLookup declNameLookups)
 
-    let -- Here we assume that the LCA is in the same codebase as Alice.
-        codebaseEnvs3 :: ThreeWay Codebase.CodebaseEnv
-        codebaseEnvs3 =
-          ThreeWay
-            { alice = codebaseEnvs2.alice,
-              bob = codebaseEnvs2.bob,
-              lca = codebaseEnvs2.alice
-            }
-    sequence (hydrateDefns <$> codebaseEnvs3 <*> blob0.defns)
+  let hydrate ::
+        Merge.ThreeWay (DefnsF Set TermReferenceId TypeReferenceId) ->
+        PG.Transaction
+          e
+          ( Defns
+              (Map TermReferenceId (Term Symbol Ann, Type Symbol Ann))
+              (Map TypeReferenceId (Decl Symbol Ann))
+          )
+      hydrate Merge.ThreeWay {lca = lcaDefns, alice = aliceDefns, bob = bobDefns} = do
+        -- We assume LCA and Alice come from the same codebase, so hydrate them together.
+        let lcaAndAliceDefns = lcaDefns <> aliceDefns
+        lcaAndAliceHydratedDefns <- hydrateDefns codebaseEnvs2.alice lcaAndAliceDefns
 
-  -- Get a names object that contains just enough names to compute the diff:
-  names3 :: TwoOrThreeWay Names <- do
-    -- Massage the hydrated definitions into a set of "labeled dependency" that contains the definitions themselves
-    -- and their direct references.
-    --
-    -- FIXME: Mitchell wonders why self is necessary. Aren't direct dependency names enough?
-    let labeledDeps3 :: ThreeWay (Set LabeledDependency)
-        labeledDeps3 =
-          Mergeblob1.hydratedDefnsLabeledDependencies <$> hydratedDefns3
-    -- Get a names perspective for Alice/Bob/LCA
-    namesPerspectives3 :: TwoOrThreeWay (NamesPerspective m) <-
-      for branchHashIds3 \branchHashId -> NPOps.namesPerspectiveForRoot branchHashId
-    sequence (PGNames.namesForReferences <$> namesPerspectives3 <*> ThreeWay.toTwoOrThreeWay labeledDeps3)
+        -- Only bother hydrating Bob defns that we haven't already found in Alice's codebase.
+        let bobDefnsNotInAlice = Defns.zipDefnsWith Set.difference Set.difference bobDefns lcaAndAliceDefns
+        bobHydratedDefns <- hydrateDefns codebaseEnvs2.bob bobDefnsNotInAlice
 
-  blob1 :: Mergeblob1 BranchHashId <- do
-    let names3' = ThreeWay {alice = names3.alice, bob = names3.bob, lca = fromMaybe (mempty @Names) names3.lca}
-    case Merge.makeMergeblob1 blob0 names3' hydratedDefns3 of
-      Right blob -> pure blob
-      Left err -> throwError (IncoherentDecl err)
+        pure (lcaAndAliceHydratedDefns <> bobHydratedDefns)
+
+  let loadNames :: Merge.ThreeWay (Set LabeledDependency) -> PG.Transaction NamespaceDiffError (Merge.ThreeWay Names)
+      loadNames dependencies = do
+        perspectives <- traverse NPOps.namesPerspectiveForRoot branchHashIds
+        names <- sequence (PGNames.namesForReferences <$> perspectives <*> ThreeWay.toTwoOrThreeWay dependencies)
+        pure (TwoOrThreeWay.toThreeWay Names.empty names)
+
+  diffblob <-
+    Merge.makeDiffblob
+      Merge.DiffblobLog
+        { logDefns = \_ -> pure (),
+          logDiff = \_ -> pure (),
+          logDiffsFromLCA = \_ -> pure (),
+          logNarrowedDefns = \_ -> pure (),
+          logSynhashedNarrowedDefns = \_ -> pure ()
+        }
+      hydrate
+      loadNames
+      defns
+      libdeps
+      declNameLookups
 
   -- Boilerplate conversion: make a "DefinitionDiffs" from the info in a "Mergeblob1".
-  --
-  -- (Mitchell says: I think Share and UCM should share a type here – perhaps DefinitionDiffs should be pushed down? Or
-  -- is it just isomorphic to something that already exists in UCM?)
   --
   -- We start focusing only on Bob here, the contributor, even though Alice could have a diff as well of course (since
   -- the LCA is arbitrarily behind Alice).
 
   let definitionDiffs :: DefnsF (DefinitionDiffs Name) Referent TypeReference
       definitionDiffs =
-        let f :: forall ref. (Ord ref) => Map Name (HumanDiffOp ref) -> DefinitionDiffs Name ref
-            f =
-              Map.toList >>> foldMap \(name, op) ->
-                case op of
-                  HumanDiffOp'Add ref -> mempty {added = Map.singleton name ref}
-                  HumanDiffOp'Delete ref -> mempty {removed = Map.singleton name ref}
-                  HumanDiffOp'Update refs -> mempty {updated = Map.singleton name (refs.old, refs.new)}
-                  HumanDiffOp'PropagatedUpdate refs -> mempty {propagated = Map.singleton name (refs.old, refs.new)}
-                  HumanDiffOp'AliasOf ref names ->
-                    mempty {newAliases = Map.singleton ref (names, NESet.singleton name)}
-                  HumanDiffOp'RenamedFrom ref names ->
-                    mempty {renamed = Map.singleton ref (names, NESet.singleton name)}
-                  HumanDiffOp'RenamedTo ref names ->
-                    mempty {renamed = Map.singleton ref (NESet.singleton name, names)}
-         in bimap f f blob1.humanDiffsFromLCA.bob
+        Defns.zipDefnsWith3 f f defns.lca.defns diffblob.simpleRenames.bob diffblob.diffsFromLCA.bob
+          <> bimap g g diffblob.propagatedUpdates.bob
+        where
+          f :: (Ord ref) => BiMultimap ref Name -> Merge.SimpleRenames -> Map Name (Merge.DiffOp (Synhashed ref)) -> DefinitionDiffs Name ref
+          f lca renames =
+            Map.toList >>> foldMap \(name, op) ->
+              case op of
+                Merge.DiffOp'Add ref ->
+                  case Map.lookup name renames.backwards of
+                    Nothing ->
+                      case NESet.nonEmptySet (BiMultimap.lookupDom ref.value lca) of
+                        Nothing -> mempty {added = Map.singleton name ref.value}
+                        Just oldNames -> mempty {newAliases = Map.singleton ref.value (oldNames, NESet.singleton name)}
+                    Just oldName -> mempty {renamed = Map.singleton ref.value (NESet.singleton oldName, NESet.singleton name)}
+                Merge.DiffOp'Delete ref ->
+                  case Map.lookup name renames.forwards of
+                    Nothing -> mempty {removed = Map.singleton name ref.value}
+                    -- we include the rename when handling the add side
+                    Just _newName -> mempty
+                Merge.DiffOp'Update refs -> mempty {updated = Map.singleton name (Updated.toPair (Updated.map (.value) refs))}
+
+          g :: (Ord ref) => Map Name (Merge.Updated ref) -> DefinitionDiffs Name ref
+          g propagatedUpdates =
+            mempty {propagated = Map.map Updated.toPair propagatedUpdates}
 
   -- Convert definition diffs to two uncompressed trees of diffs (one for terms, one for types)
   let twoUncompressedTrees ::
@@ -383,5 +351,49 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds3 nameLookupReceipts3 = 
   pure
     NamespaceAndLibdepsDiff
       { defns = oneUncompressedTree,
-        libdeps = blob1.libdepsDiffs.bob
+        libdeps = diffblob.libdepsDiffs.bob
       }
+
+hydrateDefns ::
+  Codebase.CodebaseEnv ->
+  DefnsF Set TermReferenceId TypeReferenceId ->
+  PG.Transaction
+    e
+    ( Defns
+        (Map TermReferenceId (Term Symbol Ann, Type Symbol Ann))
+        (Map TypeReferenceId (Decl Symbol Ann))
+    )
+hydrateDefns codebase Defns {terms, types}
+  | Set.null terms && Set.null types = pure (Defns Map.empty Map.empty)
+  | otherwise =
+      PG.transactionSpan "hydrateDefns" mempty do
+        Defns
+          <$> (if Set.null terms then pure Map.empty else Map.fromList <$> hydrateTermsOf codebase traversed (Set.toList terms))
+          <*> (if Set.null types then pure Map.empty else Map.fromList <$> hydrateTypesOf codebase traversed (Set.toList types))
+
+hydrateTermsOf ::
+  Codebase.CodebaseEnv ->
+  Traversal s t TermReferenceId (TermReferenceId, (Term Symbol Ann, Type Symbol Ann)) ->
+  s ->
+  PG.Transaction e t
+hydrateTermsOf codebase trav s = PG.transactionSpan "hydrateTerms" mempty do
+  s
+    & asListOf trav %%~ \refs -> do
+      v2Terms <- DefnsQ.expectTermsByRefIdsOf codebase traversed refs
+      let v2TermsWithRef = zip refs v2Terms
+      let refHashes = v2TermsWithRef <&> \(refId, (term, typ)) -> (refId, (Reference.idToHash refId, term, typ))
+      Codebase.convertTerms2to1Of (traversed . _2) refHashes
+
+hydrateTypesOf ::
+  Codebase.CodebaseEnv ->
+  Traversal s t TypeReferenceId (TypeReferenceId, Decl Symbol Ann) ->
+  s ->
+  PG.Transaction e t
+hydrateTypesOf codebase trav s = PG.transactionSpan "hydrateTypes" mempty do
+  s
+    & asListOf trav %%~ \typeReferenceIds -> do
+      typeIdsWithComponents <- zip typeReferenceIds <$> DefnsQ.expectTypeComponentElementsAndTypeIdsOf codebase traversed typeReferenceIds
+      DefnsQ.loadDeclByTypeComponentElementAndTypeIdsOf (traversed . _2) typeIdsWithComponents
+        <&> fmap \(refId, v2Decl) ->
+          let v1Decl = Cv.decl2to1 (Reference.idToHash refId) v2Decl
+           in (refId, v1Decl)
