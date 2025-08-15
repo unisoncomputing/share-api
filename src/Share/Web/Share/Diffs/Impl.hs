@@ -31,6 +31,7 @@ import U.Codebase.Reference qualified as V2Reference
 import Unison.Codebase.SqliteCodebase.Conversions (referent1to2)
 import Unison.ConstructorReference (ConstructorReference)
 import Unison.Merge (TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge.DiffOp qualified as DiffOp
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
 import Unison.Referent qualified as Referent
@@ -116,7 +117,7 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
   diff3 <-
     PG.transactionSpan "hydrate-diff3" mempty $
       HashQ.expectNamespaceHashesByNamespaceHashIdsOf
-        (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . traversed)
+        (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . DiffOp.traverse)
         diff2
   -- Resolve the actual term/type definitions. Use the LCA as the "old" (because that's what we're rendering the
   -- diff relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we

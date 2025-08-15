@@ -116,6 +116,10 @@ instance Hasql.EncodeValue Name where
     Hasql.encodeValue @Text
       & contramap Name.toText
 
+instance Hasql.DecodeValue h => Hasql.DecodeRow (Id' h) where
+  decodeRow =
+    Id <$> decodeField @h <*> (either (error . show) id . tryInto @Word64 <$> decodeField @Int64)
+
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.DecodeRow (Reference' t h) where
   decodeRow = do
     decodeReference (decodeField @(Maybe t)) (decodeField @(Maybe h)) (decodeField @(Maybe Int64))

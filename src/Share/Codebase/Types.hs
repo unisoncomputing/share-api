@@ -31,9 +31,12 @@ publicRoot :: Path.Path
 publicRoot = Path.singleton (NameSegment "public")
 
 -- | The scope of a given codebase transaction.
+--
+-- If two @CodebaseEnv@ are equal, they correspond to the same codebase.
 data CodebaseEnv = CodebaseEnv
   { codebaseOwner :: UserId
   }
+  deriving stock (Eq)
 
 data CodeCache scope = CodeCache
   { codeCacheCodebaseEnv :: CodebaseEnv,
