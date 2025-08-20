@@ -1,0 +1,66 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.37.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           share-client
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/unisoncomputing/share-api#readme>
+homepage:       https://github.com/unisoncomputing/share-api#readme
+bug-reports:    https://github.com/unisoncomputing/share-api/issues
+author:         Unison Computing
+maintainer:     Unison Computing
+copyright:      2024 Unison Computing
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/unisoncomputing/share-api
+
+library
+  exposed-modules:
+      Share.Client
+  other-modules:
+      Paths_share_client
+  hs-source-dirs:
+      src
+  default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      DeriveFunctor
+      DeriveGeneric
+      DeriveFoldable
+      DeriveTraversable
+      DerivingStrategies
+      DerivingVia
+      DoAndIfThenElse
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      InstanceSigs
+      LambdaCase
+      MultiParamTypeClasses
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      ScopedTypeVariables
+      TupleSections
+      TypeApplications
+      ViewPatterns
+      QuasiQuotes
+      BlockArguments
+      QuasiQuotes
+      ImportQualifiedPost
+  ghc-options: -Wall -Werror -Wno-name-shadowing -Wno-type-defaults -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info -O2 -funbox-strict-fields
+  build-depends:
+      base >=4.7 && <5
+    , servant-client
+    , share-api
+  default-language: Haskell2010

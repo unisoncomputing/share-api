@@ -110,6 +110,7 @@ dependencies:
 - servant
 - servant-auth
 - servant-client
+- servant-client-core
 - servant-server
 - servant-conduit
 - serialise
