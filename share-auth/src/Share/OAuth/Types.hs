@@ -42,15 +42,15 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Data.UUID (UUID)
+import GHC.TypeLits (Symbol, symbolVal)
+import Hasql.Interpolate qualified as Hasql
+import Servant
 import Share.JWT.Types
 import Share.OAuth.Scopes
 import Share.Utils.Binary (JSONBinary (..))
 import Share.Utils.IDs
 import Share.Utils.Show (Censored (..))
 import Share.Utils.URI (URIParam)
-import GHC.TypeLits (Symbol, symbolVal)
-import Hasql.Interpolate qualified as Hasql
-import Servant
 import Web.FormUrlEncoded (FromForm (..), ToForm (..))
 import Web.FormUrlEncoded qualified as Form
 
@@ -117,6 +117,7 @@ newtype PKCEVerifier = PKCEVerifier Text
   deriving (Show) via Text
 
 data ResponseType = ResponseTypeCode
+  deriving stock (Show, Eq, Ord)
 
 instance ToJSON ResponseType where
   toJSON ResponseTypeCode = Aeson.String "code"

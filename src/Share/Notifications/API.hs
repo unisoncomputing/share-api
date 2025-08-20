@@ -124,6 +124,11 @@ instance ToJSON GetSubscriptionsResponse where
   toJSON GetSubscriptionsResponse {subscriptions} =
     object ["subscriptions" .= subscriptions]
 
+instance FromJSON GetSubscriptionsResponse where
+  parseJSON = withObject "GetSubscriptionsResponse" $ \o -> do
+    subscriptions <- o .: "subscriptions"
+    pure GetSubscriptionsResponse {subscriptions}
+
 type CreateSubscriptionEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] CreateSubscriptionRequest
@@ -153,6 +158,11 @@ data CreateSubscriptionResponse
 instance ToJSON CreateSubscriptionResponse where
   toJSON CreateSubscriptionResponse {subscription} =
     object ["subscription" .= subscription]
+
+instance FromJSON CreateSubscriptionResponse where
+  parseJSON = withObject "CreateSubscriptionResponse" $ \o -> do
+    subscription <- o .: "subscription"
+    pure CreateSubscriptionResponse {subscription}
 
 type DeleteSubscriptionEndpoint =
   AuthenticatedUserId
@@ -191,6 +201,11 @@ data GetDeliveryMethodsResponse
 instance ToJSON GetDeliveryMethodsResponse where
   toJSON GetDeliveryMethodsResponse {deliveryMethods} =
     object ["deliveryMethods" .= deliveryMethods]
+
+instance FromJSON GetDeliveryMethodsResponse where
+  parseJSON = withObject "GetDeliveryMethodsResponse" $ \o -> do
+    deliveryMethods <- o .: "deliveryMethods"
+    pure GetDeliveryMethodsResponse {deliveryMethods}
 
 newtype StatusFilter = StatusFilter
   { getStatusFilter :: NESet NotificationStatus
@@ -266,6 +281,11 @@ instance ToJSON CreateEmailDeliveryMethodResponse where
   toJSON CreateEmailDeliveryMethodResponse {emailDeliveryMethodId} =
     object ["emailDeliveryMethodId" .= emailDeliveryMethodId]
 
+instance FromJSON CreateEmailDeliveryMethodResponse where
+  parseJSON = withObject "CreateEmailDeliveryMethodResponse" $ \o -> do
+    emailDeliveryMethodId <- o .: "emailDeliveryMethodId"
+    pure CreateEmailDeliveryMethodResponse {emailDeliveryMethodId}
+
 type DeleteEmailDeliveryMethodEndpoint =
   AuthenticatedUserId
     :> Capture "emailDeliveryMethodId" NotificationEmailDeliveryMethodId
@@ -312,6 +332,11 @@ data CreateWebhookResponse
 instance ToJSON CreateWebhookResponse where
   toJSON CreateWebhookResponse {webhookId} =
     object ["webhookId" .= webhookId]
+
+instance FromJSON CreateWebhookResponse where
+  parseJSON = withObject "CreateWebhookResponse" $ \o -> do
+    webhookId <- o .: "webhookId"
+    pure CreateWebhookResponse {webhookId}
 
 type DeleteWebhookEndpoint =
   AuthenticatedUserId

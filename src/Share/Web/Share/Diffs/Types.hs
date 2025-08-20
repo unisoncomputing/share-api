@@ -10,12 +10,13 @@ import Share.Prelude
 import Share.Utils.Aeson (PreEncoded)
 import Unison.Server.Types
   ( DisplayObjectDiff (..),
-    TermDefinition,
+    TermDefinition (termDefinition),
     TermDefinitionDiff (..),
     TermTag,
     TypeDefinition,
     TypeDefinitionDiff (..),
     TypeTag,
+    typeDefinition,
   )
 import Unison.ShortHash (ShortHash)
 
@@ -38,8 +39,8 @@ data ShareNamespaceDiffResponse = ShareNamespaceDiffResponse
 instance ToJSON ShareNamespaceDiffResponse where
   toJSON (ShareNamespaceDiffResponse {diff, project, oldRef, newRef, oldRefHash, newRefHash}) =
     object $
-      diffPairs ++
-           [ "project" .= toJSON project,
+      diffPairs
+        ++ [ "project" .= toJSON project,
              "oldRef" .= oldRef,
              "oldRefHash" .= oldRefHash,
              "newRef" .= newRef,
@@ -50,12 +51,28 @@ instance ToJSON ShareNamespaceDiffResponse where
       diffPairs =
         case diff of
           ShareNamespaceDiffStatus'Done diff ->
-            [ "diff" .= toJSON diff
-            , "tag" .= ("done" :: Text)
+            [ "diff" .= toJSON diff,
+              "tag" .= ("done" :: Text)
             ]
           ShareNamespaceDiffStatus'StillComputing ->
             [ "tag" .= ("computing" :: Text)
             ]
+
+instance FromJSON ShareNamespaceDiffResponse where
+  parseJSON = withObject "ShareNamespaceDiffResponse" $ \o -> do
+    project <- o .: "project"
+    oldRef <- o .: "oldRef"
+    oldRefHash <- o .:? "oldRefHash"
+    newRef <- o .: "newRef"
+    newRefHash <- o .:? "newRefHash"
+    tag <- o .: "tag"
+    diff <- case (tag :: Text) of
+      "done" -> do
+        diffValue <- o .: "diff"
+        pure $ ShareNamespaceDiffStatus'Done diffValue
+      "computing" -> pure ShareNamespaceDiffStatus'StillComputing
+      t -> fail $ "Invalid ShareNamespaceDiffResponse tag: " <> show t
+    pure ShareNamespaceDiffResponse {project, oldRef, oldRefHash, newRef, newRefHash, diff}
 
 data ShareTermDiffResponse = ShareTermDiffResponse
   { project :: ProjectShortHand,
@@ -89,6 +106,22 @@ instance ToJSON ShareTermDiffResponse where
             "newTerm" .= newTerm
           ]
 
+instance FromJSON ShareTermDiffResponse where
+  parseJSON = withObject "ShareTermDiffResponse" $ \o -> do
+    project <- o .: "project"
+    oldBranch <- o .: "oldBranchRef"
+    newBranch <- o .: "newBranchRef"
+    oldTerm <- o .: "oldTerm"
+    newTerm <- o .: "newTerm"
+    diffKind <- o .: "diffKind"
+    diff <- case (diffKind :: Text) of
+      "diff" -> do
+        diffValue <- o .: "diff"
+        pure $ DisplayObjectDiff diffValue
+      "mismatched" -> pure $ MismatchedDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
+      t -> fail $ "Invalid ShareTermDiffResponse diffKind: " <> show t
+    pure ShareTermDiffResponse {project, oldBranch, newBranch, oldTerm, newTerm, diff}
+
 data ShareTypeDiffResponse = ShareTypeDiffResponse
   { project :: ProjectShortHand,
     oldBranch :: BranchOrReleaseShortHand,
@@ -120,3 +153,19 @@ instance ToJSON ShareTypeDiffResponse where
             "oldType" .= oldType,
             "newType" .= newType
           ]
+
+instance FromJSON ShareTypeDiffResponse where
+  parseJSON = withObject "ShareTypeDiffResponse" $ \o -> do
+    project <- o .: "project"
+    oldBranch <- o .: "oldBranchRef"
+    newBranch <- o .: "newBranchRef"
+    oldType <- o .: "oldType"
+    newType <- o .: "newType"
+    diffKind <- o .: "diffKind"
+    diff <- case (diffKind :: Text) of
+      "diff" -> do
+        diffValue <- o .: "diff"
+        pure $ DisplayObjectDiff diffValue
+      "mismatched" -> pure $ MismatchedDisplayObjects (typeDefinition oldType) (typeDefinition newType)
+      t -> fail $ "Invalid ShareTypeDiffResponse diffKind: " <> show t
+    pure ShareTypeDiffResponse {project, oldBranch, newBranch, oldType, newType, diff}

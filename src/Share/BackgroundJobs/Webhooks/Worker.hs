@@ -177,12 +177,11 @@ instance ToJSON (WebhookEventPayload ()) where
 
 instance FromJSON (WebhookEventPayload ()) where
   parseJSON = Aeson.withObject "WebhookEventPayload" $ \o ->
-    WebhookEventPayload
-      <$> o Aeson..: "eventId"
-      <*> o Aeson..: "occurredAt"
-      <*> o Aeson..: "topic"
-      <*> o Aeson..: "data"
-      <*> pure ()
+    eventId <- o Aeson..: "eventId"
+    occurredAt <- o Aeson..: "occurredAt"
+    topic <- o Aeson..: "topic"
+    data_ <- o Aeson..: "data"
+    pure WebhookEventPayload {eventId, occurredAt, topic, data_, jwt = ()}
 
 tryWebhook ::
   NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent ->
