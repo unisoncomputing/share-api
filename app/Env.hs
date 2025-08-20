@@ -10,6 +10,7 @@ import Data.ByteString.Char8 qualified as BS
 import Data.Char
 import Data.Char qualified as Char
 import Data.Either.Combinators
+import Data.Map qualified as Map
 import Data.Functor
 import Data.HashMap.Strict qualified as HM
 import Data.Set qualified as Set
@@ -73,6 +74,8 @@ withEnv action = do
   maxParallelismPerDownloadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST" . readMaybe)
   maxParallelismPerUploadRequest <- fromEnv "SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" (pure . maybeToEither "Invalid SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST" . readMaybe)
   cloudWebsiteOrigin <- fromEnv "SHARE_CLOUD_HOMEPAGE_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_HOMEPAGE_ORIGIN" . parseURI)
+  cloudAPIOrigin <- fromEnv "SHARE_CLOUD_API_ORIGIN" (pure . maybeToEither "Invalid SHARE_CLOUD_API_ORIGIN" . parseURI)
+  cloudAPIJWKEndpoint <- fromEnv "SHARE_CLOUD_API_JWKS_ENDPOINT" (pure . maybeToEither "Invalid SHARE_CLOUD_API_JWKS_ENDPOINT" . parseURI)
 
   sentryService <-
     lookupEnv "SHARE_SENTRY_DSN" >>= \case
@@ -90,18 +93,23 @@ withEnv action = do
             | Deployment.onLocal = Nothing
             | otherwise = Nothing
        in r {Redis.connectTLSParams = tlsParams}
-  let acceptedAudiences = Set.singleton apiOrigin
-  let acceptedIssuers = Set.singleton apiOrigin
+  let shareAudience = JWT.Audience apiOrigin
+  let shareIssuer = JWT.Issuer apiOrigin
+  let cloudIssuer = JWT.Issuer cloudAPIOrigin
+  let acceptedAudiences = Set.singleton $ shareAudience
+  let acceptedIssuers = Set.fromList [shareIssuer, cloudIssuer]
   let legacyKey = JWT.KeyDescription {JWT.key = hs256Key, JWT.alg = JWT.HS256}
   let signingKey = JWT.KeyDescription {JWT.key = edDSAKey, JWT.alg = JWT.Ed25519}
+  let externalJWKs = Map.fromList [ (cloudIssuer, Left cloudAPIJWKEndpoint)
+                                  ]
   hashJWTJWK <- case JWT.keyDescToJWK legacyKey of
     Left err -> throwIO err
-    Right (_thumbprint, jwk) -> pure jwk
+    Right jwk -> pure jwk
   -- I explicitly add the legacy key to the validation keys, so that the thumbprinted
   -- version of the key is used for validation, which is needed for HashJWTs which are signed
   -- with a 'kid'.
   let validationKeys = Set.fromList [legacyKey]
-  jwtSettings <- case JWT.defaultJWTSettings signingKey (Just legacyKey) validationKeys acceptedAudiences acceptedIssuers of
+  jwtSettings <- JWT.defaultJWTSettings shareIssuer signingKey (Just legacyKey) validationKeys acceptedAudiences acceptedIssuers externalJWKs >>= \case
     Left cryptoError -> throwIO cryptoError
     Right settings -> pure settings
   let cookieSettings = Cookies.defaultCookieSettings Deployment.onLocal (Just (realToFrac cookieSessionTTL))
