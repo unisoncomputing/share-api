@@ -47,7 +47,8 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
-import Data.Time (UTCTime)
+import Data.Time (UTCTime, getCurrentTime)
+import Data.Time qualified as Time
 import Network.HTTP.Client qualified as HTTP
 import Network.HTTP.Client.TLS qualified as HTTPTLS
 import Network.URI qualified as URI
@@ -146,6 +147,8 @@ data JWTSettings = JWTSettings
     -- | Locations to fetch external JWKs from.
     -- Typically this will be a map of issuer: "<issuer>/.well-known/jwks.json"
     externalJWKLocations :: Map Issuer URI,
+    -- | When we last checked each issuer for external JWKs.
+    lastCheckedVar :: TVar (Map Issuer UTCTime),
     -- | The set of audiences the app accepts tokens for.
     acceptedAudiences :: Set Audience,
     -- | The set of issuers the app accepts tokens from.
@@ -244,7 +247,7 @@ data KeyMap = KeyMap
 -- | This instance is used to look up the verification keys for a given JWT, assuring that the
 -- expected algorithm and key id matches.
 instance (MonadIO m, HasClaimsSet payload) => JWT.VerificationKeyStore m (JWT.JWSHeader ()) payload JWTSettings where
-  getVerificationKeys header claims (JWTSettings {validationKeys = KeyMap {keysVar, legacyKey}, externalJWKLocations}) = do
+  getVerificationKeys header claims (JWTSettings {validationKeys = KeyMap {keysVar, legacyKey}, externalJWKLocations, lastCheckedVar}) = do
     -- Issuer is required on normal claims, but old hashJWTs may not have one.
     let mayIssuer = claims ^? JWT.claimIss . _Just . JWT.uri . to Issuer
     case mayIssuer of
@@ -252,7 +255,9 @@ instance (MonadIO m, HasClaimsSet payload) => JWT.VerificationKeyStore m (JWT.JW
       Just jwtIssuer -> do
         matchingJWKs <- getJwksForIssuer jwtIssuer
         case matchingJWKs of
-          [] -> refreshExternalJWKs jwtIssuer
+          [] -> do
+            tryRefreshExternalJWKs jwtIssuer
+            getJwksForIssuer jwtIssuer
           matchingJWKs -> pure matchingJWKs
     where
       getJwksForIssuer :: Issuer -> m [JWT.JWK]
@@ -276,9 +281,17 @@ instance (MonadIO m, HasClaimsSet payload) => JWT.VerificationKeyStore m (JWT.JW
                           pure jwk
                     _ -> empty
               _ -> pure mempty
-      refreshExternalJWKs :: (MonadIO m) => Issuer -> m [JWT.JWK]
-      refreshExternalJWKs iss = fmap (fromMaybe []) . runMaybeT $ do
+      tryRefreshExternalJWKs :: (MonadIO m) => Issuer -> m ()
+      tryRefreshExternalJWKs iss = void . runMaybeT $ do
         uri <- hoistMaybe $ Map.lookup iss externalJWKLocations
+        lastChecked <- readTVarIO lastCheckedVar
+        now <- liftIO $ getCurrentTime
+        -- Recheck at most every minute
+        case (Map.lookup iss lastChecked) of
+          Nothing -> pure ()
+          Just lastCheckedTime ->
+            guard $ Time.diffUTCTime now lastCheckedTime > (60 :: Time.NominalDiffTime)
+
         -- We only fetch external JWKs from manually configured trusted jwk URIs
         -- so it's safe not to use a proxy.
         httpMan <- liftIO $ HTTPTLS.getGlobalManager

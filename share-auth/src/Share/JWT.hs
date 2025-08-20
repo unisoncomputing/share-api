@@ -122,12 +122,14 @@ defaultJWTSettings myIssuer signingKey legacyKey oldValidKeys acceptedAudiences 
   let myJWKs = Map.singleton myIssuer myVerificationJWKs
   let keysMap = myJWKs <> externalJWKs
   keysVar <- liftIO $ newTVarIO keysMap
+  lastCheckedVar <- liftIO $ newTVarIO Map.empty
   legacyKey <- for legacyKey (except . keyDescToJWK)
   pure $
     JWTSettings
       { signingJWK,
         validationKeys = KeyMap {keysVar, legacyKey},
         externalJWKLocations,
+        lastCheckedVar,
         acceptedAudiences,
         acceptedIssuers
       }
