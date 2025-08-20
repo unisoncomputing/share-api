@@ -48,6 +48,16 @@ instance ToJSON ShareBranch where
         "contributions" .= contributions
       ]
 
+instance FromJSON ShareBranch where
+  parseJSON = withObject "ShareBranch" $ \o ->
+    ShareBranch
+      <$> o .: "branchRef"
+      <*> o .: "createdAt"
+      <*> o .: "updatedAt"
+      <*> o .: "causalHash"
+      <*> o .: "project"
+      <*> o .: "contributions"
+
 -- | Allows filtering the branches list for contributor or core branches.
 data BranchKindFilter
   = AllBranchKinds

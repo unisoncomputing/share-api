@@ -231,6 +231,23 @@ instance ToJSON CheckMergeContributionResponse where
           CantMerge msg -> object ["kind" .= ("cant_merge" :: Text), "reason" .= msg]
       ]
 
+instance FromJSON CheckMergeContributionResponse where
+  parseJSON = withObject "CheckMergeContributionResponse" \o -> do
+    mergeability <- o .: "mergeability"
+    case mergeability of
+      Object obj -> do
+        kind <- obj .: "kind"
+        case kind of
+          ("fast_forward" :: Text) -> pure CheckMergeContributionResponse {mergeability = CanFastForward}
+          "merge" -> pure CheckMergeContributionResponse {mergeability = CanMerge}
+          "conflicted" -> pure CheckMergeContributionResponse {mergeability = Conflicted}
+          "already_merged" -> pure CheckMergeContributionResponse {mergeability = AlreadyMerged}
+          "cant_merge" -> do
+            reason <- obj .: "reason"
+            pure $ CheckMergeContributionResponse {mergeability = CantMerge reason}
+          _ -> fail $ "Invalid mergeability kind: " <> Text.unpack kind
+      _ -> fail "Expected an object for check merge contribution response"
+
 data MergeResult
   = MergeSuccess
   | SourceBranchUpdated
@@ -266,6 +283,23 @@ instance ToJSON MergeContributionResponse where
           MergeConflicted -> object ["kind" .= ("conflicted" :: Text)]
           MergeFailed msg -> object ["kind" .= ("failed" :: Text), "reason" .= msg]
       ]
+
+instance FromJSON MergeContributionResponse where
+  parseJSON = withObject "MergeContributionResponse" \o -> do
+    result <- o .: "result"
+    case result of
+      Object obj -> do
+        kind <- obj .: "kind"
+        case kind of
+          ("success" :: Text) -> pure MergeContributionResponse {result = MergeSuccess}
+          "source_branch_updated" -> pure MergeContributionResponse {result = SourceBranchUpdated}
+          "target_branch_updated" -> pure MergeContributionResponse {result = TargetBranchUpdated}
+          "conflicted" -> pure MergeContributionResponse {result = MergeConflicted}
+          "failed" -> do
+            reason <- obj .: "reason"
+            pure $ MergeContributionResponse {result = MergeFailed reason}
+          _ -> fail $ "Invalid merge result kind: " <> Text.unpack kind
+      _ -> fail "Expected an object for merge contribution response"
 
 -- | Token used to ensure that the state of a contribution hasn't changed between
 -- rendering the page and the user taking a given action.

@@ -45,3 +45,11 @@ instance ToJSON UpdateCommentResponse where
   toJSON = \case
     UpdateCommentSuccess event -> object ["kind" .= ("success" :: Text), "comment" .= event]
     UpdateCommentConflict event -> object ["kind" .= ("conflict" :: Text), "comment" .= event]
+
+instance FromJSON UpdateCommentResponse where
+  parseJSON = withObject "UpdateCommentResponse" \o -> do
+    kind :: Text <- o .: "kind"
+    case kind of
+      "success" -> UpdateCommentSuccess <$> o .: "comment"
+      "conflict" -> UpdateCommentConflict <$> o .: "comment"
+      _ -> fail $ "Unknown kind: " <> show kind

@@ -53,6 +53,14 @@ instance ToJSON APIReleaseStatus where
           "deprecatedBy" .= deprecatedBy
         ]
 
+instance FromJSON APIReleaseStatus where
+  parseJSON = withObject "APIReleaseStatus" $ \o -> do
+    status :: Text <- o .: "status"
+    case status of
+      "published" -> APIPublishedRelease <$> o .: "publishedAt" <*> o .:? "publishedBy"
+      "deprecated" -> APIDeprecatedRelease <$> o .: "deprecatedAt" <*> o .:? "deprecatedBy"
+      _ -> fail $ "Invalid release status: " <> show status
+
 -- | The api format for a release.
 data APIRelease = APIRelease
   { version :: ReleaseVersion,
@@ -78,6 +86,18 @@ instance ToJSON APIRelease where
         "updatedAt" .= updatedAt,
         "status" .= status
       ]
+
+instance FromJSON APIRelease where
+  parseJSON = withObject "APIRelease" $ \o ->
+    APIRelease
+      <$> o .: "version"
+      <*> o .: "causalHashUnsquashed"
+      <*> o .: "causalHashSquashed"
+      <*> o .: "projectRef"
+      <*> o .: "createdAt"
+      <*> o .: "createdBy"
+      <*> o .: "updatedAt"
+      <*> o .: "status"
 
 releaseToAPIRelease :: ProjectShortHand -> Release CausalHash UserHandle -> APIRelease
 releaseToAPIRelease projectSH Release {..} =
