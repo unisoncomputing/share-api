@@ -4,7 +4,7 @@
 
 module Share.Web.Share.Types where
 
-import Data.Aeson (KeyValue ((.=)), ToJSON (..))
+import Data.Aeson (FromJSON, KeyValue ((.=)), ToJSON (..), (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.List.NonEmpty qualified as NEL
 import Data.Set qualified as Set
@@ -98,6 +98,39 @@ instance ToJSON DescribeUserProfile where
             "permissions" .= permissions,
             "orgId" .= orgId
           ]
+
+instance FromJSON DescribeUserProfile where
+  parseJSON = Aeson.withObject "DescribeUserProfile" $ \o -> do
+    kind <- o .: "kind"
+    case (kind :: Text) of
+      "user" -> do
+        handle <- o .: "handle"
+        name <- o .:? "name"
+        avatarUrl <- fmap unpackURI <$> o .:? "avatarUrl"
+        userId <- o .: "userId"
+        bio <- o .:? "bio"
+        website <- o .:? "website"
+        location <- o .:? "location"
+        twitterHandle <- o .:? "twitterHandle"
+        pronouns <- o .:? "pronouns"
+        permissions <- o .: "permissions"
+        pure $ DescribeUserProfile {bio, website, location, twitterHandle, pronouns, permissions, displayInfo = UnifiedUser (UserDisplayInfo {handle, name, avatarUrl, userId})}
+      "org" -> do
+        userInfo <- o .: "user"
+        handle <- userInfo Aeson..: "handle"
+        name <- userInfo Aeson..:? "name"
+        avatarUrl <- fmap unpackURI <$> userInfo Aeson..:? "avatarUrl"
+        userId <- userInfo Aeson..: "userId"
+        let user = UserDisplayInfo {handle, name, avatarUrl, userId}
+        orgId <- o .: "orgId"
+        isCommercial <- o .: "isCommercial"
+        bio <- userInfo Aeson..:? "bio"
+        website <- userInfo Aeson..:? "website"
+        twitterHandle <- userInfo Aeson..:? "twitterHandle"
+        pronouns <- userInfo Aeson..:? "pronouns"
+        permissions <- o .: "permissions"
+        pure $ DescribeUserProfile {bio, website, location = Nothing, twitterHandle, pronouns, permissions, displayInfo = UnifiedOrg (OrgDisplayInfo {user, orgId, isCommercial})}
+      _ -> fail $ "Unknown kind for DescribeUserProfile: " <> show kind
 
 data ReadmeResponse = ReadmeResponse
   { readMe :: Maybe Doc,

@@ -82,6 +82,20 @@ instance ToJSON ProjectOwner where
         "type" .= ("user" :: Text)
       ]
 
+instance FromJSON ProjectOwner where
+  parseJSON = Aeson.withObject "ProjectOwner" $ \o -> do
+    typ <- o .: "type"
+    case typ of
+      ("organization" :: Text) -> do
+        ownerHandle <- o .: "handle"
+        ownerName <- o .:? "name"
+        pure $ OrganizationOwner {..}
+      ("user" :: Text) -> do
+        ownerHandle <- o .: "handle"
+        ownerName <- o .:? "name"
+        pure $ UserOwner {..}
+      _ -> fail $ "Unknown ProjectOwner type: " <> show typ
+
 data FavData = FavData
   { numFavs :: Int64,
     isFaved :: Bool
@@ -100,6 +114,12 @@ instance ToJSON FavData where
       [ "numFavs" .= numFavs,
         "isFaved" .= isFaved
       ]
+
+instance FromJSON FavData where
+  parseJSON = Aeson.withObject "FavData" $ \o -> do
+    numFavs <- o .: "numFavs"
+    isFaved <- o .: "isFaved"
+    pure FavData {..}
 
 data APIProjectBranchAndReleaseDetails = APIProjectBranchAndReleaseDetails
   { defaultBranch :: Maybe BranchName,
@@ -136,6 +156,17 @@ instance ToJSON APIProject where
         "createdAt" .= createdAt,
         "updatedAt" .= updatedAt
       ]
+
+instance FromJSON APIProject where
+  parseJSON = Aeson.withObject "APIProject" $ \o -> do
+    owner <- o .: "owner"
+    slug <- o .: "slug"
+    summary <- o .:? "summary"
+    visibility <- o .: "visibility"
+    tags <- o .:? "tags" .!= Set.empty
+    createdAt <- o .: "createdAt"
+    updatedAt <- o .: "updatedAt"
+    pure APIProject {..}
 
 data CreateProjectRequest = CreateProjectRequest
   { summary :: Maybe Text,
@@ -247,6 +278,9 @@ data ListProjectsResponse = ListProjectsResponse
 
 instance Aeson.ToJSON ListProjectsResponse where
   toJSON (ListProjectsResponse projects) = toJSON projects
+
+instance Aeson.FromJSON ListProjectsResponse where
+  parseJSON v = ListProjectsResponse <$> Aeson.parseJSON v
 
 data UpdateProjectRequest = UpdateProjectRequest
   { summary :: NullableUpdate Text,

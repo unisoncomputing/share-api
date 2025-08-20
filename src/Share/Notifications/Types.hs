@@ -42,7 +42,7 @@ module Share.Notifications.Types
 where
 
 import Control.Lens hiding ((.=))
-import Data.Aeson (FromJSON, ToJSON (..), (.:), (.=))
+import Data.Aeson (FromJSON, ToJSON (..), (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -452,14 +452,25 @@ eventUserInfo_ f NotificationEvent {eventActor, eventScope, ..} = do
   pure $ NotificationEvent {eventActor = eventActor', eventScope = eventScope', ..}
 
 instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
-  toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor} =
+  toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId} =
     Aeson.object
       [ "id" Aeson..= eventId,
         "occurredAt" Aeson..= eventOccurredAt,
         "data" Aeson..= eventData,
         "scope" Aeson..= eventScope,
-        "actor" Aeson..= eventActor
+        "actor" Aeson..= eventActor,
+        "resourceId" Aeson..= eventResourceId
       ]
+
+instance (Aeson.FromJSON eventPayload, Aeson.FromJSON userInfo) => Aeson.FromJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
+  parseJSON = Aeson.withObject "NotificationEvent" \o -> do
+    eventId <- o .: "id"
+    eventOccurredAt <- o .: "occurredAt"
+    eventData <- o .: "data"
+    eventScope <- o .: "scope"
+    eventActor <- o .: "actor"
+    eventResourceId <- o .: "resourceId"
+    pure NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId}
 
 instance Hasql.DecodeRow (NotificationEvent NotificationEventId UserId UTCTime NotificationEventData) where
   decodeRow = do
@@ -563,6 +574,15 @@ instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) wher
         "filter" Aeson..= subscriptionFilter
       ]
 
+instance Aeson.FromJSON (NotificationSubscription NotificationSubscriptionId) where
+  parseJSON = Aeson.withObject "NotificationSubscription" \o -> do
+    subscriptionId <- o .: "id"
+    subscriptionScope <- o .: "scope"
+    subscriptionTopics <- o .: "topics"
+    subscriptionTopicGroups <- o .: "topicGroups"
+    subscriptionFilter <- o .:? "filter"
+    pure NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+
 data NotificationHubEntry userInfo eventPayload = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,
     hubEntryEvent :: NotificationEvent NotificationEventId userInfo UTCTime eventPayload,
@@ -579,6 +599,14 @@ instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (Not
         "status" Aeson..= hubEntryStatus,
         "createdAt" Aeson..= hubEntryCreatedAt
       ]
+
+instance (Aeson.FromJSON eventPayload, Aeson.FromJSON userInfo) => Aeson.FromJSON (NotificationHubEntry userInfo eventPayload) where
+  parseJSON = Aeson.withObject "NotificationHubEntry" \o -> do
+    hubEntryId <- o .: "id"
+    hubEntryEvent <- o .: "event"
+    hubEntryStatus <- o .: "status"
+    hubEntryCreatedAt <- o .: "createdAt"
+    pure NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus, hubEntryCreatedAt}
 
 instance Hasql.DecodeRow (NotificationHubEntry UserId NotificationEventData) where
   decodeRow = do

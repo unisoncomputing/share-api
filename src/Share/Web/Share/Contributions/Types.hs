@@ -84,6 +84,22 @@ instance ToJSON (ShareContribution UserDisplayInfo) where
         "numComments" .= numComments
       ]
 
+instance FromJSON (ShareContribution UserDisplayInfo) where
+  parseJSON = withObject "ShareContribution" \o -> do
+    contributionId <- o .: "id"
+    projectShortHand <- o .: "projectRef"
+    number <- o .: "number"
+    title <- o .: "title"
+    description <- o .:? "description"
+    status <- o .: "status"
+    sourceBranchShortHand <- o .: "sourceBranchRef"
+    targetBranchShortHand <- o .: "targetBranchRef"
+    createdAt <- o .: "createdAt"
+    updatedAt <- o .: "updatedAt"
+    author <- o .:? "author"
+    numComments <- o .: "numComments"
+    pure ShareContribution {..}
+
 -- | Allows filtering the branches list for contributor or core branches.
 data ContributionKindFilter
   = AllContributionKinds
@@ -141,6 +157,18 @@ instance (ToJSON user) => ToJSON (ContributionTimelineEvent user) where
           "actor" .= actor
         ]
     ContributionTimelineComment commentEvent -> toJSON commentEvent
+
+instance (FromJSON user) => FromJSON (ContributionTimelineEvent user) where
+  parseJSON = withObject "ContributionTimelineEvent" \o -> do
+    kind <- o .:? "kind"
+    case kind of
+      (Just ("statusChange" :: Text)) -> do
+        newStatus <- o .: "newStatus"
+        oldStatus <- o .:? "oldStatus"
+        actor <- o .: "actor"
+        timestamp <- o .: "timestamp"
+        pure $ ContributionTimelineStatusChange StatusChangeEvent {..}
+      _ -> ContributionTimelineComment <$> parseJSON (Object o)
 
 data CreateContributionRequest = CreateContributionRequest
   { title :: Text,
