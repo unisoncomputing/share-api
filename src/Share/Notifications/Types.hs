@@ -51,7 +51,7 @@ import Hasql.Decoders qualified as HasqlDecoders
 import Hasql.Encoders qualified as HasqlEncoders
 import Hasql.Interpolate qualified as Hasql
 import Network.URI (URI)
-import Servant (FromHttpApiData (..))
+import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Share.Contribution (ContributionStatus)
 import Share.IDs
 import Share.Postgres qualified as PG
@@ -152,6 +152,12 @@ instance FromHttpApiData NotificationStatus where
     "read" -> Right Read
     "archived" -> Right Archived
     s -> Left $ "Invalid notification status: " <> s
+
+instance ToHttpApiData NotificationStatus where
+  toQueryParam = \case
+    Unread -> "unread"
+    Read -> "read"
+    Archived -> "archived"
 
 instance Aeson.ToJSON NotificationStatus where
   toJSON = \case

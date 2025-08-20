@@ -8,11 +8,11 @@ module Share.Web.Share.Releases.Types where
 
 import Data.Aeson
 import Data.Time (UTCTime)
+import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Share.IDs
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Release
-import Servant (FromHttpApiData (..))
 
 data ReleaseStatusFilter
   = OnlyPublished
@@ -26,6 +26,12 @@ instance FromHttpApiData ReleaseStatusFilter where
     "deprecated" -> Right OnlyDeprecated
     "any" -> Right AllReleases
     _ -> Left "Invalid release status filter"
+
+instance ToHttpApiData ReleaseStatusFilter where
+  toQueryParam = \case
+    OnlyPublished -> "published"
+    OnlyDeprecated -> "deprecated"
+    AllReleases -> "any"
 
 data APIReleaseStatus
   = APIPublishedRelease UTCTime (Maybe (PrefixedID "@" UserHandle))

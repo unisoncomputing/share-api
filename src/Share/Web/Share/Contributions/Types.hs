@@ -92,10 +92,17 @@ data ContributionKindFilter
   deriving stock (Eq, Show)
 
 instance FromHttpApiData ContributionKindFilter where
-  parseQueryParam "all" = Right AllContributionKinds
-  parseQueryParam "core" = Right OnlyCoreContributions
-  parseQueryParam "contributor" = Right OnlyContributorContributions
-  parseQueryParam _ = Left "Invalid contribution kind filter, must be one of: ['all', 'core', contributor']"
+  parseQueryParam = \case
+    "all" -> Right AllContributionKinds
+    "core" -> Right OnlyCoreContributions
+    "contributor" -> Right OnlyContributorContributions
+    _ -> Left "Invalid contribution kind filter, must be one of: ['all', 'core', contributor']"
+
+instance ToHttpApiData ContributionKindFilter where
+  toQueryParam = \case
+    AllContributionKinds -> "all"
+    OnlyCoreContributions -> "core"
+    OnlyContributorContributions -> "contributor"
 
 data StatusChangeEvent user = StatusChangeEvent
   { oldStatus :: Maybe ContributionStatus,

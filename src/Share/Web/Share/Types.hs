@@ -314,10 +314,23 @@ instance FromHttpApiData SearchKinds where
       Nothing -> do
         Left $ "Invalid search kinds: " <> q
 
+instance ToHttpApiData SearchKinds where
+  toQueryParam (SearchKinds kinds) =
+    kinds
+      & toList
+      <&> toQueryParam
+      & Text.intercalate ","
+
 instance FromHttpApiData SearchKind where
-  parseQueryParam "projects" = Right SearchKindProjects
-  parseQueryParam "users" = Right SearchKindUsers
-  parseQueryParam _ = Left "Invalid search kind"
+  parseQueryParam = \case
+    "projects" -> Right SearchKindProjects
+    "users" -> Right SearchKindUsers
+    _ -> Left "Invalid search kind"
+
+instance ToHttpApiData SearchKind where
+  toQueryParam = \case
+    SearchKindProjects -> "projects"
+    SearchKindUsers -> "users"
 
 data UserSearchKind
   = UserSearchKindDefault
@@ -325,9 +338,15 @@ data UserSearchKind
     UserSearchKindHandlePrefix
 
 instance FromHttpApiData UserSearchKind where
-  parseQueryParam "default" = Right UserSearchKindDefault
-  parseQueryParam "handle-prefix" = Right UserSearchKindHandlePrefix
-  parseQueryParam _ = Left "Invalid user search kind"
+  parseQueryParam = \case
+    "default" -> Right UserSearchKindDefault
+    "handle-prefix" -> Right UserSearchKindHandlePrefix
+    _ -> Left "Invalid user search kind"
+
+instance ToHttpApiData UserSearchKind where
+  toQueryParam = \case
+    UserSearchKindDefault -> "default"
+    UserSearchKindHandlePrefix -> "handle-prefix"
 
 data ProjectSearchKind
   = ProjectSearchKindWebSearch
@@ -336,7 +355,14 @@ data ProjectSearchKind
     ProjectSearchKindSlugInfix
 
 instance FromHttpApiData ProjectSearchKind where
-  parseQueryParam "web-search" = Right ProjectSearchKindWebSearch
-  parseQueryParam "slug-prefix" = Right ProjectSearchKindSlugPrefix
-  parseQueryParam "slug-infix" = Right ProjectSearchKindSlugInfix
-  parseQueryParam _ = Left "Invalid project search kind"
+  parseQueryParam = \case
+    "web-search" -> Right ProjectSearchKindWebSearch
+    "slug-prefix" -> Right ProjectSearchKindSlugPrefix
+    "slug-infix" -> Right ProjectSearchKindSlugInfix
+    _ -> Left "Invalid project search kind"
+
+instance ToHttpApiData ProjectSearchKind where
+  toQueryParam = \case
+    ProjectSearchKindWebSearch -> "web-search"
+    ProjectSearchKindSlugPrefix -> "slug-prefix"
+    ProjectSearchKindSlugInfix -> "slug-infix"

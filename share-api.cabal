@@ -310,6 +310,7 @@ library
     , servant
     , servant-auth
     , servant-client
+    , servant-client-core
     , servant-conduit
     , servant-server
     , share-auth
@@ -466,6 +467,7 @@ executable share-api
     , servant
     , servant-auth
     , servant-client
+    , servant-client-core
     , servant-conduit
     , servant-server
     , share-api

@@ -238,6 +238,13 @@ instance (ToJSON a, ToJSON cursor) => ToJSON (Paged cursor a) where
         "nextCursor" .= nextCursor
       ]
 
+instance (FromJSON a, FromJSON cursor) => FromJSON (Paged cursor a) where
+  parseJSON = withObject "Paged" $ \obj -> do
+    items <- obj .: "items"
+    prevCursor <- obj .:? "prevCursor"
+    nextCursor <- obj .:? "nextCursor"
+    pure $ Paged items prevCursor nextCursor
+
 guardPaged :: Bool -> Bool -> Paged cursor a -> Paged cursor a
 guardPaged hasPrev hasNext paged@(Paged {prevCursor, nextCursor}) =
   paged

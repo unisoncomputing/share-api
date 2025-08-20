@@ -204,6 +204,12 @@ instance FromHttpApiData StatusFilter where
         Nothing -> Left "Empty status filter"
         Just statuses -> Right $ StatusFilter $ NESet.fromList statuses
 
+instance ToHttpApiData StatusFilter where
+  toQueryParam (StatusFilter statuses) =
+    toList statuses
+      <&> toQueryParam
+      & Text.intercalate ","
+
 instance FromJSON StatusFilter where
   parseJSON = Aeson.withArray "StatusFilter" $ \arr ->
     (traverse . traverse) parseJSON (NEL.nonEmpty $ toList arr) >>= \case
