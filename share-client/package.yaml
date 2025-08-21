@@ -60,9 +60,14 @@ default-extensions:
 
 dependencies:
 - base >= 4.7 && < 5
+- jose
 - servant
 - servant-client
+- servant-client-core
+- share-auth
 - share-api
+- text
+- wai
 
 library:
   source-dirs: src
