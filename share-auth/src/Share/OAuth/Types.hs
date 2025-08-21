@@ -122,6 +122,12 @@ data ResponseType = ResponseTypeCode
 instance ToJSON ResponseType where
   toJSON ResponseTypeCode = Aeson.String "code"
 
+instance FromJSON ResponseType where
+  parseJSON = Aeson.withText "ResponseType" $ \txt -> do
+    case Text.toLower txt of
+      "code" -> pure ResponseTypeCode
+      _ -> fail $ "Unsupported response_type: " <> Text.unpack txt
+
 instance ToHttpApiData ResponseType where
   toQueryParam = \case
     ResponseTypeCode -> "code"

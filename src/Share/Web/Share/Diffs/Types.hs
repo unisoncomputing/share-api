@@ -58,22 +58,6 @@ instance ToJSON ShareNamespaceDiffResponse where
             [ "tag" .= ("computing" :: Text)
             ]
 
-instance FromJSON ShareNamespaceDiffResponse where
-  parseJSON = withObject "ShareNamespaceDiffResponse" $ \o -> do
-    project <- o .: "project"
-    oldRef <- o .: "oldRef"
-    oldRefHash <- o .:? "oldRefHash"
-    newRef <- o .: "newRef"
-    newRefHash <- o .:? "newRefHash"
-    tag <- o .: "tag"
-    diff <- case (tag :: Text) of
-      "done" -> do
-        diffValue <- o .: "diff"
-        pure $ ShareNamespaceDiffStatus'Done diffValue
-      "computing" -> pure ShareNamespaceDiffStatus'StillComputing
-      t -> fail $ "Invalid ShareNamespaceDiffResponse tag: " <> show t
-    pure ShareNamespaceDiffResponse {project, oldRef, oldRefHash, newRef, newRefHash, diff}
-
 data ShareTermDiffResponse = ShareTermDiffResponse
   { project :: ProjectShortHand,
     oldBranch :: BranchOrReleaseShortHand,

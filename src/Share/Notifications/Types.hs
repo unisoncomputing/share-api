@@ -505,6 +505,12 @@ instance Aeson.ToJSON NotificationEmailDeliveryConfig where
         "email" Aeson..= emailDeliveryEmail
       ]
 
+instance Aeson.FromJSON NotificationEmailDeliveryConfig where
+  parseJSON = Aeson.withObject "NotificationEmailDeliveryConfig" \o -> do
+    emailDeliveryId <- o .: "id"
+    emailDeliveryEmail <- o .: "email"
+    pure NotificationEmailConfig {emailDeliveryId, emailDeliveryEmail}
+
 data NotificationWebhookConfig = NotificationWebhookConfig
   { webhookDeliveryId :: NotificationWebhookId,
     webhookDeliveryUrl :: URI
@@ -523,6 +529,12 @@ instance Aeson.ToJSON NotificationWebhookConfig where
       [ "id" Aeson..= webhookDeliveryId,
         "url" Aeson..= show webhookDeliveryUrl
       ]
+
+instance Aeson.FromJSON NotificationWebhookConfig where
+  parseJSON = Aeson.withObject "NotificationWebhookConfig" \o -> do
+    webhookDeliveryId <- o .: "id"
+    URIParam webhookDeliveryUrl <- o .: "url"
+    pure NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl}
 
 data DeliveryMethodId
   = EmailDeliveryMethodId NotificationEmailDeliveryMethodId
@@ -546,6 +558,14 @@ instance Aeson.ToJSON NotificationDeliveryMethod where
   toJSON = \case
     EmailDeliveryMethod config -> Aeson.object ["kind" .= ("email" :: Text), "config" .= config]
     WebhookDeliveryMethod config -> Aeson.object ["kind" .= ("webhook" :: Text), "config" .= config]
+
+instance Aeson.FromJSON NotificationDeliveryMethod where
+  parseJSON = Aeson.withObject "NotificationDeliveryMethod" $ \o -> do
+    deliveryMethodKind <- o .: "kind"
+    case deliveryMethodKind of
+      "email" -> EmailDeliveryMethod <$> o .: "config"
+      "webhook" -> WebhookDeliveryMethod <$> o .: "config"
+      _ -> fail $ "Unknown delivery method kind: " <> Text.unpack deliveryMethodKind
 
 data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,

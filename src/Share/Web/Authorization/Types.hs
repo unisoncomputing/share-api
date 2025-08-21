@@ -440,6 +440,12 @@ data AddRolesRequest = AddRolesRequest
   }
   deriving (Show)
 
+instance ToJSON AddRolesRequest where
+  toJSON AddRolesRequest {..} =
+    object
+      [ "role_assignments" .= roleAssignments
+      ]
+
 instance FromJSON AddRolesRequest where
   parseJSON = Aeson.withObject "AddRolesRequest" $ \o -> do
     roleAssignments <- o Aeson..: "role_assignments"
@@ -449,6 +455,12 @@ data RemoveRolesRequest = RemoveRolesRequest
   { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
+
+instance ToJSON RemoveRolesRequest where
+  toJSON RemoveRolesRequest {..} =
+    object
+      [ "role_assignments" .= roleAssignments
+      ]
 
 instance FromJSON RemoveRolesRequest where
   parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do

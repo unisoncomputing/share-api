@@ -176,7 +176,7 @@ instance ToJSON (WebhookEventPayload ()) where
       ]
 
 instance FromJSON (WebhookEventPayload ()) where
-  parseJSON = Aeson.withObject "WebhookEventPayload" $ \o ->
+  parseJSON = Aeson.withObject "WebhookEventPayload" $ \o -> do
     eventId <- o Aeson..: "eventId"
     occurredAt <- o Aeson..: "occurredAt"
     topic <- o Aeson..: "topic"
