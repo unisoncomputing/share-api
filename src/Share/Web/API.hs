@@ -19,12 +19,14 @@ import Share.Web.UCM.SyncV2.API qualified as SyncV2
 import Unison.Share.API.Projects qualified as UCMProjects
 import Unison.Sync.API qualified as Unison.Sync
 
+type OrgsAPI = ("orgs" :> Orgs.API)
+
 type API =
   OAuth.ServiceProviderAPI
     :<|> OAuth.IdentityProviderAPI
     :<|> ("codebases" :> Share.UserPublicCodebaseAPI)
     :<|> ("users" :> Share.UserAPI)
-    :<|> ("orgs" :> Orgs.API)
+    :<|> OrgsAPI
     :<|> ("search" :> Share.OmniSearchEndpoint)
     :<|> ("search-names" :> Share.SearchDefinitionNamesEndpoint)
     :<|> ("search-definitions" :> Share.SearchDefinitionsEndpoint)
