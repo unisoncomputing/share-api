@@ -34,7 +34,6 @@ import Network.Wai.Middleware.Gzip qualified as Gzip
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import OpenTelemetry.Instrumentation.Wai (newOpenTelemetryWaiMiddleware)
 import Servant
-import Servant.Client (Client, ClientM, client)
 import Share.App
 import Share.BackgroundJobs qualified as BackgroundJobs
 import Share.BackgroundJobs.Monad (runBackground)
@@ -53,7 +52,6 @@ import Share.Utils.Servant
 import Share.Utils.Servant.Cookies (CookieVal)
 import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Utils.Servant.RawRequest (RawRequest)
-import Share.Web.API (API, api)
 import Share.Web.API qualified as Web
 import Share.Web.App (WebApp, localRequestCtx)
 import Share.Web.App qualified as WebApp
@@ -339,6 +337,3 @@ verboseRequestResponseLogger app req responder = do
       Wai.ResponseStream {} -> putStrLn "<ResponseStream>"
       Wai.ResponseRaw {} -> putStrLn "<ResponseRaw>"
     responder resp
-
-_x :: Client ClientM API
-_x = client api
