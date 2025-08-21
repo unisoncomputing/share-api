@@ -24,6 +24,7 @@ module Share.NamespaceDiffs.Types
     namespaceTreeTypeDiffKinds_,
     namespaceTreeDiffRenderedTerms_,
     namespaceTreeDiffRenderedTypes_,
+    definitionDiffKindRendered_,
   )
 where
 

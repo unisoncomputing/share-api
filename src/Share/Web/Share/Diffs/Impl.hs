@@ -8,11 +8,16 @@ where
 import Control.Lens hiding ((.=))
 import Control.Monad.Except
 import Data.Aeson qualified as Aeson
+import Data.Either (partitionEithers)
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Data.Set.Lens (setOf)
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Share.Codebase qualified as Codebase
-import Share.NamespaceDiffs (DefinitionDiffKind (..), GNamespaceTreeDiff, NamespaceDiffError (..))
+import Share.NamespaceDiffs (DefinitionDiffKind (..), NamespaceDiffError (..))
 import Share.NamespaceDiffs qualified as NamespaceDiffs
+import Share.NamespaceDiffs.Types (GNamespaceTreeDiff)
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
@@ -31,15 +36,19 @@ import U.Codebase.Reference qualified as V2Reference
 import Unison.Codebase.SqliteCodebase.Conversions (referent1to2)
 import Unison.ConstructorReference (ConstructorReference)
 import Unison.Merge (TwoOrThreeWay (..), TwoWay (..))
+import Unison.Merge qualified as Merge
 import Unison.Merge.DiffOp qualified as DiffOp
 import Unison.Name (Name)
 import Unison.NameSegment (NameSegment)
+import Unison.Reference (TypeReference)
+import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
 import Unison.Server.Backend.DefinitionDiff qualified as DefinitionDiff
 import Unison.Server.Share.Definitions qualified as Definitions
 import Unison.Server.Types
 import Unison.ShortHash (ShortHash)
 import Unison.Syntax.Name qualified as Name
+import Unison.UnconflictedLocalDefnsView qualified
 import Unison.Util.Pretty (Width)
 
 -- | Diff two causals and store the diff in the database.
@@ -92,83 +101,116 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
         (lcaBranchHashId, lcaBranchNLReceipt, lcaPerspective) <- PG.transactionSpan "getNewBranch" mempty $ getBranch lcaCausalId
         pure (Just lcaBranchHashId, Just lcaBranchNLReceipt, Just lcaPerspective)
       Nothing -> pure (Nothing, Nothing, Nothing)
+
   -- Do the initial 3-way namespace diff
-  diff0 <-
+  diffblob <-
     NamespaceDiffs.computeThreeWayNamespaceDiff
       TwoWay {alice = oldCodebase, bob = newCodebase}
       TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
       TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
+
+  -- Boilerplate conversion: make a "DefinitionDiffs" from the info in a "Mergeblob1".
+  --
+  -- We start focusing only on Bob here, the contributor, even though Alice could have a diff as well of course (since
+  -- the LCA is arbitrarily behind Alice).
+  let defns0 :: GNamespaceTreeDiff NameSegment Referent TypeReference Name Name Name Name
+      defns0 =
+        NamespaceDiffs.makeNamespaceDiffTree
+          diffblob.defns.lca.defns
+          diffblob.diffsFromLCA.bob
+          diffblob.propagatedUpdates.bob
+          diffblob.simpleRenames.bob
+
+  let oldPerspective1 =
+        fromMaybe oldPerspective maybeLcaPerspective
+
+  let termNamesToRender =
+        defns0 ^.. NamespaceDiffs.namespaceTreeTermDiffKinds_ . to partitionDiffKind . NamespaceDiffs.definitionDiffKindRendered_
+
+  let (oldTermNamesToRender, newTermNamesToRender) =
+        bimap Set.fromList Set.fromList (partitionEithers termNamesToRender)
+
+  let termNamesToDiff =
+        setOf NamespaceDiffs.namespaceTreeDiffTermDiffs_ defns0
+
+  let typeNamesToRender =
+        defns0 ^.. NamespaceDiffs.namespaceTreeTypeDiffKinds_ . to partitionDiffKind . NamespaceDiffs.definitionDiffKindRendered_
+
+  let (oldTypeNamesToRender, newTypeNamesToRender) =
+        bimap Set.fromList Set.fromList (partitionEithers typeNamesToRender)
+
+  let typeNamesToDiff =
+        setOf NamespaceDiffs.namespaceTreeDiffTypeDiffs_ defns0
+
+  oldTermDefinitionsByName <- do
+    PG.transactionSpan "load old terms" mempty do
+      deriveMapOf
+        (expectTermDefinitionsOf oldCodebase oldRuntime oldPerspective1)
+        (Set.toList (Set.union oldTermNamesToRender termNamesToDiff))
+
+  newTermDefinitionsByName <- do
+    PG.transactionSpan "load new terms" mempty do
+      deriveMapOf
+        (expectTermDefinitionsOf newCodebase newRuntime newPerspective)
+        (Set.toList (Set.union newTermNamesToRender termNamesToDiff))
+
+  oldTypeDefinitionsByName <- do
+    PG.transactionSpan "load old types" mempty do
+      deriveMapOf
+        (expectTypeDefinitionsOf oldCodebase oldRuntime oldPerspective1)
+        (Set.toList (Set.union oldTypeNamesToRender typeNamesToDiff))
+
+  newTypeDefinitionsByName <- do
+    PG.transactionSpan "load new types" mempty do
+      deriveMapOf
+        (expectTypeDefinitionsOf newCodebase newRuntime newPerspective)
+        (Set.toList (Set.union newTypeNamesToRender typeNamesToDiff))
+
   -- Resolve the term referents to tag + hash
-  diff1 <- PG.transactionSpan "hydrate-diff1" mempty $ do
-    diff0
-      & asListOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferents_)
-        %%~ \refs -> do
+  defns1 :: NamespaceDiffs.GNamespaceTreeDiff NameSegment (TermTag, ShortHash) TypeReference Name Name Name Name <-
+    PG.transactionSpan "load term tags" mempty do
+      defns0
+        & asListOf NamespaceDiffs.namespaceTreeDiffReferents_ %%~ \refs -> do
           termTags <- Codebase.termTagsByReferentsOf traversed (referent1to2 <$> refs)
           pure $ zip termTags (refs <&> Referent.toShortHash)
+
   -- Resolve the type references to tag + hash
-  diff2 <-
-    PG.transactionSpan "hydrate-diff2" mempty $
-      diff1
-        & asListOf (NamespaceDiffs.namespaceAndLibdepsDiffDefns_ . NamespaceDiffs.namespaceTreeDiffReferences_)
-          %%~ \refs -> do
-            typeTags <- Codebase.typeTagsByReferencesOf traversed refs
-            pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+  defns2 :: NamespaceDiffs.GNamespaceTreeDiff NameSegment (TermTag, ShortHash) (TypeTag, ShortHash) Name Name Name Name <-
+    PG.transactionSpan "load type tags" mempty do
+      defns1
+        & asListOf NamespaceDiffs.namespaceTreeDiffReferences_ %%~ \refs -> do
+          typeTags <- Codebase.typeTagsByReferencesOf traversed refs
+          pure $ zip typeTags (refs <&> V2Reference.toShortHash)
+
+  -- Resolve the actual term/type definitions. Use the LCA as the "old" (because that's what we're rendering the diff
+  -- relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we won't have
+  -- anything classified as an "update" in this case so it doesn't really matter).
+
+  let defns3 =
+        defns2
+          & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %~ (\name -> (oldTermDefinitionsByName Map.! name, newTermDefinitionsByName Map.! name))
+          & NamespaceDiffs.witherNamespaceTreeDiffTermDiffs (Identity . diffTermsPure)
+          & runIdentity
+          & unsafePartsOf NamespaceDiffs.namespaceTreeDiffRenderedTerms_
+            .~ map (either (oldTermDefinitionsByName Map.!) (newTermDefinitionsByName Map.!)) termNamesToRender
+          & NamespaceDiffs.witherNamespaceTreeTermDiffKinds (Identity . throwAwayConstructorDiffs)
+          & runIdentity
+          & NamespaceDiffs.namespaceTreeDiffTypeDiffs_ %~ (\name -> diffTypesPure (oldTypeDefinitionsByName Map.! name, newTypeDefinitionsByName Map.! name))
+          & unsafePartsOf NamespaceDiffs.namespaceTreeDiffRenderedTypes_
+            .~ map (either (oldTypeDefinitionsByName Map.!) (newTypeDefinitionsByName Map.!)) typeNamesToRender
+
   -- Resolve libdeps branch hash ids to branch hashes
-  diff3 <-
-    PG.transactionSpan "hydrate-diff3" mempty $
+  libdeps <-
+    PG.transactionSpan "load libdeps branch hashes" mempty do
       HashQ.expectNamespaceHashesByNamespaceHashIdsOf
-        (NamespaceDiffs.namespaceAndLibdepsDiffLibdeps_ . traversed . DiffOp.traverse)
-        diff2
-  -- Resolve the actual term/type definitions. Use the LCA as the "old" (because that's what we're rendering the
-  -- diff relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we
-  -- won't have anything classified as an "update" in this case so it doesn't really matter).
-  diff4 <-
-    PG.transactionSpan "hydrate-diff4" mempty $
-      diff3
-        & NamespaceDiffs.namespaceAndLibdepsDiffDefns_
-          %%~ computeUpdatedDefinitionDiffs
-            (oldCodebase, oldRuntime, fromMaybe oldPerspective maybeLcaPerspective)
-            (newCodebase, newRuntime, newPerspective)
-  pure diff4
+        (traversed . DiffOp.traverse)
+        diffblob.libdepsDiffs.bob
 
-computeUpdatedDefinitionDiffs ::
-  forall a b from to.
-  (Ord a, Ord b) =>
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime from IO, NamesPerspective (PG.Transaction NamespaceDiffError)) ->
-  (Codebase.CodebaseEnv, Codebase.CodebaseRuntime to IO, NamesPerspective (PG.Transaction NamespaceDiffError)) ->
-  GNamespaceTreeDiff NameSegment a b Name Name Name Name ->
-  PG.Transaction
-    NamespaceDiffError
-    (NamespaceDiffs.NamespaceTreeDiff a b TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff)
-computeUpdatedDefinitionDiffs (fromCodebase, fromRuntime, fromPerspective) (toCodebase, toRuntime, toPerspective) diff0 = PG.transactionSpan "computeUpdatedDefinitionDiffs" mempty $ do
-  diff1 <- PG.transactionSpan "termDiffs" mempty $ do
-    diff0
-      & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %~ (\name -> (name, name))
-      & expectTermDefinitionsOf fromCodebase fromRuntime fromPerspective (NamespaceDiffs.namespaceTreeDiffTermDiffs_ . _1)
-      >>= expectTermDefinitionsOf toCodebase toRuntime toPerspective (NamespaceDiffs.namespaceTreeDiffTermDiffs_ . _2)
-      >>= NamespaceDiffs.witherNamespaceTreeDiffTermDiffs (pure . diffTermsPure)
-
-  diff2 <- PG.transactionSpan "termDiffKinds" mempty $ do
-    diff1
-      & NamespaceDiffs.namespaceTreeTermDiffKinds_ %~ partitionDiffKind
-      & expectTermDefinitionsOf fromCodebase fromRuntime fromPerspective (NamespaceDiffs.namespaceTreeDiffRenderedTerms_ . _Left)
-      >>= expectTermDefinitionsOf toCodebase toRuntime toPerspective (NamespaceDiffs.namespaceTreeDiffRenderedTerms_ . _Right)
-      <&> NamespaceDiffs.namespaceTreeDiffRenderedTerms_ %~ either id id
-      >>= NamespaceDiffs.witherNamespaceTreeTermDiffKinds (pure . throwAwayConstructorDiffs)
-
-  diff3 <- PG.transactionSpan "typeDiffs" mempty $ do
-    diff2
-      & NamespaceDiffs.namespaceTreeDiffTypeDiffs_ %~ (\name -> (name, name))
-      & expectTypeDefinitionsOf fromCodebase fromRuntime fromPerspective (NamespaceDiffs.namespaceTreeDiffTypeDiffs_ . _1)
-      >>= expectTypeDefinitionsOf toCodebase toRuntime toPerspective (NamespaceDiffs.namespaceTreeDiffTypeDiffs_ . _2)
-      <&> NamespaceDiffs.namespaceTreeDiffTypeDiffs_ %~ diffTypesPure
-  diff4 <- PG.transactionSpan "typeDiffKinds" mempty $ do
-    diff3
-      & NamespaceDiffs.namespaceTreeTypeDiffKinds_ %~ partitionDiffKind
-      & expectTypeDefinitionsOf fromCodebase fromRuntime fromPerspective (NamespaceDiffs.namespaceTreeDiffRenderedTypes_ . _Left)
-      >>= expectTypeDefinitionsOf toCodebase fromRuntime toPerspective (NamespaceDiffs.namespaceTreeDiffRenderedTypes_ . _Right)
-      <&> NamespaceDiffs.namespaceTreeDiffRenderedTypes_ %~ either id id
-  pure (NamespaceDiffs.compressNameTree diff4)
+  pure
+    NamespaceDiffs.NamespaceAndLibdepsDiff
+      { defns = NamespaceDiffs.compressNameTree defns3,
+        libdeps
+      }
   where
     -- Splits the diff kind into the parts from the 'from' and 'to' sections of a diff.
     --
@@ -311,3 +353,15 @@ expectTypeDefinitionsOf codebase rt np trav s =
       for (zip names results) \case
         (name, Nothing) -> throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("Type not found: " <> Name.toText name <> ", in names perspective: " <> tShow np))
         (_, Just typeDef) -> pure typeDef
+
+-- Quick helper that makes a `Map k v` from an input list of `k` and a monadic `v`-fetching function
+--
+-- A simpler version of this might elide the traversal and instead just be:
+--
+--   deriveMapOf :: (Ord k, Functor m) => ([k] -> m [v]) -> [k] -> m (Map k v)
+--
+-- However, that'd require the caller to provide a `v`-fetching function that returns the same number of `v` as there
+-- were `k` input. That's not hard to do, the traversal just does that for us (assuming it's law-abiding).
+deriveMapOf :: (Ord k, Functor m) => (forall s t. Traversal s t k v -> s -> m t) -> [k] -> m (Map k v)
+deriveMapOf f ks = do
+  Map.fromList . zip ks <$> f traverse ks
