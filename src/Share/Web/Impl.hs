@@ -8,6 +8,7 @@ import Servant
 import Share.App
 import Share.Env qualified as Env
 import Share.JWT qualified as JWT
+import Share.JWT.Types (Issuer (..))
 import Share.OAuth.Session
 import Share.OAuth.Types (ResponseType (ResponseTypeCode))
 import Share.Postgres.Ops qualified as PGO
@@ -32,7 +33,7 @@ import Share.Web.UI.Links qualified as Links
 
 discoveryEndpoint :: WebApp DiscoveryDocument
 discoveryEndpoint = do
-  issuer <- URIParam <$> shareIssuer
+  issuer <- coerce @Issuer @URIParam <$> shareIssuer
   authorizationE <- URIParam <$> Links.oauthAuthorize
   tokenE <- URIParam <$> Links.oauthToken
   userInfoE <- URIParam <$> Links.openIDUserInfo
@@ -43,7 +44,9 @@ discoveryEndpoint = do
 -- | JWK RFC: https://tools.ietf.org/html/rfc7517
 jwksEndpoint :: WebApp JWK.JWKSet
 jwksEndpoint = do
-  asks (JWT.publicJWKSet . Env.jwtSettings)
+  jwtSettings <- asks (Env.jwtSettings)
+  shareIssuer <- shareIssuer
+  JWT.publicJWKSet jwtSettings shareIssuer
 
 -- | https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
 userInfoEndpoint :: Maybe Session -> WebApp UserInfo

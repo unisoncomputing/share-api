@@ -26,8 +26,8 @@ import Data.Aeson (ToJSON (..))
 import Data.Aeson qualified as Aeson
 import Data.Function ((&))
 import Data.Functor ((<&>))
-import Data.Maybe (fromMaybe)
 import Data.Map qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Database.Redis qualified as Redis
 import Servant
@@ -67,7 +67,7 @@ data ServiceProviderConfig = ServiceProviderConfig
     -- | The audience to stamp on tokens we issue via the identity provider.
     -- This must match what's configured in the identity provider's client config.
     -- E.g. api.unison.cloud
-    serviceAudience :: URI,
+    serviceAudience :: JWT.Audience,
     -- | Name to use for session cookies.
     sessionCookieKey :: Text
   }

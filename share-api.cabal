@@ -118,7 +118,6 @@ library
       Share.Ticket
       Share.User
       Share.UserProfile
-      Share.Utils.API
       Share.Utils.Caching
       Share.Utils.Caching.JSON
       Share.Utils.Data

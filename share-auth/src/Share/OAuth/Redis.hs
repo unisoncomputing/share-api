@@ -18,6 +18,7 @@ where
 import Control.Monad (void)
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
+import Share.JWT
 import Data.Binary
 import Data.Binary qualified as Binary
 import Data.ByteString qualified as BS
@@ -29,6 +30,7 @@ import Data.Text.Encoding qualified as Text
 import Data.Time
 import Data.Typeable (TypeRep, typeRep)
 import Database.Redis qualified as R
+import Network.URI (URI)
 import Share.OAuth.Errors qualified as OAuthError
 import Share.OAuth.PKCE (verifyPkce)
 import Share.OAuth.Session
@@ -39,7 +41,6 @@ import Share.Utils.Binary (JSONBinary (..))
 import Share.Utils.IDs qualified as IDs
 import Share.Utils.SecureTokens (newSecureToken)
 import Share.Utils.URI (URIParam)
-import Network.URI (URI)
 import UnliftIO
 
 data RedisErr
@@ -115,7 +116,7 @@ createPendingSession loginRequest pkceVerifier returnToURI additionalData = do
       }
 
 -- | Generate a cryptographically secure pending-session identifier
-generatePendingSessionId :: MonadIO m => m PendingSessionId
+generatePendingSessionId :: (MonadIO m) => m PendingSessionId
 generatePendingSessionId =
   PendingSessionId <$> newSecureToken
 
@@ -163,10 +164,10 @@ instance Aeson.FromJSON CodeExchange where
 instance RedisKey CodeExchange where
   redisKey CodeExchange {code} = codeExchangeKey code
 
-createOAuth2Code :: URI -> Set URI -> UserId -> OAuth2.AuthenticationRequest -> R.Redis (Session, OAuth2.Code)
-createOAuth2Code issuer aud userId authRequest = do
+createOAuth2Code :: ServiceName -> Issuer -> Set Audience -> UserId -> OAuth2.AuthenticationRequest -> R.Redis (Session, OAuth2.Code)
+createOAuth2Code serviceName issuer aud userId authRequest = do
   code <- OAuth2.Code <$> newSecureToken
-  session@(Session {sessionId}) <- liftIO $ Session.createSession issuer aud userId
+  session@(Session {sessionId}) <- liftIO $ Session.createSession serviceName issuer aud userId
   redisPut (Just codeTTL) $ CodeExchange code authRequest userId sessionId
   pure (session, code)
 

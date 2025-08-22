@@ -8,7 +8,9 @@ Set up some shared names so we can do interesting transcript tests
 ```unison
 structural type names.Thing = This | That
 
-type lib.data.Tuple a b = Tuple a b
+structural type lib.data.Tuple a b = Tuple a b
+
+structural type names.WithDependencies = WithDependencies (lib.data.Tuple names.Thing names.Thing)
 
 lib.data.Tuple.fst = cases
   Tuple a _ -> a
@@ -23,14 +25,7 @@ names.oranges.two = 2
 names.readme = {{ Hello! }}
 external.two = 2
 external.externalName = 99
-```
 
-
-```ucm
-code-browse/main> update
-```
-
-```unison
 -- Helpful for testing proper query encoding/decoding for a name that must be
 -- uri encoded
 a names./+% b = 10
@@ -38,5 +33,9 @@ a names./+% b = 10
 
 ```ucm
 code-browse/main> update
+code-browse/main> names names.referencesExternal
+code-browse/main> names names.WithDependencies
+code-browse/main> names names.Thing
+code-browse/main> names names.apples.two
 code-browse/main> push
 ```

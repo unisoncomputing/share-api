@@ -26,6 +26,7 @@ library
   exposed-modules:
       Share.Debug
       Share.Utils.Aeson
+      Share.Utils.API
       Share.Utils.Binary
       Share.Utils.Deployment
       Share.Utils.IDs
@@ -72,6 +73,7 @@ library
       MonadRandom
     , aeson
     , base >=4.7 && <5
+    , base64-bytestring
     , binary
     , binary-instances
     , bytestring
@@ -90,6 +92,7 @@ library
     , network-uri
     , pretty-simple
     , random
+    , safe
     , servant-auth
     , servant-client
     , servant-server

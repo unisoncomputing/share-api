@@ -125,13 +125,13 @@ updateUser toUpdateUserId newName newAvatarUrl newBio newWebsite newLocation new
       pronouns = existingPronouns
     } <-
     MaybeT $ userProfileById toUpdateUserId
-  let updatedName = fromNullableUpdate existingName newName
+  let updatedName = nullifyEmpty $ fromNullableUpdate existingName newName
   let updatedAvatarUrl = fromNullableUpdate existingAvatarUrl newAvatarUrl
-  let updatedBio = fromNullableUpdate existingBio newBio
-  let updatedWebsite = fromNullableUpdate existingWebsite newWebsite
-  let updatedLocation = fromNullableUpdate existingLocation newLocation
-  let updatedTwitterHandle = fromNullableUpdate existingTwitterHandle newTwitterHandle
-  let updatedPronouns = fromNullableUpdate existingPronouns newPronouns
+  let updatedBio = nullifyEmpty $ fromNullableUpdate existingBio newBio
+  let updatedWebsite = nullifyEmpty $ fromNullableUpdate existingWebsite newWebsite
+  let updatedLocation = nullifyEmpty $ fromNullableUpdate existingLocation newLocation
+  let updatedTwitterHandle = nullifyEmpty $ fromNullableUpdate existingTwitterHandle newTwitterHandle
+  let updatedPronouns = nullifyEmpty $ fromNullableUpdate existingPronouns newPronouns
   PG.execute_
     [PG.sql|
       UPDATE users
@@ -145,6 +145,13 @@ updateUser toUpdateUserId newName newAvatarUrl newBio newWebsite newLocation new
         pronouns = #{updatedPronouns}
       WHERE id = #{toUpdateUserId}
   |]
+  where
+    -- Some fields must be non-empty or NULL.
+    -- If the user sets it to non-empty, just null it out.
+    nullifyEmpty mt = do
+      case mt of
+        Just t | Text.null t -> Nothing
+        _ -> mt
 
 expectUserByUserId :: (PG.QueryM m) => UserId -> m User
 expectUserByUserId uid = do

@@ -3,11 +3,21 @@
     "missingDefinitions": [],
     "termDefinitions": {},
     "typeDefinitions": {
-      "#37avk6c16m9c3342o2i77so3fcb4tq2l72qblg5l0di98avr5ms92h6j90e57vch5aabo6fe9dn9tj701nvt5p5ro67spivndok50fo": {
+      "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8": {
         "bestTypeName": "Tuple",
         "defnTypeTag": "Data",
         "typeDefinition": {
           "contents": [
+            {
+              "annotation": {
+                "tag": "DataTypeModifier"
+              },
+              "segment": "structural"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
             {
               "annotation": {
                 "tag": "DataTypeKeyword"
@@ -53,7 +63,7 @@
             },
             {
               "annotation": {
-                "contents": "#37avk6c16m9c3342o2i77so3fcb4tq2l72qblg5l0di98avr5ms92h6j90e57vch5aabo6fe9dn9tj701nvt5p5ro67spivndok50fo#d0",
+                "contents": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8#d0",
                 "tag": "TermReference"
               },
               "segment": "Tuple"

@@ -20,18 +20,13 @@ import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodeCache)
 import Share.Postgres (QueryM, unrecoverableError)
-import Share.Postgres.Hashes.Queries qualified as HashQ
-import Share.Postgres.IDs (BranchHashId, CausalId)
-import Share.Postgres.NameLookups.Types qualified as NameLookups
-import Share.Postgres.NamesPerspective.Ops qualified as NPOps
+import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
-import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as CV
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
-import Unison.NameSegment.Internal qualified as NameSegment
 import Unison.Parser.Ann (Ann)
 import Unison.Prelude
 import Unison.Reference (Reference)
@@ -49,34 +44,30 @@ serveTermSummary ::
   Codebase.CodebaseEnv ->
   Referent ->
   Maybe Name ->
-  CausalId ->
-  Maybe Path.Path ->
+  NamesPerspective m ->
   Maybe Width ->
   m TermSummary
-serveTermSummary codebase referent mayName rootCausalId relativeTo mayWidth = do
-  rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id rootCausalId
+serveTermSummary codebase referent mayName np mayWidth = do
   let v2Referent = CV.referent1to2 referent
   sig <-
     Codebase.loadTypesOfReferentsOf codebase id v2Referent
       `whenNothingM` unrecoverableError (MissingSignatureForTerm $ V2Referent.toReference v2Referent)
-  termSummaryForReferent v2Referent sig mayName rootBranchHashId relativeTo mayWidth
+  termSummaryForReferent v2Referent sig mayName np mayWidth
 
+-- TODO: batchify this
 termSummaryForReferent ::
   (QueryM m) =>
   V2Referent.Referent ->
   Type.Type Symbol Ann ->
   Maybe Name ->
-  BranchHashId ->
-  Maybe Path.Path ->
+  NamesPerspective m ->
   Maybe Width ->
   m TermSummary
-termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayWidth = do
+termSummaryForReferent referent typeSig mayName namesPerspective mayWidth = do
   let shortHash = V2Referent.toShortHash referent
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
-  let relativeToPath = fromMaybe mempty relativeTo
   let termReference = V2Referent.toReference referent
   let deps = Type.labeledDependencies typeSig
-  namesPerspective <- NPOps.namesPerspectiveForRootAndPath rootBranchHashId (NameLookups.PathSegments . fmap NameSegment.toUnescapedText . Path.toList $ relativeToPath)
   pped <- PPEPostgres.ppedForReferences namesPerspective deps
   let formattedTypeSig = Backend.formatSuffixedType pped width typeSig
   let summary = mkSummary termReference formattedTypeSig
@@ -100,6 +91,7 @@ serveTypeSummary ::
 serveTypeSummary codeCache reference mayName mayWidth = do
   typeSummaryForReference codeCache reference mayName mayWidth
 
+-- TODO: batchify this
 typeSummaryForReference ::
   (QueryM m) =>
   CodeCache scope ->

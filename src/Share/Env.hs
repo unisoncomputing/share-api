@@ -1,5 +1,6 @@
 module Share.Env
   ( Env (..),
+    serviceName,
   )
 where
 
@@ -68,3 +69,6 @@ data Env ctx = Env
 instance (HasTags ctx) => HasTags (Env ctx) where
   getTags = getTags . ctx
   addTags newTags env = env {ctx = addTags newTags (ctx env)}
+
+serviceName :: Text
+serviceName = "share-api"

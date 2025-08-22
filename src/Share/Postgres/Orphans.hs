@@ -23,6 +23,7 @@ import Share.Utils.Postgres (RawLazyBytes (..))
 import Share.Web.Errors (ErrorID (..), ToServerError (..))
 import U.Codebase.HashTags (BranchHash (..), CausalHash (..), ComponentHash (..), PatchHash (..))
 import U.Codebase.Reference (Id' (Id), Reference' (..))
+import U.Codebase.Reference qualified as Reference
 import U.Codebase.Referent (ConstructorType (..), Referent' (..))
 import U.Codebase.Sqlite.Patch.TermEdit qualified as SqliteTermEdit
 import U.Codebase.Sqlite.Serialization qualified as Serialization
@@ -116,10 +117,6 @@ instance Hasql.EncodeValue Name where
     Hasql.encodeValue @Text
       & contramap Name.toText
 
-instance Hasql.DecodeValue h => Hasql.DecodeRow (Id' h) where
-  decodeRow =
-    Id <$> decodeField @h <*> (either (error . show) id . tryInto @Word64 <$> decodeField @Int64)
-
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.DecodeRow (Reference' t h) where
   decodeRow = do
     decodeReference (decodeField @(Maybe t)) (decodeField @(Maybe h)) (decodeField @(Maybe Int64))
@@ -127,7 +124,7 @@ instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.Dec
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => DecodeComposite (Reference' t h) where
   decodeComposite = decodeReference (Decoders.field (Hasql.decodeField @(Maybe t))) (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int64))
 
-decodeReference :: forall t h m. (Monad m, Show t, Show h) => m (Maybe t) -> m (Maybe h) -> m (Maybe Int64) -> m (Reference' t h)
+decodeReference :: forall t h m. (HasCallStack, Monad m, Show t, Show h) => m (Maybe t) -> m (Maybe h) -> m (Maybe Int64) -> m (Reference' t h)
 decodeReference getT getH getI = do
   t <- getT
   h <- getH
@@ -140,9 +137,25 @@ decodeReference getT getH getI = do
     mkRef Nothing (Just h) (Just componentIdx) =
       ReferenceDerived (Id h componentIdx)
     mkRef t h i =
-      error $ "invalid find_type_index type reference: " ++ str
+      error $ "decodeReference: invalid reference: " <> str
       where
-        str = "(" ++ show t ++ ", " ++ show h ++ ", " ++ show i ++ ")"
+        str = "(" <> show t <> ", " <> show h <> ", " <> show i <> ")"
+
+instance (Hasql.DecodeValue h, Show h) => Hasql.DecodeRow (Reference.Id' h) where
+  decodeRow = do
+    decodeReferenceId (decodeField @(Maybe h)) (decodeField @(Maybe Int64))
+
+instance (Hasql.DecodeValue h, Show h) => DecodeComposite (Reference.Id' h) where
+  decodeComposite = decodeReferenceId (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int64))
+
+decodeReferenceId :: (HasCallStack, Monad m, Show h) => m (Maybe h) -> m (Maybe Int64) -> m (Id' h)
+decodeReferenceId getH getI = do
+  h <- getH
+  i <- getI
+  let wordI = either (error . show) id . tryInto @Word64 <$> i
+  case (h, wordI) of
+    (Just h', Just i') -> pure $ Id h' i'
+    _ -> error $ "decodeReferenceId: invalid id: " <> "(" <> show h <> ", " <> show i <> ")"
 
 instance (Hasql.DecodeRow (Reference' t h)) => Hasql.DecodeRow (Referent' (Reference' t h) (Reference' t h)) where
   decodeRow = decodeReferent Hasql.decodeRow (decodeField @(Maybe Int64))

@@ -33,6 +33,10 @@ module Share.Postgres.Definitions.Queries
     saveTypeComponent,
     termTransitiveDependenciesIds,
     termTransitiveDependencyRefs,
+    componentSizeOf,
+    definitionComponentDirectDependentsOf,
+    expectRefIdsByTermIdsOf,
+    expectRefIdsByTypeIdsOf,
 
     -- * For Migrations
     saveSerializedComponent,
@@ -186,6 +190,30 @@ expectComponentHashIdsByTypeIdsOf trav s = do
         [sql| SELECT typ.component_hash_id
               FROM ^{toTable (ordered typeIds)} AS type_ids(ord, type_id)
               JOIN types typ ON typ.id = type_ids.type_id
+              ORDER BY type_ids.ord ASC
+            |]
+
+expectRefIdsByTermIdsOf :: (QueryA m) => Traversal s t TermId V2Reference.TermReferenceId -> s -> m t
+expectRefIdsByTermIdsOf trav s = do
+  s
+    & asListOf trav %%~ \termIds -> do
+      queryListRows @V2Reference.TermReferenceId
+        [sql| SELECT ch.base32, term.component_index
+              FROM ^{toTable (ordered termIds)} AS term_ids(ord, term_id)
+              JOIN terms term ON term.id = term_ids.term_id
+              JOIN component_hashes ch ON ch.id = term.component_hash_id
+              ORDER BY term_ids.ord ASC
+            |]
+
+expectRefIdsByTypeIdsOf :: (QueryA m) => Traversal s t TypeId V2Reference.TypeReferenceId -> s -> m t
+expectRefIdsByTypeIdsOf trav s = do
+  s
+    & asListOf trav %%~ \typeIds -> do
+      queryListRows @V2Reference.TypeReferenceId
+        [sql| SELECT ch.base32, typ.component_index
+              FROM ^{toTable (ordered typeIds)} AS type_ids(ord, type_id)
+              JOIN types typ ON typ.id = type_ids.type_id
+              JOIN component_hashes ch ON ch.id = typ.component_hash_id
               ORDER BY type_ids.ord ASC
             |]
 
@@ -1412,3 +1440,63 @@ expectedTypeError refId =
 missingDeclKindError :: TypeReference -> InternalServerError Text
 missingDeclKindError r =
   InternalServerError "missing-decl-kind" $ "Couldn't find the decl kind of " <> tShow r
+
+-- | Collect the number of component elements for each component hash.
+componentSizeOf :: (QueryM m) => Traversal s t ComponentHash Int32 -> s -> m t
+componentSizeOf trav s = do
+  s
+    & asListOf trav %%~ \componentHashes -> do
+      let componentHashTable = ordered componentHashes
+      queryListCol @Int32
+        [sql|
+      WITH components(ord, base32) AS (
+        SELECT * FROM ^{toTable componentHashTable} AS t(ord, base32)
+      )
+        SELECT MAX(component_index) AS max_component_index
+        FROM (
+          SELECT DISTINCT term.component_index
+            FROM components
+              JOIN component_hashes ch ON components.base32 = ch.base32
+              JOIN terms term ON ch.id = term.component_hash_id
+          UNION
+          SELECT DISTINCT type.component_index
+            FROM components
+              JOIN component_hashes ch ON components.base32 = ch.base32
+              JOIN types type ON ch.id = type.component_hash_id
+        ) AS all_component_indices
+      |]
+
+-- | Fetch all definitions which depend on the provided component.
+--
+-- This requires a codebase because otherwise it would include dependents from all codebases.
+definitionComponentDirectDependentsOf :: (QueryM m) => CodebaseEnv -> Traversal s t ComponentHash (Set TermId, Set TypeId) -> s -> m t
+definitionComponentDirectDependentsOf CodebaseEnv {codebaseOwner} trav s = do
+  s
+    & asListOf trav %%~ \componentHashes ->
+      do
+        let componentHashTable = ordered componentHashes
+        queryListRows @([TermId], [TypeId])
+          [sql|
+        WITH components(ord, base32) AS (
+          SELECT * FROM ^{toTable componentHashTable} AS t(ord, base32)
+        )
+        SELECT ARRAY(
+          SELECT ref.term_id
+            FROM component_hashes ch
+              JOIN term_local_component_references ref ON ch.id = ref.component_hash_id
+              JOIN term_ownership ON term_ownership.term_id = ref.term_id
+              WHERE ch.base32 = components.base32
+                AND term_ownership.user_id = #{codebaseOwner}
+        ) AS term_ids,
+        ARRAY(
+          SELECT ref.type_id
+            FROM component_hashes ch
+              JOIN type_local_component_references ref ON ch.id = ref.component_hash_id
+              JOIN type_ownership ON type_ownership.type_id = ref.type_id
+              WHERE ch.base32 = components.base32
+                AND type_ownership.user_id = #{codebaseOwner}
+        ) AS type_ids
+        FROM components
+        ORDER BY ord ASC
+      |]
+        <&> fmap (bimap Set.fromList Set.fromList)

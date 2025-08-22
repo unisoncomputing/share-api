@@ -25,6 +25,8 @@ import Share.Postgres.Hashes.Queries qualified as CausalQ
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs
 import Share.Postgres.NameLookups.Ops qualified as NLOps
+import Share.Postgres.NameLookups.Types (pathToPathSegments)
+import Share.Postgres.NamesPerspective.Ops qualified as NP
 import Share.Postgres.Queries qualified as Q
 import Share.Postgres.Releases.Ops qualified as ReleaseOps
 import Share.Postgres.Releases.Queries qualified as ReleasesQ
@@ -59,7 +61,7 @@ import Unison.Server.Doc.Markdown.Render qualified as MD
 import Unison.Server.Doc.Markdown.Types qualified as MD
 import Unison.Server.Share.DefinitionSummary (serveTermSummary, serveTypeSummary)
 import Unison.Server.Share.DefinitionSummary.Types (TermSummary, TypeSummary)
-import Unison.Server.Share.Definitions qualified as ShareBackend
+import Unison.Server.Share.Definitions qualified as Defns
 import Unison.Server.Share.FuzzyFind qualified as Fuzzy
 import Unison.Server.Share.NamespaceDetails qualified as ND
 import Unison.Server.Share.NamespaceListing (NamespaceListing (..))
@@ -95,6 +97,10 @@ releaseCodeBrowsingServer session handle projectSlug releaseVersion =
       :<|> projectReleaseDefinitionsByHashEndpoint session handle projectSlug releaseVersion
       :<|> projectReleaseTermSummaryEndpoint session handle projectSlug releaseVersion
       :<|> projectReleaseTypeSummaryEndpoint session handle projectSlug releaseVersion
+      :<|> projectReleaseDefinitionDependenciesByNameEndpoint session handle projectSlug releaseVersion
+      :<|> projectReleaseDefinitionDependenciesByHashEndpoint session handle projectSlug releaseVersion
+      :<|> projectReleaseDefinitionDependentsByNameEndpoint session handle projectSlug releaseVersion
+      :<|> projectReleaseDefinitionDependentsByHashEndpoint session handle projectSlug releaseVersion
       :<|> projectReleaseFindEndpoint session handle projectSlug releaseVersion
       :<|> projectReleaseNamespacesByNameEndpoint session handle projectSlug releaseVersion
   )
@@ -154,7 +160,7 @@ projectReleaseDefinitionsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-name" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
+        Defns.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt name
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -182,7 +188,7 @@ projectReleaseDefinitionsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) u
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-definitions-by-hash" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
       CR.withCodebaseRuntime codebase unisonRuntime $ \rt -> do
-        ShareBackend.definitionForHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
+        Defns.displayDefinitionByHQName codebase (fromMaybe mempty relativeTo) releaseHead renderWidth (Suffixify False) rt query
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece referent, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -206,7 +212,9 @@ projectReleaseTermSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-release-term-summary" cacheParams releaseHead $ do
     PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      serveTermSummary codebase ref mayName releaseHead relativeTo renderWidth
+      rootBranchHashId <- HashQ.expectNamespaceIdsByCausalIdsOf id releaseHead
+      np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
+      serveTermSummary codebase ref mayName np renderWidth
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
@@ -235,6 +243,126 @@ projectReleaseTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHan
   where
     projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
     cacheParams = [IDs.toText projectReleaseShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
+
+projectReleaseDefinitionDependenciesByNameEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  ReleaseVersion ->
+  HQ.HashQualified Name ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+projectReleaseDefinitionDependenciesByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion name relativeTo renderWidth rootHash = do
+  whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = causalId}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
+  let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definition-dependencies-by-name" cacheParams causalId $ do
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      CodeCache.withCodeCache codebase \codeCache -> do
+        rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+        np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
+        DefinitionSearchResults <$> Defns.definitionDependencyResults codebase codeCache name projectShorthand branchOrReleaseShortHand np renderWidth
+  where
+    projectShorthand = ProjectShortHand {userHandle, projectSlug}
+    branchOrReleaseShortHand = IDs.IsReleaseShortHand releaseShortHand
+    releaseShortHand = ReleaseShortHand {releaseVersion}
+    projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
+    cacheParams = [IDs.toText releaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
+
+projectReleaseDefinitionDependenciesByHashEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  ReleaseVersion ->
+  Referent ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+projectReleaseDefinitionDependenciesByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion referent relativeTo renderWidth rootHash = do
+  whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = causalId}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
+  let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+  let shortHash = Referent.toShortHash referent
+  let query = HQ.HashOnly shortHash
+  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definition-dependencies-by-hash" (cacheParams query) causalId $ do
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      CodeCache.withCodeCache codebase \codeCache -> do
+        rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+        np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
+        DefinitionSearchResults <$> Defns.definitionDependencyResults codebase codeCache query projectShorthand branchOrReleaseShortHand np renderWidth
+  where
+    projectShorthand = ProjectShortHand {userHandle, projectSlug}
+    branchOrReleaseShortHand = IDs.IsReleaseShortHand releaseShortHand
+    releaseShortHand = ReleaseShortHand {releaseVersion}
+    projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
+    cacheParams query = [IDs.toText releaseShortHand, HQ.toTextWith Name.toText query, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
+
+projectReleaseDefinitionDependentsByNameEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  ReleaseVersion ->
+  HQ.HashQualified Name ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+projectReleaseDefinitionDependentsByNameEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion name relativeTo renderWidth rootHash = do
+  whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = causalId}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
+  let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definition-dependents-by-name" cacheParams causalId $ do
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      CodeCache.withCodeCache codebase \codeCache -> do
+        rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+        np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
+        DefinitionSearchResults <$> Defns.definitionDependentResults codebase codeCache name projectShorthand branchOrReleaseShortHand np renderWidth
+  where
+    projectShorthand = ProjectShortHand {userHandle, projectSlug}
+    branchOrReleaseShortHand = IDs.IsReleaseShortHand releaseShortHand
+    releaseShortHand = ReleaseShortHand {releaseVersion}
+    projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
+    cacheParams = [IDs.toText releaseShortHand, HQ.toTextWith Name.toText name, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
+
+projectReleaseDefinitionDependentsByHashEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  ReleaseVersion ->
+  Referent ->
+  Maybe Path.Path ->
+  Maybe Pretty.Width ->
+  Maybe CausalHash ->
+  WebApp (Cached JSON DefinitionSearchResults)
+projectReleaseDefinitionDependentsByHashEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug releaseVersion referent relativeTo renderWidth rootHash = do
+  whenJust rootHash $ \ch -> respondError (InvalidParam "rootHash" (into @Text ch) "Specifying a rootHash is not supported for releases")
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Release {squashedCausal = causalId}) <- getProjectRelease projectReleaseShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let codebaseLoc = Codebase.codebaseLocationForProjectRelease projectOwnerUserId
+  let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+  let shortHash = Referent.toShortHash referent
+  let query = HQ.HashOnly shortHash
+  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-definition-dependents-by-hash" (cacheParams query) causalId $ do
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
+      CodeCache.withCodeCache codebase \codeCache -> do
+        rootBranchHashId <- CausalQ.expectNamespaceIdsByCausalIdsOf id causalId
+        np <- NP.namesPerspectiveForRootAndPath rootBranchHashId (maybe mempty pathToPathSegments relativeTo)
+        DefinitionSearchResults <$> Defns.definitionDependentResults codebase codeCache query projectShorthand branchOrReleaseShortHand np renderWidth
+  where
+    projectShorthand = ProjectShortHand {userHandle, projectSlug}
+    branchOrReleaseShortHand = IDs.IsReleaseShortHand releaseShortHand
+    releaseShortHand = ReleaseShortHand {releaseVersion}
+    projectReleaseShortHand = ProjectReleaseShortHand {userHandle, projectSlug, releaseVersion}
+    cacheParams query = [IDs.toText releaseShortHand, HQ.toTextWith Name.toText query, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
 
 projectReleaseFindEndpoint ::
   Maybe Session ->

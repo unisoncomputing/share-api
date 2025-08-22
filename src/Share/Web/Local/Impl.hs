@@ -44,7 +44,7 @@ localLoginEndpoint userHandle = do
 
   iss <- shareIssuer
   aud <- shareAud
-  session <- liftIO $ Session.createSession iss aud user_id
+  session <- liftIO $ Session.createSession (Session.ServiceName Env.serviceName) iss aud user_id
   setSessionCookie session >>= \case
     Nothing -> Errors.respondError $ Errors.InternalServerError "local:failed-create-session" ("Failed to create session" :: Text)
     Just setAuthHeaders -> do
