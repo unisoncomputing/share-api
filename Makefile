@@ -36,34 +36,20 @@ $(installed_share): $(exe) $(target_dir)
 auth_example:
 	stack build --fast test-auth-app
 
-docker_server_build: $(installed_share)
-	docker build $(docker_platform_flag) -f docker/Dockerfile --build-arg share_commit=$(share_commit) -t share docker
-
-docker_server_release: $(installed_share)
-	docker build $(docker_platform_flag) -f docker/Dockerfile -t $(docker_registry)/share:$(DRONE_BUILD_NUMBER) docker
-
-docker_push: $(docker_server_release)
-	docker push $(docker_registry)/share:$(DRONE_BUILD_NUMBER)
-
-docker_staging_release: $(installed_share)
-	docker build $(docker_platform_flag) -f docker/Dockerfile -t $(docker_registry)/share-staging:$(DRONE_BUILD_NUMBER) docker
-
-docker_staging_push: $(docker_server_release)
-	docker push $(docker_registry)/share-staging:$(DRONE_BUILD_NUMBER)
-
+# Build Share and run it alongside its dependencies via docker-compose
 serve: $(installed_share)
-	trap 'docker compose -f docker/docker-compose.yml down' EXIT INT TERM
-	docker compose -f docker/docker-compose.yml up postgres redis vault &
-	while  ! (  pg_isready --host localhost -U postgres -p 5432 && redis-cli -p 6379 ping && VAULT_ADDR=http://localhost:8200 vault status)  do \
-		echo "Waiting for postgres and redis..."; \
+	@trap 'docker compose -f docker/docker-compose.yml down' EXIT INT TERM
+	@echo "Booting up docker dependencies..."
+	docker compose -f docker/docker-compose.yml up --remove-orphans --detach postgres redis vault http-echo otel-collector jaeger
+	@echo "Booting up docker dependencies...";
+	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
 	  sleep 1; \
 	done;
-	echo "Running Share at http://localhost:5424"
-
-	if [ ${OPEN_BROWSER} = "true" ] ; then \
+	@echo "Starting up Share at http://localhost:5424";
+	@if [ ${OPEN_BROWSER} = "true" ] ; then \
 	  (sleep 1 && $(OPEN) "http://localhost:5424/local/user/test/login" || true) & \
-	fi
-	(. ./local.env && $(exe) 2>&1)
+	fi;
+	@(. ./local.env && $(exe) 2>&1)
 
 fixtures:
 	echo "Resetting local database to fixture data"
