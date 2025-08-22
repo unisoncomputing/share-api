@@ -187,6 +187,7 @@ library
       Share.Web.Share.Tickets.Impl
       Share.Web.Share.Tickets.Types
       Share.Web.Share.Types
+      Share.Web.Share.Users.API
       Share.Web.Support.API
       Share.Web.Support.Impl
       Share.Web.Support.Types
