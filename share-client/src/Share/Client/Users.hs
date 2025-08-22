@@ -2,7 +2,14 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Client.Users (getUserProfile) where
+module Share.Client.Users
+  ( getUserProfile,
+
+    -- * Types
+    module Share.Web.Share.Types,
+    module Share.IDs,
+  )
+where
 
 import Crypto.JWT qualified as JWT
 import Data.Proxy (Proxy (..))

@@ -10,6 +10,11 @@ module Share.Client.Orgs
     listOrgMembers,
     addOrgMembers,
     removeOrgMembers,
+
+    -- * Types
+    module OrgsAPI,
+    module Share.Web.Authorization.Types,
+    module Share.IDs,
   )
 where
 
