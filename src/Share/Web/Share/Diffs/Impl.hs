@@ -64,10 +64,11 @@ computeAndStoreCausalDiff authZReceipt old@(oldCodebase, _, oldCausalId) new@(ne
       Right diff -> NamespaceDiffs.NamespaceDiffResult'Ok diff
       Left err -> NamespaceDiffs.NamespaceDiffResult'Err err
   let encoded = Aeson.encode result
-  ContributionQ.savePrecomputedNamespaceDiff
-    (oldCodebase, oldCausalId)
-    (newCodebase, newCausalId)
-    (TL.toStrict $ TL.decodeUtf8 encoded)
+  PG.transactionSpan "savePrecomputedNamespaceDiff" mempty do
+    ContributionQ.savePrecomputedNamespaceDiff
+      (oldCodebase, oldCausalId)
+      (newCodebase, newCausalId)
+      (TL.toStrict $ TL.decodeUtf8 encoded)
   pure (PreEncoded encoded)
 
 tryComputeCausalDiff ::
@@ -188,7 +189,8 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
   -- relative to, unless there isn't an LCA (unlikely), in which case we fall back on the other branch (we won't have
   -- anything classified as an "update" in this case so it doesn't really matter).
 
-  let defns3 =
+  let defns3 :: GNamespaceTreeDiff NameSegment (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff
+      defns3 =
         defns2
           & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %~ (\name -> (oldTermDefinitionsByName Map.! name, newTermDefinitionsByName Map.! name))
           & NamespaceDiffs.witherNamespaceTreeDiffTermDiffs (Identity . diffTermsPure)

@@ -130,7 +130,6 @@ definitionDiffsToTree diff =
             expandedAliases,
             (diff.removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
             (diff.updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
-            (diff.propagated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Propagated oldR newR name),
             expandedRenames
           ]
       includeFQNs :: Map Name (Set (DefinitionDiffKind ref Name Name)) -> Map Name (Set (DefinitionDiff ref Name Name))
