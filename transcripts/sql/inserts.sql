@@ -1,3 +1,15 @@
+\set ON_ERROR_STOP true
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_name = 'is_local_database'
+  ) THEN
+    RAISE EXCEPTION 'Refusing to clean non-test database.';
+  END IF;
+END $$;
+
 SET client_min_messages TO WARNING;
 -- Useful for local performance testing.
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;

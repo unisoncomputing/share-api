@@ -1,0 +1,8 @@
+services:
+  postgres:
+    volumes:
+      # Persist the data
+      - postgresVolume:/var/lib/postgresql/data
+
+volumes:
+  postgresVolume:

@@ -1,3 +1,15 @@
+\set ON_ERROR_STOP true
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_name = 'is_transcript_database'
+  ) THEN
+    RAISE EXCEPTION 'Refusing to clean non-test database.';
+  END IF;
+END $$;
+
 -- Resets most relevant tables, useful to run between tests.
 -- Doesn't clean codebase tables since that just slows things down, but does clean out codebase ownership.
 SET client_min_messages TO WARNING;

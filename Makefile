@@ -38,9 +38,10 @@ auth_example:
 
 # Build Share and run it alongside its dependencies via docker-compose
 serve: $(installed_share)
-	@trap 'docker compose -f docker/docker-compose.yml down' EXIT INT TERM
+	@docker compose -f docker/docker-compose.dev.yml down || true
+	@trap 'docker compose -f docker/docker-compose.dev.yml down' EXIT INT TERM
 	@echo "Booting up docker dependencies..."
-	docker compose -f docker/docker-compose.yml up --remove-orphans --detach postgres redis vault http-echo otel-collector jaeger
+	docker compose -f docker/docker-compose.dev.yml up --remove-orphans --detach
 	@echo "Booting up docker dependencies...";
 	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
 	  sleep 1; \
@@ -52,9 +53,21 @@ serve: $(installed_share)
 	@(. ./local.env && $(exe) 2>&1)
 
 fixtures:
-	echo "Resetting local database to fixture data"
+	@echo "Resetting local database to fixture data"
 	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/clean.sql"
 	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/inserts.sql"
+
+# Loads the local testing share with a bunch of realistic code.
+reset_fixtures:
+	@docker compose -f docker/docker-compose.dev.yml down || true
+	@trap 'docker compose -f docker/docker-compose.dev.yml down' EXIT INT TERM
+	# Remove the existing postgres volume to reset the database
+	@echo "Removing any existing postgres volume"
+	docker volume rm docker_postgresVolume || true
+	@echo "Booting up docker dependencies..."
+	docker compose -f docker/docker-compose.dev.yml -f docker/docker-compose.fixtures.yml up --remove-orphans --detach
+	@echo "Initializing fixture data";
+	./transcripts/fixtures/run.zsh
 
 transcripts:
 	./transcripts/run-transcripts.zsh

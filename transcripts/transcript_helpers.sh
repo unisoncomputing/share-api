@@ -40,11 +40,15 @@ pg_sql () {
         PGPASSWORD="sekrit" psql -q -U postgres -p 5432 -h localhost -t -A -c "$1"
 }
 
+pg_file () {
+        PGPASSWORD="sekrit" psql -q -U postgres -p 5432 -h localhost -t -A -f "$1"
+}
+
 
 # Reset all the fixtures to the state in `inserts.sql`
 pg_reset_fixtures () {
-        PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "${transcripts_dir}/sql/clean.sql" > /dev/null
-        PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "${transcripts_dir}/sql/inserts.sql" > /dev/null
+        pg_file "${transcripts_dir}/sql/clean.sql" > /dev/null
+        pg_file "${transcripts_dir}/sql/inserts.sql" > /dev/null
 }
 
 user_id_from_handle () {
