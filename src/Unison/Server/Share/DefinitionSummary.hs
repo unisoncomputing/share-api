@@ -18,6 +18,7 @@ where
 
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
+import Share.Codebase.Types (CodeCache)
 import Share.Postgres (QueryM, unrecoverableError)
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
@@ -91,26 +92,26 @@ termSummaryForReferent referent typeSig mayName rootBranchHashId relativeTo mayW
 
 serveTypeSummary ::
   (QueryM m) =>
-  Codebase.CodebaseEnv ->
+  CodeCache scope ->
   Reference ->
   Maybe Name ->
   Maybe Width ->
   m TypeSummary
-serveTypeSummary codebase reference mayName mayWidth = do
-  typeSummaryForReference codebase reference mayName mayWidth
+serveTypeSummary codeCache reference mayName mayWidth = do
+  typeSummaryForReference codeCache reference mayName mayWidth
 
 typeSummaryForReference ::
   (QueryM m) =>
-  Codebase.CodebaseEnv ->
+  CodeCache scope ->
   Reference ->
   Maybe Name ->
   Maybe Width ->
   m TypeSummary
-typeSummaryForReference codebase reference mayName mayWidth = do
+typeSummaryForReference codeCache reference mayName mayWidth = do
   let shortHash = Reference.toShortHash reference
   let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
   tag <- Backend.getTypeTagsOf id reference
-  displayDecl <- Backend.displayTypesOf codebase id reference
+  displayDecl <- Backend.displayTypesOf codeCache id reference
   let syntaxHeader = Backend.typeToSyntaxHeader width displayName displayDecl
   pure $
     TypeSummary

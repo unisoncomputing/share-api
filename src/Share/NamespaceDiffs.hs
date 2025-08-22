@@ -28,6 +28,7 @@ module Share.NamespaceDiffs
     namespaceAndLibdepsDiffDefns_,
     namespaceAndLibdepsDiffLibdeps_,
     definitionDiffKindRendered_,
+    definitionDiffKindRefsAndRendered_,
   )
 where
 
@@ -93,11 +94,10 @@ definitionDiffsToTree ::
   (Ord ref) =>
   DefinitionDiffs Name ref ->
   GNamespaceTreeOf NameSegment (Set (DefinitionDiff ref Name Name))
-definitionDiffsToTree dd =
-  let DefinitionDiffs {added, removed, updated, propagated, renamed, newAliases} = dd
-      expandedAliases :: Map Name (Set (DefinitionDiffKind ref Name Name))
+definitionDiffsToTree diff =
+  let expandedAliases :: Map Name (Set (DefinitionDiffKind ref Name Name))
       expandedAliases =
-        newAliases
+        diff.newAliases
           & Map.toList
           & foldMap
             ( \(r, (existingNames, newNames)) ->
@@ -108,7 +108,7 @@ definitionDiffsToTree dd =
           & Map.unionsWith (<>)
       expandedRenames :: Map Name (Set (DefinitionDiffKind ref Name Name))
       expandedRenames =
-        renamed
+        diff.renamed
           & Map.toList
           & foldMap \(r, (oldNames, newNames)) ->
             ( -- We don't currently want to track the old names in a rename, and including them messes up
@@ -125,12 +125,12 @@ definitionDiffsToTree dd =
       diffTree :: Map Name (Set (DefinitionDiffKind ref Name Name))
       diffTree =
         Map.unionsWith
-          (<>)
-          [ (added & Map.mapWithKey \n r -> Set.singleton $ Added r n),
+          Set.union
+          [ (diff.added & Map.mapWithKey \n r -> Set.singleton $ Added r n),
             expandedAliases,
-            (removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
-            (updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
-            (propagated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Propagated oldR newR name),
+            (diff.removed & Map.mapWithKey \n r -> Set.singleton $ Removed r n),
+            (diff.updated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Updated oldR newR name),
+            (diff.propagated & Map.mapWithKey \name (oldR, newR) -> Set.singleton $ Propagated oldR newR name),
             expandedRenames
           ]
       includeFQNs :: Map Name (Set (DefinitionDiffKind ref Name Name)) -> Map Name (Set (DefinitionDiff ref Name Name))

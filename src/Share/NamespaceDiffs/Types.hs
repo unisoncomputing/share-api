@@ -25,6 +25,7 @@ module Share.NamespaceDiffs.Types
     namespaceTreeDiffRenderedTerms_,
     namespaceTreeDiffRenderedTypes_,
     definitionDiffKindRendered_,
+    definitionDiffKindRefsAndRendered_,
   )
 where
 
@@ -186,6 +187,16 @@ definitionDiffKindRendered_ f = \case
   Updated old new diff -> Updated old new <$> pure diff
   RenamedTo r old rendered -> RenamedTo r old <$> f rendered
   RenamedFrom r old rendered -> RenamedFrom r old <$> f rendered
+
+definitionDiffKindRefsAndRendered_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r rendered' diff) (r, rendered) (r, rendered')
+definitionDiffKindRefsAndRendered_ f = \case
+  Added r rendered -> (\(r', rendered') -> Added r' rendered') <$> f (r, rendered)
+  NewAlias r ns rendered -> (\(r', rendered') -> NewAlias r' ns rendered') <$> f (r, rendered)
+  Removed r rendered -> (\(r', rendered') -> Removed r' rendered') <$> f (r, rendered)
+  Propagated old new diff -> Propagated old new <$> pure diff
+  Updated old new diff -> Updated old new <$> pure diff
+  RenamedTo r old rendered -> (\(r', rendered') -> RenamedTo r' old rendered') <$> f (r, rendered)
+  RenamedFrom r old rendered -> (\(r', rendered') -> RenamedFrom r' old rendered') <$> f (r, rendered)
 
 data NamespaceDiffResult
   = NamespaceDiffResult'Ok

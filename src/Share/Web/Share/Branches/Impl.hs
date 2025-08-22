@@ -13,6 +13,7 @@ import Data.Time (UTCTime)
 import Servant
 import Share.Branch (Branch (..), branchCausals_)
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodeCache qualified as CodeCache
 import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Env qualified as Env
 import Share.IDs (BranchId, BranchShortHand (..), ProjectBranchShortHand (..), ProjectShortHand (..), ProjectSlug (..), UserHandle, UserId)
@@ -227,9 +228,10 @@ projectBranchTypeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHand
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead rootHash
-  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-type-summary" cacheParams causalId $ do
-    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      serveTypeSummary codebase ref mayName renderWidth
+  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "project-branch-type-summary" cacheParams causalId do
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite do
+      CodeCache.withCodeCache codebase \codeCache -> do
+        serveTypeSummary codeCache ref mayName renderWidth
   where
     projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
     cacheParams = [IDs.toText projectBranchShortHand, toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
