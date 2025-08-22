@@ -294,7 +294,7 @@ typeDefinitionsByNamesOf ::
   m t
 typeDefinitionsByNamesOf codebase ppedBuilder namesPerspective width rt includeDocs trav s = do
   s
-    & asListOfDeduped trav %%~ \allNames -> do
+    & asListOf trav %%~ \allNames -> do
       typeDisplayObjs <- typeDisplayObjectsByNamesOf codebase namesPerspective traversed allNames
       let addName name = \case
             Just (ref, displayObject) -> Just (name, ref, displayObject)

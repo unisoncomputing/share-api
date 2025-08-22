@@ -106,6 +106,8 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
   diffblob <-
     NamespaceDiffs.computeThreeWayNamespaceDiff
       TwoWay {alice = oldCodebase, bob = newCodebase}
+      oldRuntime.codeCache
+      newRuntime.codeCache
       TwoOrThreeWay {alice = oldBranchHashId, bob = newBranchHashId, lca = maybeLcaBranchHashId}
       TwoOrThreeWay {alice = oldBranchNLReceipt, bob = newBranchNLReceipt, lca = maybeLcaBranchNLReceipt}
 
@@ -331,7 +333,7 @@ getTypeDefinitionsOf ::
   m t
 getTypeDefinitionsOf codebase rt namesPerspective trav s = do
   s
-    & asListOfDeduped trav %%~ \names -> do
+    & asListOf trav %%~ \names -> do
       Definitions.typeDefinitionsByNamesOf codebase ppedBuilder namesPerspective renderWidth rt includeDocs traversed names
   where
     includeDocs = False

@@ -21,6 +21,7 @@ import Unison.Codebase.Runtime qualified as Rt
 import Unison.DataDeclaration qualified as V1
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Parser.Ann (Ann)
+import Unison.Reference (TermReferenceId, TypeReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Symbol (Symbol)
 import Unison.Term qualified as V1
@@ -44,8 +45,8 @@ data CodeCache scope = CodeCache
   }
 
 data CodeCacheData = CodeCacheData
-  { termCache :: Map Reference.Id (V1.Term Symbol Ann, V1.Type Symbol Ann),
-    typeCache :: Map Reference.Id (V1.Decl Symbol Ann)
+  { termCache :: Map TermReferenceId (V1.Term Symbol Ann, V1.Type Symbol Ann),
+    typeCache :: Map TypeReferenceId (V1.Decl Symbol Ann)
   }
 
 -- | The runtime environment for a codebase transaction.

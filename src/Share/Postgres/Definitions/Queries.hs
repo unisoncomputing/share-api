@@ -466,22 +466,22 @@ loadTypeComponentElementsAndTypeIdsOf (CodebaseEnv codebaseUser) trav s = do
               <&> \(ord, Reference.Id compHash compIndex) -> (ord, compHash, (pgComponentIndex compIndex))
       queryListRows @(Maybe TypeComponentElement, Maybe TypeId)
         [sql|
-        WITH ref_ids(ord, comp_hash, comp_index) AS (
-          SELECT t.ord, t.comp_hash, t.comp_index FROM ^{toTable refsTable} AS t(ord, comp_hash, comp_index)
-        ) SELECT bytes.bytes, typ.id
-            FROM ref_ids
-              LEFT JOIN component_hashes ch ON ref_ids.comp_hash = ch.base32
-              LEFT JOIN types typ ON (typ.component_index = ref_ids.comp_index AND typ.component_hash_id = ch.id)
-              LEFT JOIN sandboxed_types sandboxed ON (typ.id = sandboxed.type_id AND sandboxed.user_id = #{codebaseUser})
-              LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
-            ORDER BY ref_ids.ord ASC
+          WITH ref_ids(ord, comp_hash, comp_index) AS (
+            SELECT t.ord, t.comp_hash, t.comp_index FROM ^{toTable refsTable} AS t(ord, comp_hash, comp_index)
+          ) SELECT bytes.bytes, typ.id
+              FROM ref_ids
+                LEFT JOIN component_hashes ch ON ref_ids.comp_hash = ch.base32
+                LEFT JOIN types typ ON (typ.component_index = ref_ids.comp_index AND typ.component_hash_id = ch.id)
+                LEFT JOIN sandboxed_types sandboxed ON (typ.id = sandboxed.type_id AND sandboxed.user_id = #{codebaseUser})
+                LEFT JOIN bytes ON sandboxed.bytes_id = bytes.id
+              ORDER BY ref_ids.ord ASC
         |]
         <&> fmap \(element, typeId) -> liftA2 (,) element typeId
 
 expectTypeComponentElementsAndTypeIdsOf :: (QueryA m) => CodebaseEnv -> Traversal s t TypeReferenceId (TypeComponentElement, TypeId) -> s -> m t
 expectTypeComponentElementsAndTypeIdsOf codebase trav s =
   s
-    & asListOfDeduped trav %%~ \refs -> do
+    & asListOf trav %%~ \refs -> do
       unrecoverableEitherMap
         ( \elems -> for (zip refs elems) \case
             (refId, Nothing) -> Left (expectedTypeError $ Right refId)

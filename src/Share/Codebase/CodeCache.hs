@@ -34,6 +34,7 @@ import Unison.DataDeclaration qualified as V1
 import Unison.DataDeclaration.ConstructorId qualified as V1Decl
 import Unison.Hash (Hash)
 import Unison.Parser.Ann
+import Unison.Reference (TermReferenceId, TypeReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Referent qualified as V1Referent
 import Unison.Runtime.IOSource qualified as IOSource
@@ -55,27 +56,25 @@ readCodeCache CodeCache {codeCacheVar} = PG.transactionUnsafeIO (readTVarIO code
 cacheTermAndTypes ::
   (QueryM m) =>
   CodeCache s ->
-  [(Reference.Id, (V1.Term Symbol Ann, V1.Type Symbol Ann))] ->
+  Map TermReferenceId (V1.Term Symbol Ann, V1.Type Symbol Ann) ->
   m ()
 cacheTermAndTypes CodeCache {codeCacheVar} termAndTypes = do
   PG.transactionUnsafeIO do
     atomically do
       modifyTVar' codeCacheVar \CodeCacheData {termCache, ..} ->
-        let newTermMap = Map.fromList termAndTypes
-            termCache' = Map.union termCache newTermMap
+        let !termCache' = Map.union termCache termAndTypes
          in CodeCacheData {termCache = termCache', ..}
 
 cacheDecls ::
   (QueryM m) =>
   CodeCache s ->
-  [(Reference.Id, V1.Decl Symbol Ann)] ->
+  Map TypeReferenceId (V1.Decl Symbol Ann) ->
   m ()
 cacheDecls CodeCache {codeCacheVar} decls = do
   PG.transactionUnsafeIO do
     atomically do
       modifyTVar' codeCacheVar \CodeCacheData {typeCache, ..} ->
-        let newDeclsMap = Map.fromList decls
-            typeCache' = Map.union typeCache newDeclsMap
+        let !typeCache' = Map.union typeCache decls
          in CodeCacheData {typeCache = typeCache', ..}
 
 builtinsCodeLookup :: (Monad m) => CL.CodeLookup Symbol m Ann
@@ -123,8 +122,8 @@ getTermsAndTypesByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s =
                     Nothing -> (mempty, Nothing)
                 Right tt -> (mempty, Just tt)
 
-      cacheTermAndTypes codeCache cacheable
-      pure $ hydrated'
+      cacheTermAndTypes codeCache (Map.fromList cacheable)
+      pure hydrated'
   where
     findBuiltinTT :: Reference.Id -> Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann)
     findBuiltinTT refId = do
@@ -161,8 +160,8 @@ getTypeDeclsByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
                     Nothing -> (mempty, Nothing)
                 Right decl -> (mempty, Just decl)
 
-      cacheDecls codeCache cacheable
-      pure $ hydrated'
+      cacheDecls codeCache (Map.fromList cacheable)
+      pure hydrated'
   where
     findBuiltinDecl :: Reference.Id -> Maybe (V1.Decl Symbol Ann)
     findBuiltinDecl refId = do

@@ -42,6 +42,8 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Set.NonEmpty qualified as NESet
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodeCache qualified as CodeCache
+import Share.Codebase.Types (CodeCache)
 import Share.Names.Postgres qualified as PGNames
 import Share.NamespaceDiffs.Types
 import Share.Postgres qualified as PG
@@ -214,10 +216,12 @@ compressNameTree (diffs Cofree.:< children) =
 
 computeThreeWayNamespaceDiff ::
   Merge.TwoWay Codebase.CodebaseEnv ->
+  CodeCache alice ->
+  CodeCache bob ->
   Merge.TwoOrThreeWay BranchHashId ->
   Merge.TwoOrThreeWay NameLookupReceipt ->
   PG.Transaction NamespaceDiffError (Merge.Diffblob BranchHashId)
-computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds nameLookupReceipts = PG.transactionSpan "computeThreeWayNamespaceDiff" mempty $ do
+computeThreeWayNamespaceDiff codebaseEnvs2 aliceCodeCache bobCodeCache branchHashIds nameLookupReceipts = PG.transactionSpan "computeThreeWayNamespaceDiff" mempty do
   -- Load the shallow libdeps for Alice/Bob/LCA. This can fail with "lib at unexpected path"
   libdeps :: Merge.ThreeWay (Map NameSegment BranchHashId) <- do
     PG.transactionSpan "load libdeps" mempty do
@@ -278,11 +282,11 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds nameLookupReceipts = PG
       hydrate Merge.ThreeWay {lca = lcaDefns, alice = aliceDefns, bob = bobDefns} = do
         -- We assume LCA and Alice come from the same codebase, so hydrate them together.
         let lcaAndAliceDefns = lcaDefns <> aliceDefns
-        lcaAndAliceHydratedDefns <- hydrateDefns "hydrate alice & lca definitions" codebaseEnvs2.alice lcaAndAliceDefns
+        lcaAndAliceHydratedDefns <- hydrateDefns "hydrate alice & lca definitions" codebaseEnvs2.alice aliceCodeCache lcaAndAliceDefns
 
         -- Only bother hydrating Bob defns that we haven't already found in Alice's codebase.
         let bobDefnsNotInAlice = Defns.zipDefnsWith Set.difference Set.difference bobDefns lcaAndAliceDefns
-        bobHydratedDefns <- hydrateDefns "hydrate bob definitions" codebaseEnvs2.bob bobDefnsNotInAlice
+        bobHydratedDefns <- hydrateDefns "hydrate bob definitions" codebaseEnvs2.bob bobCodeCache bobDefnsNotInAlice
 
         pure (lcaAndAliceHydratedDefns <> bobHydratedDefns)
 
@@ -313,6 +317,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 branchHashIds nameLookupReceipts = PG
 hydrateDefns ::
   Text ->
   Codebase.CodebaseEnv ->
+  CodeCache scope ->
   DefnsF Set TermReferenceId TypeReferenceId ->
   PG.Transaction
     e
@@ -320,13 +325,25 @@ hydrateDefns ::
         (Map TermReferenceId (Term Symbol Ann, Type Symbol Ann))
         (Map TypeReferenceId (Decl Symbol Ann))
     )
-hydrateDefns description codebase Defns {terms, types}
+hydrateDefns description codebase codeCache Defns {terms, types}
   | Set.null terms && Set.null types = pure (Defns Map.empty Map.empty)
   | otherwise =
       PG.transactionSpan description mempty do
-        Defns
-          <$> (if Set.null terms then pure Map.empty else Map.fromList <$> hydrateTermsOf codebase traversed (Set.toList terms))
-          <*> (if Set.null types then pure Map.empty else Map.fromList <$> hydrateTypesOf codebase traversed (Set.toList types))
+        hydratedTerms <-
+          if Set.null terms
+            then pure Map.empty
+            else do
+              hydratedTerms <- Map.fromList <$> hydrateTermsOf codebase traversed (Set.toList terms)
+              CodeCache.cacheTermAndTypes codeCache hydratedTerms
+              pure hydratedTerms
+        hydratedTypes <-
+          if Set.null types
+            then pure Map.empty
+            else do
+              hydratedTypes <- Map.fromList <$> hydrateTypesOf codebase traversed (Set.toList types)
+              CodeCache.cacheDecls codeCache hydratedTypes
+              pure hydratedTypes
+        pure Defns {terms = hydratedTerms, types = hydratedTypes}
 
 hydrateTermsOf ::
   Codebase.CodebaseEnv ->
