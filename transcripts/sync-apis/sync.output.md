@@ -33,6 +33,8 @@ ys = [!a, !b] :+ 3
   + xs : ['{g} Nat]
   + ys : [Nat]
 
+  + (added), ~ (modified), - (deleted)
+
   Run `update` to apply these changes to your codebase.
 ```
 
@@ -71,7 +73,7 @@ proj/pulled> ls .
   4. B/       (2 terms)
   5. a        ('Nat)
   6. b        ('Nat)
-  7. builtin/ (582 terms, 100 types)
+  7. builtin/ (580 terms, 100 types)
   8. xs       (['{g} Nat])
   9. ys       ([Nat])
 ```
