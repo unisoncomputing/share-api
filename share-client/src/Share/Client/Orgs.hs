@@ -14,16 +14,12 @@ module Share.Client.Orgs
 where
 
 import Crypto.JWT qualified as JWT
-import Data.Foldable
-import Data.Function ((&))
-import Data.List qualified as List
 import Data.Proxy (Proxy (..))
 import Servant.API
 import Servant.Client
 import Servant.Client.Core
-import Servant.Client.Core qualified as Client
+import Share.Client.Utils (jwtToAuthenticatedRequest)
 import Share.IDs (UserHandle)
-import Share.JWT qualified as ShareJWT
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Web.API (OrgsAPI)
 import Share.Web.Authorization.Types
@@ -31,18 +27,6 @@ import Share.Web.Authorization.Types qualified as OrgsAPI
 import Share.Web.Share.DisplayInfo.Types
 import Share.Web.Share.Orgs.API qualified as OrgsAPI
 import Share.Web.Share.Orgs.Types
-
-jwtToAuthenticatedRequest :: (AuthClientData a ~ JWT.SignedJWT) => JWT.SignedJWT -> AuthenticatedRequest a
-jwtToAuthenticatedRequest jwt =
-  mkAuthenticatedRequest jwt addJWTHeader
-  where
-    addJWTHeader :: JWT.SignedJWT -> Request -> Request
-    addJWTHeader jwt req =
-      case List.lookup "Authorization" (toList $ Client.requestHeaders req) of
-        Nothing ->
-          req
-            & Client.addHeader "Authorization" ("Bearer " <> ShareJWT.signedJWTToText jwt)
-        Just _ -> req
 
 orgsClient :: Client ClientM OrgsAPI
 orgsClient = client (Proxy :: Proxy OrgsAPI)
@@ -54,26 +38,26 @@ orgRolesRoutes = OrgsAPI.orgRoles <$> resourceRoutes
 orgMembersRoutes :: UserHandle -> Client ClientM (NamedRoutes OrgsAPI.OrgMembersRoutes)
 orgMembersRoutes = OrgsAPI.orgMembers <$> resourceRoutes
 
-listOrgRoles :: UserHandle -> JWT.SignedJWT -> ClientM ListRolesResponse
-listOrgRoles userHandle jwt = OrgsAPI.listOrgRoles (orgRolesRoutes userHandle) (jwtToAuthenticatedRequest jwt)
+listOrgRoles :: JWT.SignedJWT -> UserHandle -> ClientM ListRolesResponse
+listOrgRoles jwt userHandle = OrgsAPI.listOrgRoles (orgRolesRoutes userHandle) (jwtToAuthenticatedRequest jwt)
 
-removeOrgRoles :: UserHandle -> JWT.SignedJWT -> OrgsAPI.RemoveRolesRequest -> ClientM ListRolesResponse
-removeOrgRoles userHandle jwt removeRolesReq =
+removeOrgRoles :: JWT.SignedJWT -> UserHandle -> OrgsAPI.RemoveRolesRequest -> ClientM ListRolesResponse
+removeOrgRoles jwt userHandle removeRolesReq =
   OrgsAPI.removeOrgRoles (orgRolesRoutes userHandle) (jwtToAuthenticatedRequest jwt) removeRolesReq
 
-listOrgMembers :: UserHandle -> JWT.SignedJWT -> ClientM OrgMembersListResponse
-listOrgMembers userHandle jwt = OrgsAPI.listOrgMembers (orgMembersRoutes userHandle) (jwtToAuthenticatedRequest jwt)
+listOrgMembers :: JWT.SignedJWT -> UserHandle -> ClientM OrgMembersListResponse
+listOrgMembers jwt userHandle = OrgsAPI.listOrgMembers (orgMembersRoutes userHandle) (jwtToAuthenticatedRequest jwt)
 
-addOrgMembers :: UserHandle -> JWT.SignedJWT -> OrgMembersAddRequest -> ClientM OrgMembersListResponse
-addOrgMembers userHandle jwt addMembersReq =
+addOrgMembers :: JWT.SignedJWT -> UserHandle -> OrgMembersAddRequest -> ClientM OrgMembersListResponse
+addOrgMembers jwt userHandle addMembersReq =
   OrgsAPI.addOrgMembers (orgMembersRoutes userHandle) (jwtToAuthenticatedRequest jwt) addMembersReq
 
-removeOrgMembers :: UserHandle -> JWT.SignedJWT -> OrgMembersRemoveRequest -> ClientM OrgMembersListResponse
-removeOrgMembers userHandle jwt removeMembersReq =
+removeOrgMembers :: JWT.SignedJWT -> UserHandle -> OrgMembersRemoveRequest -> ClientM OrgMembersListResponse
+removeOrgMembers jwt userHandle removeMembersReq =
   OrgsAPI.removeOrgMembers (orgMembersRoutes userHandle) (jwtToAuthenticatedRequest jwt) removeMembersReq
 
-addOrgRoles :: UserHandle -> JWT.SignedJWT -> OrgsAPI.AddRolesRequest -> ClientM ListRolesResponse
-addOrgRoles userHandle jwt addRolesReq =
+addOrgRoles :: JWT.SignedJWT -> UserHandle -> OrgsAPI.AddRolesRequest -> ClientM ListRolesResponse
+addOrgRoles jwt userHandle addRolesReq =
   OrgsAPI.addOrgRoles (orgRolesRoutes userHandle) (jwtToAuthenticatedRequest jwt) addRolesReq
 
 createOrg :: JWT.SignedJWT -> CreateOrgRequest -> ClientM OrgDisplayInfo
