@@ -24,7 +24,9 @@ source-repository head
 
 library
   exposed-modules:
-      Share.Client
+      Share.Client.Orgs
+      Share.Client.Users
+      Share.Client.Utils
   other-modules:
       Paths_share_client
   hs-source-dirs:

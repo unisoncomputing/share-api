@@ -5,19 +5,13 @@ module Share.Web.Share.API where
 
 import Servant
 import Share.IDs
-import Share.Notifications.API qualified as Notifications
-import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
+import Share.OAuth.Session (AuthenticatedSession, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.API
-import Share.Utils.Caching
 import Share.Utils.IDs qualified as IDs
 import Share.Utils.Servant
-import Share.Web.Share.Branches.API (UserBranchesAPI)
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
-import Share.Web.Share.Contributions.API (ContributionsByUserAPI)
-import Share.Web.Share.Projects.API (ProjectsAPI)
 import Share.Web.Share.Types
-
 
 -- | GET /search?query=hoj&limit=9
 --

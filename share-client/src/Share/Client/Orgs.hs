@@ -2,7 +2,7 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Client
+module Share.Client.Orgs
   ( createOrg,
     addOrgRoles,
     listOrgRoles,
