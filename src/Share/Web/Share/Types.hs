@@ -17,7 +17,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (ProjectVisibility)
-import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.API (NullableUpdate, nullableUpdateToJSON, parseNullableUpdate)
 import Share.Utils.URI
 import Share.Web.Authorization.Types (RolePermission)
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UnifiedDisplayInfo, UserDisplayInfo (..), UserLike (..))
@@ -35,6 +35,18 @@ data UpdateUserRequest = UpdateUserRequest
     pronouns :: NullableUpdate Text
   }
   deriving (Show)
+
+instance Aeson.ToJSON UpdateUserRequest where
+  toJSON UpdateUserRequest {..} =
+    Aeson.object
+      [ "name" .= nullableUpdateToJSON name,
+        "avatarUrl" .= nullableUpdateToJSON avatarUrl,
+        "bio" .= nullableUpdateToJSON bio,
+        "website" .= nullableUpdateToJSON website,
+        "location" .= nullableUpdateToJSON location,
+        "twitterHandle" .= nullableUpdateToJSON twitterHandle,
+        "pronouns" .= nullableUpdateToJSON pronouns
+      ]
 
 instance Aeson.FromJSON UpdateUserRequest where
   parseJSON = Aeson.withObject "UpdateUserRequest" $ \o -> do
@@ -326,15 +338,16 @@ instance FromJSON UserAccountInfo where
         primaryEmail <- o Aeson..:? "primaryEmail"
         planTier <- o Aeson..: "planTier"
         hasUnreadNotifications <- o Aeson..: "hasUnreadNotifications"
-        pure $ UserAccountInfo
-          { primaryEmail,
-            completedTours,
-            organizationMemberships,
-            isSuperadmin,
-            planTier,
-            displayInfo = UnifiedUser $ UserDisplayInfo {handle, name, avatarUrl, userId},
-            hasUnreadNotifications
-          }
+        pure $
+          UserAccountInfo
+            { primaryEmail,
+              completedTours,
+              organizationMemberships,
+              isSuperadmin,
+              planTier,
+              displayInfo = UnifiedUser $ UserDisplayInfo {handle, name, avatarUrl, userId},
+              hasUnreadNotifications
+            }
       "org" -> do
         userInfo <- o Aeson..: "user"
         handle <- userInfo Aeson..: "handle"
@@ -347,15 +360,16 @@ instance FromJSON UserAccountInfo where
         organizationMemberships <- o Aeson..: "organizationMemberships"
         planTier <- o Aeson..: "planTier"
         hasUnreadNotifications <- o Aeson..: "hasUnreadNotifications"
-        pure $ UserAccountInfo
-          { primaryEmail = Nothing,
-            completedTours = [],
-            organizationMemberships,
-            isSuperadmin = False,
-            planTier,
-            displayInfo = UnifiedOrg $ OrgDisplayInfo {orgId, isCommercial, user},
-            hasUnreadNotifications
-          }
+        pure $
+          UserAccountInfo
+            { primaryEmail = Nothing,
+              completedTours = [],
+              organizationMemberships,
+              isSuperadmin = False,
+              planTier,
+              displayInfo = UnifiedOrg $ OrgDisplayInfo {orgId, isCommercial, user},
+              hasUnreadNotifications
+            }
       t -> fail $ "Invalid UserAccountInfo kind: " <> Text.unpack t
 
 type PathSegment = Text

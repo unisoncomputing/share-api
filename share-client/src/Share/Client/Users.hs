@@ -2,10 +2,7 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Client.Users
-  (
-  )
-where
+module Share.Client.Users (getUserProfile) where
 
 import Crypto.JWT qualified as JWT
 import Data.Proxy (Proxy (..))

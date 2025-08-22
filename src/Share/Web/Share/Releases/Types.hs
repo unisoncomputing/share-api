@@ -122,6 +122,11 @@ data StatusUpdate
   | MakeDeprecated
   deriving stock (Eq, Show)
 
+instance ToJSON StatusUpdate where
+  toJSON = \case
+    MakePublished -> String "published"
+    MakeDeprecated -> String "deprecated"
+
 instance FromJSON StatusUpdate where
   parseJSON = withText "StatusUpdate" $ \case
     "published" -> pure MakePublished
@@ -132,6 +137,12 @@ data UpdateReleaseRequest = UpdateReleaseRequest
   { status :: Maybe StatusUpdate
   }
 
+instance ToJSON UpdateReleaseRequest where
+  toJSON UpdateReleaseRequest {..} =
+    object
+      [ "status" .= status
+      ]
+
 instance FromJSON UpdateReleaseRequest where
   parseJSON = withObject "UpdateReleaseRequest" $ \obj -> do
     status <- obj .:? "status"
@@ -141,6 +152,15 @@ data CreateReleaseRequest = CreateReleaseRequest
   { causalHash :: PrefixedHash "#" CausalHash,
     releaseVersion :: ReleaseVersion
   }
+
+instance ToJSON CreateReleaseRequest where
+  toJSON CreateReleaseRequest {..} =
+    object
+      [ "causalHash" .= causalHash,
+        "major" .= major releaseVersion,
+        "minor" .= minor releaseVersion,
+        "patch" .= patch releaseVersion
+      ]
 
 instance FromJSON CreateReleaseRequest where
   parseJSON = withObject "CreateReleaseRequest" $ \obj ->

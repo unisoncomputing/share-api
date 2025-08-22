@@ -142,6 +142,15 @@ data CreateSubscriptionRequest
     subscriptionFilter :: Maybe SubscriptionFilter
   }
 
+instance ToJSON CreateSubscriptionRequest where
+  toJSON CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+    object
+      [ "scope" .= subscriptionScope,
+        "topics" .= subscriptionTopics,
+        "topicGroups" .= subscriptionTopicGroups,
+        "filter" .= subscriptionFilter
+      ]
+
 instance FromJSON CreateSubscriptionRequest where
   parseJSON = withObject "CreateSubscriptionRequest" $ \o -> do
     subscriptionScope <- o .: "scope"
@@ -181,6 +190,14 @@ data UpdateSubscriptionRequest
     subscriptionTopicGroups :: Maybe (Set NotificationTopicGroup),
     subscriptionFilter :: Maybe SubscriptionFilter
   }
+
+instance ToJSON UpdateSubscriptionRequest where
+  toJSON UpdateSubscriptionRequest {subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+    object
+      [ "topics" .= subscriptionTopics,
+        "topicGroups" .= subscriptionTopicGroups,
+        "filter" .= subscriptionFilter
+      ]
 
 instance FromJSON UpdateSubscriptionRequest where
   parseJSON = withObject "UpdateSubscriptionRequest" $ \o -> do
@@ -225,6 +242,11 @@ instance ToHttpApiData StatusFilter where
       <&> toQueryParam
       & Text.intercalate ","
 
+instance ToJSON StatusFilter where
+  toJSON (StatusFilter statuses) =
+    toList statuses
+      & toJSON
+
 instance FromJSON StatusFilter where
   parseJSON = Aeson.withArray "StatusFilter" $ \arr ->
     (traverse . traverse) parseJSON (NEL.nonEmpty $ toList arr) >>= \case
@@ -251,6 +273,13 @@ data UpdateHubEntriesRequest
     notificationIds :: NESet NotificationHubEntryId
   }
 
+instance ToJSON UpdateHubEntriesRequest where
+  toJSON UpdateHubEntriesRequest {notificationStatus, notificationIds} =
+    object
+      [ "status" .= notificationStatus,
+        "notificationIds" .= notificationIds
+      ]
+
 instance FromJSON UpdateHubEntriesRequest where
   parseJSON = withObject "UpdateHubEntriesRequest" $ \o -> do
     notificationStatus <- o .: "status"
@@ -266,6 +295,10 @@ data CreateEmailDeliveryMethodRequest
   = CreateEmailDeliveryMethodRequest
   { email :: Email
   }
+
+instance ToJSON CreateEmailDeliveryMethodRequest where
+  toJSON CreateEmailDeliveryMethodRequest {email} =
+    object ["email" .= email]
 
 instance FromJSON CreateEmailDeliveryMethodRequest where
   parseJSON = withObject "CreateEmailDeliveryMethodRequest" $ \o -> do
@@ -302,6 +335,10 @@ data UpdateEmailDeliveryMethodRequest
   { email :: Email
   }
 
+instance ToJSON UpdateEmailDeliveryMethodRequest where
+  toJSON UpdateEmailDeliveryMethodRequest {email} =
+    object ["email" .= email]
+
 instance FromJSON UpdateEmailDeliveryMethodRequest where
   parseJSON = withObject "UpdateEmailDeliveryMethodRequest" $ \o -> do
     email <- o .: "email"
@@ -317,6 +354,10 @@ data CreateWebhookRequest
   { url :: URIParam,
     name :: Text
   }
+
+instance ToJSON CreateWebhookRequest where
+  toJSON CreateWebhookRequest {url, name} =
+    object ["url" .= url, "name" .= name]
 
 instance FromJSON CreateWebhookRequest where
   parseJSON = withObject "CreateWebhookRequest" $ \o -> do
@@ -354,6 +395,10 @@ data UpdateWebhookRequest
   { url :: URIParam
   }
 
+instance ToJSON UpdateWebhookRequest where
+  toJSON UpdateWebhookRequest {url} =
+    object ["url" .= url]
+
 instance FromJSON UpdateWebhookRequest where
   parseJSON = withObject "UpdateWebhookRequest" $ \o -> do
     url <- o .: "url"
@@ -375,6 +420,10 @@ data AddSubscriptionDeliveryMethodsRequest
   }
   deriving stock (Show, Eq, Ord)
 
+instance ToJSON AddSubscriptionDeliveryMethodsRequest where
+  toJSON AddSubscriptionDeliveryMethodsRequest {deliveryMethods} =
+    object ["deliveryMethods" .= deliveryMethods]
+
 instance FromJSON AddSubscriptionDeliveryMethodsRequest where
   parseJSON = withObject "AddSubscriptionDeliveryMethodsRequest" $ \o -> do
     deliveryMethods <- o .: "deliveryMethods"
@@ -385,6 +434,10 @@ data RemoveSubscriptionDeliveryMethodsRequest
   { deliveryMethods :: NESet DeliveryMethodId
   }
   deriving stock (Show, Eq, Ord)
+
+instance ToJSON RemoveSubscriptionDeliveryMethodsRequest where
+  toJSON RemoveSubscriptionDeliveryMethodsRequest {deliveryMethods} =
+    object ["deliveryMethods" .= deliveryMethods]
 
 instance FromJSON RemoveSubscriptionDeliveryMethodsRequest where
   parseJSON = withObject "RemoveSubscriptionDeliveryMethodsRequest" $ \o -> do

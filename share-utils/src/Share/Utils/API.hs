@@ -10,6 +10,7 @@ module Share.Utils.API
     fromNullableUpdate,
     applySetUpdate,
     parseNullableUpdate,
+    nullableUpdateToJSON,
     emptySetUpdate,
     Cursor (..),
     Paged (..),
@@ -86,6 +87,12 @@ parseNullableUpdate obj key =
     Just Aeson.Null -> pure Nullify
     Just v -> UpdateTo <$> parseJSON v
 
+nullableUpdateToJSON :: (ToJSON a) => NullableUpdate a -> Maybe Value
+nullableUpdateToJSON = \case
+  Unchanged -> Nothing
+  Nullify -> Just Aeson.Null
+  UpdateTo a -> Just (toJSON a)
+
 -- | Perform a nullable update to an existing value and return the result.
 --
 -- >>> fromNullableUpdate (Just 1) Unchanged
@@ -132,10 +139,19 @@ data SetUpdate a
 
 -- | Type for specifying whether a value should be added or removed from a set.
 data AddOrRemove = Add | Remove
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 emptySetUpdate :: SetUpdate a
 emptySetUpdate = SetUpdate Map.empty
+
+instance forall a. (ToJSON a, Ord a, Typeable a) => ToJSON (SetUpdate a) where
+  toJSON = \case
+    SetUpdate updates ->
+      object
+        [ "add" .= Map.keys (Map.filter (== Add) updates),
+          "remove" .= Map.keys (Map.filter (== Remove) updates)
+        ]
+    SetReplacement new -> object ["replaceWith" .= Set.toList new]
 
 instance forall a. (FromJSON a, Ord a, Typeable a) => FromJSON (SetUpdate a) where
   parseJSON = Aeson.withObject ("(SetUpdate" <> show (typeRep (Proxy @a)) <> ")") $ \obj -> do

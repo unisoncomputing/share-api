@@ -16,7 +16,7 @@ import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
-import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.API (NullableUpdate, nullableUpdateToJSON, parseNullableUpdate)
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors qualified as Err
 import Share.Web.Share.Comments (CommentEvent (..), commentEventTimestamp)
@@ -179,6 +179,16 @@ data CreateContributionRequest = CreateContributionRequest
   }
   deriving (Show)
 
+instance ToJSON CreateContributionRequest where
+  toJSON CreateContributionRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= description,
+        "status" .= status,
+        "sourceBranchRef" .= sourceBranchShortHand,
+        "targetBranchRef" .= targetBranchShortHand
+      ]
+
 instance FromJSON CreateContributionRequest where
   parseJSON = withObject "CreateContributionRequest" \o -> do
     title <- o .: "title"
@@ -196,6 +206,16 @@ data UpdateContributionRequest = UpdateContributionRequest
     targetBranchSH :: Maybe BranchShortHand
   }
   deriving (Show)
+
+instance ToJSON UpdateContributionRequest where
+  toJSON UpdateContributionRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= nullableUpdateToJSON description,
+        "status" .= status,
+        "sourceBranchRef" .= sourceBranchSH,
+        "targetBranchRef" .= targetBranchSH
+      ]
 
 instance FromJSON UpdateContributionRequest where
   parseJSON = withObject "UpdateContributionRequest" \o -> do
@@ -260,6 +280,12 @@ data MergeContributionRequest = MergeContributionRequest
   { contributionStateToken :: ContributionStateToken
   }
   deriving (Show)
+
+instance ToJSON MergeContributionRequest where
+  toJSON MergeContributionRequest {..} =
+    object
+      [ "contributionStateToken" .= toQueryParam contributionStateToken
+      ]
 
 instance FromJSON MergeContributionRequest where
   parseJSON = withObject "MergeContributionRequest" \o -> do

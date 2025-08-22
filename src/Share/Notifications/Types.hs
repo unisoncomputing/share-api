@@ -541,6 +541,11 @@ data DeliveryMethodId
   | WebhookDeliveryMethodId NotificationWebhookId
   deriving stock (Show, Eq, Ord)
 
+instance Aeson.ToJSON DeliveryMethodId where
+  toJSON = \case
+    EmailDeliveryMethodId eid -> Aeson.object ["kind" .= ("email" :: Text), "id" .= eid]
+    WebhookDeliveryMethodId wid -> Aeson.object ["kind" .= ("webhook" :: Text), "id" .= wid]
+
 instance Aeson.FromJSON DeliveryMethodId where
   parseJSON = Aeson.withObject "DeliveryMethodId" $ \o -> do
     deliveryMethodKind <- o .: "kind"

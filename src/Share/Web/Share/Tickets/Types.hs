@@ -12,7 +12,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Ticket (TicketStatus)
-import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.API (NullableUpdate, nullableUpdateToJSON, parseNullableUpdate)
 import Share.Web.Share.Comments
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..))
 
@@ -133,6 +133,13 @@ data CreateTicketRequest = CreateTicketRequest
   }
   deriving (Show)
 
+instance ToJSON CreateTicketRequest where
+  toJSON CreateTicketRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= description
+      ]
+
 instance FromJSON CreateTicketRequest where
   parseJSON = withObject "CreateContributionRequest" \o -> do
     title <- o .: "title"
@@ -145,6 +152,14 @@ data UpdateTicketRequest = UpdateTicketRequest
     status :: Maybe TicketStatus
   }
   deriving (Show)
+
+instance ToJSON UpdateTicketRequest where
+  toJSON UpdateTicketRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= nullableUpdateToJSON description,
+        "status" .= status
+      ]
 
 instance FromJSON UpdateTicketRequest where
   parseJSON = withObject "UpdateTicketRequest" \o -> do

@@ -480,6 +480,12 @@ data ProjectNotificationSubscriptionRequest
   }
   deriving (Show, Eq)
 
+instance ToJSON ProjectNotificationSubscriptionRequest where
+  toJSON ProjectNotificationSubscriptionRequest {..} =
+    object
+      [ "isSubscribed" .= isSubscribed
+      ]
+
 instance FromJSON ProjectNotificationSubscriptionRequest where
   parseJSON = Aeson.withObject "ProjectNotificationSubscriptionRequest" $ \o -> do
     isSubscribed <- o Aeson..: "isSubscribed"
@@ -496,3 +502,8 @@ instance ToJSON ProjectNotificationSubscriptionResponse where
     object
       [ "subscriptionId" .= subscriptionId
       ]
+
+instance FromJSON ProjectNotificationSubscriptionResponse where
+  parseJSON = Aeson.withObject "ProjectNotificationSubscriptionResponse" $ \o -> do
+    subscriptionId <- o Aeson..: "subscriptionId"
+    pure ProjectNotificationSubscriptionResponse {subscriptionId}

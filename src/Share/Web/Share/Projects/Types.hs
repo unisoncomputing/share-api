@@ -180,6 +180,14 @@ data CreateProjectRequest = CreateProjectRequest
     tags :: Set ProjectTag
   }
 
+instance Aeson.ToJSON CreateProjectRequest where
+  toJSON CreateProjectRequest {..} =
+    object
+      [ "summary" .= summary,
+        "visibility" .= visibility,
+        "tags" .= tags
+      ]
+
 instance Aeson.FromJSON CreateProjectRequest where
   parseJSON = Aeson.withObject "CreateProjectRequest" $ \o -> do
     summary <- o .:? "summary"
@@ -321,6 +329,14 @@ data UpdateProjectRequest = UpdateProjectRequest
     tags :: SetUpdate ProjectTag
   }
 
+instance Aeson.ToJSON UpdateProjectRequest where
+  toJSON UpdateProjectRequest {..} =
+    object
+      [ "summary" .= nullableUpdateToJSON summary,
+        "visibility" .= visibility,
+        "tags" .= tags
+      ]
+
 instance Aeson.FromJSON UpdateProjectRequest where
   parseJSON = Aeson.withObject "UpdateProjectRequest" $ \obj -> do
     summary <- parseNullableUpdate obj "summary"
@@ -337,6 +353,12 @@ data FavProjectRequest = FavProjectRequest
   { isFaved :: Bool
   }
   deriving (Show)
+
+instance Aeson.ToJSON FavProjectRequest where
+  toJSON FavProjectRequest {..} =
+    Aeson.object
+      [ "isFaved" .= isFaved
+      ]
 
 instance Aeson.FromJSON FavProjectRequest where
   parseJSON = Aeson.withObject "FavProjectRequest" $ \o ->

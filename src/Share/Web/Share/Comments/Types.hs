@@ -16,6 +16,12 @@ data CreateCommentRequest = CreateCommentRequest
   }
   deriving (Show)
 
+instance ToJSON CreateCommentRequest where
+  toJSON CreateCommentRequest {..} =
+    object
+      [ "content" .= content
+      ]
+
 instance FromJSON CreateCommentRequest where
   parseJSON = withObject "CreateCommentRequest" \o -> do
     content <- o .: "content"
@@ -29,6 +35,13 @@ data UpdateCommentRequest = UpdateCommentRequest
     expectedRevision :: RevisionNumber
   }
   deriving (Show)
+
+instance ToJSON UpdateCommentRequest where
+  toJSON UpdateCommentRequest {..} =
+    object
+      [ "content" .= content,
+        "expectedRevision" .= expectedRevision
+      ]
 
 instance FromJSON UpdateCommentRequest where
   parseJSON = withObject "UpdateCommentRequest" \o -> do
