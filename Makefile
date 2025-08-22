@@ -1,5 +1,6 @@
-.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts
+.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts reset_fixtures
 
+export SHARE_PROJECT_DIR=$(shell pwd)
 UNAME := $(shell uname)
 STACK_FLAGS := "--fast"
 dist_dir := $(shell stack path | awk '/^dist-dir/{print $$2}')
@@ -67,7 +68,19 @@ reset_fixtures:
 	@echo "Booting up docker dependencies..."
 	docker compose -f docker/docker-compose.dev.yml -f docker/docker-compose.fixtures.yml up --remove-orphans --detach
 	@echo "Initializing fixture data";
-	./transcripts/fixtures/run.zsh
+	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
+	  sleep 1; \
+	done;
+	@echo "Booting up share";
+	@( . ./local.env \
+		$(exe) 2>&1 & \
+		SERVER_PID=$$!; \
+	trap "kill $$SERVER_PID 2>/dev/null || true" EXIT INT TERM; \
+	echo "Loading fixtures"; \
+	./transcripts/fixtures/run.zsh; \
+	kill $$SERVER_PID 2>/dev/null || true; \
+	) 
+	@echo "Done!";
 
 transcripts:
 	./transcripts/run-transcripts.zsh

@@ -6,7 +6,7 @@ BEGIN
     SELECT 1 FROM information_schema.tables 
     WHERE table_name = 'is_local_database'
   ) THEN
-    RAISE EXCEPTION 'Refusing to clean non-test database.';
+    RAISE EXCEPTION 'Refusing to insert fixtures on non-local database.';
   END IF;
 END $$;
 

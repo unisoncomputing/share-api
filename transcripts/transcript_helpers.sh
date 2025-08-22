@@ -2,7 +2,7 @@
 
 set -e
 
-transcripts_dir=$(realpath "$(dirname "$0")")
+transcripts_dir="${SHARE_PROJECT_ROOT}/transcripts"
 ucm_xdg_data_dir=$(mktemp -d)
 mkdir -p "${ucm_xdg_data_dir}/unisonlanguage"
 ucm_credentials_file="${ucm_xdg_data_dir}/unisonlanguage/credentials.json"
@@ -44,11 +44,16 @@ pg_file () {
         PGPASSWORD="sekrit" psql -q -U postgres -p 5432 -h localhost -t -A -f "$1"
 }
 
+pg_init_fixtures() {
+        # Initialize the database with the schema and inserts
+        pg_file "${transcripts_dir}/sql/inserts.sql" > /dev/null
+}
+
 
 # Reset all the fixtures to the state in `inserts.sql`
 pg_reset_fixtures () {
         pg_file "${transcripts_dir}/sql/clean.sql" > /dev/null
-        pg_file "${transcripts_dir}/sql/inserts.sql" > /dev/null
+        pg_init_fixtures
 }
 
 user_id_from_handle () {
@@ -84,7 +89,7 @@ create_user () {
 }
 
 # Set up users so we can auth against them.
-pg_reset_fixtures
+pg_init_fixtures
 
 echo "Getting access token for transcript setup"
 
