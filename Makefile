@@ -1,6 +1,7 @@
 .PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts reset_fixtures
 
-export SHARE_PROJECT_DIR=$(shell pwd)
+SHARE_PROJECT_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+export SHARE_PROJECT_ROOT
 UNAME := $(shell uname)
 STACK_FLAGS := "--fast"
 dist_dir := $(shell stack path | awk '/^dist-dir/{print $$2}')
@@ -52,11 +53,6 @@ serve: $(installed_share)
 	  (sleep 1 && $(OPEN) "http://localhost:5424/local/user/test/login" || true) & \
 	fi;
 	@(. ./local.env && $(exe) 2>&1)
-
-fixtures:
-	@echo "Resetting local database to fixture data"
-	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/clean.sql"
-	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/inserts.sql"
 
 # Loads the local testing share with a bunch of realistic code.
 reset_fixtures:

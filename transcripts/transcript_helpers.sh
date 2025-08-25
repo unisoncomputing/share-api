@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+set -e
+set -u
+
 transcripts_dir="${SHARE_PROJECT_ROOT}/transcripts"
 source "${transcripts_dir}/transcript_functions.sh"
 

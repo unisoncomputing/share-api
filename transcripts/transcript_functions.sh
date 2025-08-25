@@ -3,6 +3,7 @@
 # Sets up a bunch of utility functions and environment variables, 
 # but doesn't run anything.
 set -e
+set -u
 
 transcripts_dir="${SHARE_PROJECT_ROOT}/transcripts"
 ucm_xdg_data_dir=$(mktemp -d)
@@ -217,7 +218,7 @@ EOF
 wait_for_diffs() {
 # Since namespace diffs are computed asynchronously, we just block here until there are no diffs left in
 # the causal_diff_queue.
-for i in {1..5}; do
+for _ in {1..5}; do
   if [[ $(pg_sql "select count(*) from causal_diff_queue;") -ne 0 ]]; then
     sleep 1
   else
