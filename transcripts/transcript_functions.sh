@@ -132,7 +132,7 @@ fetch_data() {
         echo "fetch requires at least 4 arguments: user_id, method, testname, api_path, [data]" >&2
         exit 1
     fi
-    if [ -z "$1" ]; then
+    if [ -z "${1:-}" ]; then
         echo "fetch requires a user id" >&2
         exit 1
     fi
@@ -140,7 +140,7 @@ fetch_data() {
     method="$2"
     testname="$3"
     api_path="$4"
-    data="$5"
+    data="${5:-}"
     url="http://localhost:5424${api_path}"
     result_file="$(mktemp)"
     status_code_file="$(mktemp)"
@@ -169,7 +169,7 @@ fetch_data_jq() {
     testname="$3"
     api_path="$4"
     jq_pattern="$5"
-    data="$6"
+    data="${6:-}"
     fetch_data "$cookie_jar" "$method" "$testname" "$api_path" "$data" 2> /dev/null | \
       jq --sort-keys -r "$jq_pattern" 
 }
@@ -177,7 +177,7 @@ fetch_data_jq() {
 # Credentials setup 
 
 login_user_for_ucm() {
-  if [ -z "$1" ]; then
+  if [ -z "${1:-}" ]; then
     echo "login_user_for_ucm requires a user handle" >&2
     exit 1
   fi
