@@ -16,6 +16,7 @@ module Share.Postgres.NameLookups.Queries
     projectTermsWithinRoot,
     projectTermsWithinRootV1,
     projectTypesWithinRoot,
+    projectConstructorCountsWithinRoot,
 
     -- * Name lookup management
     listNameLookupMounts,
@@ -41,11 +42,11 @@ import Share.Postgres.NamesPerspective.Types (NamesPerspective, perspectiveCurre
 import Share.Postgres.Refs.Types (PGReference, PGReferent, referenceFields, referentFields)
 import Share.Prelude
 import Share.Utils.Postgres (ordered)
-import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType)
 import U.Codebase.Referent qualified as V2
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.Name (Name)
+import Unison.Reference (TypeReference, TypeReferenceId)
 import Unison.Referent qualified as V1
 import Unison.Util.Monoid qualified as Monoid
 
@@ -489,9 +490,9 @@ referent2to1 :: (HasCallStack) => (V2.Referent PG.:. PG.Only (Maybe V2.Construct
 referent2to1 (r PG.:. PG.Only mayCT) = Cv.referent2to1UsingCT (fromMaybe (error "Required constructor type for constructor but it was null") mayCT) r
 
 -- | Get a cursor over all non-lib types within the given root branch.
-projectTypesWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (Name, Reference))
+projectTypesWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (Name, TypeReference))
 projectTypesWithinRoot !_nlReceipt bhId = do
-  Cursors.newRowCursor @(NamedRef Reference)
+  Cursors.newRowCursor @(NamedRef TypeReference)
     "typesForSearchSyncCursor"
     [sql|
         SELECT reversed_name, reference_builtin, reference_component_hash.base32, reference_component_index
@@ -500,6 +501,37 @@ projectTypesWithinRoot !_nlReceipt bhId = do
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
+
+-- | Get a cursor over all non-lib, non-builtin types and their corresponding constructor counts, within the given root branch.
+projectConstructorCountsWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (TypeReferenceId :. Only Int64))
+projectConstructorCountsWithinRoot !_ bhId =
+  Cursors.newRowCursor
+    "constructorCountsCursor"
+    [sql|
+      WITH x AS (
+        SELECT DISTINCT ON (scoped_type_name_lookup.type_id)
+          scoped_type_name_lookup.type_id,
+          component_hashes.base32,
+          scoped_type_name_lookup.reference_component_index
+        FROM scoped_type_name_lookup
+        JOIN component_hashes
+          ON scoped_type_name_lookup.reference_component_hash_id = component_hashes.id
+        WHERE scoped_type_name_lookup.root_branch_hash_id = #{bhId}
+          AND scoped_type_name_lookup.reference_builtin IS NULL
+      )
+      SELECT
+        x.base32 AS hash,
+        x.reference_component_index AS component_index,
+        COALESCE(y.constructor_index + 1, 0) AS constructor_count
+      FROM x
+      LEFT JOIN LATERAL (
+        SELECT constructors.constructor_index
+        FROM constructors
+        WHERE x.type_id = constructors.type_id
+        ORDER BY constructors.constructor_index DESC
+        LIMIT 1
+      ) y ON true;
+    |]
 
 ensureNameLookupForBranchId :: (QueryM m) => BranchHashId -> m NameLookupReceipt
 ensureNameLookupForBranchId branchHashId = PG.transactionSpan "ensureNameLookupForBranchId" mempty do

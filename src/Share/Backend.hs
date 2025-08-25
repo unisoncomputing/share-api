@@ -41,7 +41,7 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Share.Codebase qualified as Codebase
 import Share.Codebase.CodeCache qualified as CC
-import Share.Codebase.Types (CodebaseRuntime (CodebaseRuntime, cachedEvalResult))
+import Share.Codebase.Types (CodeCache, CodebaseRuntime (CodebaseRuntime, cachedEvalResult))
 import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Conversions (namespaceStatsPgToV2)
@@ -69,7 +69,7 @@ import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Parser.Ann (Ann)
 import Unison.PrettyPrintEnv qualified as PPE
 import Unison.PrettyPrintEnvDecl qualified as PPED
-import Unison.Reference (Reference)
+import Unison.Reference (Reference, TermReference, TypeReference)
 import Unison.Reference qualified as Reference
 import Unison.Referent qualified as Referent
 import Unison.Runtime.IOSource qualified as DD
@@ -248,8 +248,13 @@ getTypeTagsOf trav s = do
         Just CT.Data -> Data
         Just CT.Effect -> Ability
 
-displayTermsOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann)) -> s -> m t
-displayTermsOf codebase trav s =
+displayTermsOf ::
+  (QueryM m) =>
+  CodeCache scope ->
+  Traversal s t TermReference (DisplayObject (Type Symbol Ann) (V1.Term Symbol Ann)) ->
+  s ->
+  m t
+displayTermsOf codeCache trav s =
   s
     & asListOfDeduped trav %%~ \refs -> do
       let partitionedRefs =
@@ -261,7 +266,7 @@ displayTermsOf codebase trav s =
                   Nothing -> Left $ MissingObject $ Reference.toShortHash ref
                   Just typ -> Left $ BuiltinObject (mempty <$ typ)
               Reference.DerivedId rid -> Right rid
-      r <- Codebase.expectTermsByRefIdsOf codebase (traversed . _Right) partitionedRefs
+      r <- CC.expectTermsAndTypesByRefIdsOf codeCache (traversed . _Right) partitionedRefs
       r
         & traversed
           %~ \case
@@ -272,15 +277,15 @@ displayTermsOf codebase trav s =
             Left obj -> obj
         & pure
 
-displayTypesOf :: (QueryM m) => Codebase.CodebaseEnv -> Traversal s t Reference (DisplayObject () (DD.Decl Symbol Ann)) -> s -> m t
-displayTypesOf codebase trav s =
+displayTypesOf :: (QueryM m) => CodeCache scope -> Traversal s t TypeReference (DisplayObject () (DD.Decl Symbol Ann)) -> s -> m t
+displayTypesOf codeCache trav s =
   s
     & asListOf trav %%~ \refs -> do
       let partitionedRefs =
             refs <&> \case
               Reference.Builtin _ -> Left (BuiltinObject ())
               Reference.DerivedId rid -> Right rid
-      Codebase.expectTypeDeclarationsByRefIdsOf codebase (traversed . _Right) partitionedRefs
+      CC.expectTypeDeclsByRefIdsOf codeCache (traversed . _Right) partitionedRefs
         <&> fmap \case
           Left obj -> obj
           Right decl -> (UserObject decl)

@@ -23,6 +23,7 @@ import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync.Types (Arity (..), DefinitionDocument (..), DefnSearchToken (..), Occurrence, OccurrenceKind (..), TermOrTypeSummary (..), TermOrTypeTag (..), VarId (..))
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase qualified as Codebase
+import Share.Codebase.Types (CodeCache)
 import Share.IDs (ReleaseId, UserId)
 import Share.Metrics qualified as Metrics
 import Share.Postgres qualified as PG
@@ -65,6 +66,7 @@ import Unison.Util.Monoid qualified as Monoid
 import Unison.Util.Recursion qualified as Rec
 import Unison.Util.Set qualified as Set
 import Unison.Var qualified as Var
+import qualified Share.Codebase.CodeCache as CodeCache
 
 data DefnIndexingFailure
   = NoTypeSigForTerm Name Referent
@@ -165,12 +167,13 @@ syncRoot authZReceipt (mayReleaseId, rootBranchHashId, codebaseOwner) = do
         let nlReceipt = nameLookupReceipt namesPerspective
         let codebaseLoc = Codebase.codebaseLocationForProjectRelease codebaseOwner
         let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
-        termsCursor <- NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
+        CodeCache.withCodeCache codebase \codeCache -> do
+          termsCursor <- NLOps.projectTermsWithinRoot nlReceipt rootBranchHashId
 
-        termErrs <- syncTerms codebase namesPerspective rootBranchHashId termsCursor
-        typesCursor <- NLOps.projectTypesWithinRoot nlReceipt rootBranchHashId
-        typeErrs <- syncTypes codebase namesPerspective rootBranchHashId typesCursor
-        pure (termErrs <> typeErrs)
+          termErrs <- syncTerms codebase namesPerspective rootBranchHashId termsCursor
+          typesCursor <- NLOps.projectTypesWithinRoot nlReceipt rootBranchHashId
+          typeErrs <- syncTypes codebase codeCache namesPerspective rootBranchHashId typesCursor
+          pure (termErrs <> typeErrs)
       True -> pure mempty
   -- Copy relevant index rows into the global search index as well
   for mayReleaseId (syncRelease rootBranchHashId)
@@ -370,11 +373,12 @@ typeSigTokens typ =
 syncTypes ::
   (PG.QueryM m) =>
   Codebase.CodebaseEnv ->
+  CodeCache scope ->
   NamesPerspective m ->
   BranchHashId ->
   Cursors.PGCursor (Name, TypeReference) ->
   m ([DefnIndexingFailure], [Text])
-syncTypes codebase namesPerspective rootBranchHashId typesCursor = do
+syncTypes codebase codeCache namesPerspective rootBranchHashId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
     (errs, refDocs) <-
       types
@@ -391,7 +395,7 @@ syncTypes codebase namesPerspective rootBranchHashId typesCursor = do
               decl <- lift (Codebase.loadV1TypeDeclarationsByRefIdsOf codebase id refId) `whenNothingM` throwError (NoDeclForType fqn ref)
               pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
           let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
-          typeSummary <- lift $ Summary.typeSummaryForReference codebase ref (Just fqn) Nothing
+          typeSummary <- lift $ Summary.typeSummaryForReference codeCache ref (Just fqn) Nothing
           let sh = Reference.toShortHash ref
           let dd =
                 DefinitionDocument
