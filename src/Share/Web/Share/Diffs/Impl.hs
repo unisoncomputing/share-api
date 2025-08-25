@@ -145,29 +145,37 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
   let typeNamesToDiff =
         setOf NamespaceDiffs.namespaceTreeDiffTypeDiffs_ defns0
 
-  oldTermDefinitionsByName <- do
-    PG.transactionSpan "load old terms" mempty do
-      deriveMapOf
-        (expectTermDefinitionsOf oldCodebase oldRuntime oldPerspective1)
-        (Set.toList (Set.union oldTermNamesToRender termNamesToDiff))
+  getOldTermDefinitionByName <- do
+    oldTermDefinitionsByName <-
+      PG.transactionSpan "load old terms" mempty do
+        deriveMapOf
+          (expectTermDefinitionsOf oldCodebase oldRuntime oldPerspective1)
+          (Set.toList (Set.union oldTermNamesToRender termNamesToDiff))
+    pure (oldTermDefinitionsByName Map.!)
 
-  newTermDefinitionsByName <- do
-    PG.transactionSpan "load new terms" mempty do
-      deriveMapOf
-        (expectTermDefinitionsOf newCodebase newRuntime newPerspective)
-        (Set.toList (Set.union newTermNamesToRender termNamesToDiff))
+  getNewTermDefinitionByName <- do
+    newTermDefinitionsByName <- do
+      PG.transactionSpan "load new terms" mempty do
+        deriveMapOf
+          (expectTermDefinitionsOf newCodebase newRuntime newPerspective)
+          (Set.toList (Set.union newTermNamesToRender termNamesToDiff))
+    pure (newTermDefinitionsByName Map.!)
 
-  oldTypeDefinitionsByName <- do
-    PG.transactionSpan "load old types" mempty do
-      deriveMapOf
-        (expectTypeDefinitionsOf oldCodebase oldRuntime oldPerspective1)
-        (Set.toList (Set.union oldTypeNamesToRender typeNamesToDiff))
+  getOldTypeDefinitionByName <- do
+    oldTypeDefinitionsByName <- do
+      PG.transactionSpan "load old types" mempty do
+        deriveMapOf
+          (expectTypeDefinitionsOf oldCodebase oldRuntime oldPerspective1)
+          (Set.toList (Set.union oldTypeNamesToRender typeNamesToDiff))
+    pure (oldTypeDefinitionsByName Map.!)
 
-  newTypeDefinitionsByName <- do
-    PG.transactionSpan "load new types" mempty do
-      deriveMapOf
-        (expectTypeDefinitionsOf newCodebase newRuntime newPerspective)
-        (Set.toList (Set.union newTypeNamesToRender typeNamesToDiff))
+  getNewTypeDefinitionByName <- do
+    newTypeDefinitionsByName <- do
+      PG.transactionSpan "load new types" mempty do
+        deriveMapOf
+          (expectTypeDefinitionsOf newCodebase newRuntime newPerspective)
+          (Set.toList (Set.union newTypeNamesToRender typeNamesToDiff))
+    pure (newTypeDefinitionsByName Map.!)
 
   -- Resolve the term referents to tag + hash
   defns1 :: NamespaceDiffs.GNamespaceTreeDiff NameSegment (TermTag, ShortHash) TypeReference Name Name Name Name <-
@@ -192,16 +200,17 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
   let defns3 :: GNamespaceTreeDiff NameSegment (TermTag, ShortHash) (TypeTag, ShortHash) TermDefinition TypeDefinition TermDefinitionDiff TypeDefinitionDiff
       defns3 =
         defns2
-          & NamespaceDiffs.namespaceTreeDiffTermDiffs_ %~ (\name -> (oldTermDefinitionsByName Map.! name, newTermDefinitionsByName Map.! name))
-          & NamespaceDiffs.witherNamespaceTreeDiffTermDiffs (Identity . diffTermsPure)
-          & runIdentity
-          & unsafePartsOf NamespaceDiffs.namespaceTreeDiffRenderedTerms_
-            .~ map (either (oldTermDefinitionsByName Map.!) (newTermDefinitionsByName Map.!)) termNamesToRender
-          & NamespaceDiffs.witherNamespaceTreeTermDiffKinds (Identity . throwAwayConstructorDiffs)
-          & runIdentity
-          & NamespaceDiffs.namespaceTreeDiffTypeDiffs_ %~ (\name -> diffTypesPure (oldTypeDefinitionsByName Map.! name, newTypeDefinitionsByName Map.! name))
-          & unsafePartsOf NamespaceDiffs.namespaceTreeDiffRenderedTypes_
-            .~ map (either (oldTypeDefinitionsByName Map.!) (newTypeDefinitionsByName Map.!)) typeNamesToRender
+          & NamespaceDiffs.mapMaybeNamespaceTreeDiffTermDiffs (\name -> diffTermsPure (getOldTermDefinitionByName name) (getNewTermDefinitionByName name))
+          & NamespaceDiffs.mapMaybeNamespaceTreeTermDiffKinds
+            ( NamespaceDiffs.definitionDiffKindRenderedOldNew_
+                ( either
+                    (eitherToMaybe . getOldTermDefinitionByName)
+                    (eitherToMaybe . getNewTermDefinitionByName)
+                )
+            )
+          & NamespaceDiffs.namespaceTreeDiffTypeDiffs_ %~ (\name -> diffTypesPure (getOldTypeDefinitionByName name) (getNewTypeDefinitionByName name))
+          & NamespaceDiffs.namespaceTreeTypeDiffKinds_ . NamespaceDiffs.definitionDiffKindRenderedOldNew_
+            %~ either getOldTypeDefinitionByName getNewTypeDefinitionByName
 
   -- Resolve libdeps branch hash ids to branch hashes
   libdeps <-
@@ -229,23 +238,6 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
       RenamedTo r names name -> RenamedTo r names (Left name)
       RenamedFrom r names name -> RenamedFrom r names (Right name)
 
-    throwAwayConstructorDiffs ::
-      DefinitionDiffKind a (Either ConstructorReference TermDefinition) diff -> Maybe (DefinitionDiffKind a TermDefinition diff)
-    throwAwayConstructorDiffs = \case
-      Added ref (Right term) -> Just (Added ref term)
-      NewAlias ref names (Right term) -> Just (NewAlias ref names term)
-      Removed ref (Right term) -> Just (Removed ref term)
-      Updated old new diff -> Just (Updated old new diff)
-      Propagated old new diff -> Just (Propagated old new diff)
-      RenamedTo ref names (Right term) -> Just (RenamedTo ref names term)
-      RenamedFrom ref names (Right term) -> Just (RenamedFrom ref names term)
-      --
-      Added _ (Left _) -> Nothing
-      NewAlias _ _ (Left _) -> Nothing
-      Removed _ (Left _) -> Nothing
-      RenamedFrom _ _ (Left _) -> Nothing
-      RenamedTo _ _ (Left _) -> Nothing
-
 -- | Note: Only use this if you're diffing a single definition, otherwise batch operations are
 -- more efficient.
 diffTerms ::
@@ -256,17 +248,15 @@ diffTerms ::
 diffTerms !_authZReceipt (oldCodebase, oldRt, oldNp, oldName) (newCodebase, newRt, newNp, newName) = do
   oldTerm <- getTermDefinitionsOf oldCodebase oldRt oldNp id oldName `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
   newTerm <- getTermDefinitionsOf newCodebase newRt newNp id newName `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
-  pure $ diffTermsPure (oldTerm, newTerm)
+  pure $ diffTermsPure oldTerm newTerm
 
-diffTermsPure ::
-  (Either a2 TermDefinition, Either a3 TermDefinition) -> (Maybe TermDefinitionDiff)
-diffTermsPure = \case
-  (Right oldTerm, Right newTerm) ->
-    let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
-     in (Just TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject})
-  -- For later: decide how to render a constructor-to-term or constructor-to-constructor diff
-  -- Just dropping them from the diff for now
-  _ -> Nothing
+diffTermsPure :: Either ConstructorReference TermDefinition -> Either ConstructorReference TermDefinition -> Maybe TermDefinitionDiff
+diffTermsPure (Right oldTerm) (Right newTerm) =
+  let termDiffDisplayObject = DefinitionDiff.diffDisplayObjects (termDefinition oldTerm) (termDefinition newTerm)
+   in (Just TermDefinitionDiff {left = oldTerm, right = newTerm, diff = termDiffDisplayObject})
+-- For later: decide how to render a constructor-to-term or constructor-to-constructor diff
+-- Just dropping them from the diff for now
+diffTermsPure _ _ = Nothing
 
 -- | Get definitions for a batch of terms within a codebase and perspective.
 -- NOTE: The names should already be properly scoped to the names perspective.
@@ -315,11 +305,10 @@ diffTypes !_authZReceipt (oldCodebase, oldRt, oldNp, oldTypeName) (newCodebase, 
   newType <-
     getTypeDefinitionsOf newCodebase newRt newNp id newTypeName
       `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
-  pure $ diffTypesPure (oldType, newType)
+  pure $ diffTypesPure oldType newType
 
-diffTypesPure ::
-  (TypeDefinition, TypeDefinition) -> TypeDefinitionDiff
-diffTypesPure (oldType, newType) = do
+diffTypesPure :: TypeDefinition -> TypeDefinition -> TypeDefinitionDiff
+diffTypesPure oldType newType =
   let typeDiffDisplayObject = DefinitionDiff.diffDisplayObjects (typeDefinition oldType) (typeDefinition newType)
    in TypeDefinitionDiff {left = oldType, right = newType, diff = typeDiffDisplayObject}
 

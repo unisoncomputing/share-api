@@ -17,14 +17,17 @@ module Share.NamespaceDiffs.Types
     namespaceTreeDiffReferents_,
     namespaceTreeDiffReferences_,
     namespaceTreeDiffTermDiffs_,
+    mapMaybeNamespaceTreeDiffTermDiffs,
     witherNamespaceTreeDiffTermDiffs,
     namespaceTreeDiffTypeDiffs_,
     namespaceTreeTermDiffKinds_,
+    mapMaybeNamespaceTreeTermDiffKinds,
     witherNamespaceTreeTermDiffKinds,
     namespaceTreeTypeDiffKinds_,
     namespaceTreeDiffRenderedTerms_,
     namespaceTreeDiffRenderedTypes_,
     definitionDiffKindRendered_,
+    definitionDiffKindRenderedOldNew_,
     definitionDiffKindRefsAndRendered_,
   )
 where
@@ -187,6 +190,16 @@ definitionDiffKindRendered_ f = \case
   Updated old new diff -> Updated old new <$> pure diff
   RenamedTo r old rendered -> RenamedTo r old <$> f rendered
   RenamedFrom r old rendered -> RenamedFrom r old <$> f rendered
+
+definitionDiffKindRenderedOldNew_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r rendered' diff) (Either rendered rendered) rendered'
+definitionDiffKindRenderedOldNew_ f = \case
+  Added r rendered -> Added r <$> f (Right rendered)
+  NewAlias r ns rendered -> NewAlias r ns <$> f (Right rendered)
+  Removed r rendered -> Removed r <$> f (Left rendered)
+  Propagated old new diff -> Propagated old new <$> pure diff
+  Updated old new diff -> Updated old new <$> pure diff
+  RenamedTo r old rendered -> RenamedTo r old <$> f (Left rendered)
+  RenamedFrom r old rendered -> RenamedFrom r old <$> f (Right rendered)
 
 definitionDiffKindRefsAndRendered_ :: Traversal (DefinitionDiffKind r rendered diff) (DefinitionDiffKind r rendered' diff) (r, rendered) (r, rendered')
 definitionDiffKindRefsAndRendered_ f = \case
@@ -539,6 +552,15 @@ namespaceTreeDiffReferences_ = traversed . traversed . diffAtPathReferences_
 namespaceTreeDiffTermDiffs_ :: (Ord termDiff', Ord referent, Ord renderedTerm) => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff' typeDiff) termDiff termDiff'
 namespaceTreeDiffTermDiffs_ = traversed . traversed . diffAtPathTermDiffs_
 
+mapMaybeNamespaceTreeDiffTermDiffs ::
+  forall k reference referent renderedTerm renderedType termDiff termDiff' typeDiff.
+  (Ord termDiff', Ord referent, Ord renderedTerm) =>
+  (termDiff -> Maybe termDiff') ->
+  GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff ->
+  GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff' typeDiff
+mapMaybeNamespaceTreeDiffTermDiffs f =
+  runIdentity . witherNamespaceTreeDiffTermDiffs (Identity . f)
+
 witherNamespaceTreeDiffTermDiffs ::
   forall f k reference referent renderedTerm renderedType termDiff termDiff' typeDiff.
   (Monad f, Ord termDiff', Ord referent, Ord renderedTerm) =>
@@ -567,6 +589,15 @@ namespaceTreeDiffTypeDiffs_ = traversed . traversed . diffAtPathTypeDiffs_
 
 namespaceTreeTermDiffKinds_ :: (Ord renderedTerm', Ord termDiff', Ord referent') => Traversal (GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff) (GNamespaceTreeDiff k referent' reference renderedTerm' renderedType termDiff' typeDiff) (DefinitionDiffKind referent renderedTerm termDiff) (DefinitionDiffKind referent' renderedTerm' termDiff')
 namespaceTreeTermDiffKinds_ = traversed . traversed . diffAtPathTermDiffKinds_
+
+mapMaybeNamespaceTreeTermDiffKinds ::
+  forall k reference referent referent' renderedTerm renderedTerm' renderedType termDiff termDiff' typeDiff.
+  (Ord renderedTerm', Ord termDiff', Ord referent') =>
+  (DefinitionDiffKind referent renderedTerm termDiff -> Maybe (DefinitionDiffKind referent' renderedTerm' termDiff')) ->
+  GNamespaceTreeDiff k referent reference renderedTerm renderedType termDiff typeDiff ->
+  GNamespaceTreeDiff k referent' reference renderedTerm' renderedType termDiff' typeDiff
+mapMaybeNamespaceTreeTermDiffKinds f =
+  runIdentity . witherNamespaceTreeTermDiffKinds (Identity . f)
 
 witherNamespaceTreeTermDiffKinds ::
   forall f k reference referent referent' renderedTerm renderedTerm' renderedType termDiff termDiff' typeDiff.
