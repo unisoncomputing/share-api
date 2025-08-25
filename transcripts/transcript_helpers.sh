@@ -89,7 +89,7 @@ create_user () {
 }
 
 # Set up users so we can auth against them.
-pg_init_fixtures
+pg_reset_fixtures
 
 echo "Getting access token for transcript setup"
 

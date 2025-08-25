@@ -94,13 +94,15 @@ transcripts:
 	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
 	  sleep 1; \
 	done;
+	./transcripts/configure_transcript_database.zsh
 	@echo "Booting up share";
-	( . ./local.env \
+	( . ./local.env ; \
 		$(exe) & \
 		SERVER_PID=$$!; \
 		trap "kill $$SERVER_PID 2>/dev/null || true" EXIT INT TERM; \
 		echo "Running transcripts"; \
-		./transcripts/run-transcripts.zsh \
+		./transcripts/run-transcripts.zsh ; \
+		echo "Done transcripts"; \
 		kill $$SERVER_PID 2>/dev/null || true; \
 	) 
 	@echo "Done!";
