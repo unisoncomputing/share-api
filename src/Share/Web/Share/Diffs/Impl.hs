@@ -128,65 +128,74 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
   let oldPerspective1 =
         fromMaybe oldPerspective maybeLcaPerspective
 
-  let termNamesToRender =
-        defns0 ^.. NamespaceDiffs.namespaceTreeTermDiffKinds_ . to partitionDiffKind . NamespaceDiffs.definitionDiffKindRendered_
+  (getOldTermDefinitionByName, getNewTermDefinitionByName) <- do
+    let newNameToReferent :: Name -> Referent
+        newNameToReferent =
+          (BiMultimap.range diffblob.defns.bob.defns.terms Map.!)
 
-  let (oldTermNamesToRender, newTermNamesToRender) =
-        bimap Set.fromList Set.fromList (partitionEithers termNamesToRender)
+    let oldNameToReferent :: Name -> Referent
+        oldNameToReferent =
+          case maybeLcaPerspective of
+            Just _ -> (BiMultimap.range diffblob.defns.lca.defns.terms Map.!)
+            Nothing -> newNameToReferent
 
-  let termNamesToDiff =
-        setOf NamespaceDiffs.namespaceTreeDiffTermDiffs_ defns0
+    let (oldTermNamesToRender, newTermNamesToRender) =
+          defns0
+            & toListOf (NamespaceDiffs.namespaceTreeTermDiffKinds_ . to partitionDiffKind . NamespaceDiffs.definitionDiffKindRendered_)
+            & partitionEithers
+            & bimap Set.fromList Set.fromList
 
-  let typeNamesToRender =
-        defns0 ^.. NamespaceDiffs.namespaceTreeTypeDiffKinds_ . to partitionDiffKind . NamespaceDiffs.definitionDiffKindRendered_
+    let termNamesToDiff =
+          setOf NamespaceDiffs.namespaceTreeDiffTermDiffs_ defns0
 
-  let (oldTypeNamesToRender, newTypeNamesToRender) =
-        bimap Set.fromList Set.fromList (partitionEithers typeNamesToRender)
-
-  let typeNamesToDiff =
-        setOf NamespaceDiffs.namespaceTreeDiffTypeDiffs_ defns0
-
-  let newNameToReferent :: Name -> Referent
-      newNameToReferent =
-        (BiMultimap.range diffblob.defns.bob.defns.terms Map.!)
-
-  let oldNameToReferent :: Name -> Referent
-      oldNameToReferent =
-        case maybeLcaPerspective of
-          Just _ -> (BiMultimap.range diffblob.defns.lca.defns.terms Map.!)
-          Nothing -> newNameToReferent
-
-  getOldTermDefinitionByName <- do
     oldTermDefinitionsByName <-
       PG.transactionSpan "load old terms" mempty do
         deriveMapOf
           (expectTermDefinitionsByNamedRefsOf oldCodebase oldRuntime oldPerspective1 oldNameToReferent)
           (Set.toList (Set.union oldTermNamesToRender termNamesToDiff))
-    pure (oldTermDefinitionsByName Map.!)
 
-  getNewTermDefinitionByName <- do
     newTermDefinitionsByName <- do
       PG.transactionSpan "load new terms" mempty do
         deriveMapOf
           (expectTermDefinitionsByNamedRefsOf newCodebase newRuntime newPerspective newNameToReferent)
           (Set.toList (Set.union newTermNamesToRender termNamesToDiff))
-    pure (newTermDefinitionsByName Map.!)
 
-  getOldTypeDefinitionByName <- do
+    pure ((oldTermDefinitionsByName Map.!), (newTermDefinitionsByName Map.!))
+
+  (getOldTypeDefinitionByName, getNewTypeDefinitionByName) <- do
+    let newNameToReference :: Name -> TypeReference
+        newNameToReference =
+          (BiMultimap.range diffblob.defns.bob.defns.types Map.!)
+
+    let oldNameToReference :: Name -> TypeReference
+        oldNameToReference =
+          case maybeLcaPerspective of
+            Just _ -> (BiMultimap.range diffblob.defns.lca.defns.types Map.!)
+            Nothing -> newNameToReference
+
+    let (oldTypeNamesToRender, newTypeNamesToRender) =
+          defns0
+            & toListOf (NamespaceDiffs.namespaceTreeTypeDiffKinds_ . to partitionDiffKind . NamespaceDiffs.definitionDiffKindRendered_)
+            & partitionEithers
+            & bimap Set.fromList Set.fromList
+
+    let typeNamesToDiff =
+          setOf NamespaceDiffs.namespaceTreeDiffTypeDiffs_ defns0
+
     oldTypeDefinitionsByName <- do
       PG.transactionSpan "load old types" mempty do
         deriveMapOf
-          (expectTypeDefinitionsOf oldCodebase oldRuntime oldPerspective1)
+          (expectTypeDefinitionsByNamedRefsOf oldCodebase oldRuntime oldPerspective1 oldNameToReference)
           (Set.toList (Set.union oldTypeNamesToRender typeNamesToDiff))
     pure (oldTypeDefinitionsByName Map.!)
 
-  getNewTypeDefinitionByName <- do
     newTypeDefinitionsByName <- do
       PG.transactionSpan "load new types" mempty do
         deriveMapOf
-          (expectTypeDefinitionsOf newCodebase newRuntime newPerspective)
+          (expectTypeDefinitionsByNamedRefsOf newCodebase newRuntime newPerspective newNameToReference)
           (Set.toList (Set.union newTypeNamesToRender typeNamesToDiff))
-    pure (newTypeDefinitionsByName Map.!)
+
+    pure ((oldTypeDefinitionsByName Map.!), (newTypeDefinitionsByName Map.!))
 
   -- Resolve the term referents to tag + hash
   defns1 :: NamespaceDiffs.GNamespaceTreeDiff NameSegment (TermTag, ShortHash) TypeReference Name Name Name Name <-
@@ -337,12 +346,8 @@ diffTypes ::
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
   PG.Transaction NamespaceDiffError TypeDefinitionDiff
 diffTypes !_authZReceipt (oldCodebase, oldRt, oldNp, oldTypeName) (newCodebase, newRt, newNp, newTypeName) = do
-  oldType <-
-    getTypeDefinitionsOf oldCodebase oldRt oldNp id oldTypeName
-      `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'From' Type not found: " <> Name.toText oldTypeName))
-  newType <-
-    getTypeDefinitionsOf newCodebase newRt newNp id newTypeName
-      `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "type-not-found") ("'To' Type not found: " <> Name.toText newTypeName))
+  oldType <- expectTypeDefinitionsOf oldCodebase oldRt oldNp id oldTypeName
+  newType <- expectTypeDefinitionsOf newCodebase newRt newNp id newTypeName
   pure $ diffTypesPure oldType newType
 
 diffTypesPure :: TypeDefinition -> TypeDefinition -> TypeDefinitionDiff
@@ -366,7 +371,34 @@ getTypeDefinitionsOf codebase rt namesPerspective trav s = do
       Definitions.typeDefinitionsByNamesOf codebase ppedBuilder namesPerspective renderWidth rt includeDocs traversed names
   where
     includeDocs = False
-    ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
+    ppedBuilder = PPEPostgres.ppedForReferences namesPerspective
+    renderWidth :: Width
+    renderWidth = 80
+
+expectTypeDefinitionsByNamedRefsOf ::
+  (PG.QueryM m) =>
+  Codebase.CodebaseEnv ->
+  Codebase.CodebaseRuntime sym IO ->
+  NamesPerspective m ->
+  (Name -> TypeReference) ->
+  Traversal s t Name TypeDefinition ->
+  s ->
+  m t
+expectTypeDefinitionsByNamedRefsOf codebase rt namesPerspective toReference trav s = do
+  s
+    & asListOf trav %%~ \names ->
+      Definitions.typeDefinitionsByNamedRefsOf
+        codebase
+        ppedBuilder
+        namesPerspective
+        renderWidth
+        rt
+        includeDocs
+        traverse
+        (map (\name -> (name, toReference name)) names)
+  where
+    includeDocs = False
+    ppedBuilder = PPEPostgres.ppedForReferences namesPerspective
     renderWidth :: Width
     renderWidth = 80
 

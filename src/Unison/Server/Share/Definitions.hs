@@ -5,6 +5,7 @@ module Unison.Server.Share.Definitions
     termDefinitionByNamesOf,
     termDefinitionByNamedRefsOf,
     typeDefinitionsByNamesOf,
+    typeDefinitionsByNamedRefsOf,
     definitionDependencyResults,
     definitionDependentResults,
   )
@@ -518,19 +519,54 @@ typeDefinitionsByNamesOf codebase ppedBuilder namesPerspective width rt includeD
             Nothing -> Nothing
       let withNames = zipWith addName allNames typeDisplayObjs
       withNames
-        & asListOf (traversed . _Just) %%~ \displayInfos -> do
-          let (names, refs, displayObjects) = unzip3 displayInfos
-          let allDeps = displayInfos & foldMap \(_name, ref, dispObj) -> typeDisplayObjectLabeledDependencies ref dispObj
-          pped <- ppedBuilder allDeps
-          allRenderedDocs <-
-            if includeDocs
-              then do
-                allDocRefs <- Docs.docsForDefinitionNamesOf codebase namesPerspective traversed names
-                -- TODO: properly batchify this
-                for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
-              else pure (names $> [])
-          let syntaxDOs = snd <$> Backend.typesToSyntaxOf (Suffixify False) width pped traversed (zip refs displayObjects)
-          Backend.mkTypeDefinitionsOf pped width traversed (zip4 (Just <$> names) refs allRenderedDocs syntaxDOs)
+        & asListOf (traversed . _Just)
+          %%~ mkTypeDefinitions codebase ppedBuilder namesPerspective width rt includeDocs
+
+-- | NOTE: If you're displaying many definitions you should probably generate a single PPED to
+-- share among all of them, it would be more efficient than generating a PPED per definition.
+typeDefinitionsByNamedRefsOf ::
+  (QueryM m) =>
+  CodebaseEnv ->
+  PPEDBuilder m ->
+  NamesPerspective m ->
+  Width ->
+  CodebaseRuntime sym IO ->
+  Bool ->
+  Traversal s t (Name, TypeReference) TypeDefinition ->
+  s ->
+  m t
+typeDefinitionsByNamedRefsOf codebase ppedBuilder namesPerspective width rt includeDocs trav s = do
+  s
+    & asListOf trav %%~ \refs0 -> do
+      types <-
+        refs0
+          & map (\(name, ref) -> (name, ref, ref))
+          & Backend.displayTypesOf rt.codeCache (traversed . _3)
+      mkTypeDefinitions codebase ppedBuilder namesPerspective width rt includeDocs types
+
+mkTypeDefinitions ::
+  (QueryM m) =>
+  CodebaseEnv ->
+  PPEDBuilder m ->
+  NamesPerspective m ->
+  Width ->
+  CodebaseRuntime sym IO ->
+  Bool ->
+  [(Name, TypeReference, DisplayObject () (DD.Decl Symbol Ann))] ->
+  m [TypeDefinition]
+mkTypeDefinitions codebase ppedBuilder namesPerspective width rt includeDocs displayInfos = do
+  let (names, refs, displayObjects) = unzip3 displayInfos
+  let allDeps = displayInfos & foldMap \(_name, ref, dispObj) -> typeDisplayObjectLabeledDependencies ref dispObj
+  pped <- ppedBuilder allDeps
+  allRenderedDocs <-
+    if includeDocs
+      then do
+        allDocRefs <- Docs.docsForDefinitionNamesOf codebase namesPerspective traversed names
+        -- TODO: properly batchify this
+        for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
+      else pure (names $> [])
+  let syntaxDOs = snd <$> Backend.typesToSyntaxOf (Suffixify False) width pped traversed (zip refs displayObjects)
+  Backend.mkTypeDefinitionsOf pped width traversed (zip4 (Just <$> names) refs allRenderedDocs syntaxDOs)
 
 typeDisplayObjectLabeledDependencies :: TypeReference -> DisplayObject () (DD.Decl Symbol Ann) -> Set LD.LabeledDependency
 typeDisplayObjectLabeledDependencies typeRef displayObject = do
