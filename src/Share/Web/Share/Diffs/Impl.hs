@@ -29,7 +29,6 @@ import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Utils.Aeson (PreEncoded (PreEncoded))
-import Share.Utils.Lens (asListOfDeduped)
 import Share.Web.Authorization (AuthZReceipt)
 import Share.Web.Errors
 import U.Codebase.Reference qualified as V2Reference
@@ -49,6 +48,8 @@ import Unison.Server.Types
 import Unison.ShortHash (ShortHash)
 import Unison.Syntax.Name qualified as Name
 import Unison.UnconflictedLocalDefnsView qualified
+import Unison.Util.BiMultimap qualified as BiMultimap
+import Unison.Util.Defns qualified
 import Unison.Util.Pretty (Width)
 
 -- | Diff two causals and store the diff in the database.
@@ -145,11 +146,21 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
   let typeNamesToDiff =
         setOf NamespaceDiffs.namespaceTreeDiffTypeDiffs_ defns0
 
+  let newNameToReferent :: Name -> Referent
+      newNameToReferent =
+        (BiMultimap.range diffblob.defns.bob.defns.terms Map.!)
+
+  let oldNameToReferent :: Name -> Referent
+      oldNameToReferent =
+        case maybeLcaPerspective of
+          Just _ -> (BiMultimap.range diffblob.defns.lca.defns.terms Map.!)
+          Nothing -> newNameToReferent
+
   getOldTermDefinitionByName <- do
     oldTermDefinitionsByName <-
       PG.transactionSpan "load old terms" mempty do
         deriveMapOf
-          (expectTermDefinitionsOf oldCodebase oldRuntime oldPerspective1)
+          (expectTermDefinitionsByNamedRefsOf oldCodebase oldRuntime oldPerspective1 oldNameToReferent)
           (Set.toList (Set.union oldTermNamesToRender termNamesToDiff))
     pure (oldTermDefinitionsByName Map.!)
 
@@ -157,7 +168,7 @@ tryComputeCausalDiff !_authZReceipt (oldCodebase, oldRuntime, oldCausalId) (newC
     newTermDefinitionsByName <- do
       PG.transactionSpan "load new terms" mempty do
         deriveMapOf
-          (expectTermDefinitionsOf newCodebase newRuntime newPerspective)
+          (expectTermDefinitionsByNamedRefsOf newCodebase newRuntime newPerspective newNameToReferent)
           (Set.toList (Set.union newTermNamesToRender termNamesToDiff))
     pure (newTermDefinitionsByName Map.!)
 
@@ -246,8 +257,8 @@ diffTerms ::
   (Codebase.CodebaseEnv, Codebase.CodebaseRuntime new IO, NamesPerspective (PG.Transaction NamespaceDiffError), Name) ->
   PG.Transaction NamespaceDiffError (Maybe TermDefinitionDiff)
 diffTerms !_authZReceipt (oldCodebase, oldRt, oldNp, oldName) (newCodebase, newRt, newNp, newName) = do
-  oldTerm <- getTermDefinitionsOf oldCodebase oldRt oldNp id oldName `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'From' term not found: " <> Name.toText oldName))
-  newTerm <- getTermDefinitionsOf newCodebase newRt newNp id newName `whenNothingM` throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("'To' term not found: " <> Name.toText newName))
+  oldTerm <- expectTermDefinitionsOf oldCodebase oldRt oldNp id oldName
+  newTerm <- expectTermDefinitionsOf newCodebase newRt newNp id newName
   pure $ diffTermsPure oldTerm newTerm
 
 diffTermsPure :: Either ConstructorReference TermDefinition -> Either ConstructorReference TermDefinition -> Maybe TermDefinitionDiff
@@ -270,7 +281,7 @@ getTermDefinitionsOf ::
   m t
 getTermDefinitionsOf codebase rt namesPerspective trav s = do
   s
-    & asListOfDeduped trav %%~ \names -> do
+    & asListOf trav %%~ \names -> do
       Definitions.termDefinitionByNamesOf codebase ppedBuilder namesPerspective renderWidth rt includeDocs traversed names
   where
     includeDocs = False
@@ -292,6 +303,33 @@ expectTermDefinitionsOf codebase rt np trav s =
       for (zip names results) \case
         (name, Nothing) -> throwError (MissingEntityError $ EntityMissing (ErrorID "term-not-found") ("Term not found: " <> Name.toText name <> ", in names perspective: " <> tShow np))
         (_, Just termDef) -> pure termDef
+
+expectTermDefinitionsByNamedRefsOf ::
+  (PG.QueryM m) =>
+  Codebase.CodebaseEnv ->
+  Codebase.CodebaseRuntime sym IO ->
+  NamesPerspective m ->
+  (Name -> Referent) ->
+  Traversal s t Name (Either ConstructorReference TermDefinition) ->
+  s ->
+  m t
+expectTermDefinitionsByNamedRefsOf codebase rt namesPerspective toReferent trav s = do
+  s
+    & asListOf trav %%~ \names ->
+      Definitions.termDefinitionByNamedRefsOf
+        codebase
+        ppedBuilder
+        namesPerspective
+        renderWidth
+        rt
+        includeDocs
+        traverse
+        (map (\name -> (name, toReferent name)) names)
+  where
+    includeDocs = False
+    ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
+    renderWidth :: Width
+    renderWidth = 80
 
 diffTypes ::
   AuthZReceipt ->

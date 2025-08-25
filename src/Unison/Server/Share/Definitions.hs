@@ -3,6 +3,7 @@ module Unison.Server.Share.Definitions
     resolveHQName,
     definitionDependencies,
     termDefinitionByNamesOf,
+    termDefinitionByNamedRefsOf,
     typeDefinitionsByNamesOf,
     definitionDependencyResults,
     definitionDependentResults,
@@ -55,6 +56,7 @@ import Unison.PrettyPrintEnvDecl qualified as PPED
 import Unison.Reference (TermReference, TypeReference)
 import Unison.Reference qualified as Reference
 import Unison.Reference qualified as V1
+import Unison.Referent (Referent)
 import Unison.Referent qualified as Referent
 import Unison.Server.Doc qualified as Doc
 import Unison.Server.NameSearch (NameSearch (..))
@@ -431,19 +433,54 @@ termDefinitionByNamesOf codebase ppedBuilder namesPerspective width rt includeDo
       let withNames = zipWith addName allNames constructorsAndRendered
       -- Only the Right values are terms which we're concerned with, the Left values are constructors
       withNames
-        & asListOf (traversed . _Just . _Right) %%~ \(refsDO :: [(Name, TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann))]) -> do
-          let allDeps = refsDO & foldMap \(_name, ref, displayObject) -> termDisplayObjectLabeledDependencies ref displayObject
-          pped <- ppedBuilder allDeps
-          let (names, refs, dos) = unzip3 refsDO
-          allRenderedDocs <-
-            if includeDocs
-              then do
-                allDocRefs <- Docs.docsForDefinitionNamesOf codebase namesPerspective traversed names
-                -- TODO: properly batchify this
-                for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
-              else pure (names $> [])
-          let syntaxDOs = snd <$> Backend.termsToSyntaxOf (Suffixify False) width pped traversed (zip refs dos)
-          Backend.mkTermDefinitionsOf codebase pped width traversed (zip4 (Just <$> names) refs allRenderedDocs syntaxDOs)
+        & asListOf (traversed . _Just . _Right) %%~ mkTermDefinitions codebase ppedBuilder namesPerspective width rt includeDocs
+
+termDefinitionByNamedRefsOf ::
+  (QueryM m) =>
+  CodebaseEnv ->
+  PPEDBuilder m ->
+  NamesPerspective m ->
+  Width ->
+  CodebaseRuntime sym IO ->
+  Bool ->
+  Traversal s t (Name, Referent) (Either ConstructorReference TermDefinition) ->
+  s ->
+  m t
+termDefinitionByNamedRefsOf codebase ppedBuilder namesPerspective width rt includeDocs trav s = do
+  s
+    & asListOf trav %%~ \refs0 -> do
+      terms <-
+        refs0
+          & map \case
+            (_, Referent.Con ref _) -> Left ref
+            (name, Referent.Ref ref) -> Right (name, ref, ref)
+          & Backend.displayTermsOf rt.codeCache (traversed . _Right . _3)
+      terms
+        & asListOf (traversed . _Right) %%~ mkTermDefinitions codebase ppedBuilder namesPerspective width rt includeDocs
+
+mkTermDefinitions ::
+  (QueryM m) =>
+  CodebaseEnv ->
+  PPEDBuilder m ->
+  NamesPerspective m ->
+  Width ->
+  CodebaseRuntime sym IO ->
+  Bool ->
+  [(Name, TermReference, DisplayObject (Type Symbol Ann) (Term Symbol Ann))] ->
+  m [TermDefinition]
+mkTermDefinitions codebase ppedBuilder namesPerspective width rt includeDocs refsDO = do
+  let allDeps = refsDO & foldMap \(_name, ref, displayObject) -> termDisplayObjectLabeledDependencies ref displayObject
+  pped <- ppedBuilder allDeps
+  let (names, refs, dos) = unzip3 refsDO
+  allRenderedDocs <-
+    if includeDocs
+      then do
+        allDocRefs <- Docs.docsForDefinitionNamesOf codebase namesPerspective traversed names
+        -- TODO: properly batchify this
+        for allDocRefs $ renderDocRefs codebase ppedBuilder width rt
+      else pure (names $> [])
+  let syntaxDOs = snd <$> Backend.termsToSyntaxOf (Suffixify False) width pped traversed (zip refs dos)
+  Backend.mkTermDefinitionsOf codebase pped width traversed (zip4 (Just <$> names) refs allRenderedDocs syntaxDOs)
 
 termDisplayObjectLabeledDependencies :: TermReference -> DisplayObject (Type Symbol Ann) (Term Symbol Ann) -> Set LD.LabeledDependency
 termDisplayObjectLabeledDependencies termRef displayObject = do

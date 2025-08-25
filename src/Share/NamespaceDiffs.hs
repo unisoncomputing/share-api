@@ -31,7 +31,6 @@ module Share.NamespaceDiffs
     namespaceAndLibdepsDiffLibdeps_,
     definitionDiffKindRendered_,
     definitionDiffKindRenderedOldNew_,
-    definitionDiffKindRefsAndRendered_,
   )
 where
 
