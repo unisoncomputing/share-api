@@ -2,7 +2,7 @@
 
 module Share.Web.Types (DiscoveryDocument (..), UserInfo (..)) where
 
-import Data.Aeson (ToJSON (..), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), (.=))
 import Data.Aeson qualified as Aeson
 import Share.IDs
 import Share.OAuth.Types (ResponseType)
@@ -32,6 +32,16 @@ instance ToJSON DiscoveryDocument where
         "response_types_supported" .= responseTypesSupported
       ]
 
+instance FromJSON DiscoveryDocument where
+  parseJSON = Aeson.withObject "DiscoveryDocument" $ \o -> do
+    issuer <- o Aeson..: "issuer"
+    authorizationE <- o Aeson..: "authorization_endpoint"
+    tokenE <- o Aeson..: "token_endpoint"
+    userInfoE <- o Aeson..: "userinfo_endpoint"
+    jwksURI <- o Aeson..: "jwks_uri"
+    responseTypesSupported <- o Aeson..: "response_types_supported"
+    pure DiscoveryDocument {issuer, authorizationE, tokenE, userInfoE, jwksURI, responseTypesSupported}
+
 -- | This response is compliant with the claims specified here: https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
 --
 -- It's permitted to add additional claims, but any standard claims must be formatted
@@ -57,3 +67,13 @@ instance ToJSON UserInfo where
         "email" .= email,
         "handle" .= handle
       ]
+
+instance FromJSON UserInfo where
+  parseJSON = Aeson.withObject "UserInfo" $ \o -> do
+    sub <- o Aeson..: "sub"
+    name <- o Aeson..: "name"
+    picture <- o Aeson..: "picture"
+    profile <- o Aeson..: "profile"
+    email <- o Aeson..: "email"
+    handle <- o Aeson..: "handle"
+    pure UserInfo {sub, name, picture, profile, email, handle}

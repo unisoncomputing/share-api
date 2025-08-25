@@ -105,12 +105,6 @@ instance ToJSON ResolvedAuthSubject where
     OrgSubject id -> object ["kind" .= ("org" :: Text), "id" .= id]
     TeamSubject id -> object ["kind" .= ("team" :: Text), "id" .= id]
 
-instance ToJSON DisplayAuthSubject where
-  toJSON = \case
-    UserSubject user -> object ["kind" .= ("user" :: Text), "data" .= user]
-    OrgSubject org -> object ["kind" .= ("org" :: Text), "data" .= org]
-    TeamSubject team -> object ["kind" .= ("team" :: Text), "data" .= team]
-
 instance FromJSON ResolvedAuthSubject where
   parseJSON = withObject "ResolvedAuthSubject" $ \o -> do
     kind <- o Aeson..: "kind"
@@ -119,6 +113,21 @@ instance FromJSON ResolvedAuthSubject where
       "org" -> OrgSubject <$> o Aeson..: "id"
       "team" -> TeamSubject <$> o Aeson..: "id"
       _ -> fail "Invalid ResolvedAuthSubject"
+
+instance ToJSON DisplayAuthSubject where
+  toJSON = \case
+    UserSubject user -> object ["kind" .= ("user" :: Text), "data" .= user]
+    OrgSubject org -> object ["kind" .= ("org" :: Text), "data" .= org]
+    TeamSubject team -> object ["kind" .= ("team" :: Text), "data" .= team]
+
+instance FromJSON DisplayAuthSubject where
+  parseJSON = withObject "DisplayAuthSubject" $ \o -> do
+    kind <- o Aeson..: "kind"
+    case (kind :: Text) of
+      "user" -> UserSubject <$> o Aeson..: "data"
+      "org" -> OrgSubject <$> o Aeson..: "data"
+      "team" -> TeamSubject <$> o Aeson..: "data"
+      _ -> fail "Invalid DisplayAuthSubject"
 
 --  Decoder for (subject.kind, id :: UUID)
 instance Hasql.DecodeRow ResolvedAuthSubject where
@@ -351,7 +360,7 @@ instance (FromJSON user) => FromJSON (RoleAssignment user) where
 -- | A type for mixing in permissions info on a response for a resource.
 newtype PermissionsInfo = PermissionsInfo (Set RolePermission)
   deriving (Show)
-  deriving (ToJSON) via (AtKey "permissions" (Set RolePermission))
+  deriving (ToJSON, FromJSON) via (AtKey "permissions" (Set RolePermission))
 
 data ProjectMaintainerPermissions = ProjectMaintainerPermissions
   { canView :: Bool,
@@ -390,6 +399,12 @@ instance ToJSON ListRolesResponse where
         "active" .= active
       ]
 
+instance FromJSON ListRolesResponse where
+  parseJSON = Aeson.withObject "ListRolesResponse" $ \o -> do
+    roleAssignments <- o Aeson..: "role_assignments"
+    active <- o Aeson..: "active"
+    pure ListRolesResponse {roleAssignments, active}
+
 data AddRolesResponse = AddRolesResponse
   { roleAssignments :: [RoleAssignment DisplayAuthSubject]
   }
@@ -399,6 +414,11 @@ instance ToJSON AddRolesResponse where
     object
       [ "role_assignments" Aeson..= roleAssignments
       ]
+
+instance FromJSON AddRolesResponse where
+  parseJSON = Aeson.withObject "AddRolesResponse" $ \o -> do
+    roleAssignments <- o Aeson..: "role_assignments"
+    pure AddRolesResponse {roleAssignments}
 
 data RemoveRolesResponse = RemoveRolesResponse
   { roleAssignments :: [RoleAssignment DisplayAuthSubject]
@@ -410,10 +430,21 @@ instance ToJSON RemoveRolesResponse where
       [ "role_assignments" Aeson..= roleAssignments
       ]
 
+instance FromJSON RemoveRolesResponse where
+  parseJSON = Aeson.withObject "RemoveRolesResponse" $ \o -> do
+    roleAssignments <- o Aeson..: "role_assignments"
+    pure RemoveRolesResponse {roleAssignments}
+
 data AddRolesRequest = AddRolesRequest
   { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
+
+instance ToJSON AddRolesRequest where
+  toJSON AddRolesRequest {..} =
+    object
+      [ "role_assignments" .= roleAssignments
+      ]
 
 instance FromJSON AddRolesRequest where
   parseJSON = Aeson.withObject "AddRolesRequest" $ \o -> do
@@ -424,6 +455,12 @@ data RemoveRolesRequest = RemoveRolesRequest
   { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
   }
   deriving (Show)
+
+instance ToJSON RemoveRolesRequest where
+  toJSON RemoveRolesRequest {..} =
+    object
+      [ "role_assignments" .= roleAssignments
+      ]
 
 instance FromJSON RemoveRolesRequest where
   parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do
@@ -443,6 +480,12 @@ data ProjectNotificationSubscriptionRequest
   }
   deriving (Show, Eq)
 
+instance ToJSON ProjectNotificationSubscriptionRequest where
+  toJSON ProjectNotificationSubscriptionRequest {..} =
+    object
+      [ "isSubscribed" .= isSubscribed
+      ]
+
 instance FromJSON ProjectNotificationSubscriptionRequest where
   parseJSON = Aeson.withObject "ProjectNotificationSubscriptionRequest" $ \o -> do
     isSubscribed <- o Aeson..: "isSubscribed"
@@ -459,3 +502,8 @@ instance ToJSON ProjectNotificationSubscriptionResponse where
     object
       [ "subscriptionId" .= subscriptionId
       ]
+
+instance FromJSON ProjectNotificationSubscriptionResponse where
+  parseJSON = Aeson.withObject "ProjectNotificationSubscriptionResponse" $ \o -> do
+    subscriptionId <- o Aeson..: "subscriptionId"
+    pure ProjectNotificationSubscriptionResponse {subscriptionId}

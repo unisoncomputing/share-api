@@ -53,8 +53,8 @@ server :: ServerT API.API WebApp
 server =
   let orgResourceServer orgHandle =
         API.ResourceRoutes
-          { API.roles = rolesServer orgHandle,
-            API.members = membersServer orgHandle
+          { API.orgRoles = rolesServer orgHandle,
+            API.orgMembers = membersServer orgHandle
           }
    in orgCreateEndpoint :<|> orgResourceServer
 
@@ -68,17 +68,17 @@ orgCreateEndpoint callerUserId (CreateOrgRequest {name, handle, avatarUrl, email
 rolesServer :: UserHandle -> API.OrgRolesRoutes (AsServerT WebApp)
 rolesServer orgHandle =
   API.OrgRolesRoutes
-    { API.list = listRolesEndpoint orgHandle,
-      API.add = addRolesEndpoint orgHandle,
-      API.remove = removeRolesEndpoint orgHandle
+    { API.listOrgRoles = listRolesEndpoint orgHandle,
+      API.addOrgRoles = addRolesEndpoint orgHandle,
+      API.removeOrgRoles = removeRolesEndpoint orgHandle
     }
 
 membersServer :: UserHandle -> API.OrgMembersRoutes (AsServerT WebApp)
 membersServer orgHandle =
   API.OrgMembersRoutes
-    { API.list = listMembersEndpoint orgHandle,
-      API.add = addMembersEndpoint orgHandle,
-      API.remove = removeMembersEndpoint orgHandle
+    { API.listOrgMembers = listMembersEndpoint orgHandle,
+      API.addOrgMembers = addMembersEndpoint orgHandle,
+      API.removeOrgMembers = removeMembersEndpoint orgHandle
     }
 
 orgIdByHandle :: UserHandle -> WebApp OrgId

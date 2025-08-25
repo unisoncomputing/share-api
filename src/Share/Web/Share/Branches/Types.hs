@@ -8,7 +8,7 @@ module Share.Web.Share.Branches.Types where
 import Data.Aeson
 import Data.Time (UTCTime)
 import Servant (FromHttpApiData)
-import Servant.API (FromHttpApiData (..))
+import Servant.API (FromHttpApiData (..), ToHttpApiData (..))
 import Share.Branch (Branch (..))
 import Share.IDs
 import Share.IDs qualified as IDs
@@ -48,6 +48,16 @@ instance ToJSON ShareBranch where
         "contributions" .= contributions
       ]
 
+instance FromJSON ShareBranch where
+  parseJSON = withObject "ShareBranch" $ \o ->
+    ShareBranch
+      <$> o .: "branchRef"
+      <*> o .: "createdAt"
+      <*> o .: "updatedAt"
+      <*> o .: "causalHash"
+      <*> o .: "project"
+      <*> o .: "contributions"
+
 -- | Allows filtering the branches list for contributor or core branches.
 data BranchKindFilter
   = AllBranchKinds
@@ -60,3 +70,8 @@ instance FromHttpApiData BranchKindFilter where
   parseQueryParam "core" = Right OnlyCoreBranches
   parseQueryParam "contributor" = Right OnlyContributorBranches
   parseQueryParam _ = Left "Invalid branch kind filter, must be one of: ['all', 'core', contributor']"
+
+instance ToHttpApiData BranchKindFilter where
+  toQueryParam AllBranchKinds = "all"
+  toQueryParam OnlyCoreBranches = "core"
+  toQueryParam OnlyContributorBranches = "contributor"

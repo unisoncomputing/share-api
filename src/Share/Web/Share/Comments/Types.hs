@@ -16,6 +16,12 @@ data CreateCommentRequest = CreateCommentRequest
   }
   deriving (Show)
 
+instance ToJSON CreateCommentRequest where
+  toJSON CreateCommentRequest {..} =
+    object
+      [ "content" .= content
+      ]
+
 instance FromJSON CreateCommentRequest where
   parseJSON = withObject "CreateCommentRequest" \o -> do
     content <- o .: "content"
@@ -29,6 +35,13 @@ data UpdateCommentRequest = UpdateCommentRequest
     expectedRevision :: RevisionNumber
   }
   deriving (Show)
+
+instance ToJSON UpdateCommentRequest where
+  toJSON UpdateCommentRequest {..} =
+    object
+      [ "content" .= content,
+        "expectedRevision" .= expectedRevision
+      ]
 
 instance FromJSON UpdateCommentRequest where
   parseJSON = withObject "UpdateCommentRequest" \o -> do
@@ -45,3 +58,11 @@ instance ToJSON UpdateCommentResponse where
   toJSON = \case
     UpdateCommentSuccess event -> object ["kind" .= ("success" :: Text), "comment" .= event]
     UpdateCommentConflict event -> object ["kind" .= ("conflict" :: Text), "comment" .= event]
+
+instance FromJSON UpdateCommentResponse where
+  parseJSON = withObject "UpdateCommentResponse" \o -> do
+    kind :: Text <- o .: "kind"
+    case kind of
+      "success" -> UpdateCommentSuccess <$> o .: "comment"
+      "conflict" -> UpdateCommentConflict <$> o .: "comment"
+      _ -> fail $ "Unknown kind: " <> show kind

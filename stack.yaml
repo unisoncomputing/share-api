@@ -5,6 +5,7 @@ packages:
 - share-auth
 - share-auth/example
 - share-utils
+- share-client
 - unison/codebase2/codebase
 - unison/codebase2/codebase-sqlite
 - unison/codebase2/codebase-sqlite-hashing-v2

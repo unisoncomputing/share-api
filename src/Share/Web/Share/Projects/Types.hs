@@ -82,6 +82,20 @@ instance ToJSON ProjectOwner where
         "type" .= ("user" :: Text)
       ]
 
+instance FromJSON ProjectOwner where
+  parseJSON = Aeson.withObject "ProjectOwner" $ \o -> do
+    typ <- o .: "type"
+    case typ of
+      ("organization" :: Text) -> do
+        ownerHandle <- o .: "handle"
+        ownerName <- o .:? "name"
+        pure $ OrganizationOwner {..}
+      ("user" :: Text) -> do
+        ownerHandle <- o .: "handle"
+        ownerName <- o .:? "name"
+        pure $ UserOwner {..}
+      _ -> fail $ "Unknown ProjectOwner type: " <> show typ
+
 data FavData = FavData
   { numFavs :: Int64,
     isFaved :: Bool
@@ -101,6 +115,12 @@ instance ToJSON FavData where
         "isFaved" .= isFaved
       ]
 
+instance FromJSON FavData where
+  parseJSON = Aeson.withObject "FavData" $ \o -> do
+    numFavs <- o .: "numFavs"
+    isFaved <- o .: "isFaved"
+    pure FavData {..}
+
 data APIProjectBranchAndReleaseDetails = APIProjectBranchAndReleaseDetails
   { defaultBranch :: Maybe BranchName,
     latestRelease :: Maybe ReleaseVersion
@@ -113,6 +133,12 @@ instance ToJSON APIProjectBranchAndReleaseDetails where
       [ "defaultBranch" .= defaultBranch,
         "latestRelease" .= latestRelease
       ]
+
+instance FromJSON APIProjectBranchAndReleaseDetails where
+  parseJSON = Aeson.withObject "APIProjectBranchAndReleaseDetails" $ \o -> do
+    defaultBranch <- o .:? "defaultBranch"
+    latestRelease <- o .:? "latestRelease"
+    pure APIProjectBranchAndReleaseDetails {..}
 
 data APIProject = APIProject
   { owner :: ProjectOwner,
@@ -137,11 +163,30 @@ instance ToJSON APIProject where
         "updatedAt" .= updatedAt
       ]
 
+instance FromJSON APIProject where
+  parseJSON = Aeson.withObject "APIProject" $ \o -> do
+    owner <- o .: "owner"
+    slug <- o .: "slug"
+    summary <- o .:? "summary"
+    visibility <- o .: "visibility"
+    tags <- o .:? "tags" .!= Set.empty
+    createdAt <- o .: "createdAt"
+    updatedAt <- o .: "updatedAt"
+    pure APIProject {..}
+
 data CreateProjectRequest = CreateProjectRequest
   { summary :: Maybe Text,
     visibility :: ProjectVisibility,
     tags :: Set ProjectTag
   }
+
+instance Aeson.ToJSON CreateProjectRequest where
+  toJSON CreateProjectRequest {..} =
+    object
+      [ "summary" .= summary,
+        "visibility" .= visibility,
+        "tags" .= tags
+      ]
 
 instance Aeson.FromJSON CreateProjectRequest where
   parseJSON = Aeson.withObject "CreateProjectRequest" $ \o -> do
@@ -155,6 +200,9 @@ data CreateProjectResponse = CreateProjectResponse
 instance Aeson.ToJSON CreateProjectResponse where
   toJSON CreateProjectResponse = Aeson.object []
 
+instance Aeson.FromJSON CreateProjectResponse where
+  parseJSON _ = pure CreateProjectResponse
+
 -- | A list of daily downloads for a project, limited to the last 28 days (4 weeks)
 -- Listed from [most recent -> least recent]
 newtype DownloadStats = DownloadStats [Int64]
@@ -162,6 +210,11 @@ newtype DownloadStats = DownloadStats [Int64]
 
 instance Aeson.ToJSON DownloadStats where
   toJSON (DownloadStats stats) = toJSON stats
+
+instance Aeson.FromJSON DownloadStats where
+  parseJSON arr = do
+    stats <- parseJSON arr
+    pure $ DownloadStats stats
 
 data ReleaseDownloadStats = ReleaseDownloadStats
   { releaseDownloads :: DownloadStats
@@ -173,6 +226,11 @@ instance Aeson.ToJSON ReleaseDownloadStats where
     object
       [ "releaseDownloads" .= releaseDownloads
       ]
+
+instance Aeson.FromJSON ReleaseDownloadStats where
+  parseJSON = Aeson.withObject "ReleaseDownloadStats" $ \o -> do
+    releaseDownloads <- o .: "releaseDownloads"
+    pure ReleaseDownloadStats {..}
 
 data ContributionStats = ContributionStats
   { inReview :: Int,
@@ -190,6 +248,14 @@ instance Aeson.ToJSON ContributionStats where
         "numClosedContributions" .= closed,
         "numMergedContributions" .= merged
       ]
+
+instance Aeson.FromJSON ContributionStats where
+  parseJSON = Aeson.withObject "ContributionStats" $ \o -> do
+    inReview <- o .: "numActiveContributions"
+    draft <- o .: "numDraftContributions"
+    closed <- o .: "numClosedContributions"
+    merged <- o .: "numMergedContributions"
+    pure ContributionStats {..}
 
 instance PG.DecodeRow ContributionStats where
   decodeRow = do
@@ -212,6 +278,12 @@ instance Aeson.ToJSON TicketStats where
         "numClosedTickets" .= numClosedTickets
       ]
 
+instance Aeson.FromJSON TicketStats where
+  parseJSON = Aeson.withObject "TicketStats" $ \o -> do
+    numOpenTickets <- o .: "numOpenTickets"
+    numClosedTickets <- o .: "numClosedTickets"
+    pure TicketStats {..}
+
 instance PG.DecodeRow TicketStats where
   decodeRow = do
     numOpenTickets <- fromIntegral @Int64 <$> PG.decodeField
@@ -222,13 +294,13 @@ newtype IsPremiumProject = IsPremiumProject
   { isPremiumProject :: Bool
   }
   deriving (Show)
-  deriving (ToJSON) via (AtKey "isPremiumProject" Bool)
+  deriving (ToJSON, FromJSON) via (AtKey "isPremiumProject" Bool)
 
 newtype IsSubscribed = IsSubscribed
   { isSubscribed :: Bool
   }
   deriving (Show)
-  deriving (ToJSON) via (AtKey "isSubscribed" Bool)
+  deriving (ToJSON, FromJSON) via (AtKey "isSubscribed" Bool)
 
 type GetProjectResponse =
   APIProject
@@ -248,11 +320,22 @@ data ListProjectsResponse = ListProjectsResponse
 instance Aeson.ToJSON ListProjectsResponse where
   toJSON (ListProjectsResponse projects) = toJSON projects
 
+instance Aeson.FromJSON ListProjectsResponse where
+  parseJSON v = ListProjectsResponse <$> Aeson.parseJSON v
+
 data UpdateProjectRequest = UpdateProjectRequest
   { summary :: NullableUpdate Text,
     visibility :: Maybe ProjectVisibility,
     tags :: SetUpdate ProjectTag
   }
+
+instance Aeson.ToJSON UpdateProjectRequest where
+  toJSON UpdateProjectRequest {..} =
+    object
+      [ "summary" .= nullableUpdateToJSON summary,
+        "visibility" .= visibility,
+        "tags" .= tags
+      ]
 
 instance Aeson.FromJSON UpdateProjectRequest where
   parseJSON = Aeson.withObject "UpdateProjectRequest" $ \obj -> do
@@ -270,6 +353,12 @@ data FavProjectRequest = FavProjectRequest
   { isFaved :: Bool
   }
   deriving (Show)
+
+instance Aeson.ToJSON FavProjectRequest where
+  toJSON FavProjectRequest {..} =
+    Aeson.object
+      [ "isFaved" .= isFaved
+      ]
 
 instance Aeson.FromJSON FavProjectRequest where
   parseJSON = Aeson.withObject "FavProjectRequest" $ \o ->

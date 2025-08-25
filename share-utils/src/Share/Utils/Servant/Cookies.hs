@@ -18,6 +18,7 @@ module Share.Utils.Servant.Cookies
   )
 where
 
+import Data.Binary.Builder qualified as Builder
 import Data.ByteString qualified as BS
 import Data.Function ((&))
 import Data.Map (Map)
@@ -70,6 +71,14 @@ instance (KnownSymbol s, FromHttpApiData a) => FromHttpApiData (CookieVal s a) w
                 Just valTxt -> CookieVal . Just <$> parseQueryParam valTxt
         )
 
+instance (KnownSymbol s, ToHttpApiData a) => ToHttpApiData (CookieVal s a) where
+  toQueryParam (CookieVal Nothing) = ""
+  toQueryParam (CookieVal (Just a)) =
+    Text.pack (symbolVal (Proxy @s)) <> "=" <> toQueryParam a
+  toHeader (CookieVal Nothing) = ""
+  toHeader (CookieVal (Just a)) =
+    toHeader $ CookieMap $ Map.singleton (Text.pack $ symbolVal (Proxy @s)) (toQueryParam a)
+
 type Cookies = Header "Cookie" CookieMap
 
 -- | This type is used by 'Cookies' and 'CookieVal' as a way to deserialize the Cookie header
@@ -79,6 +88,15 @@ newtype CookieMap = CookieMap {cookieMap :: Map Text Text}
 instance FromHttpApiData CookieMap where
   parseQueryParam _ = error "CookieMap used outside of Header field"
   parseHeader bs = Right . CookieMap . Map.fromList $ Cookie.parseCookiesText bs
+
+instance ToHttpApiData CookieMap where
+  toQueryParam _ = error "CookieMap used outside of Header field"
+
+  toHeader (CookieMap m) =
+    Map.toList m
+      & Cookie.renderCookiesText
+      & Builder.toLazyByteString
+      & BS.toStrict
 
 -- | The @SameSite@ attribute of cookies determines whether cookies will be sent
 -- on cross-origin requests.

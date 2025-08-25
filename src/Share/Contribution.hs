@@ -6,7 +6,7 @@ import Data.Aeson qualified as Aeson
 import Data.Time (UTCTime)
 import Hasql.Decoders qualified as Hasql
 import Hasql.Interpolate qualified as Hasql
-import Servant (FromHttpApiData (..))
+import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
@@ -58,6 +58,13 @@ instance FromHttpApiData ContributionStatus where
     "closed" -> Right Closed
     "merged" -> Right Merged
     _ -> Left "Invalid contribution status"
+
+instance ToHttpApiData ContributionStatus where
+  toQueryParam = \case
+    Draft -> "draft"
+    InReview -> "in_review"
+    Closed -> "closed"
+    Merged -> "merged"
 
 instance Hasql.DecodeValue ContributionStatus where
   decodeValue = do

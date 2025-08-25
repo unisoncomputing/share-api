@@ -26,6 +26,9 @@ instance (Typeable a, ToJSON a) => ToJSON (MaybeEncoded a) where
   toEncoding (IsEncoded txt) = Aeson.toEncoding (PreEncoded @a txt)
   toEncoding (NotEncoded a) = Aeson.toEncoding a
 
+instance (Aeson.FromJSON a) => Aeson.FromJSON (MaybeEncoded a) where
+  parseJSON v = NotEncoded <$> Aeson.parseJSON v
+
 newtype PreEncoded a = PreEncoded BL.ByteString
   deriving stock (Show, Eq, Ord)
 
@@ -38,3 +41,8 @@ instance (Typeable a) => ToJSON (PreEncoded a) where
 
   toEncoding :: (HasCallStack) => PreEncoded a -> Aeson.Encoding
   toEncoding (PreEncoded txt) = Encoding.unsafeToEncoding . Builder.fromLazyByteString $ txt
+
+instance (Aeson.FromJSON a) => Aeson.FromJSON (PreEncoded a) where
+  parseJSON v = do
+    -- TODO: This is a bit silly.
+    pure . PreEncoded $ Aeson.encode v

@@ -24,24 +24,24 @@ type API =
 
 data ResourceRoutes mode
   = ResourceRoutes
-  { roles :: mode :- "roles" :> NamedRoutes OrgRolesRoutes,
-    members :: mode :- "members" :> NamedRoutes OrgMembersRoutes
+  { orgRoles :: mode :- "roles" :> NamedRoutes OrgRolesRoutes,
+    orgMembers :: mode :- "members" :> NamedRoutes OrgMembersRoutes
   }
   deriving stock (Generic)
 
 data OrgRolesRoutes mode
   = OrgRolesRoutes
-  { list :: mode :- OrgRolesListEndpoint,
-    add :: mode :- OrgRolesAddEndpoint,
-    remove :: mode :- OrgRolesRemoveEndpoint
+  { listOrgRoles :: mode :- OrgRolesListEndpoint,
+    addOrgRoles :: mode :- OrgRolesAddEndpoint,
+    removeOrgRoles :: mode :- OrgRolesRemoveEndpoint
   }
   deriving stock (Generic)
 
 data OrgMembersRoutes mode
   = OrgMembersRoutes
-  { list :: mode :- OrgMembersListEndpoint,
-    add :: mode :- OrgMembersAddEndpoint,
-    remove :: mode :- OrgMembersRemoveEndpoint
+  { listOrgMembers :: mode :- OrgMembersListEndpoint,
+    addOrgMembers :: mode :- OrgMembersAddEndpoint,
+    removeOrgMembers :: mode :- OrgMembersRemoveEndpoint
   }
   deriving stock (Generic)
 

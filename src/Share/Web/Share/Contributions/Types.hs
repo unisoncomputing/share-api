@@ -16,7 +16,7 @@ import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
-import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.API (NullableUpdate, nullableUpdateToJSON, parseNullableUpdate)
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Errors qualified as Err
 import Share.Web.Share.Comments (CommentEvent (..), commentEventTimestamp)
@@ -84,6 +84,22 @@ instance ToJSON (ShareContribution UserDisplayInfo) where
         "numComments" .= numComments
       ]
 
+instance FromJSON (ShareContribution UserDisplayInfo) where
+  parseJSON = withObject "ShareContribution" \o -> do
+    contributionId <- o .: "id"
+    projectShortHand <- o .: "projectRef"
+    number <- o .: "number"
+    title <- o .: "title"
+    description <- o .:? "description"
+    status <- o .: "status"
+    sourceBranchShortHand <- o .: "sourceBranchRef"
+    targetBranchShortHand <- o .: "targetBranchRef"
+    createdAt <- o .: "createdAt"
+    updatedAt <- o .: "updatedAt"
+    author <- o .:? "author"
+    numComments <- o .: "numComments"
+    pure ShareContribution {..}
+
 -- | Allows filtering the branches list for contributor or core branches.
 data ContributionKindFilter
   = AllContributionKinds
@@ -92,10 +108,17 @@ data ContributionKindFilter
   deriving stock (Eq, Show)
 
 instance FromHttpApiData ContributionKindFilter where
-  parseQueryParam "all" = Right AllContributionKinds
-  parseQueryParam "core" = Right OnlyCoreContributions
-  parseQueryParam "contributor" = Right OnlyContributorContributions
-  parseQueryParam _ = Left "Invalid contribution kind filter, must be one of: ['all', 'core', contributor']"
+  parseQueryParam = \case
+    "all" -> Right AllContributionKinds
+    "core" -> Right OnlyCoreContributions
+    "contributor" -> Right OnlyContributorContributions
+    _ -> Left "Invalid contribution kind filter, must be one of: ['all', 'core', contributor']"
+
+instance ToHttpApiData ContributionKindFilter where
+  toQueryParam = \case
+    AllContributionKinds -> "all"
+    OnlyCoreContributions -> "core"
+    OnlyContributorContributions -> "contributor"
 
 data StatusChangeEvent user = StatusChangeEvent
   { oldStatus :: Maybe ContributionStatus,
@@ -135,6 +158,18 @@ instance (ToJSON user) => ToJSON (ContributionTimelineEvent user) where
         ]
     ContributionTimelineComment commentEvent -> toJSON commentEvent
 
+instance (FromJSON user) => FromJSON (ContributionTimelineEvent user) where
+  parseJSON = withObject "ContributionTimelineEvent" \o -> do
+    kind <- o .:? "kind"
+    case kind of
+      (Just ("statusChange" :: Text)) -> do
+        newStatus <- o .: "newStatus"
+        oldStatus <- o .:? "oldStatus"
+        actor <- o .: "actor"
+        timestamp <- o .: "timestamp"
+        pure $ ContributionTimelineStatusChange StatusChangeEvent {..}
+      _ -> ContributionTimelineComment <$> parseJSON (Object o)
+
 data CreateContributionRequest = CreateContributionRequest
   { title :: Text,
     description :: Maybe Text,
@@ -143,6 +178,16 @@ data CreateContributionRequest = CreateContributionRequest
     targetBranchShortHand :: BranchShortHand
   }
   deriving (Show)
+
+instance ToJSON CreateContributionRequest where
+  toJSON CreateContributionRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= description,
+        "status" .= status,
+        "sourceBranchRef" .= sourceBranchShortHand,
+        "targetBranchRef" .= targetBranchShortHand
+      ]
 
 instance FromJSON CreateContributionRequest where
   parseJSON = withObject "CreateContributionRequest" \o -> do
@@ -161,6 +206,16 @@ data UpdateContributionRequest = UpdateContributionRequest
     targetBranchSH :: Maybe BranchShortHand
   }
   deriving (Show)
+
+instance ToJSON UpdateContributionRequest where
+  toJSON UpdateContributionRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= nullableUpdateToJSON description,
+        "status" .= status,
+        "sourceBranchRef" .= sourceBranchSH,
+        "targetBranchRef" .= targetBranchSH
+      ]
 
 instance FromJSON UpdateContributionRequest where
   parseJSON = withObject "UpdateContributionRequest" \o -> do
@@ -196,6 +251,23 @@ instance ToJSON CheckMergeContributionResponse where
           CantMerge msg -> object ["kind" .= ("cant_merge" :: Text), "reason" .= msg]
       ]
 
+instance FromJSON CheckMergeContributionResponse where
+  parseJSON = withObject "CheckMergeContributionResponse" \o -> do
+    mergeability <- o .: "mergeability"
+    case mergeability of
+      Object obj -> do
+        kind <- obj .: "kind"
+        case kind of
+          ("fast_forward" :: Text) -> pure CheckMergeContributionResponse {mergeability = CanFastForward}
+          "merge" -> pure CheckMergeContributionResponse {mergeability = CanMerge}
+          "conflicted" -> pure CheckMergeContributionResponse {mergeability = Conflicted}
+          "already_merged" -> pure CheckMergeContributionResponse {mergeability = AlreadyMerged}
+          "cant_merge" -> do
+            reason <- obj .: "reason"
+            pure $ CheckMergeContributionResponse {mergeability = CantMerge reason}
+          _ -> fail $ "Invalid mergeability kind: " <> Text.unpack kind
+      _ -> fail "Expected an object for check merge contribution response"
+
 data MergeResult
   = MergeSuccess
   | SourceBranchUpdated
@@ -208,6 +280,12 @@ data MergeContributionRequest = MergeContributionRequest
   { contributionStateToken :: ContributionStateToken
   }
   deriving (Show)
+
+instance ToJSON MergeContributionRequest where
+  toJSON MergeContributionRequest {..} =
+    object
+      [ "contributionStateToken" .= toQueryParam contributionStateToken
+      ]
 
 instance FromJSON MergeContributionRequest where
   parseJSON = withObject "MergeContributionRequest" \o -> do
@@ -231,6 +309,23 @@ instance ToJSON MergeContributionResponse where
           MergeConflicted -> object ["kind" .= ("conflicted" :: Text)]
           MergeFailed msg -> object ["kind" .= ("failed" :: Text), "reason" .= msg]
       ]
+
+instance FromJSON MergeContributionResponse where
+  parseJSON = withObject "MergeContributionResponse" \o -> do
+    result <- o .: "result"
+    case result of
+      Object obj -> do
+        kind <- obj .: "kind"
+        case kind of
+          ("success" :: Text) -> pure MergeContributionResponse {result = MergeSuccess}
+          "source_branch_updated" -> pure MergeContributionResponse {result = SourceBranchUpdated}
+          "target_branch_updated" -> pure MergeContributionResponse {result = TargetBranchUpdated}
+          "conflicted" -> pure MergeContributionResponse {result = MergeConflicted}
+          "failed" -> do
+            reason <- obj .: "reason"
+            pure $ MergeContributionResponse {result = MergeFailed reason}
+          _ -> fail $ "Invalid merge result kind: " <> Text.unpack kind
+      _ -> fail "Expected an object for merge contribution response"
 
 -- | Token used to ensure that the state of a contribution hasn't changed between
 -- rendering the page and the user taking a given action.

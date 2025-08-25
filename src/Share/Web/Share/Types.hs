@@ -4,7 +4,7 @@
 
 module Share.Web.Share.Types where
 
-import Data.Aeson (KeyValue ((.=)), ToJSON (..))
+import Data.Aeson (FromJSON, KeyValue ((.=)), ToJSON (..), (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.List.NonEmpty qualified as NEL
 import Data.Set qualified as Set
@@ -17,7 +17,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (ProjectVisibility)
-import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.API (NullableUpdate, nullableUpdateToJSON, parseNullableUpdate)
 import Share.Utils.URI
 import Share.Web.Authorization.Types (RolePermission)
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UnifiedDisplayInfo, UserDisplayInfo (..), UserLike (..))
@@ -35,6 +35,18 @@ data UpdateUserRequest = UpdateUserRequest
     pronouns :: NullableUpdate Text
   }
   deriving (Show)
+
+instance Aeson.ToJSON UpdateUserRequest where
+  toJSON UpdateUserRequest {..} =
+    Aeson.object
+      [ "name" .= nullableUpdateToJSON name,
+        "avatarUrl" .= nullableUpdateToJSON avatarUrl,
+        "bio" .= nullableUpdateToJSON bio,
+        "website" .= nullableUpdateToJSON website,
+        "location" .= nullableUpdateToJSON location,
+        "twitterHandle" .= nullableUpdateToJSON twitterHandle,
+        "pronouns" .= nullableUpdateToJSON pronouns
+      ]
 
 instance Aeson.FromJSON UpdateUserRequest where
   parseJSON = Aeson.withObject "UpdateUserRequest" $ \o -> do
@@ -54,6 +66,12 @@ instance ToJSON UserKind where
   toJSON = \case
     UserKind -> "user"
     OrgKind -> "org"
+
+instance FromJSON UserKind where
+  parseJSON = Aeson.withText "UserKind" $ \case
+    "user" -> pure UserKind
+    "org" -> pure OrgKind
+    t -> fail $ "Invalid UserKind: " <> Text.unpack t
 
 data DescribeUserProfile = DescribeUserProfile
   { bio :: Maybe Text,
@@ -99,6 +117,39 @@ instance ToJSON DescribeUserProfile where
             "orgId" .= orgId
           ]
 
+instance FromJSON DescribeUserProfile where
+  parseJSON = Aeson.withObject "DescribeUserProfile" $ \o -> do
+    kind <- o .: "kind"
+    case (kind :: Text) of
+      "user" -> do
+        handle <- o .: "handle"
+        name <- o .:? "name"
+        avatarUrl <- fmap unpackURI <$> o .:? "avatarUrl"
+        userId <- o .: "userId"
+        bio <- o .:? "bio"
+        website <- o .:? "website"
+        location <- o .:? "location"
+        twitterHandle <- o .:? "twitterHandle"
+        pronouns <- o .:? "pronouns"
+        permissions <- o .: "permissions"
+        pure $ DescribeUserProfile {bio, website, location, twitterHandle, pronouns, permissions, displayInfo = UnifiedUser (UserDisplayInfo {handle, name, avatarUrl, userId})}
+      "org" -> do
+        userInfo <- o .: "user"
+        handle <- userInfo Aeson..: "handle"
+        name <- userInfo Aeson..:? "name"
+        avatarUrl <- fmap unpackURI <$> userInfo Aeson..:? "avatarUrl"
+        userId <- userInfo Aeson..: "userId"
+        let user = UserDisplayInfo {handle, name, avatarUrl, userId}
+        orgId <- o .: "orgId"
+        isCommercial <- o .: "isCommercial"
+        bio <- userInfo Aeson..:? "bio"
+        website <- userInfo Aeson..:? "website"
+        twitterHandle <- userInfo Aeson..:? "twitterHandle"
+        pronouns <- userInfo Aeson..:? "pronouns"
+        permissions <- o .: "permissions"
+        pure $ DescribeUserProfile {bio, website, location = Nothing, twitterHandle, pronouns, permissions, displayInfo = UnifiedOrg (OrgDisplayInfo {user, orgId, isCommercial})}
+      _ -> fail $ "Unknown kind for DescribeUserProfile: " <> show kind
+
 data ReadmeResponse = ReadmeResponse
   { readMe :: Maybe Doc,
     markdownReadMe :: Maybe Text
@@ -112,6 +163,12 @@ instance ToJSON ReadmeResponse where
         "markdownReadMe" .= markdownReadMe
       ]
 
+instance FromJSON ReadmeResponse where
+  parseJSON = Aeson.withObject "ReadmeResponse" $ \o -> do
+    readMe <- o Aeson..: "readMe"
+    markdownReadMe <- o Aeson..: "markdownReadMe"
+    pure ReadmeResponse {readMe, markdownReadMe}
+
 -- | A reponse for rendering docs.
 data DocResponse = DocResponse
   { doc :: Maybe Doc
@@ -123,6 +180,11 @@ instance ToJSON DocResponse where
     Aeson.object
       [ "doc" .= doc
       ]
+
+instance FromJSON DocResponse where
+  parseJSON = Aeson.withObject "DocResponse" $ \o -> do
+    doc <- o Aeson..: "doc"
+    pure DocResponse {doc}
 
 data SearchResult
   = SearchResultUserLike UnifiedDisplayInfo
@@ -163,6 +225,32 @@ instance ToJSON SearchResult where
           "visibility" .= visibility
         ]
 
+instance FromJSON SearchResult where
+  parseJSON = Aeson.withObject "SearchResult" $ \o -> do
+    tag <- o Aeson..: "tag"
+    case (tag :: Text) of
+      "user" -> do
+        handle <- o Aeson..: "handle"
+        name <- o Aeson..:? "name"
+        avatarUrl <- o Aeson..:? "avatarUrl"
+        userId <- o Aeson..: "userId"
+        pure $ SearchResultUserLike $ UnifiedUser $ UserDisplayInfo {handle, name, avatarUrl, userId}
+      "org" -> do
+        orgId <- o Aeson..: "orgId"
+        isCommercial <- o Aeson..: "isCommercial"
+        user <- o Aeson..: "user"
+        handle <- user Aeson..: "handle"
+        name <- user Aeson..:? "name"
+        avatarUrl <- user Aeson..:? "avatarUrl"
+        userId <- user Aeson..: "userId"
+        pure $ SearchResultUserLike $ UnifiedOrg $ OrgDisplayInfo {user = UserDisplayInfo {handle, name, avatarUrl, userId}, orgId, isCommercial}
+      "project" -> do
+        projectRef <- o Aeson..: "projectRef"
+        summary <- o Aeson..:? "summary"
+        visibility <- o Aeson..: "visibility"
+        pure $ SearchResultProject projectRef summary visibility
+      t -> fail $ "Invalid SearchResult tag: " <> Text.unpack t
+
 -- | Cloud/Unison Subscription plan tier
 data PlanTier = Free | Starter | Pro
   deriving (Show, Eq, Ord)
@@ -172,6 +260,13 @@ instance ToJSON PlanTier where
     Free -> "Free"
     Starter -> "Starter"
     Pro -> "Pro"
+
+instance FromJSON PlanTier where
+  parseJSON = Aeson.withText "PlanTier" $ \case
+    "Free" -> pure Free
+    "Starter" -> pure Starter
+    "Pro" -> pure Pro
+    t -> fail $ "Invalid PlanTier: " <> Text.unpack t
 
 instance PG.DecodeValue PlanTier where
   decodeValue =
@@ -228,6 +323,55 @@ instance ToJSON UserAccountInfo where
             "hasUnreadNotifications" .= hasUnreadNotifications
           ]
 
+instance FromJSON UserAccountInfo where
+  parseJSON = Aeson.withObject "UserAccountInfo" $ \o -> do
+    kind <- o Aeson..: "kind"
+    case (kind :: Text) of
+      "user" -> do
+        handle <- o Aeson..: "handle"
+        name <- o Aeson..:? "name"
+        avatarUrl <- o Aeson..:? "avatarUrl"
+        userId <- o Aeson..: "userId"
+        isSuperadmin <- o Aeson..: "isSuperadmin"
+        organizationMemberships <- o Aeson..: "organizationMemberships"
+        completedTours <- o Aeson..: "completedTours"
+        primaryEmail <- o Aeson..:? "primaryEmail"
+        planTier <- o Aeson..: "planTier"
+        hasUnreadNotifications <- o Aeson..: "hasUnreadNotifications"
+        pure $
+          UserAccountInfo
+            { primaryEmail,
+              completedTours,
+              organizationMemberships,
+              isSuperadmin,
+              planTier,
+              displayInfo = UnifiedUser $ UserDisplayInfo {handle, name, avatarUrl, userId},
+              hasUnreadNotifications
+            }
+      "org" -> do
+        userInfo <- o Aeson..: "user"
+        handle <- userInfo Aeson..: "handle"
+        name <- userInfo Aeson..:? "name"
+        avatarUrl <- userInfo Aeson..:? "avatarUrl"
+        userId <- userInfo Aeson..: "userId"
+        let user = UserDisplayInfo {handle, name, avatarUrl, userId}
+        orgId <- o Aeson..: "orgId"
+        isCommercial <- o Aeson..: "isCommercial"
+        organizationMemberships <- o Aeson..: "organizationMemberships"
+        planTier <- o Aeson..: "planTier"
+        hasUnreadNotifications <- o Aeson..: "hasUnreadNotifications"
+        pure $
+          UserAccountInfo
+            { primaryEmail = Nothing,
+              completedTours = [],
+              organizationMemberships,
+              isSuperadmin = False,
+              planTier,
+              displayInfo = UnifiedOrg $ OrgDisplayInfo {orgId, isCommercial, user},
+              hasUnreadNotifications
+            }
+      t -> fail $ "Invalid UserAccountInfo kind: " <> Text.unpack t
+
 type PathSegment = Text
 
 data DefinitionNameSearchResult = DefinitionNameSearchResult
@@ -242,6 +386,12 @@ instance ToJSON DefinitionNameSearchResult where
         "tag" .= tag
       ]
 
+instance FromJSON DefinitionNameSearchResult where
+  parseJSON = Aeson.withObject "DefinitionNameSearchResult" $ \o -> do
+    token <- o Aeson..: "token"
+    tag <- o Aeson..: "tag"
+    pure DefinitionNameSearchResult {token, tag}
+
 newtype DefinitionSearchResults = DefinitionSearchResults
   { results :: [DefinitionSearchResult]
   }
@@ -251,6 +401,11 @@ instance ToJSON DefinitionSearchResults where
     Aeson.object
       [ "results" .= results
       ]
+
+instance FromJSON DefinitionSearchResults where
+  parseJSON = Aeson.withObject "DefinitionSearchResults" $ \o -> do
+    results <- o Aeson..: "results"
+    pure DefinitionSearchResults {results}
 
 data DefinitionSearchResult = DefinitionSearchResult
   { fqn :: Name,
@@ -289,6 +444,35 @@ instance ToJSON DefinitionSearchResult where
               ]
           )
 
+instance FromJSON DefinitionSearchResult where
+  parseJSON = Aeson.withObject "DefinitionSearchResult" $ \o -> do
+    fqn <- o Aeson..: "fqn"
+    project <- o Aeson..: "projectRef"
+    branchRef <- o Aeson..: "branchRef"
+    kind <- o Aeson..: "kind"
+    definition <- o Aeson..: "definition"
+    summary <- case kind of
+      Aeson.String "term" -> do
+        definitionObj <- case definition of
+          Aeson.Object obj -> pure obj
+          _ -> fail "Expected object for term definition"
+        displayName <- definitionObj Aeson..: "displayName"
+        hash <- definitionObj Aeson..: "hash"
+        summaryText <- definitionObj Aeson..: "summary"
+        tag <- definitionObj Aeson..: "tag"
+        pure $ DefSync.ToTTermSummary $ TermSummary {displayName, hash, summary = summaryText, tag}
+      Aeson.String "type" -> do
+        definitionObj <- case definition of
+          Aeson.Object obj -> pure obj
+          _ -> fail "Expected object for type definition"
+        displayName <- definitionObj Aeson..: "displayName"
+        hash <- definitionObj Aeson..: "hash"
+        summaryText <- definitionObj Aeson..: "summary"
+        tag <- definitionObj Aeson..: "tag"
+        pure $ DefSync.ToTTypeSummary $ TypeSummary {displayName, hash, summary = summaryText, tag}
+      _ -> fail "Invalid definition kind"
+    pure DefinitionSearchResult {fqn, summary, project, branchRef}
+
 data SearchKind
   = SearchKindProjects
   | SearchKindUsers
@@ -314,10 +498,23 @@ instance FromHttpApiData SearchKinds where
       Nothing -> do
         Left $ "Invalid search kinds: " <> q
 
+instance ToHttpApiData SearchKinds where
+  toQueryParam (SearchKinds kinds) =
+    kinds
+      & toList
+      <&> toQueryParam
+      & Text.intercalate ","
+
 instance FromHttpApiData SearchKind where
-  parseQueryParam "projects" = Right SearchKindProjects
-  parseQueryParam "users" = Right SearchKindUsers
-  parseQueryParam _ = Left "Invalid search kind"
+  parseQueryParam = \case
+    "projects" -> Right SearchKindProjects
+    "users" -> Right SearchKindUsers
+    _ -> Left "Invalid search kind"
+
+instance ToHttpApiData SearchKind where
+  toQueryParam = \case
+    SearchKindProjects -> "projects"
+    SearchKindUsers -> "users"
 
 data UserSearchKind
   = UserSearchKindDefault
@@ -325,9 +522,15 @@ data UserSearchKind
     UserSearchKindHandlePrefix
 
 instance FromHttpApiData UserSearchKind where
-  parseQueryParam "default" = Right UserSearchKindDefault
-  parseQueryParam "handle-prefix" = Right UserSearchKindHandlePrefix
-  parseQueryParam _ = Left "Invalid user search kind"
+  parseQueryParam = \case
+    "default" -> Right UserSearchKindDefault
+    "handle-prefix" -> Right UserSearchKindHandlePrefix
+    _ -> Left "Invalid user search kind"
+
+instance ToHttpApiData UserSearchKind where
+  toQueryParam = \case
+    UserSearchKindDefault -> "default"
+    UserSearchKindHandlePrefix -> "handle-prefix"
 
 data ProjectSearchKind
   = ProjectSearchKindWebSearch
@@ -336,7 +539,14 @@ data ProjectSearchKind
     ProjectSearchKindSlugInfix
 
 instance FromHttpApiData ProjectSearchKind where
-  parseQueryParam "web-search" = Right ProjectSearchKindWebSearch
-  parseQueryParam "slug-prefix" = Right ProjectSearchKindSlugPrefix
-  parseQueryParam "slug-infix" = Right ProjectSearchKindSlugInfix
-  parseQueryParam _ = Left "Invalid project search kind"
+  parseQueryParam = \case
+    "web-search" -> Right ProjectSearchKindWebSearch
+    "slug-prefix" -> Right ProjectSearchKindSlugPrefix
+    "slug-infix" -> Right ProjectSearchKindSlugInfix
+    _ -> Left "Invalid project search kind"
+
+instance ToHttpApiData ProjectSearchKind where
+  toQueryParam = \case
+    ProjectSearchKindWebSearch -> "web-search"
+    ProjectSearchKindSlugPrefix -> "slug-prefix"
+    ProjectSearchKindSlugInfix -> "slug-infix"

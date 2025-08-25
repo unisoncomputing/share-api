@@ -36,6 +36,11 @@ instance MimeRender JSON (Cached JSON a) where
   mimeRender _proxy = \case
     Cached bs -> BL.fromStrict bs
 
+-- | This 'Cached' primitive is a bit weird, we may wish to revisit it.
+instance {-# OVERLAPPING #-} MimeUnrender JSON (Cached JSON a) where
+  mimeUnrender _proxy bs = do
+    pure $ Cached $ BS.toStrict bs
+
 instance (FromJSON a, ToJSON a) => ToJSON (Cached JSON a) where
   toJSON (Cached bs) = toJSON $ Aeson.decode @a $ BL.fromStrict bs
 

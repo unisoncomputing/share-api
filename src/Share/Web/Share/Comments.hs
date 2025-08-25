@@ -63,7 +63,7 @@ commentEventTimestamp = \case
   CommentEvent Comment {timestamp} -> timestamp
   DeletedCommentEvent DeletedComment {timestamp} -> timestamp
 
-instance Aeson.ToJSON user => Aeson.ToJSON (CommentEvent user) where
+instance (Aeson.ToJSON user) => Aeson.ToJSON (CommentEvent user) where
   toJSON =
     \case
       CommentEvent Comment {..} ->
@@ -83,3 +83,21 @@ instance Aeson.ToJSON user => Aeson.ToJSON (CommentEvent user) where
             "timestamp" Aeson..= timestamp,
             "deletedAt" Aeson..= deletedAt
           ]
+
+instance (Aeson.FromJSON user) => Aeson.FromJSON (CommentEvent user) where
+  parseJSON =
+    Aeson.withObject "CommentEvent" $ \o -> do
+      mayDeleted <- o Aeson..: "deletedAt"
+      case mayDeleted of
+        Just (deletedAt :: UTCTime) -> do
+          commentId <- o Aeson..: "id"
+          timestamp <- o Aeson..: "timestamp"
+          pure $ DeletedCommentEvent DeletedComment {..}
+        Nothing -> do
+          commentId <- o Aeson..: "id"
+          actor <- o Aeson..: "actor"
+          timestamp <- o Aeson..: "timestamp"
+          editedAt <- o Aeson..:? "editedAt"
+          content <- o Aeson..: "content"
+          revision <- o Aeson..: "revision"
+          pure $ CommentEvent Comment {..}

@@ -88,12 +88,25 @@ instance ToJSON FoundType where
         "namedType" Aeson..= namedType
       ]
 
+instance FromJSON FoundType where
+  parseJSON = withObject "FoundType" $ \o -> do
+    bestFoundTypeName <- o .: "bestFoundTypeName"
+    typeDef <- o .: "typeDef"
+    namedType <- o .: "namedType"
+    pure FoundType {bestFoundTypeName, typeDef, namedType}
+
 instance ToJSON FoundTerm where
   toJSON (FoundTerm {bestFoundTermName, namedTerm}) =
     object
       [ "bestFoundTermName" Aeson..= bestFoundTermName,
         "namedTerm" Aeson..= namedTerm
       ]
+
+instance FromJSON FoundTerm where
+  parseJSON = withObject "FoundTerm" $ \o -> do
+    bestFoundTermName <- o .: "bestFoundTermName"
+    namedTerm <- o .: "namedTerm"
+    pure FoundTerm {bestFoundTermName, namedTerm}
 
 data FoundResult
   = FoundTermResult FoundTerm
@@ -104,6 +117,14 @@ instance ToJSON FoundResult where
   toJSON = \case
     FoundTermResult ft -> object ["tag" Aeson..= String "FoundTermResult", "contents" Aeson..= ft]
     FoundTypeResult ft -> object ["tag" Aeson..= String "FoundTypeResult", "contents" Aeson..= ft]
+
+instance FromJSON FoundResult where
+  parseJSON = withObject "FoundResult" $ \o -> do
+    tag :: Text <- o .: "tag"
+    case tag of
+      "FoundTermResult" -> FoundTermResult <$> o .: "contents"
+      "FoundTypeResult" -> FoundTypeResult <$> o .: "contents"
+      _ -> fail $ "Unknown FoundResult tag: " <> show tag
 
 serveFuzzyFind ::
   forall m.
@@ -251,13 +272,32 @@ instance ToJSON Alignment where
   toJSON (Alignment {score, result}) =
     object ["score" Aeson..= score, "result" Aeson..= result]
 
+instance FromJSON Alignment where
+  parseJSON = withObject "Alignment" $ \o -> do
+    score <- o .: "score"
+    result <- o .: "result"
+    pure Alignment {score, result}
+
 instance ToJSON MatchResult where
   toJSON (MatchResult {segments}) = object ["segments" Aeson..= toJSON segments]
+
+instance FromJSON MatchResult where
+  parseJSON = withObject "MatchResult" $ \o -> do
+    segments <- o .: "segments"
+    pure MatchResult {segments}
 
 instance ToJSON MatchSegment where
   toJSON = \case
     Gap s -> object ["tag" Aeson..= String "Gap", "contents" Aeson..= s]
     Match s -> object ["tag" Aeson..= String "Match", "contents" Aeson..= s]
+
+instance FromJSON MatchSegment where
+  parseJSON = withObject "MatchSegment" $ \o -> do
+    tag :: Text <- o .: "tag"
+    case tag of
+      "Gap" -> Gap <$> o .: "contents"
+      "Match" -> Match <$> o .: "contents"
+      _ -> fail $ "Unknown MatchSegment tag: " <> show tag
 
 -- After finding a search results with fuzzy find we do some post processing to
 -- refine the result:
