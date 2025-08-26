@@ -198,38 +198,45 @@ syncTerms ::
 syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
     (errs, refDocs) <-
-      PG.timeTransaction "Building terms" $
-        terms
-          -- Most lib names are already filtered out by using the name lookup; but sometimes
-          -- when libs aren't at the project root some can slip through, so we remove them.
-          & V.filter
-            ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
-            )
-          & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-            -- TODO: properly batchify this
-            typ <- lift (Codebase.loadTypesOfReferentsOf codebase id ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
-            let displayName =
-                  fqn
-                    & Name.reverseSegments
-                    -- For now we treat the display name for search as just the last 2 segments of the name.
-                    & \case
-                      (ns :| rest) -> ns :| take 1 rest
-                    & Name.fromReverseSegments
-            -- TODO: batchify this
-            termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) namesPerspective Nothing
-            let sh = Referent.toShortHash ref
-            let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
-            let dd =
-                  DefinitionDocument
-                    { rootBranchHashId,
-                      fqn,
-                      hash = sh,
-                      tokens = refTokens,
-                      arity = arity,
-                      tag = ToTTermTag (termSummary.tag),
-                      metadata = ToTTermSummary termSummary
-                    }
-            pure dd
+      PG.timeTransaction "Building terms" $ do
+        let nonLibTerms =
+              terms
+                -- Most lib names are already filtered out by using the name lookup; but sometimes
+                -- when libs aren't at the project root some can slip through, so we remove them.
+                & V.filter
+                  ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
+                  )
+
+        let (fqns, refs) = V.unzip nonLibTerms
+        mayTypes <- Codebase.loadTypesOfReferentsOf codebase traversed refs
+        let (errs, termsWithTypes) =
+              V.zip3 refs fqns mayTypes & foldMap \case
+                (ref, fqn, Nothing) -> ([NoTypeSigForTerm fqn ref], [])
+                (ref, fqn, Just typ) -> ([], [(ref, fqn, typ)])
+        termDefinitions <- for termsWithTypes \(ref, fqn, typ) -> do
+          let displayName =
+                fqn
+                  & Name.reverseSegments
+                  -- For now we treat the display name for search as just the last 2 segments of the name.
+                  & \case
+                    (ns :| rest) -> ns :| take 1 rest
+                  & Name.fromReverseSegments
+          -- TODO: batchify this
+          termSummary <- Summary.termSummaryForReferent ref typ (Just displayName) namesPerspective Nothing
+          let sh = Referent.toShortHash ref
+          let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
+          let dd =
+                DefinitionDocument
+                  { rootBranchHashId,
+                    fqn,
+                    hash = sh,
+                    tokens = refTokens,
+                    arity = arity,
+                    tag = ToTTermTag (termSummary.tag),
+                    metadata = ToTTermSummary termSummary
+                  }
+          pure dd
+        pure (errs, termDefinitions)
 
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
