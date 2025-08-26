@@ -222,7 +222,7 @@ syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
                     (ns :| rest) -> ns :| take 1 rest
                   & Name.fromReverseSegments
           -- TODO: batchify this
-          termSummary <- Summary.termSummaryForReferent ref typ (Just displayName) namesPerspective Nothing
+          termSummary <- Summary.termSummariesForReferentsOf namesPerspective Nothing id (ref, typ, Just displayName)
           let sh = Referent.toShortHash ref
           let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
           let dd =
@@ -398,7 +398,7 @@ syncTypes codebase namesPerspective rootBranchHashId typesCursor = do
               decl <- lift (Codebase.loadV1TypeDeclarationsByRefIdsOf codebase id refId) `whenNothingM` throwError (NoDeclForType fqn ref)
               pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
           let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
-          typeSummary <- lift $ Summary.typeSummaryForReference codebase ref (Just fqn) Nothing
+          typeSummary <- lift $ Summary.typeSummariesForReferencesOf codebase Nothing id (ref, Just fqn)
           let sh = Reference.toShortHash ref
           let dd =
                 DefinitionDocument
