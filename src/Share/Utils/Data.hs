@@ -5,6 +5,8 @@ module Share.Utils.Data
     zipWith3,
     zip4,
     zipWith4,
+    zip5,
+    zipWith5,
     mapFromSelf,
   )
 where
@@ -46,6 +48,15 @@ zipWith4 :: (Zip.Zip t) => t a -> t b -> t c -> t d -> (a -> b -> c -> d -> e) -
 zipWith4 as bs cs ds f =
   zip4 as bs cs ds
     <&> (\(a, b, c, d) -> f a b c d)
+
+zip5 :: (Zip.Zip t) => t a -> t b -> t c -> t d -> t e -> t (a, b, c, d, e)
+zip5 as bs cs ds es =
+  Zip.zipWith (\(a, b) (c, d, e) -> (a, b, c, d, e)) (Zip.zip as bs) (zip3 cs ds es)
+
+zipWith5 :: (Zip.Zip t) => t a -> t b -> t c -> t d -> t e -> (a -> b -> c -> d -> e -> f) -> t f
+zipWith5 as bs cs ds es f =
+  zip5 as bs cs ds es
+    <&> (\(a, b, c, d, e) -> f a b c d e)
 
 mapFromSelf :: (Ord k) => [k] -> Map k k
 mapFromSelf ks =
