@@ -39,6 +39,7 @@ import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Release (Release (..))
 import Share.Telemetry (withSpan)
+import Share.Utils.Data qualified as Data
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (SomeServerError)
@@ -213,30 +214,30 @@ syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
               V.zip3 refs fqns mayTypes & foldMap \case
                 (ref, fqn, Nothing) -> ([NoTypeSigForTerm fqn ref], [])
                 (ref, fqn, Just typ) -> ([], [(ref, fqn, typ)])
-        termDefinitions <- for termsWithTypes \(ref, fqn, typ) -> do
-          let displayName =
-                fqn
-                  & Name.reverseSegments
-                  -- For now we treat the display name for search as just the last 2 segments of the name.
-                  & \case
-                    (ns :| rest) -> ns :| take 1 rest
-                  & Name.fromReverseSegments
-          -- TODO: batchify this
-          termSummary <- Summary.termSummariesForReferentsOf namesPerspective Nothing id (ref, typ, Just displayName)
-          let sh = Referent.toShortHash ref
-          let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
-          let dd =
-                DefinitionDocument
-                  { rootBranchHashId,
-                    fqn,
-                    hash = sh,
-                    tokens = refTokens,
-                    arity = arity,
-                    tag = ToTTermTag (termSummary.tag),
-                    metadata = ToTTermSummary termSummary
-                  }
-          pure dd
-        pure (errs, termDefinitions)
+        let termsTypesDisplayNames =
+              termsWithTypes <&> \(ref, fqn, typ) ->
+                let displayName =
+                      fqn
+                        & Name.reverseSegments
+                        -- For now we treat the display name for search as just the last 2 segments of the name.
+                        & \case
+                          (ns :| rest) -> ns :| take 1 rest
+                        & Name.fromReverseSegments
+                 in (ref, typ, Just displayName)
+        termSummaries <- Summary.termSummariesForReferentsOf namesPerspective Nothing traversed termsTypesDisplayNames
+        let docs = Data.zipWith2 termsWithTypes termSummaries \(ref, fqn, typ) termSummary ->
+              let sh = Referent.toShortHash ref
+                  (refTokens, arity) = tokensForTerm fqn ref typ termSummary
+               in DefinitionDocument
+                    { rootBranchHashId,
+                      fqn,
+                      hash = sh,
+                      tokens = refTokens,
+                      arity = arity,
+                      tag = ToTTermTag (termSummary.tag),
+                      metadata = ToTTermSummary termSummary
+                    }
+        pure (errs, docs)
 
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
