@@ -49,8 +49,8 @@ serve: $(installed_share)
 	  sleep 1; \
 	done;
 	@echo "Starting up Share at http://localhost:5424";
-	@if [ ${OPEN_BROWSER} = "true" ] ; then \
-	  (sleep 1 && $(OPEN) "http://localhost:5424/local/user/test/login" || true) & \
+	@if curl -f -s http://localhost:1234 >/dev/null 2>&1 ; then \
+	  (sleep 1 && $(OPEN) "http://localhost:5424/local/user/test/login" && $(OPEN) "http://localhost:1234" || true) & \
 	fi;
 	@(. ./local.env && $(exe) 2>&1)
 
