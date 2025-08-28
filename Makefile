@@ -40,10 +40,10 @@ auth_example:
 
 # Build Share and run it alongside its dependencies via docker-compose
 serve: $(installed_share)
-	@docker compose -f docker/docker-compose.dev.yml down || true
-	@trap 'docker compose -f docker/docker-compose.dev.yml down' EXIT INT TERM
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
 	@echo "Booting up docker dependencies..."
-	docker compose -f docker/docker-compose.dev.yml up --remove-orphans --detach
+	docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.fixtures.yml up  --remove-orphans --detach
 	@echo "Booting up docker dependencies...";
 	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
 	  sleep 1; \
@@ -56,13 +56,16 @@ serve: $(installed_share)
 
 # Loads the local testing share with a bunch of realistic code.
 reset_fixtures:
-	@docker compose -f docker/docker-compose.dev.yml down || true
-	@trap 'docker compose -f docker/docker-compose.dev.yml down' EXIT INT TERM
+	# Prompt for confirmation
+	@echo "This will delete all data in your local share database. Are you sure? (y/N) "
+	@read -r confirmation && [ "$$confirmation" = "y" ] || [ "$$confirmation" = "Y" ]
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
 	# Remove the existing postgres volume to reset the database
 	@echo "Removing any existing postgres volume"
 	docker volume rm docker_postgresVolume || true
 	@echo "Booting up docker dependencies..."
-	docker compose -f docker/docker-compose.dev.yml -f docker/docker-compose.fixtures.yml up --remove-orphans --detach
+	docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.fixtures.yml up --remove-orphans --detach
 	@echo "Initializing fixture data";
 	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
 	  sleep 1; \
@@ -80,13 +83,10 @@ reset_fixtures:
 
 transcripts:
 	@echo "Taking down any existing docker dependencies"
-	@docker compose -f docker/docker-compose.dev.yml down || true
-	@trap 'docker compose -f docker/docker-compose.dev.yml down' EXIT INT TERM
-	# Remove the existing postgres volume to reset the database
-	@echo "Removing any existing postgres volume"
-	docker volume rm docker_postgresVolume || true
-	@echo "Booting up docker dependencies..."
-	docker compose -f docker/docker-compose.dev.yml -f docker/docker-compose.fixtures.yml up --remove-orphans --detach
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
+	@echo "Booting up transcript docker dependencies..."
+	docker compose -f docker/docker-compose.base.yml up --remove-orphans --detach
 	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
 	  sleep 1; \
 	done;
@@ -97,8 +97,7 @@ transcripts:
 		SERVER_PID=$$!; \
 		trap "kill $$SERVER_PID 2>/dev/null || true" EXIT INT TERM; \
 		echo "Running transcripts"; \
-		./transcripts/run-transcripts.zsh ; \
-		echo "Done transcripts"; \
+		./transcripts/run-transcripts.zsh $(pattern); \
 		kill $$SERVER_PID 2>/dev/null || true; \
 	) 
-	@echo "Done!";
+	@echo "Transcripts complete!";

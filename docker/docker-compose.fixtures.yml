@@ -1,3 +1,4 @@
+# Sets postgres container to use a persistent volume for its data
 services:
   postgres:
     volumes:
