@@ -17,7 +17,6 @@ where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Lens
-import Control.Monad.State.Strict qualified as State
 import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Share.Codebase qualified as Codebase
@@ -129,35 +128,18 @@ getTermsAndTypesByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s =
 
 -- | Like 'getTermsAndTypesByRefIdsOf', but throws an unrecoverable error when the term isn't in the database.
 expectTermsAndTypesByRefIdsOf ::
+  forall m scope s t.
   (QueryM m) =>
   CodeCache scope ->
   Traversal s t TermReferenceId TermAndType ->
   s ->
   m t
-expectTermsAndTypesByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
-  CodeCacheData {termCache} <- readCodeCache codeCache
-  s
-    & asListOf trav %%~ \refs -> do
-      -- Partition by cache misses
-      let terms0 :: [Either (TermReferenceId, TermReferenceId) TermAndType]
-          terms0 =
-            refs
-              <&> \ref ->
-                case findBuiltinTT ref <|> Map.lookup ref termCache of
-                  Just termAndType -> Right termAndType
-                  Nothing -> Left (ref, ref)
-
-      -- Fetch all cache misses from database
-      terms1 :: [Either (TermReferenceId, TermAndType) TermAndType] <-
-        Codebase.expectTermsByRefIdsOf codeCacheCodebaseEnv (traversed . _Left . _2) terms0
-
-      -- Tease out the just-fetched things to add to the cache
-      let terms2 :: [TermAndType]
-          justFetched :: Map TermReferenceId TermAndType
-          (terms2, justFetched) = teaseOutJustFetched terms1
-
-      cacheTermAndTypes codeCache justFetched
-      pure terms2
+expectTermsAndTypesByRefIdsOf codeCache trav =
+  asListOf trav %%~ \refs -> do
+    termsAndTypes <- getTermsAndTypesByRefIdsOf codeCache traverse refs
+    for (zip refs termsAndTypes) \case
+      (_, Just tt) -> pure tt
+      (ref, Nothing) -> PG.unrecoverableError (Codebase.MissingTerm ref)
 
 findBuiltinTT :: TermReferenceId -> Maybe TermAndType
 findBuiltinTT refId = do
@@ -203,46 +185,16 @@ expectTypeDeclsByRefIdsOf ::
   Traversal s t TypeReferenceId (V1.Decl Symbol Ann) ->
   s ->
   m t
-expectTypeDeclsByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
-  CodeCacheData {typeCache} <- readCodeCache codeCache
-  s
-    & asListOf trav %%~ \refs -> do
-      -- Partition by cache misses
-      let types0 :: [Either (TypeReferenceId, TypeReferenceId) (V1.Decl Symbol Ann)]
-          types0 =
-            refs
-              <&> \ref ->
-                case findBuiltinDecl ref <|> Map.lookup ref typeCache of
-                  Just typ -> Right typ
-                  Nothing -> Left (ref, ref)
-
-      -- Fetch all cache misses from database
-      types1 :: [Either (TypeReferenceId, V1.Decl Symbol Ann) (V1.Decl Symbol Ann)] <-
-        Codebase.expectTypeDeclarationsByRefIdsOf codeCacheCodebaseEnv (traversed . _Left . _2) types0
-
-      -- Tease out the just-fetched things to add to the cache
-      let types2 :: [V1.Decl Symbol Ann]
-          justFetched :: Map TypeReferenceId (V1.Decl Symbol Ann)
-          (types2, justFetched) = teaseOutJustFetched types1
-
-      cacheDecls codeCache justFetched
-      pure types2
+expectTypeDeclsByRefIdsOf codeCache trav =
+  asListOf trav %%~ \refs -> do
+    decls <- getTypeDeclsByRefIdsOf codeCache traverse refs
+    for (zip refs decls) \case
+      (_, Just decl) -> pure decl
+      (ref, Nothing) -> PG.unrecoverableError (Codebase.MissingDecl ref)
 
 findBuiltinDecl :: Reference.Id -> Maybe (V1.Decl Symbol Ann)
 findBuiltinDecl refId = do
   runIdentity $ CL.getTypeDeclaration builtinsCodeLookup refId
-
--- Tease out the just-fetched things to add to the cache
-teaseOutJustFetched :: forall a ref. (Ord ref) => [Either (ref, a) a] -> ([a], Map ref a)
-teaseOutJustFetched terms1 =
-  runState (traverse recordJustFetched terms1) Map.empty
-  where
-    recordJustFetched :: Either (ref, a) a -> State (Map ref a) a
-    recordJustFetched = \case
-      Left (ref, term) -> do
-        State.modify' (Map.insert ref term)
-        pure term
-      Right term -> pure term
 
 getTypeDeclsByRefsOf ::
   (QueryM m) =>
