@@ -61,10 +61,14 @@ A [flake.nix](flake.nix) file is provided in this repo. It currently doesn't use
 
 ## Running Locally
 
-Start the server and its dependencies with `make serve`.
-You may wish to run `make fixtures` to fill some in some data for local testing.
+The first time you run locally, start with `make reset_fixtures`, then on subsequent runs just use `make serve`.
 
-See `./docker/docker-compose.yml` to see how the postgres and redis services are configured.
+Data changes in Postgres using `make serve` are persistent locally.
+You can reset the database to a known state with `make reset_fixtures`.
+
+`make transcripts` will take down the database and use a temporary one for running the transcripts.
+
+See the `Makefile` and `./docker/docker-compose.base.yml` to learn more.
 
 ### Debugging and observability
 
