@@ -229,6 +229,8 @@ jobs:
           docker image ls -a
 
       - name: Run transcript tests
+        env:
+          SHARE_PROJECT_ROOT: ${{ github.workspace }}
         # If it takes longer than this, it's probably stalled out.
         timeout-minutes: 10
         run: |
