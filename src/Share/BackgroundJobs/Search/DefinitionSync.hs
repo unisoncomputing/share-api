@@ -4,7 +4,6 @@
 module Share.BackgroundJobs.Search.DefinitionSync (worker) where
 
 import Control.Lens
-import Control.Monad.Except
 import Data.Either (isRight)
 import Data.Generics.Product (HasField (..))
 import Data.List qualified as List
@@ -39,6 +38,7 @@ import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import Share.Release (Release (..))
 import Share.Telemetry (withSpan)
+import Share.Utils.Data qualified as Data
 import Share.Utils.Logging qualified as Logging
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (SomeServerError)
@@ -198,29 +198,36 @@ syncTerms ::
 syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
   Cursors.foldBatched termsCursor defnBatchSize \terms -> do
     (errs, refDocs) <-
-      PG.timeTransaction "Building terms" $
-        terms
-          -- Most lib names are already filtered out by using the name lookup; but sometimes
-          -- when libs aren't at the project root some can slip through, so we remove them.
-          & V.filter
-            ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
-            )
-          & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-            -- TODO: properly batchify this
-            typ <- lift (Codebase.loadTypesOfReferentsOf codebase id ref) `whenNothingM` throwError (NoTypeSigForTerm fqn ref)
-            let displayName =
-                  fqn
-                    & Name.reverseSegments
-                    -- For now we treat the display name for search as just the last 2 segments of the name.
-                    & \case
-                      (ns :| rest) -> ns :| take 1 rest
-                    & Name.fromReverseSegments
-            -- TODO: batchify this
-            termSummary <- lift $ Summary.termSummaryForReferent ref typ (Just displayName) namesPerspective Nothing
-            let sh = Referent.toShortHash ref
-            let (refTokens, arity) = tokensForTerm fqn ref typ termSummary
-            let dd =
-                  DefinitionDocument
+      PG.timeTransaction "Building terms" $ do
+        let nonLibTerms =
+              terms
+                -- Most lib names are already filtered out by using the name lookup; but sometimes
+                -- when libs aren't at the project root some can slip through, so we remove them.
+                & V.filter
+                  ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
+                  )
+
+        let (fqns, refs) = V.unzip nonLibTerms
+        mayTypes <- Codebase.loadTypesOfReferentsOf codebase traversed refs
+        let (errs, termsWithTypes) =
+              V.zip3 refs fqns mayTypes & foldMap \case
+                (ref, fqn, Nothing) -> ([NoTypeSigForTerm fqn ref], [])
+                (ref, fqn, Just typ) -> ([], [(ref, fqn, typ)])
+        let termsTypesDisplayNames =
+              termsWithTypes <&> \(ref, fqn, typ) ->
+                let displayName =
+                      fqn
+                        & Name.reverseSegments
+                        -- For now we treat the display name for search as just the last 2 segments of the name.
+                        & \case
+                          (ns :| rest) -> ns :| take 1 rest
+                        & Name.fromReverseSegments
+                 in (ref, typ, Just displayName)
+        termSummaries <- Summary.termSummariesForReferentsOf namesPerspective Nothing traversed termsTypesDisplayNames
+        let docs = Data.zipWith2 termsWithTypes termSummaries \(ref, fqn, typ) termSummary ->
+              let sh = Referent.toShortHash ref
+                  (refTokens, arity) = tokensForTerm fqn ref typ termSummary
+               in DefinitionDocument
                     { rootBranchHashId,
                       fqn,
                       hash = sh,
@@ -229,7 +236,7 @@ syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
                       tag = ToTTermTag (termSummary.tag),
                       metadata = ToTTermSummary termSummary
                     }
-            pure dd
+        pure (errs, docs)
 
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
@@ -376,47 +383,56 @@ syncTypes ::
   m ([DefnIndexingFailure], [Text])
 syncTypes codebase namesPerspective rootBranchHashId typesCursor = do
   Cursors.foldBatched typesCursor defnBatchSize \types -> do
-    (errs, refDocs) <-
-      types
-        -- Most lib names are already filtered out by using the name lookup; but sometimes
-        -- when libs aren't at the project root some can slip through, so we remove them.
-        & V.filter
-          ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
-          )
-        & foldMapM \(fqn, ref) -> fmap (either (\err -> ([err], [])) (\doc -> ([], [doc]))) . runExceptT $ do
-          (declTokens, declArity) <- case ref of
-            Reference.Builtin _ -> pure (mempty, Arity 0)
-            Reference.DerivedId refId -> do
-              -- TODO: batchify this
-              decl <- lift (Codebase.loadV1TypeDeclarationsByRefIdsOf codebase id refId) `whenNothingM` throwError (NoDeclForType fqn ref)
-              pure $ (tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
-          let basicTokens = Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
-          typeSummary <- lift $ Summary.typeSummaryForReference codebase ref (Just fqn) Nothing
+    let nonLibTypes =
+          types
+            -- Most lib names are already filtered out by using the name lookup; but sometimes
+            -- when libs aren't at the project root some can slip through, so we remove them.
+            & V.filter
+              ( \(fqn, _) -> not (libSegment `elem` (NEL.toList $ Name.reverseSegments fqn))
+              )
+    let (fqns, refs) = V.unzip nonLibTypes
+    let partitioned :: V.Vector (Either ([DefnIndexingFailure], Set (DefnSearchToken TypeReference), Arity) (Reference.Id, Reference.Id))
+        partitioned =
+          refs <&> \case
+            Reference.Builtin _ -> Left (mempty, mempty, Arity 0)
+            Reference.DerivedId refId -> Right (refId, refId)
+    (errs, declTokens :: (V.Vector (Set (DefnSearchToken typeRef0))), arities :: V.Vector Arity) <- do
+      Codebase.loadV1TypeDeclarationsByRefIdsOf codebase (traverse . _Right . _2) partitioned
+        <&> itraversed <. _Right
+          %@~ ( \i ->
+                  \case
+                    (refId, Just decl) -> ([], tokensForDecl refId decl, Arity . fromIntegral . length . DD.bound $ DD.asDataDecl decl)
+                    (refId, Nothing) -> ([(NoDeclForType (fqns V.! i) $ Reference.DerivedId refId)], mempty, Arity 0)
+              )
+        <&> fmap (either id id)
+        <&> V.unzip3
+    let basicTokens = Data.zipWith2 fqns refs \fqn ref -> Set.fromList [NameToken fqn, HashToken $ Reference.toShortHash ref]
+    let allTokens = Data.zipWith2 declTokens basicTokens Set.union
+    typeSummaries <- Summary.typeSummariesForReferencesOf codebase Nothing traversed (Data.zip2 refs (Just <$> fqns))
+    let defDocuments = Data.zipWith5 refs fqns typeSummaries allTokens arities $ \ref fqn typeSummary tokens arity ->
           let sh = Reference.toShortHash ref
-          let dd =
-                DefinitionDocument
-                  { rootBranchHashId,
-                    fqn,
-                    hash = sh,
-                    tokens = declTokens <> basicTokens,
-                    arity = declArity,
-                    tag = ToTTypeTag (typeSummary.tag),
-                    metadata = ToTTypeSummary typeSummary
-                  }
-          pure dd
+           in DefinitionDocument
+                { rootBranchHashId,
+                  fqn,
+                  hash = sh,
+                  tokens,
+                  arity,
+                  tag = ToTTypeTag (typeSummary.tag),
+                  metadata = ToTTypeSummary typeSummary
+                }
     -- It's much more efficient to build only one PPE per batch.
-    let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
+    let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) defDocuments
     pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
-    let namedDocs :: [DefinitionDocument Name (Name, ShortHash)]
+    let namedDocs :: V.Vector (DefinitionDocument Name (Name, ShortHash))
         namedDocs =
-          refDocs
+          defDocuments
             & traversed . field @"tokens" %~ Set.mapMaybe \token -> do
               for token \ref -> do
                 name <- PPE.types ppe ref
                 pure $ (HQ'.toName name, Reference.toShortHash ref)
-    badNames <- DDQ.insertDefinitionDocuments namedDocs
-    pure (errs, badNames)
+    badNames <- DDQ.insertDefinitionDocuments $ V.toList namedDocs
+    pure (fold errs, badNames)
 
 -- | Compute the search tokens for a type declaration.
 -- Note that constructors are handled separately when syncing terms.

@@ -10,16 +10,19 @@
 
 module Unison.Server.Share.DefinitionSummary
   ( serveTermSummary,
-    termSummaryForReferent,
+    termSummariesForReferentsOf,
     serveTypeSummary,
-    typeSummaryForReference,
+    typeSummariesForReferencesOf,
   )
 where
 
+import Control.Lens
+import Data.List (zipWith4)
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Postgres (QueryM, unrecoverableError)
 import Share.Postgres.NamesPerspective.Types (NamesPerspective)
+import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
 import U.Codebase.Referent qualified as V2Referent
 import Unison.Codebase.Editor.DisplayObject (DisplayObject (..))
@@ -27,7 +30,6 @@ import Unison.Codebase.SqliteCodebase.Conversions qualified as CV
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.Parser.Ann (Ann)
-import Unison.Prelude
 import Unison.Reference (Reference)
 import Unison.Reference qualified as Reference
 import Unison.Referent (Referent)
@@ -51,27 +53,28 @@ serveTermSummary codebase referent mayName np mayWidth = do
   sig <-
     Codebase.loadTypesOfReferentsOf codebase id v2Referent
       `whenNothingM` unrecoverableError (MissingSignatureForTerm $ V2Referent.toReference v2Referent)
-  termSummaryForReferent v2Referent sig mayName np mayWidth
+  termSummariesForReferentsOf np mayWidth id (v2Referent, sig, mayName)
 
--- TODO: batchify this
-termSummaryForReferent ::
+termSummariesForReferentsOf ::
   (QueryM m) =>
-  V2Referent.Referent ->
-  Type.Type Symbol Ann ->
-  Maybe Name ->
   NamesPerspective m ->
   Maybe Width ->
-  m TermSummary
-termSummaryForReferent referent typeSig mayName namesPerspective mayWidth = do
-  let shortHash = V2Referent.toShortHash referent
-  let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
-  let termReference = V2Referent.toReference referent
-  let deps = Type.labeledDependencies typeSig
-  pped <- PPEPostgres.ppedForReferences namesPerspective deps
-  let formattedTypeSig = Backend.formatSuffixedType pped width typeSig
-  let summary = mkSummary termReference formattedTypeSig
-  tag <- Backend.getTermTagsOf id (referent, typeSig)
-  pure $ TermSummary displayName shortHash summary tag
+  Traversal s t (V2Referent.Referent, Type.Type Symbol Ann, Maybe Name) TermSummary ->
+  s ->
+  m t
+termSummariesForReferentsOf namesPerspective mayWidth trav s = do
+  s
+    & asListOf trav %%~ \inputs -> do
+      let (refs, typeSigs, mayNames) = unzip3 inputs
+      let allDeps = foldMap Type.labeledDependencies typeSigs
+      pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
+      let shortHashes = V2Referent.toShortHash <$> refs
+      let displayNames = zipWith (\mayName shortHash -> maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName) mayNames shortHashes
+      let termReferences = V2Referent.toReference <$> refs
+      let formattedTypeSigs = Backend.formatSuffixedType pped width <$> typeSigs
+      let summaries = zipWith mkSummary termReferences formattedTypeSigs
+      tag <- Backend.getTermTagsOf traversed (zip refs typeSigs)
+      pure $ zipWith4 TermSummary displayNames shortHashes summaries tag
   where
     width = mayDefaultWidth mayWidth
 
@@ -88,28 +91,27 @@ serveTypeSummary ::
   Maybe Width ->
   m TypeSummary
 serveTypeSummary codebase reference mayName mayWidth = do
-  typeSummaryForReference codebase reference mayName mayWidth
+  typeSummariesForReferencesOf codebase mayWidth id (reference, mayName)
 
--- TODO: batchify this
-typeSummaryForReference ::
+typeSummariesForReferencesOf ::
   (QueryM m) =>
   Codebase.CodebaseEnv ->
-  Reference ->
-  Maybe Name ->
   Maybe Width ->
-  m TypeSummary
-typeSummaryForReference codebase reference mayName mayWidth = do
-  let shortHash = Reference.toShortHash reference
-  let displayName = maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName
-  tag <- Backend.getTypeTagsOf id reference
-  displayDecl <- Backend.displayTypesOf codebase id reference
-  let syntaxHeader = Backend.typeToSyntaxHeader width displayName displayDecl
-  pure $
-    TypeSummary
-      { displayName = displayName,
-        hash = shortHash,
-        summary = bimap Backend.mungeSyntaxText Backend.mungeSyntaxText syntaxHeader,
-        tag = tag
-      }
+  Traversal s t (Reference, Maybe Name) TypeSummary ->
+  s ->
+  m t
+typeSummariesForReferencesOf codebase mayWidth trav s = do
+  s
+    & asListOf trav %%~ \inputs -> do
+      let (refs, mayNames) = unzip inputs
+      let shortHashes = Reference.toShortHash <$> refs
+      let displayNames =
+            zipWith (\mayName shortHash -> maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName) mayNames shortHashes
+      tags <- Backend.getTypeTagsOf traversed refs
+      displayDecls <- Backend.displayTypesOf codebase traversed refs
+      let syntaxHeaders =
+            zipWith (Backend.typeToSyntaxHeader width) displayNames displayDecls
+              <&> bimap Backend.mungeSyntaxText Backend.mungeSyntaxText
+      pure $ zipWith4 TypeSummary displayNames shortHashes syntaxHeaders tags
   where
     width = mayDefaultWidth mayWidth
