@@ -36,6 +36,7 @@
           },
           "id": "EVENT-<UUID>",
           "occurredAt": "<TIMESTAMP>",
+          "resourceId": "RES-<UUID>",
           "scope": {
             "info": {
               "avatarUrl": null,
