@@ -4,9 +4,7 @@
 
 set -e
 set -u
-
-echo "This is not yet implemented"
-exit 1
+set -x
 
 . "${SHARE_PROJECT_ROOT}/transcripts/transcript_functions.sh"
 
@@ -16,44 +14,36 @@ if [ ! -d "$cache_dir" ]; then
   mkdir -p "$cache_dir"
 fi
 
+project_list="${SHARE_PROJECT_ROOT}/transcripts/fixtures/projects.txt"
+
 typeset -A projects
 projects=(
-    base '@unison/base'
+    # pull from,                  push to
+    '@unison/base/releases/4.8.0' '@test/base/main'
 )
 
-for project_name project_ref in "${(@kv)projects}"; do
-    echo "Downloading sync file for $project_ref"
-    output_file="$(mktemp)"
-    curl -X GET --location "https://api.unison-lang.org/ucm/v1/projects/project?name=${project_ref}" \
-    --header 'Content-Type: application/json' \
-    >"$output_file"
+pull_transcript="$(mktemp).md"
+push_transcript="$(mktemp).md"
 
-    echo "Response for project $project_ref:"
-    cat "$output_file"
+while IFS= read -r line; do
+  read -r project_source project_dest <<< "$line"
+cat << EOF
+\`\`\`ucm
+scratch/main> clone ${project_source}
+\`\`\`
 
-    latest_release="$(jq -r '.payload."latest-release"' <"$output_file")"
-    projectId="$(jq -r '.payload."project-id"' <"$output_file")"
-    branch_ref="releases/${latest_release}"
-    project_branch_ref="${project_ref}/${branch_ref}"
+EOF
+done <"$project_list" >"$pull_transcript"
 
-    curl -X GET --location "https://api.unison-lang.org/ucm/v1/projects/project-branch?projectId=${projectId}&branchName=releases/${latest_release}" \
-    --header 'Content-Type: application/json' \
-    >"$output_file"
-    branch_head="$(jq -r '.payload."branch-head"' <"$output_file")"
+while IFS= read -r line; do
+  read -r project_source project_dest <<< "$line"
+cat << EOF
+\`\`\`ucm
+${project_source}> push ${project_dest}
+\`\`\`
 
-    echo "Response for project branch $project_branch_ref:"
-    cat "$output_file"
+EOF
+done <"$project_list"  >"$push_transcript"
 
-    sync_file="$cache_dir/${project_branch_ref}"
-    
-    if [ -f "$sync_file" ]; then
-        echo "Sync file for $project_branch_ref already exists, skipping download."
-        continue
-      else
-        mkdir -p "$(dirname "$sync_file")"
-        echo "Downloading sync file for $project_branch_ref into $sync_file"
-        curl -X POST --location 'https://api.unison-lang.org/ucm/v2/sync/entities/download' \
-        --header 'Content-Type: application/json' \
-        --data-raw "{\"branchRef\": \"${project_branch_ref}\", \"causalHash\": \"${branch_head}\", \"knownHashes\":[]}" >"$cache_dir/${project_branch_ref}"
-    fi
-done
+UNISON_SHARE_HOST="https://api.unison-lang.org" ucm -C "${cache_dir}/code-cache" transcript.in-place "$pull_transcript"
+UNISON_SHARE_HOST="http://localhost:5424" ucm -c "${cache_dir}/code-cache" transcript.in-place "$push_transcript"
