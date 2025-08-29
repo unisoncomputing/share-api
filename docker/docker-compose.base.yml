@@ -1,0 +1,83 @@
+# docker compose config for local development.
+services:
+  postgres:
+    image: postgres:15.4
+    container_name: postgres
+    restart: always
+    healthcheck:
+      # Ensure the database is up, and the tables are initialized
+      test: ["CMD", "psql", "-U", "postgres", "-c", "SELECT from users;"]
+      interval: 3s
+      timeout: 10s
+      retries: 5
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: sekrit
+    volumes:
+      - ../sql:/docker-entrypoint-initdb.d
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf # -c log_statement=all
+
+  redis:
+    image: redis:6.2.6
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    ports:
+     - "6379:6379"
+
+  vault:
+    image: 'hashicorp/vault:1.19'
+    container_name: vault
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "sekrit"
+      VAULT_KV_V1_MOUNT_PATH: "secret"
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    cap_add:
+      - IPC_LOCK
+    # # Use kv version 1
+    # command: server -dev
+
+  http-echo:
+    image: 'mendhak/http-https-echo:36'
+    container_name: http-echo
+    environment:
+      HTTP_PORT: 9999
+      ECHO_BACK_TO_CLIENT: "false"
+    ports:
+      - "9999:9999"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zpages extension
+
+    depends_on:
+      - jaeger
+
+  jaeger:
+      image: cr.jaegertracing.io/jaegertracing/jaeger:2.8.0
+      ports:
+        - 16686:16686  # Jaeger UI
+
+      environment:
+        - COLLECTOR_OTLP_ENABLED=true

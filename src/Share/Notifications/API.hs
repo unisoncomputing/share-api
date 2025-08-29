@@ -124,6 +124,11 @@ instance ToJSON GetSubscriptionsResponse where
   toJSON GetSubscriptionsResponse {subscriptions} =
     object ["subscriptions" .= subscriptions]
 
+instance FromJSON GetSubscriptionsResponse where
+  parseJSON = withObject "GetSubscriptionsResponse" $ \o -> do
+    subscriptions <- o .: "subscriptions"
+    pure GetSubscriptionsResponse {subscriptions}
+
 type CreateSubscriptionEndpoint =
   AuthenticatedUserId
     :> ReqBody '[JSON] CreateSubscriptionRequest
@@ -136,6 +141,15 @@ data CreateSubscriptionRequest
     subscriptionTopicGroups :: Set NotificationTopicGroup,
     subscriptionFilter :: Maybe SubscriptionFilter
   }
+
+instance ToJSON CreateSubscriptionRequest where
+  toJSON CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+    object
+      [ "scope" .= subscriptionScope,
+        "topics" .= subscriptionTopics,
+        "topicGroups" .= subscriptionTopicGroups,
+        "filter" .= subscriptionFilter
+      ]
 
 instance FromJSON CreateSubscriptionRequest where
   parseJSON = withObject "CreateSubscriptionRequest" $ \o -> do
@@ -154,6 +168,11 @@ instance ToJSON CreateSubscriptionResponse where
   toJSON CreateSubscriptionResponse {subscription} =
     object ["subscription" .= subscription]
 
+instance FromJSON CreateSubscriptionResponse where
+  parseJSON = withObject "CreateSubscriptionResponse" $ \o -> do
+    subscription <- o .: "subscription"
+    pure CreateSubscriptionResponse {subscription}
+
 type DeleteSubscriptionEndpoint =
   AuthenticatedUserId
     :> Capture "subscription_id" NotificationSubscriptionId
@@ -171,6 +190,14 @@ data UpdateSubscriptionRequest
     subscriptionTopicGroups :: Maybe (Set NotificationTopicGroup),
     subscriptionFilter :: Maybe SubscriptionFilter
   }
+
+instance ToJSON UpdateSubscriptionRequest where
+  toJSON UpdateSubscriptionRequest {subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+    object
+      [ "topics" .= subscriptionTopics,
+        "topicGroups" .= subscriptionTopicGroups,
+        "filter" .= subscriptionFilter
+      ]
 
 instance FromJSON UpdateSubscriptionRequest where
   parseJSON = withObject "UpdateSubscriptionRequest" $ \o -> do
@@ -192,6 +219,11 @@ instance ToJSON GetDeliveryMethodsResponse where
   toJSON GetDeliveryMethodsResponse {deliveryMethods} =
     object ["deliveryMethods" .= deliveryMethods]
 
+instance FromJSON GetDeliveryMethodsResponse where
+  parseJSON = withObject "GetDeliveryMethodsResponse" $ \o -> do
+    deliveryMethods <- o .: "deliveryMethods"
+    pure GetDeliveryMethodsResponse {deliveryMethods}
+
 newtype StatusFilter = StatusFilter
   { getStatusFilter :: NESet NotificationStatus
   }
@@ -203,6 +235,17 @@ instance FromHttpApiData StatusFilter where
       >>= \case
         Nothing -> Left "Empty status filter"
         Just statuses -> Right $ StatusFilter $ NESet.fromList statuses
+
+instance ToHttpApiData StatusFilter where
+  toQueryParam (StatusFilter statuses) =
+    toList statuses
+      <&> toQueryParam
+      & Text.intercalate ","
+
+instance ToJSON StatusFilter where
+  toJSON (StatusFilter statuses) =
+    toList statuses
+      & toJSON
 
 instance FromJSON StatusFilter where
   parseJSON = Aeson.withArray "StatusFilter" $ \arr ->
@@ -230,6 +273,13 @@ data UpdateHubEntriesRequest
     notificationIds :: NESet NotificationHubEntryId
   }
 
+instance ToJSON UpdateHubEntriesRequest where
+  toJSON UpdateHubEntriesRequest {notificationStatus, notificationIds} =
+    object
+      [ "status" .= notificationStatus,
+        "notificationIds" .= notificationIds
+      ]
+
 instance FromJSON UpdateHubEntriesRequest where
   parseJSON = withObject "UpdateHubEntriesRequest" $ \o -> do
     notificationStatus <- o .: "status"
@@ -246,6 +296,10 @@ data CreateEmailDeliveryMethodRequest
   { email :: Email
   }
 
+instance ToJSON CreateEmailDeliveryMethodRequest where
+  toJSON CreateEmailDeliveryMethodRequest {email} =
+    object ["email" .= email]
+
 instance FromJSON CreateEmailDeliveryMethodRequest where
   parseJSON = withObject "CreateEmailDeliveryMethodRequest" $ \o -> do
     email <- o .: "email"
@@ -259,6 +313,11 @@ data CreateEmailDeliveryMethodResponse
 instance ToJSON CreateEmailDeliveryMethodResponse where
   toJSON CreateEmailDeliveryMethodResponse {emailDeliveryMethodId} =
     object ["emailDeliveryMethodId" .= emailDeliveryMethodId]
+
+instance FromJSON CreateEmailDeliveryMethodResponse where
+  parseJSON = withObject "CreateEmailDeliveryMethodResponse" $ \o -> do
+    emailDeliveryMethodId <- o .: "emailDeliveryMethodId"
+    pure CreateEmailDeliveryMethodResponse {emailDeliveryMethodId}
 
 type DeleteEmailDeliveryMethodEndpoint =
   AuthenticatedUserId
@@ -276,6 +335,10 @@ data UpdateEmailDeliveryMethodRequest
   { email :: Email
   }
 
+instance ToJSON UpdateEmailDeliveryMethodRequest where
+  toJSON UpdateEmailDeliveryMethodRequest {email} =
+    object ["email" .= email]
+
 instance FromJSON UpdateEmailDeliveryMethodRequest where
   parseJSON = withObject "UpdateEmailDeliveryMethodRequest" $ \o -> do
     email <- o .: "email"
@@ -292,6 +355,10 @@ data CreateWebhookRequest
     name :: Text
   }
 
+instance ToJSON CreateWebhookRequest where
+  toJSON CreateWebhookRequest {url, name} =
+    object ["url" .= url, "name" .= name]
+
 instance FromJSON CreateWebhookRequest where
   parseJSON = withObject "CreateWebhookRequest" $ \o -> do
     url <- o .: "url"
@@ -306,6 +373,11 @@ data CreateWebhookResponse
 instance ToJSON CreateWebhookResponse where
   toJSON CreateWebhookResponse {webhookId} =
     object ["webhookId" .= webhookId]
+
+instance FromJSON CreateWebhookResponse where
+  parseJSON = withObject "CreateWebhookResponse" $ \o -> do
+    webhookId <- o .: "webhookId"
+    pure CreateWebhookResponse {webhookId}
 
 type DeleteWebhookEndpoint =
   AuthenticatedUserId
@@ -322,6 +394,10 @@ data UpdateWebhookRequest
   = UpdateWebhookRequest
   { url :: URIParam
   }
+
+instance ToJSON UpdateWebhookRequest where
+  toJSON UpdateWebhookRequest {url} =
+    object ["url" .= url]
 
 instance FromJSON UpdateWebhookRequest where
   parseJSON = withObject "UpdateWebhookRequest" $ \o -> do
@@ -344,6 +420,10 @@ data AddSubscriptionDeliveryMethodsRequest
   }
   deriving stock (Show, Eq, Ord)
 
+instance ToJSON AddSubscriptionDeliveryMethodsRequest where
+  toJSON AddSubscriptionDeliveryMethodsRequest {deliveryMethods} =
+    object ["deliveryMethods" .= deliveryMethods]
+
 instance FromJSON AddSubscriptionDeliveryMethodsRequest where
   parseJSON = withObject "AddSubscriptionDeliveryMethodsRequest" $ \o -> do
     deliveryMethods <- o .: "deliveryMethods"
@@ -354,6 +434,10 @@ data RemoveSubscriptionDeliveryMethodsRequest
   { deliveryMethods :: NESet DeliveryMethodId
   }
   deriving stock (Show, Eq, Ord)
+
+instance ToJSON RemoveSubscriptionDeliveryMethodsRequest where
+  toJSON RemoveSubscriptionDeliveryMethodsRequest {deliveryMethods} =
+    object ["deliveryMethods" .= deliveryMethods]
 
 instance FromJSON RemoveSubscriptionDeliveryMethodsRequest where
   parseJSON = withObject "RemoveSubscriptionDeliveryMethodsRequest" $ \o -> do

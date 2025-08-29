@@ -12,7 +12,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Ticket (TicketStatus)
-import Share.Utils.API (NullableUpdate, parseNullableUpdate)
+import Share.Utils.API (NullableUpdate, nullableUpdateToJSON, parseNullableUpdate)
 import Share.Web.Share.Comments
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo (..))
 
@@ -62,6 +62,20 @@ instance ToJSON (ShareTicket UserDisplayInfo) where
         "numComments" .= numComments
       ]
 
+instance FromJSON (ShareTicket UserDisplayInfo) where
+  parseJSON = withObject "ShareTicket" \o -> do
+    ticketId <- o .: "id"
+    projectShortHand <- o .: "projectRef"
+    number <- o .: "number"
+    title <- o .: "title"
+    description <- o .:? "description"
+    status <- o .: "status"
+    createdAt <- o .: "createdAt"
+    updatedAt <- o .: "updatedAt"
+    author <- o .:? "author"
+    numComments <- o .: "numComments"
+    pure ShareTicket {..}
+
 data StatusChangeEvent user = StatusChangeEvent
   { oldStatus :: Maybe TicketStatus,
     newStatus :: TicketStatus,
@@ -100,11 +114,31 @@ instance (ToJSON user) => ToJSON (TicketTimelineEvent user) where
         ]
     TicketTimelineComment commentEvent -> toJSON commentEvent
 
+instance (FromJSON user) => FromJSON (TicketTimelineEvent user) where
+  parseJSON = withObject "TicketTimelineEvent" \o -> do
+    kind <- o .: "kind"
+    case (kind :: Text) of
+      "statusChange" -> do
+        newStatus <- o .: "newStatus"
+        oldStatus <- o .:? "oldStatus"
+        actor <- o .: "actor"
+        timestamp <- o .: "timestamp"
+        pure $ TicketTimelineStatusChange StatusChangeEvent {..}
+      "comment" -> TicketTimelineComment <$> parseJSON (Object o)
+      _ -> fail $ "Unknown ticket timeline event kind: " <> show kind
+
 data CreateTicketRequest = CreateTicketRequest
   { title :: Text,
     description :: Maybe Text
   }
   deriving (Show)
+
+instance ToJSON CreateTicketRequest where
+  toJSON CreateTicketRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= description
+      ]
 
 instance FromJSON CreateTicketRequest where
   parseJSON = withObject "CreateContributionRequest" \o -> do
@@ -118,6 +152,14 @@ data UpdateTicketRequest = UpdateTicketRequest
     status :: Maybe TicketStatus
   }
   deriving (Show)
+
+instance ToJSON UpdateTicketRequest where
+  toJSON UpdateTicketRequest {..} =
+    object
+      [ "title" .= title,
+        "description" .= nullableUpdateToJSON description,
+        "status" .= status
+      ]
 
 instance FromJSON UpdateTicketRequest where
   parseJSON = withObject "UpdateTicketRequest" \o -> do

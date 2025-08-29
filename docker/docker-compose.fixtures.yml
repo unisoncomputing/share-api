@@ -1,0 +1,9 @@
+# Sets postgres container to use a persistent volume for its data
+services:
+  postgres:
+    volumes:
+      # Persist the data
+      - postgresVolume:/var/lib/postgresql/data
+
+volumes:
+  postgresVolume:

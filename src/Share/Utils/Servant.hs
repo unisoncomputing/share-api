@@ -23,6 +23,7 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import GHC.TypeLits (KnownSymbol, Nat, Symbol)
 import Servant
+import Servant.Client.Core
 import Share.Prelude
 import Share.Utils.Logging
 import Share.Web.App (WebApp)
@@ -40,7 +41,7 @@ type RequiredQueryParam = QueryParam' '[Required, Strict]
 type RequiredHeader = Header' '[Required, Strict]
 
 redirectTo :: URI -> LocationHeader
-redirectTo uri = addHeader (show uri) NoContent
+redirectTo uri = Servant.addHeader (show uri) NoContent
 
 data Timeout = Timeout NominalDiffTime
 
@@ -92,3 +93,16 @@ instance (HasServer api ctx, KnownSymbol sym, FromHttpApiData a, HasContextEntry
   route _ ctx d = route (Proxy :: Proxy ((Capture sym a :> api) :<|> api)) ctx $ fmap f d
     where
       f may = may . Just :<|> may Nothing
+
+instance (HasClient m api, ToHttpApiData a) => HasClient m (OptionalCapture sym a :> api) where
+  type Client m (OptionalCapture sym a :> api) = Maybe a -> Client m api
+
+  clientWithRoute pm _ req ma =
+    case ma of
+      Nothing ->
+        clientWithRoute pm (Proxy :: Proxy api) req
+      Just capture ->
+        let req' = (req {requestPath = requestPath req <> "/" <> toEncodedUrlPiece capture})
+         in clientWithRoute pm (Proxy :: Proxy api) req'
+
+  hoistClientMonad pm _ nt = fmap (hoistClientMonad pm (Proxy :: Proxy api) nt)

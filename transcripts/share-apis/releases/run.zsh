@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 
 set -e
+set -u
 
 source "../../transcript_helpers.sh"
 

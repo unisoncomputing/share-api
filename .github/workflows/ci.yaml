@@ -229,6 +229,8 @@ jobs:
           docker image ls -a
 
       - name: Run transcript tests
+        env:
+          SHARE_PROJECT_ROOT: ${{ github.workspace }}
         # If it takes longer than this, it's probably stalled out.
         timeout-minutes: 10
         run: |
@@ -239,12 +241,11 @@ jobs:
           curl -L https://github.com/unisonweb/unison/releases/download/release%2F0.5.45/ucm-linux-x64.tar.gz | tar -xz -C ucm
           export PATH=$PWD/ucm:$PATH
 
-          # Clean up old postgres data if it exists.
-          docker volume rm docker_postgresVolume 2>/dev/null || true
-
           # Start share and it's dependencies in the background
-          docker compose -f docker/docker-compose.yml up --wait
+          docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.share.yml up --wait
 
+          # Configure it as a transcript database
+          ./transcripts/configure_transcript_database.zsh
 
           # Run the transcript tests
           zsh ./transcripts/run-transcripts.zsh

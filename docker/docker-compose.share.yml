@@ -1,0 +1,55 @@
+services:
+  # Define the share service for use in CI
+  share:
+    image: share-api
+    container_name: share-api
+    depends_on:
+          redis:
+            condition: service_healthy
+          postgres:
+            condition: service_healthy
+          vault:
+            condition: service_healthy
+          http-echo:
+            condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5424/health"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "5424:5424"
+
+    environment:
+      # Placeholder values for development
+      - SHARE_DEPLOYMENT=local
+      - SHARE_API_ORIGIN=http://localhost:5424
+      - SHARE_SERVER_PORT=5424
+      - SHARE_REDIS=redis://redis:6379
+      - SHARE_POSTGRES=postgresql://postgres:sekrit@postgres:5432
+      - SHARE_POSTGRES_CONN_TTL=30
+      - SHARE_POSTGRES_CONN_MAX=10
+      - SHARE_HMAC_KEY=hmac-key-test-key-test-key-test-
+      - SHARE_EDDSA_KEY=eddsa-key-test-key-test-key-test
+      - SHARE_SHARE_UI_ORIGIN=http://localhost:1234
+      - SHARE_CLOUD_UI_ORIGIN=http://localhost:5678
+      - SHARE_HOMEPAGE_ORIGIN=http://localhost:1111
+      - SHARE_CLOUD_HOMEPAGE_ORIGIN=http://localhost:2222
+      - SHARE_CLOUD_API_ORIGIN=http://localhost:3333
+      - SHARE_CLOUD_API_JWKS_ENDPOINT=http://localhost:3333/.well-known/jwks.json
+      - SHARE_LOG_LEVEL=DEBUG
+      - SHARE_COMMIT=dev
+      - SHARE_MAX_PARALLELISM_PER_DOWNLOAD_REQUEST=1
+      - SHARE_MAX_PARALLELISM_PER_UPLOAD_REQUEST=5
+      - VAULT_HOST=http://vault:8200/v1
+      - VAULT_TOKEN=sekrit
+      - USER_SECRETS_VAULT_MOUNT=secret # A default mount in dev vault
+      - SHARE_GITHUB_CLIENTID=invalid
+      - SHARE_GITHUB_CLIENT_SECRET=invalid
+      - OTEL_SERVICE_NAME=share-api
+      - OTEL_SERVICE_VERSION=local
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=share-api,service.version=local,deployment.environment=local
+      - OTEL_TRACES_SAMPLER=traceidratio
+      - OTEL_TRACES_SAMPLER_ARG=1.0

@@ -59,6 +59,7 @@ import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UserLike (..))
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
+import Share.Web.Share.Users.API qualified as Users
 import Unison.Codebase.Path qualified as Path
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
@@ -99,9 +100,9 @@ userCodebaseServer session handle =
       addRequestTag "codebase-handle" (IDs.toText handle)
       m
 
-userServer :: ServerT Share.UserAPI WebApp
+userServer :: ServerT Users.API WebApp
 userServer session handle =
-  hoistServerWithContext (Proxy @Share.UserResourceAPI) ctxType addTags $
+  hoistServerWithContext (Proxy @Users.UserResourceAPI) ctxType addTags $
     ( getUserReadmeEndpoint session handle
         :<|> getUserProfileEndpoint mayCallerId handle
         :<|> updateUserEndpoint handle

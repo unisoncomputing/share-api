@@ -29,6 +29,7 @@ where
 import Control.Applicative
 import Control.Monad.Random
 import Control.Monad.Trans.Maybe (MaybeT (..))
+import Crypto.JWT qualified as JWT
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Binary
@@ -46,6 +47,7 @@ import Network.HTTP.Types qualified as Network
 import Network.URI
 import Network.Wai qualified as Wai
 import Servant
+import Servant.Client.Core.Auth qualified as ServantAuth
 import Servant.Server.Experimental.Auth qualified as ServantAuth
 import Share.JWT
 import Share.OAuth.Types
@@ -63,6 +65,8 @@ type AuthenticatedSession = Servant.AuthProtect "require-session"
 
 type instance ServantAuth.AuthServerData (Servant.AuthProtect "require-session") = Session
 
+type instance ServantAuth.AuthClientData (Servant.AuthProtect "require-session") = JWT.SignedJWT
+
 -- | Requires a valid session cookie to be present in the request,
 -- provides the authenticated user's user-id as an argument to the handler
 --
@@ -70,6 +74,8 @@ type instance ServantAuth.AuthServerData (Servant.AuthProtect "require-session")
 type AuthenticatedUserId = Servant.AuthProtect "require-user-id"
 
 type instance ServantAuth.AuthServerData (AuthProtect "require-user-id") = UserId
+
+type instance ServantAuth.AuthClientData (AuthProtect "require-user-id") = JWT.SignedJWT
 
 -- | Used for endpoints with optional auth.
 -- Provides 'Just' the session if a valid session cookie is present in the request,
@@ -80,12 +86,16 @@ type MaybeAuthenticatedSession = Servant.AuthProtect "maybe-session"
 
 type instance ServantAuth.AuthServerData (AuthProtect "maybe-session") = Maybe Session
 
+type instance ServantAuth.AuthClientData (AuthProtect "maybe-session") = Maybe JWT.SignedJWT
+
 -- | Used for endpoints with optional auth.
 -- Provides 'Just' the user ID if a valid session cookie is present in the request,
 -- otherwise provides 'Nothing'.
 type MaybeAuthenticatedUserId = Servant.AuthProtect "maybe-user-id"
 
 type instance ServantAuth.AuthServerData (AuthProtect "maybe-user-id") = Maybe UserId
+
+type instance ServantAuth.AuthClientData (AuthProtect "maybe-user-id") = Maybe JWT.SignedJWT
 
 -- | An additional check to perform on a session. Returns True if valid, False otherwise.
 type SessionCheck = (Session -> Handler Bool)

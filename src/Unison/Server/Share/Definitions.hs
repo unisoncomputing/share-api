@@ -158,12 +158,14 @@ definitionDependencyResults codebase codeCache hqName project branchRef np mayWi
       hqFqn <- hoistMaybe $ PPE.terms ppe referent
       let fqn = HQ'.toName hqFqn
       typ <- MaybeT $ (Codebase.loadTypesOfReferentsOf codebase id (CV.referent1to2 referent))
-      summary <- fmap ToTTermSummary . lift $ Summary.termSummaryForReferent v2Referent typ (Just fqn) np mayWidth
+      -- TODO: batchify this
+      summary <- fmap ToTTermSummary . lift $ Summary.termSummariesForReferentsOf np mayWidth id (v2Referent, typ, Just fqn)
       pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
     Right typeRef -> do
       hqFqn <- hoistMaybe $ PPE.types ppe typeRef
       let fqn = HQ'.toName hqFqn
-      summary <- fmap ToTTypeSummary . lift $ Summary.typeSummaryForReference codeCache typeRef (Just fqn) mayWidth
+      -- TODO: batchify this
+      summary <- fmap ToTTypeSummary . lift $ Summary.typeSummariesForReferencesOf codeCache mayWidth id (typeRef, Just fqn)
       pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
 
 -- Ideally we'd do this via the database, but we actually _can't_, since the database only
@@ -218,6 +220,7 @@ definitionDependents codebase name nameSearch = do
 
 -- | Returns all the definitions which depend on the query.
 definitionDependentResults ::
+  forall m scope.
   (QueryM m) =>
   CodebaseEnv ->
   CodeCache scope ->
@@ -231,21 +234,38 @@ definitionDependentResults codebase codeCache hqName project branchRef np mayWid
   let nameSearch = PGNameSearch.nameSearchForPerspective np
   deps <- definitionDependents codebase hqName nameSearch
   ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
-  -- TODO: batchify this
-  forMaybe (Set.toList $ dependenciesToReferences deps) \dep -> runMaybeT $ case dep of
-    Left termRef -> do
-      let referent = Referent.fromTermReference termRef
-      let v2Referent = CV.referent1to2 referent
-      hqFqn <- hoistMaybe $ PPE.terms ppe referent
-      let fqn = HQ'.toName hqFqn
-      typ <- MaybeT $ (Codebase.loadTypesOfReferentsOf codebase id (CV.referent1to2 referent))
-      summary <- fmap ToTTermSummary . lift $ Summary.termSummaryForReferent v2Referent typ (Just fqn) np mayWidth
-      pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
-    Right typeRef -> do
-      hqFqn <- hoistMaybe $ PPE.types ppe typeRef
-      let fqn = HQ'.toName hqFqn
-      summary <- fmap ToTTypeSummary . lift $ Summary.typeSummaryForReference codeCache typeRef (Just fqn) mayWidth
-      pure $ DefinitionSearchResult {fqn, summary, project, branchRef}
+  let allRefs = Set.toList $ dependenciesToReferences deps
+  let (allTerms, allTypes) = partitionEithers allRefs
+  liftA2 (<>) (doTerms ppe allTerms) (doTypes ppe allTypes)
+  where
+    doTerms :: PPE.PrettyPrintEnv -> [TermReference] -> m [DefinitionSearchResult]
+    doTerms ppe termRefs = do
+      let referents = Referent.fromTermReference <$> termRefs
+      let referentsMap = Data.mapFromSelf referents
+      let hqFqns = referentsMap & mapMaybe (PPE.terms ppe)
+      let v2Referents = CV.referent1to2 <$> referentsMap
+      let fqns = HQ'.toName <$> hqFqns
+      typs <-
+        Codebase.loadTypesOfReferentsOf codebase traversed v2Referents
+          <&> catMaybes
+      let combined = Data.zip3 v2Referents typs (Just <$> fqns)
+      termSummaries <-
+        Summary.termSummariesForReferentsOf np mayWidth traversed combined
+          <&> fmap ToTTermSummary
+      Data.zipWith2 fqns termSummaries (\fqn summary -> DefinitionSearchResult {fqn, summary, project, branchRef})
+        & Map.elems
+        & pure
+    doTypes :: PPE.PrettyPrintEnv -> [TypeReference] -> m [DefinitionSearchResult]
+    doTypes ppe typeRefs = do
+      let typeRefsMap = Data.mapFromSelf typeRefs
+      let hqFqns = typeRefsMap & mapMaybe (PPE.types ppe)
+      let fqns = HQ'.toName <$> hqFqns
+      typeSummaries <-
+        Summary.typeSummariesForReferencesOf codeCache mayWidth traversed (Data.zip2 typeRefsMap (Just <$> fqns))
+          <&> fmap ToTTypeSummary
+      Data.zipWith2 fqns typeSummaries (\fqn summary -> DefinitionSearchResult {fqn, summary, project, branchRef})
+        & Map.elems
+        & pure
 
 -- | Renders a definition for the given name or hash alongside its documentation.
 displayDefinitionByHQName ::

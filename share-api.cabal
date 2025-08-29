@@ -187,6 +187,7 @@ library
       Share.Web.Share.Tickets.Impl
       Share.Web.Share.Tickets.Types
       Share.Web.Share.Types
+      Share.Web.Share.Users.API
       Share.Web.Support.API
       Share.Web.Support.Impl
       Share.Web.Support.Types
@@ -310,6 +311,7 @@ library
     , servant
     , servant-auth
     , servant-client
+    , servant-client-core
     , servant-conduit
     , servant-server
     , share-auth
@@ -466,6 +468,7 @@ executable share-api
     , servant
     , servant-auth
     , servant-client
+    , servant-client-core
     , servant-conduit
     , servant-server
     , share-api
