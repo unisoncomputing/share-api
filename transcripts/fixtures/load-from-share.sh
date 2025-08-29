@@ -27,9 +27,12 @@ push_transcript="$(mktemp).md"
 
 while IFS= read -r line; do
   read -r project_source project_dest <<< "$line"
+# Annoyingly clone will fail if it's already been cloned, but succeed otherwise, so we just add a bad command to
+# force the block to always fail so we can use the :error directive.
 cat << EOF
-\`\`\`ucm
+\`\`\`ucm:error
 scratch/main> clone ${project_source}
+scratch/main> force-failure
 \`\`\`
 
 EOF
