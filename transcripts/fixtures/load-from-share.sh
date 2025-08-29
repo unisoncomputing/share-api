@@ -1,8 +1,12 @@
 #!/bin/zsh
 
+# Note: this doesn't work as intended yet.
+
 set -e
 set -u
-set -x
+
+echo "This is not yet implemented"
+exit 1
 
 . "${SHARE_PROJECT_ROOT}/transcripts/transcript_functions.sh"
 
