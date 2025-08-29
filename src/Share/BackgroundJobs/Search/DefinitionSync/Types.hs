@@ -87,6 +87,12 @@ instance ToHttpApiData TermOrTypeTag where
 instance ToJSON TermOrTypeTag where
   toJSON = String . toQueryParam
 
+instance FromJSON TermOrTypeTag where
+  parseJSON = withText "TermOrTypeTag" $ \txt ->
+    case parseQueryParam txt of
+      Left err -> fail $ Text.unpack err
+      Right tag -> pure tag
+
 instance Hasql.EncodeValue TermOrTypeTag where
   encodeValue =
     Encoders.enum

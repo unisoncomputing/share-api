@@ -129,6 +129,13 @@ instance ToJSON OrgDisplayInfo where
         "isCommercial" Aeson..= isCommercial
       ]
 
+instance FromJSON OrgDisplayInfo where
+  parseJSON = Aeson.withObject "OrgDisplayInfo" $ \o -> do
+    user <- o Aeson..: "user"
+    orgId <- o Aeson..: "orgId"
+    isCommercial <- o Aeson..: "isCommercial"
+    pure OrgDisplayInfo {user, orgId, isCommercial}
+
 data TeamDisplayInfo = TeamDisplayInfo
   { teamId :: TeamId,
     name :: Text,
@@ -143,3 +150,11 @@ instance ToJSON TeamDisplayInfo where
         "name" Aeson..= name,
         "avatarUrl" Aeson..= (URIParam <$> avatarUrl)
       ]
+
+instance FromJSON TeamDisplayInfo where
+  parseJSON =
+    Aeson.withObject "TeamDisplayInfo" $ \o -> do
+      teamId <- o Aeson..: "teamId"
+      name <- o Aeson..: "name"
+      avatarUrl <- fmap unpackURI <$> o Aeson..:? "avatarUrl"
+      pure TeamDisplayInfo {teamId, name, avatarUrl}

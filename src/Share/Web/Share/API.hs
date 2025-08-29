@@ -5,45 +5,13 @@ module Share.Web.Share.API where
 
 import Servant
 import Share.IDs
-import Share.Notifications.API qualified as Notifications
-import Share.OAuth.Session (AuthenticatedSession, AuthenticatedUserId, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
+import Share.OAuth.Session (AuthenticatedSession, MaybeAuthenticatedSession, MaybeAuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.API
-import Share.Utils.Caching
 import Share.Utils.IDs qualified as IDs
 import Share.Utils.Servant
-import Share.Web.Share.Branches.API (UserBranchesAPI)
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
-import Share.Web.Share.Contributions.API (ContributionsByUserAPI)
-import Share.Web.Share.Projects.API (ProjectsAPI)
 import Share.Web.Share.Types
-
-type UserAPI =
-  MaybeAuthenticatedSession
-    :> Capture "user_handle" UserHandle
-    :> UserResourceAPI
-
-type UserResourceAPI =
-  ("readme" :> UserReadmeEndpoint)
-    :<|> UserProfileEndpoint
-    :<|> UpdateUserEndpoint
-    :<|> ("projects" :> ProjectsAPI)
-    :<|> ("branches" :> UserBranchesAPI)
-    :<|> ("contributions" :> ContributionsByUserAPI)
-    :<|> ("notifications" :> Notifications.API)
-
--- | PATCH /users/:user_handle
--- Update the user's profile
-type UpdateUserEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] UpdateUserRequest
-    :> Patch '[JSON] DescribeUserProfile
-
--- | GET /users/:user_handle
-type UserProfileEndpoint = Get '[JSON] DescribeUserProfile
-
--- | GET /users/:user_handle/readme
-type UserReadmeEndpoint = Get '[JSON] (Cached JSON ReadmeResponse)
 
 -- | GET /search?query=hoj&limit=9
 --

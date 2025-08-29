@@ -7,7 +7,7 @@ import Data.Time (UTCTime)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Interpolate qualified as Hasql
-import Servant (FromHttpApiData (..))
+import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
@@ -43,6 +43,11 @@ instance FromHttpApiData TicketStatus where
     "open" -> Right Open
     "closed" -> Right Closed
     _ -> Left "Invalid ticket status"
+
+instance ToHttpApiData TicketStatus where
+  toQueryParam = \case
+    Open -> "open"
+    Closed -> "closed"
 
 instance Hasql.DecodeValue TicketStatus where
   decodeValue = do

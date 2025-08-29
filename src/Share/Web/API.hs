@@ -13,18 +13,24 @@ import Share.Web.Local.API qualified as Local
 import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Orgs.API qualified as Orgs
 import Share.Web.Share.Projects.API qualified as Projects
+import Share.Web.Share.Users.API qualified as Users
 import Share.Web.Support.API qualified as Support
 import Share.Web.Types
 import Share.Web.UCM.SyncV2.API qualified as SyncV2
 import Unison.Share.API.Projects qualified as UCMProjects
 import Unison.Sync.API qualified as Unison.Sync
 
+-- Some APIs are pulled out separately to make building clients easier.
+type OrgsAPI = ("orgs" :> Orgs.API)
+
+type UsersAPI = ("users" :> Users.API)
+
 type API =
   OAuth.ServiceProviderAPI
     :<|> OAuth.IdentityProviderAPI
     :<|> ("codebases" :> Share.UserPublicCodebaseAPI)
-    :<|> ("users" :> Share.UserAPI)
-    :<|> ("orgs" :> Orgs.API)
+    :<|> UsersAPI
+    :<|> OrgsAPI
     :<|> ("search" :> Share.OmniSearchEndpoint)
     :<|> ("search-names" :> Share.SearchDefinitionNamesEndpoint)
     :<|> ("search-definitions" :> Share.SearchDefinitionsEndpoint)

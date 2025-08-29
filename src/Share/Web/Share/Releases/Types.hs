@@ -8,11 +8,11 @@ module Share.Web.Share.Releases.Types where
 
 import Data.Aeson
 import Data.Time (UTCTime)
+import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Share.IDs
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Release
-import Servant (FromHttpApiData (..))
 
 data ReleaseStatusFilter
   = OnlyPublished
@@ -26,6 +26,12 @@ instance FromHttpApiData ReleaseStatusFilter where
     "deprecated" -> Right OnlyDeprecated
     "any" -> Right AllReleases
     _ -> Left "Invalid release status filter"
+
+instance ToHttpApiData ReleaseStatusFilter where
+  toQueryParam = \case
+    OnlyPublished -> "published"
+    OnlyDeprecated -> "deprecated"
+    AllReleases -> "any"
 
 data APIReleaseStatus
   = APIPublishedRelease UTCTime (Maybe (PrefixedID "@" UserHandle))
@@ -46,6 +52,14 @@ instance ToJSON APIReleaseStatus where
           "deprecatedAt" .= deprecatedAt,
           "deprecatedBy" .= deprecatedBy
         ]
+
+instance FromJSON APIReleaseStatus where
+  parseJSON = withObject "APIReleaseStatus" $ \o -> do
+    status :: Text <- o .: "status"
+    case status of
+      "published" -> APIPublishedRelease <$> o .: "publishedAt" <*> o .:? "publishedBy"
+      "deprecated" -> APIDeprecatedRelease <$> o .: "deprecatedAt" <*> o .:? "deprecatedBy"
+      _ -> fail $ "Invalid release status: " <> show status
 
 -- | The api format for a release.
 data APIRelease = APIRelease
@@ -73,6 +87,18 @@ instance ToJSON APIRelease where
         "status" .= status
       ]
 
+instance FromJSON APIRelease where
+  parseJSON = withObject "APIRelease" $ \o ->
+    APIRelease
+      <$> o .: "version"
+      <*> o .: "causalHashUnsquashed"
+      <*> o .: "causalHashSquashed"
+      <*> o .: "projectRef"
+      <*> o .: "createdAt"
+      <*> o .: "createdBy"
+      <*> o .: "updatedAt"
+      <*> o .: "status"
+
 releaseToAPIRelease :: ProjectShortHand -> Release CausalHash UserHandle -> APIRelease
 releaseToAPIRelease projectSH Release {..} =
   APIRelease
@@ -96,6 +122,11 @@ data StatusUpdate
   | MakeDeprecated
   deriving stock (Eq, Show)
 
+instance ToJSON StatusUpdate where
+  toJSON = \case
+    MakePublished -> String "published"
+    MakeDeprecated -> String "deprecated"
+
 instance FromJSON StatusUpdate where
   parseJSON = withText "StatusUpdate" $ \case
     "published" -> pure MakePublished
@@ -106,6 +137,12 @@ data UpdateReleaseRequest = UpdateReleaseRequest
   { status :: Maybe StatusUpdate
   }
 
+instance ToJSON UpdateReleaseRequest where
+  toJSON UpdateReleaseRequest {..} =
+    object
+      [ "status" .= status
+      ]
+
 instance FromJSON UpdateReleaseRequest where
   parseJSON = withObject "UpdateReleaseRequest" $ \obj -> do
     status <- obj .:? "status"
@@ -115,6 +152,15 @@ data CreateReleaseRequest = CreateReleaseRequest
   { causalHash :: PrefixedHash "#" CausalHash,
     releaseVersion :: ReleaseVersion
   }
+
+instance ToJSON CreateReleaseRequest where
+  toJSON CreateReleaseRequest {..} =
+    object
+      [ "causalHash" .= causalHash,
+        "major" .= major releaseVersion,
+        "minor" .= minor releaseVersion,
+        "patch" .= patch releaseVersion
+      ]
 
 instance FromJSON CreateReleaseRequest where
   parseJSON = withObject "CreateReleaseRequest" $ \obj ->
