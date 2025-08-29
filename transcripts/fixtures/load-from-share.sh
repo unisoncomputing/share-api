@@ -4,7 +4,6 @@
 
 set -e
 set -u
-set -x
 
 . "${SHARE_PROJECT_ROOT}/transcripts/transcript_functions.sh"
 
@@ -21,14 +20,15 @@ if [ ! -f "$custom_project_list" ]; then
   touch "$custom_project_list"
 fi
 
-typeset -A projects
-projects=(
-    # pull from,                  push to
-    '@unison/base/releases/4.8.0' '@test/base/main'
-)
-
+auth_transcript="$(mktemp).md"
 pull_transcript="$(mktemp).md"
 push_transcript="$(mktemp).md"
+
+cat << EOF >"$auth_transcript"
+\`\`\`ucm
+scratch/main> auth.login
+\`\`\`
+EOF
 
 while IFS= read -r line; do
   read -r project_source project_dest <<< "$line"
@@ -41,7 +41,7 @@ scratch/main> force-failure
 \`\`\`
 
 EOF
-done <(cat "$main_project_list" "$custom_project_list") >"$pull_transcript"
+done < <(cat "$main_project_list" "$custom_project_list") >"$pull_transcript"
 
 while IFS= read -r line; do
   read -r project_source project_dest <<< "$line"
@@ -51,7 +51,11 @@ ${project_source}> push ${project_dest}
 \`\`\`
 
 EOF
-done <(cat "$main_project_list" "$custom_project_list")  >"$push_transcript"
+done < <(cat "$main_project_list" "$custom_project_list")  >"$push_transcript"
 
+echo "📫 Downloading projects from Share"
 UNISON_SHARE_HOST="https://api.unison-lang.org" ucm -C "${cache_dir}/code-cache" transcript.in-place "$pull_transcript"
+echo "🔑 Authenticating with local server..."
+UNISON_SHARE_HOST="http://localhost:5424" ucm -c "${cache_dir}/code-cache" transcript.in-place "$auth_transcript"
+echo "📦 Pushing projects to local server..."
 UNISON_SHARE_HOST="http://localhost:5424" ucm -c "${cache_dir}/code-cache" transcript.in-place "$push_transcript"

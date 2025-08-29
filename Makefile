@@ -71,8 +71,8 @@ reset_fixtures:
 	  sleep 1; \
 	done;
 	@echo "Booting up share";
-	@( . ./local.env \
-		$(exe) 2>&1 & \
+	@( . ./local.env ; \
+		$(exe) & \
 		SERVER_PID=$$!; \
 	trap "kill $$SERVER_PID 2>/dev/null || true" EXIT INT TERM; \
 	echo "Loading fixtures"; \
