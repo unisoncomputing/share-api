@@ -21,5 +21,5 @@ prelude.output.md
 # Scratch files
 *.u
 
-# End users can customize their own 
-transcripts/fixtures/projects.txt
+# Developers can customize their own local development setup
+/transcripts/fixtures/custom_projects.txt

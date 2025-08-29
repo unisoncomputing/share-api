@@ -14,7 +14,12 @@ if [ ! -d "$cache_dir" ]; then
   mkdir -p "$cache_dir"
 fi
 
-project_list="${SHARE_PROJECT_ROOT}/transcripts/fixtures/projects.txt"
+main_project_list="${SHARE_PROJECT_ROOT}/transcripts/fixtures/projects.txt"
+custom_project_list="${SHARE_PROJECT_ROOT}/transcripts/fixtures/custom_projects.txt"
+# create the custom projects file if it doesn't exist
+if [ ! -f "$custom_project_list" ]; then
+  touch "$custom_project_list"
+fi
 
 typeset -A projects
 projects=(
@@ -36,7 +41,7 @@ scratch/main> force-failure
 \`\`\`
 
 EOF
-done <"$project_list" >"$pull_transcript"
+done <(cat "$main_project_list" "$custom_project_list") >"$pull_transcript"
 
 while IFS= read -r line; do
   read -r project_source project_dest <<< "$line"
@@ -46,7 +51,7 @@ ${project_source}> push ${project_dest}
 \`\`\`
 
 EOF
-done <"$project_list"  >"$push_transcript"
+done <(cat "$main_project_list" "$custom_project_list")  >"$push_transcript"
 
 UNISON_SHARE_HOST="https://api.unison-lang.org" ucm -C "${cache_dir}/code-cache" transcript.in-place "$pull_transcript"
 UNISON_SHARE_HOST="http://localhost:5424" ucm -c "${cache_dir}/code-cache" transcript.in-place "$push_transcript"
