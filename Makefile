@@ -1,5 +1,7 @@
-.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts
+.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts reset_fixtures
 
+SHARE_PROJECT_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+export SHARE_PROJECT_ROOT
 UNAME := $(shell uname)
 STACK_FLAGS := "--fast"
 dist_dir := $(shell stack path | awk '/^dist-dir/{print $$2}')
@@ -36,39 +38,66 @@ $(installed_share): $(exe) $(target_dir)
 auth_example:
 	stack build --fast test-auth-app
 
-docker_server_build: $(installed_share)
-	docker build $(docker_platform_flag) -f docker/Dockerfile --build-arg share_commit=$(share_commit) -t share docker
-
-docker_server_release: $(installed_share)
-	docker build $(docker_platform_flag) -f docker/Dockerfile -t $(docker_registry)/share:$(DRONE_BUILD_NUMBER) docker
-
-docker_push: $(docker_server_release)
-	docker push $(docker_registry)/share:$(DRONE_BUILD_NUMBER)
-
-docker_staging_release: $(installed_share)
-	docker build $(docker_platform_flag) -f docker/Dockerfile -t $(docker_registry)/share-staging:$(DRONE_BUILD_NUMBER) docker
-
-docker_staging_push: $(docker_server_release)
-	docker push $(docker_registry)/share-staging:$(DRONE_BUILD_NUMBER)
-
+# Build Share and run it alongside its dependencies via docker-compose
 serve: $(installed_share)
-	trap 'docker compose -f docker/docker-compose.yml down' EXIT INT TERM
-	docker compose -f docker/docker-compose.yml up postgres redis vault &
-	while  ! (  pg_isready --host localhost -U postgres -p 5432 && redis-cli -p 6379 ping && VAULT_ADDR=http://localhost:8200 vault status)  do \
-		echo "Waiting for postgres and redis..."; \
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
+	@echo "Booting up docker dependencies..."
+	docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.fixtures.yml up  --remove-orphans --detach
+	@echo "Booting up docker dependencies...";
+	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
 	  sleep 1; \
 	done;
-	echo "Running Share at http://localhost:5424"
+	@echo "Starting up Share at http://localhost:5424";
+	@if curl -f -s http://localhost:1234 >/dev/null 2>&1 ; then \
+	  (sleep 1 && $(OPEN) "http://localhost:5424/local/user/test/login" && $(OPEN) "http://localhost:1234" || true) & \
+	fi;
+	@(. ./local.env && $(exe) 2>&1)
 
-	if [ ${OPEN_BROWSER} = "true" ] ; then \
-	  (sleep 1 && $(OPEN) "http://localhost:5424/local/user/test/login" || true) & \
-	fi
-	(. ./local.env && $(exe) 2>&1)
-
-fixtures:
-	echo "Resetting local database to fixture data"
-	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/clean.sql"
-	PGPASSWORD="sekrit" psql -U postgres -p 5432 -h localhost -f "transcripts/sql/inserts.sql"
+# Loads the local testing share with a bunch of realistic code.
+reset_fixtures:
+	# Prompt for confirmation
+	@echo "This will delete all data in your local share database. Are you sure? (y/N) "
+	@read -r confirmation && [ "$$confirmation" = "y" ] || [ "$$confirmation" = "Y" ]
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
+	# Remove the existing postgres volume to reset the database
+	@echo "Removing any existing postgres volume"
+	docker volume rm docker_postgresVolume || true
+	@echo "Booting up docker dependencies..."
+	docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.fixtures.yml up --remove-orphans --detach
+	@echo "Initializing fixture data";
+	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
+	  sleep 1; \
+	done;
+	@echo "Booting up share";
+	@( . ./local.env \
+		$(exe) 2>&1 & \
+		SERVER_PID=$$!; \
+	trap "kill $$SERVER_PID 2>/dev/null || true" EXIT INT TERM; \
+	echo "Loading fixtures"; \
+	./transcripts/fixtures/run.zsh; \
+	kill $$SERVER_PID 2>/dev/null || true; \
+	) 
+	@echo "Done!";
 
 transcripts:
-	./transcripts/run-transcripts.zsh
+	@echo "Taking down any existing docker dependencies"
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
+	@echo "Booting up transcript docker dependencies..."
+	docker compose -f docker/docker-compose.base.yml up --remove-orphans --detach
+	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
+	  sleep 1; \
+	done;
+	./transcripts/configure_transcript_database.zsh
+	@echo "Booting up share";
+	( . ./local.env ; \
+		$(exe) & \
+		SERVER_PID=$$!; \
+		trap "kill $$SERVER_PID 2>/dev/null || true" EXIT INT TERM; \
+		echo "Running transcripts"; \
+		./transcripts/run-transcripts.zsh $(pattern); \
+		kill $$SERVER_PID 2>/dev/null || true; \
+	) 
+	@echo "Transcripts complete!";
