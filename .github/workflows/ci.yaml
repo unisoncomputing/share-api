@@ -244,6 +244,9 @@ jobs:
           # Start share and it's dependencies in the background
           docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.share.yml up --wait
 
+          # Configure it as a transcript database
+          ./transcripts/configure_transcript_database.zsh
+
           # Run the transcript tests
           zsh ./transcripts/run-transcripts.zsh
 
