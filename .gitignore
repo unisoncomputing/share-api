@@ -20,3 +20,6 @@ prelude.output.md
 
 # Scratch files
 *.u
+
+# End users can customize their own 
+transcripts/fixtures/projects.txt
