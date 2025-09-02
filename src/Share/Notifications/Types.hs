@@ -436,6 +436,7 @@ data NotificationEvent id userInfo occurredAt eventPayload = NotificationEvent
   { eventId :: id,
     eventOccurredAt :: occurredAt,
     eventResourceId :: ResourceId,
+    eventProjectId :: Maybe ProjectId,
     eventData :: eventPayload,
     eventScope :: userInfo,
     eventActor :: userInfo
@@ -452,14 +453,15 @@ eventUserInfo_ f NotificationEvent {eventActor, eventScope, ..} = do
   pure $ NotificationEvent {eventActor = eventActor', eventScope = eventScope', ..}
 
 instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
-  toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId} =
+  toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId, eventProjectId} =
     Aeson.object
       [ "id" Aeson..= eventId,
         "occurredAt" Aeson..= eventOccurredAt,
         "data" Aeson..= eventData,
         "scope" Aeson..= eventScope,
         "actor" Aeson..= eventActor,
-        "resourceId" Aeson..= eventResourceId
+        "resourceId" Aeson..= eventResourceId,
+        "projectId" Aeson..= eventProjectId
       ]
 
 instance (Aeson.FromJSON eventPayload, Aeson.FromJSON userInfo) => Aeson.FromJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
@@ -470,7 +472,8 @@ instance (Aeson.FromJSON eventPayload, Aeson.FromJSON userInfo) => Aeson.FromJSO
     eventScope <- o .: "scope"
     eventActor <- o .: "actor"
     eventResourceId <- o .: "resourceId"
-    pure NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId}
+    eventProjectId <- o .: "projectId"
+    pure NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId, eventProjectId}
 
 instance Hasql.DecodeRow (NotificationEvent NotificationEventId UserId UTCTime NotificationEventData) where
   decodeRow = do
@@ -479,8 +482,9 @@ instance Hasql.DecodeRow (NotificationEvent NotificationEventId UserId UTCTime N
     eventScope <- PG.decodeField
     eventActor <- PG.decodeField
     eventResourceId <- PG.decodeField
+    eventProjectId <- PG.decodeField
     eventData <- PG.decodeRow
-    pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId}
+    pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId, eventProjectId}
 
 type NewNotificationEvent = NotificationEvent () UserId () NotificationEventData
 
