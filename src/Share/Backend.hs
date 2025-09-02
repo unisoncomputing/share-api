@@ -93,6 +93,7 @@ import Unison.Util.Pretty (Width)
 import Unison.Util.Pretty qualified as Pretty
 import Unison.Util.SyntaxText qualified as UST
 import Unison.Var (Var)
+import Unison.Codebase.Runtime.Profile (ProfileSpec (..))
 
 mkTypeDefinitionsOf ::
   (QueryM m) =>
@@ -328,16 +329,18 @@ evalDocRef codebase (CodebaseRuntime {codeLookup, codeCache, cachedEvalResult, u
     eval (Term.amap (const mempty) -> tm) = PG.transactionSpan "eval" mempty do
       -- We use an empty ppe for evalutation, it's only used for adding additional context to errors.
       let evalPPE = PPE.empty
-      termRef <- fmap eitherToMaybe . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE unisonRuntime tm
-      case termRef of
+      result <- fmap eitherToMaybe . PG.transactionUnsafeIO . liftIO $ Rt.evaluateTerm' codeLookup cachedEvalResult evalPPE NoProf unisonRuntime tm
+      case result of
         -- don't cache when there were decompile errors
-        Just (errs, tmr) | null errs -> do
+        Just (Rt.DecompErrs errs, _) | not (null errs) -> do
+          pure ()
+        Just (_resp, tmr) -> do
           Codebase.saveCachedEvalResult
             codebase
             (Hashing.hashClosedTerm tm)
             (Term.amap (const mempty) tmr)
         _ -> pure ()
-      pure $ termRef <&> Term.amap (const mempty) . snd
+      pure $ result <&> Term.amap (const mempty) . snd
 
 -- | Find all definitions and children reachable from the given 'V2Branch.Branch',
 lsBranch ::
