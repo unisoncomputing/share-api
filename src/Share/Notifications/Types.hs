@@ -582,7 +582,9 @@ data NotificationSubscription id = NotificationSubscription
     subscriptionProjectId :: Maybe ProjectId,
     subscriptionTopics :: Set NotificationTopic,
     subscriptionTopicGroups :: Set NotificationTopicGroup,
-    subscriptionFilter :: Maybe NotificationFilter
+    subscriptionFilter :: Maybe NotificationFilter,
+    subscriptionCreatedAt :: Maybe UTCTime,
+    subscriptionUpdatedAt :: Maybe UTCTime
   }
   deriving (Show, Eq)
 
@@ -594,17 +596,21 @@ instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) wher
     subscriptionTopics <- Set.fromList <$> PG.decodeField
     subscriptionTopicGroups <- Set.fromList <$> PG.decodeField
     subscriptionFilter <- PG.decodeField
-    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+    subscriptionCreatedAt <- PG.decodeField
+    subscriptionUpdatedAt <- PG.decodeField
+    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
 
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
-  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt} =
     Aeson.object
       [ "id" Aeson..= subscriptionId,
         "scope" Aeson..= subscriptionScope,
         "projectId" Aeson..= subscriptionProjectId,
         "topics" Aeson..= subscriptionTopics,
         "topicGroups" Aeson..= subscriptionTopicGroups,
-        "filter" Aeson..= subscriptionFilter
+        "filter" Aeson..= subscriptionFilter,
+        "createdAt" Aeson..= subscriptionCreatedAt,
+        "updatedAt" Aeson..= subscriptionUpdatedAt
       ]
 
 instance Aeson.FromJSON (NotificationSubscription NotificationSubscriptionId) where
@@ -615,7 +621,10 @@ instance Aeson.FromJSON (NotificationSubscription NotificationSubscriptionId) wh
     subscriptionTopics <- o .: "topics"
     subscriptionTopicGroups <- o .: "topicGroups"
     subscriptionFilter <- o .:? "filter"
-    pure NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+    subscriptionCreatedAt <- o .:? "createdAt"
+    subscriptionUpdatedAt <- o .:? "updatedAt"
+
+    pure NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
 
 data NotificationHubEntry userInfo eventPayload = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,

@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeOperators #-}
+
 module Share.Notifications.Queries
   ( recordEvent,
     expectEvent,
@@ -21,6 +23,7 @@ module Share.Notifications.Queries
     hasUnreadNotifications,
     updateWatchProjectSubscription,
     isUserSubscribedToWatchProject,
+    listProjectWebhooks,
   )
 where
 
@@ -288,7 +291,7 @@ listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscripti
 listNotificationSubscriptions subscriberUserId = do
   queryListRows
     [sql|
-      SELECT ns.id, ns.scope_user_id, ns.project_id, ns.topics, ns.topic_groups, ns.filter
+      SELECT ns.id, ns.scope_user_id, ns.project_id, ns.topics, ns.topic_groups, ns.filter, ns.created_at, ns.updated_at
         FROM notification_subscriptions ns
       WHERE ns.subscriber_user_id = #{subscriberUserId}
       ORDER BY ns.created_at DESC
@@ -328,7 +331,7 @@ getNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transacti
 getNotificationSubscription subscriberUserId subscriptionId = do
   queryExpect1Row
     [sql|
-      SELECT ns.id, ns.scope_user_id, ns.topics, ns.topic_groups, ns.filter
+      SELECT ns.id, ns.scope_user_id, ns.topics, ns.topic_groups, ns.filter, ns.created_at, ns.updated_at
         FROM notification_subscriptions ns
       WHERE ns.id = #{subscriptionId}
         AND ns.subscriber_user_id = #{subscriberUserId}
@@ -549,3 +552,31 @@ isUserSubscribedToWatchProject userId projId = do
           AND ns.filter = #{filter}::jsonb
           LIMIT 1
     |]
+
+-- | We provide a wrapper layer on top of notification subscriptions and webhooks
+-- to make the frontend experience a bit more intuitive.
+listProjectWebhooks :: UserId -> ProjectId -> PG.Transaction e [(NotificationWebhookId, Text, NotificationSubscription NotificationSubscriptionId)]
+listProjectWebhooks caller projectId = do
+  PG.queryListRows @((NotificationWebhookId, Text) PG.:. NotificationSubscription NotificationSubscriptionId)
+    [PG.sql|
+      -- Only get one webhook per subscription, there _shouldn't_ be multiple webhooks per
+      -- subscription if everything is working correctly.
+      SELECT DISTINCT ON (ns.id)
+        nw.id,
+        nw.name,
+        -- We ignore topic groups here for now and only allow the user to configure
+        -- individual topic events.
+        ns.id,
+        ns.scope_user_id,
+        ns.topics,
+        ns.topic_groups,
+        ns.filter,
+        ns.created_at,
+        ns.updated_at
+      FROM notification_subscriptions ns
+      JOIN notification_by_webhook nbw ON ns.id = nbw.subscription_id
+      JOIN notification_webhooks nw ON nbw.webhook_id = nw.id
+      WHERE ns.project_id = #{projectId}
+        AND ns.subscriber_user_id = #{caller}
+    |]
+    <&> fmap (\((webhookId, webhookName) PG.:. subscription) -> (webhookId, webhookName, subscription))

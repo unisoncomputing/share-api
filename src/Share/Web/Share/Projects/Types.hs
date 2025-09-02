@@ -390,12 +390,19 @@ data ProjectWebhook = ProjectWebhook
   { url :: URIParam,
     events :: Set NotificationTopic,
     notificationSubscriptionId :: NotificationSubscriptionId,
-    -- Not currently exposed.
-    -- webhookId :: NotificationWebhookId,
-    createdAt :: UTCTime,
-    updatedAt :: UTCTime
+    createdAt :: Maybe UTCTime,
+    updatedAt :: Maybe UTCTime
   }
   deriving stock (Eq, Show)
+
+instance PG.DecodeRow ProjectWebhook where
+  decodeRow = do
+    url <- PG.decodeField
+    events <- Set.fromList <$> PG.decodeField
+    notificationSubscriptionId <- PG.decodeField
+    createdAt <- PG.decodeField
+    updatedAt <- PG.decodeField
+    pure ProjectWebhook {..}
 
 instance ToJSON ProjectWebhook where
   toJSON ProjectWebhook {..} =

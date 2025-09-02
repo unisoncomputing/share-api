@@ -3,21 +3,30 @@ module Share.Notifications.Ops
     createWebhookDeliveryMethod,
     updateWebhookDeliveryMethod,
     deleteWebhookDeliveryMethod,
+    listProjectWebhooks,
+    createProjectWebhook,
     hydrateEvent,
   )
 where
 
+import Control.Lens
+import Data.Set.NonEmpty qualified as NESet
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
 import Share.Notifications.Types
 import Share.Notifications.Webhooks.Secrets (WebhookConfig (..))
 import Share.Notifications.Webhooks.Secrets qualified as WebhookSecrets
+import Share.Notifications.Webhooks.Secrets qualified as Webhooks
 import Share.Postgres qualified as PG
+import Share.Postgres.Queries qualified as Q
 import Share.Prelude
+import Share.Project (Project (..))
 import Share.Utils.URI (URIParam (..))
 import Share.Web.App (WebApp)
 import Share.Web.Errors (respondError)
+import Share.Web.Share.Projects.Types (ProjectWebhook (..))
 import Share.Web.UI.Links qualified as Links
+import UnliftIO qualified
 
 listNotificationDeliveryMethods :: UserId -> Maybe NotificationSubscriptionId -> WebApp [NotificationDeliveryMethod]
 listNotificationDeliveryMethods userId maySubscriptionId = do
@@ -82,3 +91,47 @@ hydrateEvent :: HydratedEventPayload -> PG.Transaction e HydratedEvent
 hydrateEvent hydratedEventPayload = do
   hydratedEventLink <- Links.notificationLink hydratedEventPayload
   pure $ HydratedEvent {hydratedEventPayload, hydratedEventLink}
+
+-- | We provide a wrapper layer on top of notification subscriptions and webhooks
+-- to make the frontend experience a bit more intuitive.
+listProjectWebhooks :: UserId -> ProjectId -> WebApp [ProjectWebhook]
+listProjectWebhooks caller projectId = do
+  projectWebhooks <- PG.runTransaction $ do NotifQ.listProjectWebhooks caller projectId
+  results <-
+    projectWebhooks
+      & asListOf (traversed . _1) %%~ \webhookIds ->
+        do
+          UnliftIO.pooledForConcurrently webhookIds \webhookId -> do
+            Webhooks.fetchWebhookConfig webhookId >>= \case
+              Left err -> respondError err
+              Right (WebhookConfig {uri = URIParam uri}) -> do
+                pure $ (NotificationWebhookConfig webhookId uri)
+  let webhooks =
+        results <&> \(NotificationWebhookConfig {webhookDeliveryUrl = url}, _name, NotificationSubscription {subscriptionTopics, subscriptionId, subscriptionCreatedAt, subscriptionUpdatedAt}) ->
+          ProjectWebhook
+            { url = URIParam url,
+              events = subscriptionTopics,
+              notificationSubscriptionId = subscriptionId,
+              createdAt = subscriptionCreatedAt,
+              updatedAt = subscriptionUpdatedAt
+            }
+  pure webhooks
+
+createProjectWebhook :: UserId -> ProjectId -> URIParam -> Set NotificationTopic -> WebApp ProjectWebhook
+createProjectWebhook subscriberUserId projectId url topics = do
+  webhookId <- createWebhookDeliveryMethod subscriberUserId url "Project Webhook"
+  let topicGroups = mempty
+  let filter = Nothing
+  subscriptionId <- PG.runTransaction $ do
+    Project {ownerUserId = projectOwner} <- Q.expectProjectById projectId
+    subscriptionId <- NotifQ.createNotificationSubscription subscriberUserId projectOwner (Just projectId) topics topicGroups filter
+    NotifQ.addSubscriptionDeliveryMethods subscriberUserId subscriptionId (NESet.singleton $ WebhookDeliveryMethodId webhookId)
+    pure subscriptionId
+  pure $
+    ProjectWebhook
+      { url,
+        events = topics,
+        notificationSubscriptionId = subscriptionId,
+        createdAt = Nothing,
+        updatedAt = Nothing
+      }
