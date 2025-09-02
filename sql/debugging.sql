@@ -328,7 +328,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION debug_history_of_causal(causal_id INTEGER)
-RETURNS TABLE (causal_id INTEGER, causal_hash TEXT, namespace_hash_id INTEGER, namespace_hash TEXT) 
+RETURNS TABLE (causal_id INTEGER, causal_hash TEXT, namespace_hash_id INTEGER, namespace_hash TEXT)
 AS $$
   WITH RECURSIVE history(causal_id, causal_hash, namespace_hash_id, namespace_hash) AS (
       SELECT causal.id, causal.hash, causal.namespace_hash_id, bh.base32
@@ -351,3 +351,24 @@ RETURNS BOOLEAN AS $$
       WHERE history.causal_id = old_causal_id
   );
 $$ LANGUAGE sql;
+
+CREATE OR REPLACE VIEW debug_orgs AS
+SELECT o.id AS org_id,
+       org_user.name AS org_name,
+       org_user.handle AS org_handle,
+       o.user_id AS org_user_id,
+       o.subject_id AS org_subject_id,
+       o.resource_id AS org_resource_id,
+       o.created_at AS org_created_at,
+       o.updated_at AS org_updated_at,
+       o.creator_user_id AS org_creator_user_id,
+       creator.handle AS creator_handle,
+       o.is_commercial AS is_commercial,
+       (SELECT COUNT(*) AS member_count
+                 FROM org_members om WHERE om.organization_user_id = o.user_id
+              )
+FROM orgs o
+  JOIN users org_user ON o.user_id = org_user.id
+  JOIN users creator ON o.creator_user_id = creator.id
+  ;
+
