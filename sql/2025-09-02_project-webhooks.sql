@@ -6,8 +6,12 @@ ALTER TABLE notification_subscriptions
   -- If provided, the project_id must be belong to the scope_user_id's user/org.
   ADD COLUMN project_id UUID NULL REFERENCES projects(id) ON DELETE CASCADE;
 
+CREATE INDEX notification_subscriptions_by_user_and_project ON notification_subscriptions(subscriber_user_id, project_id, created_at DESC);
+
 ALTER TABLE notification_events 
   ADD COLUMN project_id UUID NULL REFERENCES projects(id) ON DELETE CASCADE;
+
+CREATE INDEX notification_events_scope_user_and_project ON notification_events(scope_user_id, project_id, occurred_at DESC);
 
 -- Migrate existing filters to the new column, and also remove 
 -- the projectId from the JSONB filter.
