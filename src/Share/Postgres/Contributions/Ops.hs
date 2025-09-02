@@ -78,6 +78,7 @@ createContribution authorId projectId title description status sourceBranchId ta
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
+            eventProjectId = Just projectId,
             eventData = ProjectContributionCreatedData projectData contributionData,
             eventScope = projectOwnerUserId,
             eventActor = authorId
@@ -151,6 +152,7 @@ insertContributionStatusChangeEvent projectId contributionId actorUserId oldStat
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
+                eventProjectId = Just projectId,
                 eventData = ProjectContributionStatusUpdatedData projectData contributionData statusUpdateData,
                 eventScope = projectOwnerUserId,
                 eventActor = actorUserId

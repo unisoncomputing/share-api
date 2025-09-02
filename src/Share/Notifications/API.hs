@@ -137,15 +137,17 @@ type CreateSubscriptionEndpoint =
 data CreateSubscriptionRequest
   = CreateSubscriptionRequest
   { subscriptionScope :: UserHandle,
+    subscriptionProjectId :: Maybe ProjectId,
     subscriptionTopics :: Set NotificationTopic,
     subscriptionTopicGroups :: Set NotificationTopicGroup,
     subscriptionFilter :: Maybe SubscriptionFilter
   }
 
 instance ToJSON CreateSubscriptionRequest where
-  toJSON CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+  toJSON CreateSubscriptionRequest {subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
     object
       [ "scope" .= subscriptionScope,
+        "projectId" .= subscriptionProjectId,
         "topics" .= subscriptionTopics,
         "topicGroups" .= subscriptionTopicGroups,
         "filter" .= subscriptionFilter
@@ -154,10 +156,11 @@ instance ToJSON CreateSubscriptionRequest where
 instance FromJSON CreateSubscriptionRequest where
   parseJSON = withObject "CreateSubscriptionRequest" $ \o -> do
     subscriptionScope <- o .: "scope"
+    subscriptionProjectId <- o .:? "projectId"
     subscriptionTopics <- o .: "topics"
     subscriptionTopicGroups <- o .: "topicGroups"
     subscriptionFilter <- o .:? "filter"
-    pure CreateSubscriptionRequest {subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+    pure CreateSubscriptionRequest {subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
 data CreateSubscriptionResponse
   = CreateSubscriptionResponse
