@@ -288,18 +288,18 @@ listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscripti
 listNotificationSubscriptions subscriberUserId = do
   queryListRows
     [sql|
-      SELECT ns.id, ns.scope_user_id, ns.topics, ns.topic_groups, ns.filter
+      SELECT ns.id, ns.scope_user_id, ns.project_id, ns.topics, ns.topic_groups, ns.filter
         FROM notification_subscriptions ns
       WHERE ns.subscriber_user_id = #{subscriberUserId}
       ORDER BY ns.created_at DESC
     |]
 
-createNotificationSubscription :: UserId -> UserId -> Set NotificationTopic -> Set NotificationTopicGroup -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
-createNotificationSubscription subscriberUserId subscriptionScope subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
+createNotificationSubscription :: UserId -> UserId -> Maybe ProjectId -> Set NotificationTopic -> Set NotificationTopicGroup -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
+createNotificationSubscription subscriberUserId subscriptionScope subscriptionProjectId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
   queryExpect1Col
     [sql|
-      INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, topics, topic_groups, filter)
-      VALUES (#{subscriberUserId}, #{subscriptionScope}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{Foldable.toList subscriptionTopicGroups}::notification_topic_group[], #{subscriptionFilter})
+      INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, project_id, topics, topic_groups, filter)
+      VALUES (#{subscriberUserId}, #{subscriptionScope}, #{subscriptionProjectId}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{Foldable.toList subscriptionTopicGroups}::notification_topic_group[], #{subscriptionFilter})
       RETURNING id
     |]
 
@@ -510,7 +510,7 @@ hydrateEventPayload = \case
 -- | Subscribe or unsubscribe to watching a project
 updateWatchProjectSubscription :: UserId -> ProjectId -> Bool -> Transaction e (Maybe NotificationSubscriptionId)
 updateWatchProjectSubscription userId projId shouldBeSubscribed = do
-  let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
+  let filter = SubscriptionFilter $ Aeson.object []
   existing <- isUserSubscribedToWatchProject userId projId
   case existing of
     Just existingId
@@ -532,12 +532,12 @@ updateWatchProjectSubscription userId projId shouldBeSubscribed = do
             FROM projects p
           WHERE p.id = #{projId}
         |]
-      Just <$> createNotificationSubscription userId projectOwnerUserId mempty (Set.singleton WatchProject) (Just filter)
+      Just <$> createNotificationSubscription userId projectOwnerUserId (Just projId) mempty (Set.singleton WatchProject) (Just filter)
     _ -> pure Nothing
 
 isUserSubscribedToWatchProject :: UserId -> ProjectId -> Transaction e (Maybe NotificationSubscriptionId)
 isUserSubscribedToWatchProject userId projId = do
-  let filter = SubscriptionFilter $ Aeson.object ["projectId" Aeson..= projId]
+  let filter = SubscriptionFilter $ Aeson.object []
   query1Col @NotificationSubscriptionId
     [sql|
       SELECT ns.id FROM notification_subscriptions ns
@@ -545,6 +545,7 @@ isUserSubscribedToWatchProject userId projId = do
         WHERE ns.subscriber_user_id = #{userId}
           AND ns.scope_user_id = p.owner_user_id
           AND ns.topic_groups = ARRAY[#{WatchProject}::notification_topic_group]
+          AND ns.project_id = #{projId}
           AND ns.filter = #{filter}::jsonb
           LIMIT 1
     |]
