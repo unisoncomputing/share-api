@@ -62,6 +62,7 @@ A [flake.nix](flake.nix) file is provided in this repo. It currently doesn't use
 ## Running Locally
 
 The first time you run locally, start with `make reset_fixtures`, then on subsequent runs just use `make serve`.
+`make reset_fixtures` will set up some basic test data in your local database, and will copy all projects from `./transcripts/fixtures/projects.txt` and `./transcripts/fixtures/custom_projects.txt` from Share into your local database.
 
 Data changes in Postgres using `make serve` are persistent locally.
 You can reset the database to a known state with `make reset_fixtures`.
