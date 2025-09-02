@@ -7,6 +7,7 @@ module Share.Codebase
   ( shorthashLength,
     CodebaseEnv,
     codebaseOwner,
+    CodebaseError (..),
     CodebaseRuntime (..),
     codebaseEnv,
     codebaseForProjectBranch,

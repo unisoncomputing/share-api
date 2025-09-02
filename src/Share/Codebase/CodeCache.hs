@@ -6,7 +6,9 @@ module Share.Codebase.CodeCache
     termsForRefsOf,
     typesOfReferentsOf,
     getTermsAndTypesByRefIdsOf,
+    expectTermsAndTypesByRefIdsOf,
     getTypeDeclsByRefIdsOf,
+    expectTypeDeclsByRefIdsOf,
     getTypeDeclsByRefsOf,
     cacheTermAndTypes,
     cacheDecls,
@@ -34,6 +36,7 @@ import Unison.DataDeclaration qualified as V1
 import Unison.DataDeclaration.ConstructorId qualified as V1Decl
 import Unison.Hash (Hash)
 import Unison.Parser.Ann
+import Unison.Reference (TermReferenceId, TypeReferenceId)
 import Unison.Reference qualified as Reference
 import Unison.Referent qualified as V1Referent
 import Unison.Runtime.IOSource qualified as IOSource
@@ -42,6 +45,9 @@ import Unison.Term qualified as Term
 import Unison.Term qualified as V1
 import Unison.Type qualified as Type
 import Unison.Type qualified as V1
+
+type TermAndType =
+  (V1.Term Symbol Ann, V1.Type Symbol Ann)
 
 withCodeCache :: (QueryM m) => CodebaseEnv -> (forall s. CodeCache s -> m r) -> m r
 withCodeCache codeCacheCodebaseEnv action = do
@@ -52,30 +58,24 @@ withCodeCache codeCacheCodebaseEnv action = do
 readCodeCache :: (QueryM m) => CodeCache s -> m CodeCacheData
 readCodeCache CodeCache {codeCacheVar} = PG.transactionUnsafeIO (readTVarIO codeCacheVar)
 
-cacheTermAndTypes ::
-  (QueryM m) =>
-  CodeCache s ->
-  [(Reference.Id, (V1.Term Symbol Ann, V1.Type Symbol Ann))] ->
-  m ()
+cacheTermAndTypes :: (QueryM m) => CodeCache s -> Map TermReferenceId TermAndType -> m ()
 cacheTermAndTypes CodeCache {codeCacheVar} termAndTypes = do
   PG.transactionUnsafeIO do
     atomically do
       modifyTVar' codeCacheVar \CodeCacheData {termCache, ..} ->
-        let newTermMap = Map.fromList termAndTypes
-            termCache' = Map.union termCache newTermMap
+        let !termCache' = Map.union termCache termAndTypes
          in CodeCacheData {termCache = termCache', ..}
 
 cacheDecls ::
   (QueryM m) =>
   CodeCache s ->
-  [(Reference.Id, V1.Decl Symbol Ann)] ->
+  Map TypeReferenceId (V1.Decl Symbol Ann) ->
   m ()
 cacheDecls CodeCache {codeCacheVar} decls = do
   PG.transactionUnsafeIO do
     atomically do
       modifyTVar' codeCacheVar \CodeCacheData {typeCache, ..} ->
-        let newDeclsMap = Map.fromList decls
-            typeCache' = Map.union typeCache newDeclsMap
+        let !typeCache' = Map.union typeCache decls
          in CodeCacheData {typeCache = typeCache', ..}
 
 builtinsCodeLookup :: (Monad m) => CL.CodeLookup Symbol m Ann
@@ -97,7 +97,7 @@ toCodeLookup codeCache = do
 getTermsAndTypesByRefIdsOf ::
   (QueryM m) =>
   CodeCache scope ->
-  Traversal s t Reference.Id (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann)) ->
+  Traversal s t TermReferenceId (Maybe TermAndType) ->
   s ->
   m t
 getTermsAndTypesByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
@@ -123,19 +123,34 @@ getTermsAndTypesByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s =
                     Nothing -> (mempty, Nothing)
                 Right tt -> (mempty, Just tt)
 
-      cacheTermAndTypes codeCache cacheable
-      pure $ hydrated'
-  where
-    findBuiltinTT :: Reference.Id -> Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann)
-    findBuiltinTT refId = do
-      tm <- runIdentity $ CL.getTerm builtinsCodeLookup refId
-      typ <- runIdentity $ CL.getTypeOfTerm builtinsCodeLookup refId
-      pure (tm, typ)
+      cacheTermAndTypes codeCache (Map.fromList cacheable)
+      pure hydrated'
+
+-- | Like 'getTermsAndTypesByRefIdsOf', but throws an unrecoverable error when the term isn't in the database.
+expectTermsAndTypesByRefIdsOf ::
+  forall m scope s t.
+  (QueryM m) =>
+  CodeCache scope ->
+  Traversal s t TermReferenceId TermAndType ->
+  s ->
+  m t
+expectTermsAndTypesByRefIdsOf codeCache trav =
+  asListOf trav %%~ \refs -> do
+    termsAndTypes <- getTermsAndTypesByRefIdsOf codeCache traverse refs
+    for (zip refs termsAndTypes) \case
+      (_, Just tt) -> pure tt
+      (ref, Nothing) -> PG.unrecoverableError (Codebase.MissingTerm ref)
+
+findBuiltinTT :: TermReferenceId -> Maybe TermAndType
+findBuiltinTT refId = do
+  tm <- runIdentity $ CL.getTerm builtinsCodeLookup refId
+  typ <- runIdentity $ CL.getTypeOfTerm builtinsCodeLookup refId
+  pure (tm, typ)
 
 getTypeDeclsByRefIdsOf ::
   (QueryM m) =>
   CodeCache scope ->
-  Traversal s t Reference.Id (Maybe (V1.Decl Symbol Ann)) ->
+  Traversal s t TypeReferenceId (Maybe (V1.Decl Symbol Ann)) ->
   s ->
   m t
 getTypeDeclsByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
@@ -161,12 +176,25 @@ getTypeDeclsByRefIdsOf codeCache@(CodeCache {codeCacheCodebaseEnv}) trav s = do
                     Nothing -> (mempty, Nothing)
                 Right decl -> (mempty, Just decl)
 
-      cacheDecls codeCache cacheable
-      pure $ hydrated'
-  where
-    findBuiltinDecl :: Reference.Id -> Maybe (V1.Decl Symbol Ann)
-    findBuiltinDecl refId = do
-      runIdentity $ CL.getTypeDeclaration builtinsCodeLookup refId
+      cacheDecls codeCache (Map.fromList cacheable)
+      pure hydrated'
+
+expectTypeDeclsByRefIdsOf ::
+  (QueryM m) =>
+  CodeCache scope ->
+  Traversal s t TypeReferenceId (V1.Decl Symbol Ann) ->
+  s ->
+  m t
+expectTypeDeclsByRefIdsOf codeCache trav =
+  asListOf trav %%~ \refs -> do
+    decls <- getTypeDeclsByRefIdsOf codeCache traverse refs
+    for (zip refs decls) \case
+      (_, Just decl) -> pure decl
+      (ref, Nothing) -> PG.unrecoverableError (Codebase.MissingDecl ref)
+
+findBuiltinDecl :: Reference.Id -> Maybe (V1.Decl Symbol Ann)
+findBuiltinDecl refId = do
+  runIdentity $ CL.getTypeDeclaration builtinsCodeLookup refId
 
 getTypeDeclsByRefsOf ::
   (QueryM m) =>
@@ -196,7 +224,7 @@ termsForRefsOf codeCache trav s = do
   s
     & asListOf trav %%~ \refs ->
       do
-        let trav :: Traversal Reference (Maybe (V1.Term Symbol ())) Reference.Id (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+        let trav :: Traversal Reference (Maybe (V1.Term Symbol ())) Reference.Id (Maybe TermAndType)
             trav f = \case
               -- Builtins are their own terms
               ref@(Reference.Builtin _) -> pure (Just (Term.ref () ref))
@@ -241,7 +269,7 @@ typesOfReferentsOf codeCache trav s = do
         [ Either
             (V1.Type Symbol ())
             ( Either
-                (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+                (Maybe TermAndType)
                 (Reference.Id' Hash, V1Decl.ConstructorId)
             )
         ] <-
@@ -250,7 +278,7 @@ typesOfReferentsOf codeCache trav s = do
         [ Either
             (V1.Type Symbol ())
             ( Either
-                (Maybe (V1.Term Symbol Ann, V1.Type Symbol Ann))
+                (Maybe TermAndType)
                 (Maybe (V1.Decl Symbol Ann), V1Decl.ConstructorId)
             )
         ] <-

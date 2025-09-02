@@ -12,6 +12,7 @@ import Data.Text qualified as Text
 import Servant
 import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
+import Share.Codebase.CodeCache qualified as CodeCache
 import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Codebase.Types qualified as Codebase
 import Share.Env qualified as Env
@@ -247,9 +248,10 @@ typeSummaryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle ref mayNam
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadUserCodebase callerUserId codebaseOwner authPath
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   (rootCausalId, _rootCausalHash) <- PG.runTransactionMode PG.ReadCommitted PG.Read $ Codebase.expectLooseCodeRoot codebase
-  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "type-summary" cacheParams rootCausalId $ do
-    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ do
-      serveTypeSummary codebase ref mayName renderWidth
+  Codebase.cachedCodebaseResponse authZReceipt codebaseLoc "type-summary" cacheParams rootCausalId do
+    PG.runTransactionMode PG.ReadCommitted PG.ReadWrite do
+      CodeCache.withCodeCache codebase \codeCache -> do
+        serveTypeSummary codeCache ref mayName renderWidth
   where
     cacheParams = [toUrlPiece ref, maybe "" Name.toText mayName, tShow $ fromMaybe mempty relativeTo, foldMap toUrlPiece renderWidth]
     authPath :: Path.Path

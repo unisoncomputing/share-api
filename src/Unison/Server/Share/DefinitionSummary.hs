@@ -20,6 +20,7 @@ import Control.Lens
 import Data.List (zipWith4)
 import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
+import Share.Codebase.Types (CodeCache)
 import Share.Postgres (QueryM, unrecoverableError)
 import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
@@ -85,22 +86,22 @@ termSummariesForReferentsOf namesPerspective mayWidth trav s = do
 
 serveTypeSummary ::
   (QueryM m) =>
-  Codebase.CodebaseEnv ->
+  CodeCache scope ->
   Reference ->
   Maybe Name ->
   Maybe Width ->
   m TypeSummary
-serveTypeSummary codebase reference mayName mayWidth = do
-  typeSummariesForReferencesOf codebase mayWidth id (reference, mayName)
+serveTypeSummary codeCache reference mayName mayWidth = do
+  typeSummariesForReferencesOf codeCache mayWidth id (reference, mayName)
 
 typeSummariesForReferencesOf ::
   (QueryM m) =>
-  Codebase.CodebaseEnv ->
+  CodeCache scope ->
   Maybe Width ->
   Traversal s t (Reference, Maybe Name) TypeSummary ->
   s ->
   m t
-typeSummariesForReferencesOf codebase mayWidth trav s = do
+typeSummariesForReferencesOf codeCache mayWidth trav s = do
   s
     & asListOf trav %%~ \inputs -> do
       let (refs, mayNames) = unzip inputs
@@ -108,7 +109,7 @@ typeSummariesForReferencesOf codebase mayWidth trav s = do
       let displayNames =
             zipWith (\mayName shortHash -> maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName) mayNames shortHashes
       tags <- Backend.getTypeTagsOf traversed refs
-      displayDecls <- Backend.displayTypesOf codebase traversed refs
+      displayDecls <- Backend.displayTypesOf codeCache traversed refs
       let syntaxHeaders =
             zipWith (Backend.typeToSyntaxHeader width) displayNames displayDecls
               <&> bimap Backend.mungeSyntaxText Backend.mungeSyntaxText

@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeOperators #-}
+
 module Share.Postgres.NameLookups.Ops
   ( fuzzySearchDefinitions,
     termNamesForRefsWithinNamespaceOf,
@@ -11,12 +13,15 @@ module Share.Postgres.NameLookups.Ops
     Q.projectTypesWithinRoot,
     Q.listNameLookupMounts,
     projectNamesWithoutLib,
+    projectConstructorCountsWithoutLib,
   )
 where
 
 import Control.Lens
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
-import Share.Postgres (QueryM)
+import Data.Vector qualified as Vector
+import Share.Postgres (Only (..), QueryM, (:.) (..))
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.Hashes.Queries qualified as HashQ
@@ -31,12 +36,12 @@ import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Postgres.Refs.Types
 import Share.Prelude
 import Share.Utils.Lens (asListOfDeduped)
-import U.Codebase.Reference (Reference)
 import U.Codebase.Referent (ConstructorType, Referent)
-import Unison.Names (Names)
-import Unison.Names qualified as Names
+import Unison.Name (Name)
+import Unison.Reference (Reference, TypeReference, TypeReferenceId)
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
+import Unison.Util.Defns (Defns (..), DefnsF)
 
 -- | Search for term or type names which contain the provided list of segments in order.
 -- Search is case insensitive.
@@ -115,10 +120,24 @@ deleteNameLookupsExceptFor reachable = do
 
 -- | Build a 'Names' for all definitions within the given root, without any dependencies.
 -- Note: This loads everything into memory at once, so avoid this and prefer streaming when possible.
-projectNamesWithoutLib :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m Names
+projectNamesWithoutLib ::
+  (QueryM m) =>
+  NameLookupReceipt ->
+  BranchHashId ->
+  m (DefnsF [] (Name, V1.Referent) (Name, TypeReference))
 projectNamesWithoutLib !nlr rootBranchHashId = do
   termNamesCursor <- Q.projectTermsWithinRootV1 nlr rootBranchHashId
-  allTerms <- Cursor.foldBatched termNamesCursor 1000 (pure . toList)
+  terms <- Cursor.foldBatched termNamesCursor 1000 (pure . toList)
   typesCursor <- (Q.projectTypesWithinRoot nlr rootBranchHashId)
-  allTypes <- Cursor.foldBatched typesCursor 1000 (pure . toList)
-  pure $ Names.fromTermsAndTypes allTerms allTypes
+  types <- Cursor.foldBatched typesCursor 1000 (pure . toList)
+  pure Defns {terms, types}
+
+-- | Build a @Map TypeReferenceId Int@ constructor count map for all types within the given root, without any dependencies.
+projectConstructorCountsWithoutLib :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (Map TypeReferenceId Int)
+projectConstructorCountsWithoutLib !nlr rootBranchHashId = do
+  cursor <- Q.projectConstructorCountsWithinRoot nlr rootBranchHashId
+  Cursor.foldBatched cursor 1000 (pure . Vector.foldl' f Map.empty)
+  where
+    f :: Map TypeReferenceId Int -> TypeReferenceId :. Only Int64 -> Map TypeReferenceId Int
+    f acc (ref :. Only count) =
+      Map.insert ref (fromIntegral @Int64 @Int count) acc
