@@ -614,6 +614,7 @@ createBranch !_nlReceipt projectId branchName contributorId causalId mergeTarget
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
+                eventProjectId = Just projectId,
                 eventData = ProjectBranchUpdatedData projectData branchData,
                 eventScope = projectOwnerUserId,
                 eventActor = creatorId
@@ -681,6 +682,7 @@ setBranchCausalHash !_nameLookupReceipt description callerUserId branchId causal
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
+                eventProjectId = Just projectId,
                 eventData = ProjectBranchUpdatedData projectData branchData,
                 eventScope = projectOwnerUserId,
                 eventActor = callerUserId

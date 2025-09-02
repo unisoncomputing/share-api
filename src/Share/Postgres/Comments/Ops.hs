@@ -40,7 +40,7 @@ createComment authorId thingId content = do
           { commentId,
             commentAuthorUserId = authorId
           }
-  (event, projectResourceId, projectOwnerUserId) <- case thingId of
+  (event, projectResourceId, projectOwnerUserId, projectId) <- case thingId of
     Left contributionId -> do
       Contribution {projectId, sourceBranchId, targetBranchId, author} <- ContributionQ.contributionById contributionId
       (projectData, projectResourceId, projectOwnerUserId) <- ProjectQ.projectNotificationData projectId
@@ -51,7 +51,7 @@ createComment authorId thingId content = do
                 toBranchId = targetBranchId,
                 contributorUserId = author
               }
-      pure (ProjectContributionCommentData projectData contributionData commentData, projectResourceId, projectOwnerUserId)
+      pure (ProjectContributionCommentData projectData contributionData commentData, projectResourceId, projectOwnerUserId, projectId)
     Right ticketId -> do
       Ticket {projectId, author} <- TicketQ.ticketById ticketId
       (projectData, projectResourceId, projectOwnerUserId) <- ProjectQ.projectNotificationData projectId
@@ -60,12 +60,13 @@ createComment authorId thingId content = do
               { ticketId,
                 ticketAuthorUserId = author
               }
-      pure (ProjectTicketCommentData projectData ticketData commentData, projectResourceId, projectOwnerUserId)
+      pure (ProjectTicketCommentData projectData ticketData commentData, projectResourceId, projectOwnerUserId, projectId)
   let notifEvent =
         NotificationEvent
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
+            eventProjectId = Just projectId,
             eventData = event,
             eventScope = projectOwnerUserId,
             eventActor = authorId
