@@ -579,6 +579,7 @@ instance Aeson.FromJSON NotificationDeliveryMethod where
 data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
     subscriptionScope :: UserId,
+    subscriptionProjectId :: Maybe ProjectId,
     subscriptionTopics :: Set NotificationTopic,
     subscriptionTopicGroups :: Set NotificationTopicGroup,
     subscriptionFilter :: Maybe NotificationFilter
@@ -588,16 +589,18 @@ instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) wher
   decodeRow = do
     subscriptionId <- PG.decodeField
     subscriptionScope <- PG.decodeField
+    subscriptionProjectId <- PG.decodeField
     subscriptionTopics <- Set.fromList <$> PG.decodeField
     subscriptionTopicGroups <- Set.fromList <$> PG.decodeField
     subscriptionFilter <- PG.decodeField
-    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
-  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
     Aeson.object
       [ "id" Aeson..= subscriptionId,
         "scope" Aeson..= subscriptionScope,
+        "projectId" Aeson..= subscriptionProjectId,
         "topics" Aeson..= subscriptionTopics,
         "topicGroups" Aeson..= subscriptionTopicGroups,
         "filter" Aeson..= subscriptionFilter
@@ -607,10 +610,11 @@ instance Aeson.FromJSON (NotificationSubscription NotificationSubscriptionId) wh
   parseJSON = Aeson.withObject "NotificationSubscription" \o -> do
     subscriptionId <- o .: "id"
     subscriptionScope <- o .: "scope"
+    subscriptionProjectId <- o .: "projectId"
     subscriptionTopics <- o .: "topics"
     subscriptionTopicGroups <- o .: "topicGroups"
     subscriptionFilter <- o .:? "filter"
-    pure NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+    pure NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
 data NotificationHubEntry userInfo eventPayload = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,
