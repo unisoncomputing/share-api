@@ -55,7 +55,7 @@ serve: $(installed_share)
 	@(. ./local.env && $(exe) 2>&1)
 
 # Loads the local testing share with a bunch of realistic code.
-reset_fixtures:
+reset_fixtures: $(installed_share)
 	# Prompt for confirmation
 	@echo "This will delete all data in your local share database. Are you sure? (y/N) "
 	@read -r confirmation && [ "$$confirmation" = "y" ] || [ "$$confirmation" = "Y" ]
@@ -81,7 +81,7 @@ reset_fixtures:
 	) 
 	@echo "Done!";
 
-transcripts:
+transcripts: $(installed_share)
 	@echo "Taking down any existing docker dependencies"
 	@docker compose -f docker/docker-compose.base.yml down || true
 	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
