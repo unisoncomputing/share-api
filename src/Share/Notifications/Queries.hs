@@ -48,18 +48,18 @@ import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
-recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventActor}) = do
+recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventProjectId, eventActor}) = do
   execute_
     [sql|
-      INSERT INTO notification_events (topic, scope_user_id, actor_user_id, resource_id, data)
-      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventActor}, #{eventResourceId}, #{eventData})
+      INSERT INTO notification_events (topic, scope_user_id, actor_user_id, resource_id, project_id, data)
+      VALUES (#{eventTopic eventData}::notification_topic, #{eventScope}, #{eventActor}, #{eventResourceId}, #{eventProjectId}, #{eventData})
     |]
 
 expectEvent :: (QueryM m) => NotificationEventId -> m PGNotificationEvent
 expectEvent eventId = do
   queryExpect1Row @PGNotificationEvent
     [sql|
-      SELECT id, occurred_at, scope_user_id, actor_user_id, resource_id, topic, data
+      SELECT id, occurred_at, scope_user_id, actor_user_id, resource_id, project_id, topic, data
         FROM notification_events
       WHERE id = #{eventId}
     |]
