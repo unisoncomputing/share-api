@@ -584,6 +584,7 @@ data NotificationSubscription id = NotificationSubscription
     subscriptionTopicGroups :: Set NotificationTopicGroup,
     subscriptionFilter :: Maybe NotificationFilter
   }
+  deriving (Show, Eq)
 
 instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) where
   decodeRow = do
