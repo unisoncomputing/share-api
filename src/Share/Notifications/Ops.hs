@@ -7,6 +7,7 @@ module Share.Notifications.Ops
     createProjectWebhook,
     deleteProjectWebhook,
     updateProjectWebhook,
+    expectProjectWebhook,
     hydrateEvent,
   )
 where
@@ -60,15 +61,20 @@ addWebhookDeliveryMethod uriParam webhookName notificationSubscriptionId runInIO
     Right _ -> pure ()
   pure webhookId
 
-deleteWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> WebApp ()
-deleteWebhookDeliveryMethod notificationUser webhookDeliveryMethodId = do
+deleteWebhookDeliveryMethod :: SubscriptionOwner -> NotificationWebhookId -> WebApp ()
+deleteWebhookDeliveryMethod owner webhookDeliveryMethodId = do
+  let ownerFilter = case owner of
+        UserSubscriptionOwner userId -> [PG.sql| ns.subscriber_user_id = #{userId} |]
+        ProjectSubscriptionOwner projectId -> [PG.sql| ns.subscriber_project_id = #{projectId} |]
   isValid <- PG.runTransaction $ do
     PG.queryExpect1Col
       [PG.sql|
         SELECT EXISTS(
           SELECT FROM notification_webhooks nw
+            JOIN notification_subscriptions ns
+              ON nw.subscription_id = ns.id
             WHERE nw.id = #{webhookDeliveryMethodId}
-              AND nw.subscriber_user_id = #{notificationUser}
+              AND ^{ownerFilter}
         )
       |]
   when isValid $ do
@@ -77,7 +83,7 @@ deleteWebhookDeliveryMethod notificationUser webhookDeliveryMethodId = do
       Left err -> respondError err
       Right _ -> do
         PG.runTransaction $ do
-          NotifQ.deleteWebhookDeliveryMethod notificationUser webhookDeliveryMethodId
+          NotifQ.deleteWebhookDeliveryMethod owner webhookDeliveryMethodId
 
 hydrateEvent :: HydratedEventPayload -> PG.Transaction e HydratedEvent
 hydrateEvent hydratedEventPayload = do
@@ -116,13 +122,13 @@ createProjectWebhook projectId uri topics = do
   runInIO <- UnliftIO.askRunInIO
   subscriptionId <- PG.runTransactionOrRespondError $ do
     Project {ownerUserId = projectOwner} <- Q.expectProjectById projectId
-    subscriptionId <- NotifQ.createNotificationSubscription subscriberUserId projectOwner (Just projectId) topics topicGroups filter
+    subscriptionId <- NotifQ.createNotificationSubscription (ProjectSubscriptionOwner projectId) projectOwner (Just projectId) topics topicGroups filter
     addWebhookDeliveryMethod uri "Project Webhook" subscriptionId runInIO
     pure subscriptionId
-  expectProjectWebhook subscriberUserId projectId subscriptionId
+  expectProjectWebhook projectId subscriptionId
 
-expectProjectWebhook :: UserId -> ProjectId -> NotificationSubscriptionId -> WebApp ProjectWebhook
-expectProjectWebhook caller projectId subscriptionId = do
+expectProjectWebhook :: ProjectId -> NotificationSubscriptionId -> WebApp ProjectWebhook
+expectProjectWebhook projectId subscriptionId = do
   (webhookId, _name) <- PG.runTransaction $ do NotifQ.expectProjectWebhook projectId subscriptionId
   uri <-
     WebhookSecrets.fetchWebhookConfig webhookId >>= \case
@@ -138,23 +144,25 @@ expectProjectWebhook caller projectId subscriptionId = do
         projectWebhookUpdatedAt = subscription.subscriptionUpdatedAt
       }
 
-deleteProjectWebhook :: UserId -> NotificationSubscriptionId -> WebApp ()
-deleteProjectWebhook caller subscriptionId = do
+deleteProjectWebhook :: ProjectId -> NotificationSubscriptionId -> WebApp ()
+deleteProjectWebhook projectId subscriptionId = do
+  let owner = ProjectSubscriptionOwner projectId
   -- First fetch the webhook id associated with this subscription
   webhooks <- PG.runTransaction $ do NotifQ.webhooksForSubscription subscriptionId
   for_ webhooks \webhookId -> do
-    deleteWebhookDeliveryMethod caller webhookId
-  PG.runTransaction $ do NotifQ.deleteNotificationSubscription caller subscriptionId
+    deleteWebhookDeliveryMethod owner webhookId
+  PG.runTransaction $ do NotifQ.deleteNotificationSubscription owner subscriptionId
 
-updateProjectWebhook :: SubscriptionOwner -> NotificationSubscriptionId -> URIParam -> (Maybe (Set NotificationTopic)) -> WebApp ()
-updateProjectWebhook subscriptionOwner subscriptionId uri topics = do
-  -- First fetch the webhook ids associated with this subscription
-  webhooks <- PG.runTransaction $ do NotifQ.webhooksForSubscription subscriptionId
-  for_ webhooks \webhookId -> do
-    -- Update the webhook config in Vault
-    WebhookSecrets.putWebhookConfig webhookId (WebhookConfig uri) >>= \case
-      Left err -> respondError err
-      Right _ -> pure ()
+updateProjectWebhook :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe URIParam -> (Maybe (Set NotificationTopic)) -> WebApp ()
+updateProjectWebhook subscriptionOwner subscriptionId mayURIUpdate topics = do
+  for_ mayURIUpdate \uri -> do
+    -- First fetch the webhook ids associated with this subscription
+    webhooks <- PG.runTransaction $ do NotifQ.webhooksForSubscription subscriptionId
+    for_ webhooks \webhookId -> do
+      -- Update the webhook config in Vault
+      WebhookSecrets.putWebhookConfig webhookId (WebhookConfig uri) >>= \case
+        Left err -> respondError err
+        Right _ -> pure ()
   PG.runTransaction $ NotifQ.updateNotificationSubscription subscriptionOwner subscriptionId topics mempty Nothing
 
 updateWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> URIParam -> WebApp ()
