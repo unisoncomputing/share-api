@@ -579,8 +579,9 @@ instance Aeson.FromJSON NotificationDeliveryMethod where
 
 data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
-    subscriptionScope :: UserId,
-    subscriptionProjectId :: Maybe ProjectId,
+    subscriptionScopeUser :: UserId,
+    subscriptionScopeProject :: Maybe ProjectId,
+    subscriptionOwner :: SubscriptionOwner,
     subscriptionTopics :: Set NotificationTopic,
     subscriptionTopicGroups :: Set NotificationTopicGroup,
     subscriptionFilter :: Maybe NotificationFilter,
@@ -592,21 +593,28 @@ data NotificationSubscription id = NotificationSubscription
 instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) where
   decodeRow = do
     subscriptionId <- PG.decodeField
-    subscriptionScope <- PG.decodeField
-    subscriptionProjectId <- PG.decodeField
+    subscriptionScopeUser <- PG.decodeField
+    subscriptionScopeProject <- PG.decodeField
+    subscriberUser <- PG.decodeField
+    subscriberProject <- PG.decodeField
+    let subscriptionOwner = case (subscriberUser, subscriberProject) of
+          (Just uid, Nothing) -> UserSubscriptionOwner uid
+          (Nothing, Just pid) -> ProjectSubscriptionOwner pid
+          _ -> error "Invalid subscription owner in database"
     subscriptionTopics <- Set.fromList <$> PG.decodeField
     subscriptionTopicGroups <- Set.fromList <$> PG.decodeField
     subscriptionFilter <- PG.decodeField
     subscriptionCreatedAt <- PG.decodeField
     subscriptionUpdatedAt <- PG.decodeField
-    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
+    pure $ NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
 
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
-  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt} =
+  toJSON NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt} =
     Aeson.object
       [ "id" Aeson..= subscriptionId,
-        "scope" Aeson..= subscriptionScope,
-        "projectId" Aeson..= subscriptionProjectId,
+        "scope" Aeson..= subscriptionScopeUser,
+        "projectId" Aeson..= subscriptionScopeProject,
+        "owner" Aeson..= subscriptionOwner,
         "topics" Aeson..= subscriptionTopics,
         "topicGroups" Aeson..= subscriptionTopicGroups,
         "filter" Aeson..= subscriptionFilter,
@@ -617,15 +625,16 @@ instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) wher
 instance Aeson.FromJSON (NotificationSubscription NotificationSubscriptionId) where
   parseJSON = Aeson.withObject "NotificationSubscription" \o -> do
     subscriptionId <- o .: "id"
-    subscriptionScope <- o .: "scope"
-    subscriptionProjectId <- o .: "projectId"
+    subscriptionScopeUser <- o .: "scope"
+    subscriptionScopeProject <- o .:? "scope_project"
+    subscriptionOwner <- o .: "owner"
     subscriptionTopics <- o .: "topics"
     subscriptionTopicGroups <- o .: "topicGroups"
     subscriptionFilter <- o .:? "filter"
     subscriptionCreatedAt <- o .:? "createdAt"
     subscriptionUpdatedAt <- o .:? "updatedAt"
 
-    pure NotificationSubscription {subscriptionId, subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
+    pure NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
 
 data NotificationHubEntry userInfo eventPayload = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,
@@ -980,3 +989,23 @@ data SubscriptionOwner
   = ProjectSubscriptionOwner ProjectId
   | UserSubscriptionOwner UserId
   deriving stock (Show, Eq, Ord)
+
+instance ToJSON SubscriptionOwner where
+  toJSON (ProjectSubscriptionOwner pid) =
+    Aeson.object
+      [ "kind" .= ("project" :: Text),
+        "id" .= pid
+      ]
+  toJSON (UserSubscriptionOwner uid) =
+    Aeson.object
+      [ "kind" .= ("user" :: Text),
+        "id" .= uid
+      ]
+
+instance FromJSON SubscriptionOwner where
+  parseJSON = Aeson.withObject "SubscriptionOwner" \o -> do
+    kind <- o .: "kind"
+    case kind of
+      "project" -> ProjectSubscriptionOwner <$> o .: "id"
+      "user" -> UserSubscriptionOwner <$> o .: "id"
+      _ -> fail $ "Unknown subscription owner kind: " <> Text.unpack kind

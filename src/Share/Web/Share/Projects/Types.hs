@@ -387,40 +387,40 @@ instance Aeson.ToJSON CatalogCategory where
 
 -- | This type provides a view over the subscription <-> webhook many-to-many view.
 data ProjectWebhook = ProjectWebhook
-  { url :: URIParam,
-    events :: Set NotificationTopic,
-    notificationSubscriptionId :: NotificationSubscriptionId,
-    createdAt :: Maybe UTCTime,
-    updatedAt :: Maybe UTCTime
+  { projectWebhookUri :: URIParam,
+    projectWebhookEvents :: Set NotificationTopic,
+    projectWebhookNotificationSubscriptionId :: NotificationSubscriptionId,
+    projectWebhookCreatedAt :: Maybe UTCTime,
+    projectWebhookUpdatedAt :: Maybe UTCTime
   }
   deriving stock (Eq, Show)
 
 instance PG.DecodeRow ProjectWebhook where
   decodeRow = do
-    url <- PG.decodeField
-    events <- Set.fromList <$> PG.decodeField
-    notificationSubscriptionId <- PG.decodeField
-    createdAt <- PG.decodeField
-    updatedAt <- PG.decodeField
+    projectWebhookUri <- PG.decodeField
+    projectWebhookEvents <- Set.fromList <$> PG.decodeField
+    projectWebhookNotificationSubscriptionId <- PG.decodeField
+    projectWebhookCreatedAt <- PG.decodeField
+    projectWebhookUpdatedAt <- PG.decodeField
     pure ProjectWebhook {..}
 
 instance ToJSON ProjectWebhook where
   toJSON ProjectWebhook {..} =
     object
-      [ "url" .= url,
-        "events" .= events,
-        "notificationSubscriptionId" .= notificationSubscriptionId,
-        "createdAt" .= createdAt,
-        "updatedAt" .= updatedAt
+      [ "uri" .= projectWebhookUri,
+        "events" .= projectWebhookEvents,
+        "notificationSubscriptionId" .= projectWebhookNotificationSubscriptionId,
+        "createdAt" .= projectWebhookCreatedAt,
+        "updatedAt" .= projectWebhookUpdatedAt
       ]
 
 instance FromJSON ProjectWebhook where
   parseJSON = Aeson.withObject "ProjectWebhook" $ \o -> do
-    url <- o .: "url"
-    events <- o .: "events"
-    notificationSubscriptionId <- o .: "notificationSubscriptionId"
-    createdAt <- o .: "createdAt"
-    updatedAt <- o .: "updatedAt"
+    projectWebhookUri <- o .: "uri"
+    projectWebhookEvents <- o .: "events"
+    projectWebhookNotificationSubscriptionId <- o .: "notificationSubscriptionId"
+    projectWebhookCreatedAt <- o .: "createdAt"
+    projectWebhookUpdatedAt <- o .: "updatedAt"
     pure ProjectWebhook {..}
 
 data ListProjectWebhooksResponse = ListProjectWebhooksResponse
@@ -440,7 +440,7 @@ instance FromJSON ListProjectWebhooksResponse where
     pure ListProjectWebhooksResponse {..}
 
 data CreateProjectWebhookRequest = CreateProjectWebhookRequest
-  { url :: URIParam,
+  { uri :: URIParam,
     events :: Set NotificationTopic,
     subscriber :: UserHandle
   }
@@ -449,14 +449,14 @@ data CreateProjectWebhookRequest = CreateProjectWebhookRequest
 instance ToJSON CreateProjectWebhookRequest where
   toJSON CreateProjectWebhookRequest {..} =
     object
-      [ "url" .= url,
+      [ "uri" .= uri,
         "events" .= events,
         "subscriber" .= (IDs.toText $ PrefixedID @"@" subscriber)
       ]
 
 instance FromJSON CreateProjectWebhookRequest where
   parseJSON = Aeson.withObject "CreateProjectWebhookRequest" $ \o -> do
-    url <- o .: "url"
+    uri <- o .: "uri"
     events <- o .: "events"
     subscriber <- o .: "subscriber"
     pure CreateProjectWebhookRequest {..}
@@ -478,7 +478,7 @@ instance FromJSON CreateProjectWebhookResponse where
     pure CreateProjectWebhookResponse {..}
 
 data UpdateProjectWebhookRequest = UpdateProjectWebhookRequest
-  { url :: Maybe URIParam,
+  { uri :: Maybe URIParam,
     events :: Maybe (Set NotificationTopic)
   }
   deriving stock (Eq, Show)
@@ -486,13 +486,13 @@ data UpdateProjectWebhookRequest = UpdateProjectWebhookRequest
 instance ToJSON UpdateProjectWebhookRequest where
   toJSON UpdateProjectWebhookRequest {..} =
     object
-      [ "url" .= url,
+      [ "uri" .= uri,
         "events" .= events
       ]
 
 instance FromJSON UpdateProjectWebhookRequest where
   parseJSON = Aeson.withObject "UpdateProjectWebhookRequest" $ \o -> do
-    url <- o .:? "url"
+    uri <- o .:? "uri"
     events <- o .:? "events"
     pure UpdateProjectWebhookRequest {..}
 
