@@ -5,6 +5,7 @@ module Share.Notifications.Ops
     deleteWebhookDeliveryMethod,
     listProjectWebhooks,
     createProjectWebhook,
+    deleteProjectWebhook,
     hydrateEvent,
   )
 where
@@ -135,3 +136,11 @@ createProjectWebhook subscriberUserId projectId url topics = do
         createdAt = Nothing,
         updatedAt = Nothing
       }
+
+deleteProjectWebhook :: UserId -> NotificationSubscriptionId -> WebApp ()
+deleteProjectWebhook caller subscriptionId = do
+  -- First fetch the webhook id associated with this subscription
+  webhooks <- PG.runTransaction $ do NotifQ.webhooksForSubscription subscriptionId
+  for_ webhooks \webhookId -> do
+    deleteWebhookDeliveryMethod caller webhookId
+  PG.runTransaction $ do NotifQ.deleteNotificationSubscription caller subscriptionId
