@@ -448,7 +448,7 @@ listProjectWebhooksEndpoint session projectUserHandle projectSlug = do
   Project {projectId} <- PG.runTransactionOrRespondError $ do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectSubscriptionsView caller projectId
-  webhooks <- NotifOps.listProjectWebhooks caller projectId
+  webhooks <- NotifOps.listProjectWebhooks projectId
   pure $ ListProjectWebhooksResponse {webhooks}
   where
     projectShortHand :: IDs.ProjectShortHand
