@@ -255,7 +255,7 @@ createNotificationSubscription owner subscriptionScope subscriptionProjectId sub
         UserSubscriptionOwner userId -> (Just userId, Nothing)
   queryExpect1Col
     [sql|
-      INSERT INTO notification_subscriptions (subscriber_user_id, subscriber_project_id, scope_user_id, scope_project_id, topics, topic_groups, filter)
+      INSERT INTO notification_subscriptions(subscriber_user_id, subscriber_project_id, scope_user_id, scope_project_id, topics, topic_groups, filter)
       VALUES (#{subscriberUserId}, #{subscriberProjectId}, #{subscriptionScope}, #{subscriptionProjectId}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{Foldable.toList subscriptionTopicGroups}::notification_topic_group[], #{subscriptionFilter})
       RETURNING id
     |]
@@ -564,8 +564,9 @@ expectProjectWebhook projectId subscriptionId = do
     [PG.sql|
       SELECT nw.id, nw.name
         FROM notification_webhooks nw
+        JOIN notification_subscriptions ns ON nw.subscription_id = ns.id
       WHERE nw.subscription_id = #{subscriptionId}
-        AND nw.subscriber_project_id = #{projectId}
+        AND ns.subscriber_project_id = #{projectId}
       LIMIT 1
     |]
 
