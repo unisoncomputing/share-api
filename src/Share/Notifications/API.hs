@@ -5,10 +5,7 @@ module Share.Notifications.API
   ( API,
     Routes (..),
     HubEntriesRoutes (..),
-    DeliveryMethodRoutes (..),
     SubscriptionRoutes (..),
-    EmailRoutes (..),
-    WebhookRoutes (..),
     GetHubEntriesCursor,
     StatusFilter (..),
     UpdateHubEntriesRequest (..),
@@ -16,13 +13,6 @@ module Share.Notifications.API
     CreateSubscriptionRequest (..),
     CreateSubscriptionResponse (..),
     UpdateSubscriptionRequest (..),
-    GetDeliveryMethodsResponse (..),
-    CreateEmailDeliveryMethodRequest (..),
-    CreateEmailDeliveryMethodResponse (..),
-    UpdateEmailDeliveryMethodRequest (..),
-    CreateWebhookRequest (..),
-    CreateWebhookResponse (..),
-    UpdateWebhookRequest (..),
   )
 where
 
@@ -35,11 +25,10 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (HydratedEvent, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, NotificationTopicGroup, SubscriptionFilter)
+import Share.Notifications.Types (HydratedEvent, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, NotificationTopicGroup, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.API (Cursor, Paged)
-import Share.Utils.URI (URIParam)
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
 type API = NamedRoutes Routes
@@ -47,7 +36,6 @@ type API = NamedRoutes Routes
 data Routes mode
   = Routes
   { hubRoutes :: mode :- "hub" :> NamedRoutes HubEntriesRoutes,
-    deliveryMethodRoutes :: mode :- "delivery-methods" :> NamedRoutes DeliveryMethodRoutes,
     subscriptionsRoutes :: mode :- "subscriptions" :> NamedRoutes SubscriptionRoutes
   }
   deriving stock (Generic)
@@ -59,36 +47,12 @@ data HubEntriesRoutes mode
   }
   deriving stock (Generic)
 
-data DeliveryMethodRoutes mode
-  = DeliveryMethodRoutes
-  { getDeliveryMethodsEndpoint :: mode :- GetDeliveryMethodsEndpoint,
-    emailDeliveryRoutes :: mode :- "emails" :> NamedRoutes EmailRoutes,
-    webhookDeliveryRoutes :: mode :- "webhooks" :> NamedRoutes WebhookRoutes
-  }
-  deriving stock (Generic)
-
 data SubscriptionRoutes mode
   = SubscriptionRoutes
   { getSubscriptionsEndpoint :: mode :- GetSubscriptionsEndpoint,
     createSubscriptionEndpoint :: mode :- CreateSubscriptionEndpoint,
     deleteSubscriptionEndpoint :: mode :- DeleteSubscriptionEndpoint,
     updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint
-  }
-  deriving stock (Generic)
-
-data EmailRoutes mode
-  = EmailRoutes
-  { createEmailDeliveryMethodEndpoint :: mode :- CreateEmailDeliveryMethodEndpoint,
-    deleteEmailDeliveryMethodEndpoint :: mode :- DeleteEmailDeliveryMethodEndpoint,
-    updateEmailDeliveryMethodEndpoint :: mode :- UpdateEmailDeliveryMethodEndpoint
-  }
-  deriving stock (Generic)
-
-data WebhookRoutes mode
-  = WebhookRoutes
-  { createWebhookEndpoint :: mode :- CreateWebhookEndpoint,
-    deleteWebhookEndpoint :: mode :- DeleteWebhookEndpoint,
-    updateWebhookEndpoint :: mode :- UpdateWebhookEndpoint
   }
   deriving stock (Generic)
 
@@ -190,24 +154,6 @@ instance FromJSON UpdateSubscriptionRequest where
     subscriptionFilter <- o .:? "filter"
     pure UpdateSubscriptionRequest {subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
-type GetDeliveryMethodsEndpoint =
-  AuthenticatedUserId
-    :> Get '[JSON] GetDeliveryMethodsResponse
-
-data GetDeliveryMethodsResponse
-  = GetDeliveryMethodsResponse
-  { deliveryMethods :: [NotificationDeliveryMethod]
-  }
-
-instance ToJSON GetDeliveryMethodsResponse where
-  toJSON GetDeliveryMethodsResponse {deliveryMethods} =
-    object ["deliveryMethods" .= deliveryMethods]
-
-instance FromJSON GetDeliveryMethodsResponse where
-  parseJSON = withObject "GetDeliveryMethodsResponse" $ \o -> do
-    deliveryMethods <- o .: "deliveryMethods"
-    pure GetDeliveryMethodsResponse {deliveryMethods}
-
 newtype StatusFilter = StatusFilter
   { getStatusFilter :: NESet NotificationStatus
   }
@@ -269,121 +215,3 @@ instance FromJSON UpdateHubEntriesRequest where
     notificationStatus <- o .: "status"
     notificationIds <- o .: "notificationIds"
     pure UpdateHubEntriesRequest {notificationStatus, notificationIds}
-
-type CreateEmailDeliveryMethodEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] CreateEmailDeliveryMethodRequest
-    :> Post '[JSON] CreateEmailDeliveryMethodResponse
-
-data CreateEmailDeliveryMethodRequest
-  = CreateEmailDeliveryMethodRequest
-  { email :: Email
-  }
-
-instance ToJSON CreateEmailDeliveryMethodRequest where
-  toJSON CreateEmailDeliveryMethodRequest {email} =
-    object ["email" .= email]
-
-instance FromJSON CreateEmailDeliveryMethodRequest where
-  parseJSON = withObject "CreateEmailDeliveryMethodRequest" $ \o -> do
-    email <- o .: "email"
-    pure CreateEmailDeliveryMethodRequest {email}
-
-data CreateEmailDeliveryMethodResponse
-  = CreateEmailDeliveryMethodResponse
-  { emailDeliveryMethodId :: NotificationEmailDeliveryMethodId
-  }
-
-instance ToJSON CreateEmailDeliveryMethodResponse where
-  toJSON CreateEmailDeliveryMethodResponse {emailDeliveryMethodId} =
-    object ["emailDeliveryMethodId" .= emailDeliveryMethodId]
-
-instance FromJSON CreateEmailDeliveryMethodResponse where
-  parseJSON = withObject "CreateEmailDeliveryMethodResponse" $ \o -> do
-    emailDeliveryMethodId <- o .: "emailDeliveryMethodId"
-    pure CreateEmailDeliveryMethodResponse {emailDeliveryMethodId}
-
-type DeleteEmailDeliveryMethodEndpoint =
-  AuthenticatedUserId
-    :> Capture "emailDeliveryMethodId" NotificationEmailDeliveryMethodId
-    :> Delete '[JSON] ()
-
-type UpdateEmailDeliveryMethodEndpoint =
-  AuthenticatedUserId
-    :> Capture "emailDeliveryMethodId" NotificationEmailDeliveryMethodId
-    :> ReqBody '[JSON] UpdateEmailDeliveryMethodRequest
-    :> Patch '[JSON] ()
-
-data UpdateEmailDeliveryMethodRequest
-  = UpdateEmailDeliveryMethodRequest
-  { email :: Email
-  }
-
-instance ToJSON UpdateEmailDeliveryMethodRequest where
-  toJSON UpdateEmailDeliveryMethodRequest {email} =
-    object ["email" .= email]
-
-instance FromJSON UpdateEmailDeliveryMethodRequest where
-  parseJSON = withObject "UpdateEmailDeliveryMethodRequest" $ \o -> do
-    email <- o .: "email"
-    pure UpdateEmailDeliveryMethodRequest {email}
-
-type CreateWebhookEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] CreateWebhookRequest
-    :> Post '[JSON] CreateWebhookResponse
-
-data CreateWebhookRequest
-  = CreateWebhookRequest
-  { url :: URIParam,
-    name :: Text
-  }
-
-instance ToJSON CreateWebhookRequest where
-  toJSON CreateWebhookRequest {url, name} =
-    object ["url" .= url, "name" .= name]
-
-instance FromJSON CreateWebhookRequest where
-  parseJSON = withObject "CreateWebhookRequest" $ \o -> do
-    url <- o .: "url"
-    name <- o .: "name"
-    pure CreateWebhookRequest {url, name}
-
-data CreateWebhookResponse
-  = CreateWebhookResponse
-  { webhookId :: NotificationWebhookId
-  }
-
-instance ToJSON CreateWebhookResponse where
-  toJSON CreateWebhookResponse {webhookId} =
-    object ["webhookId" .= webhookId]
-
-instance FromJSON CreateWebhookResponse where
-  parseJSON = withObject "CreateWebhookResponse" $ \o -> do
-    webhookId <- o .: "webhookId"
-    pure CreateWebhookResponse {webhookId}
-
-type DeleteWebhookEndpoint =
-  AuthenticatedUserId
-    :> Capture "webhookId" NotificationWebhookId
-    :> Delete '[JSON] ()
-
-type UpdateWebhookEndpoint =
-  AuthenticatedUserId
-    :> Capture "webhookId" NotificationWebhookId
-    :> ReqBody '[JSON] UpdateWebhookRequest
-    :> Patch '[JSON] ()
-
-data UpdateWebhookRequest
-  = UpdateWebhookRequest
-  { url :: URIParam
-  }
-
-instance ToJSON UpdateWebhookRequest where
-  toJSON UpdateWebhookRequest {url} =
-    object ["url" .= url]
-
-instance FromJSON UpdateWebhookRequest where
-  parseJSON = withObject "UpdateWebhookRequest" $ \o -> do
-    url <- o .: "url"
-    pure UpdateWebhookRequest {url}
