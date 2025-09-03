@@ -24,6 +24,7 @@ import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.Notifications.Ops qualified as NotifOps
 import Share.Notifications.Queries qualified as NotifsQ
+import Share.Notifications.Types (SubscriptionOwner (ProjectSubscriptionOwner))
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
@@ -471,8 +472,10 @@ updateProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionI
   Project {projectId, ownerUserId = projectOwner} <- PG.runTransactionOrRespondError $ do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage caller projectOwner
-  webhook <- PG.runTransactionOrRespondError $ do
-    NotifsQ.updateProjectWebhook caller projectId subscriptionId url events `whenNothingM` throwError (EntityMissing (ErrorID "webhook:not-found") "Webhook not found")
+  let owner = ProjectSubscriptionOwner projectId
+  NotifOps.updateProjectWebhook owner subscriptionId url events
+  PG.runTransaction $ do
+    NotifQ.updateNotificationSubscription owner subscriptionId (Just events) mempty Nothing
   pure $ UpdateProjectWebhookResponse {webhook}
   where
     projectShortHand :: IDs.ProjectShortHand

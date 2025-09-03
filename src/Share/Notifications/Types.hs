@@ -33,6 +33,7 @@ module Share.Notifications.Types
     CommentPayload (..),
     ReleasePayload (..),
     StatusUpdatePayload (..),
+    SubscriptionOwner (..),
     eventTopic,
     hydratedEventTopic,
     eventData_,
@@ -974,3 +975,8 @@ hydratedEventTopic (HydratedEvent {hydratedEventPayload}) = case hydratedEventPa
   HydratedProjectTicketStatusUpdatedPayload {} -> ProjectTicketStatusUpdated
   HydratedProjectTicketCommentPayload {} -> ProjectTicketComment
   HydratedProjectReleaseCreatedPayload {} -> ProjectReleaseCreated
+
+data SubscriptionOwner
+  = ProjectSubscriptionOwner ProjectId
+  | UserSubscriptionOwner UserId
+  deriving stock (Show, Eq, Ord)
