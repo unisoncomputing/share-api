@@ -94,7 +94,7 @@ listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFil
     query limit cursorFilter =
       queryListRows @(NotificationHubEntry UserId NotificationEventData)
         [sql|
-          SELECT hub.id, hub.status, hub.created_at, event.id, event.occurred_at, event.scope_user_id, event.actor_user_id, event.resource_id, event.topic, event.data
+          SELECT hub.id, hub.status, hub.created_at, event.id, event.occurred_at, event.scope_user_id, event.actor_user_id, event.resource_id, event.project_id, event.topic, event.data
             FROM notification_hub_entries hub
             JOIN notification_events event ON hub.event_id = event.id
           WHERE hub.user_id = #{notificationUserId}
