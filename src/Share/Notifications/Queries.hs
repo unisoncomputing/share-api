@@ -250,8 +250,11 @@ deleteNotificationSubscription subscriberUserId subscriptionId = do
         AND subscriber_user_id = #{subscriberUserId}
     |]
 
-updateNotificationSubscription :: UserId -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> Transaction e ()
-updateNotificationSubscription subscriberUserId subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
+updateNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> Transaction e ()
+updateNotificationSubscription owner subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
+  let filter = case owner of
+        UserSubscriptionOwner subscriberUserId -> [sql| subscriber_user_id = #{subscriberUserId}|]
+        ProjectSubscriptionOwner projectOwnerUserId -> [sql| subscriber_project_id = #{projectOwnerUserId} |]
   execute_
     [sql|
       UPDATE notification_subscriptions
@@ -259,7 +262,7 @@ updateNotificationSubscription subscriberUserId subscriptionId subscriptionTopic
           topic_groups = COALESCE(#{Foldable.toList <$> subscriptionTopicGroups}::notification_topic_group[], topic_groups),
           filter = COALESCE(#{subscriptionFilter}, filter)
       WHERE id = #{subscriptionId}
-        AND subscriber_user_id = #{subscriberUserId}
+        AND ^{filter}
     |]
 
 getNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transaction e (NotificationSubscription NotificationSubscriptionId)
