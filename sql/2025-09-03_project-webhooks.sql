@@ -124,6 +124,9 @@ BEGIN
     -- in which case we just carry on.
     INSERT INTO notification_hub_entries (event_id, user_id)
       VALUES (the_event_id, the_subscriber)
+      -- Don't add to the hub if the subscriber is a project, 
+      -- projects don't have a hub.
+      WHERE the_subscriber IS NOT NULL
       ON CONFLICT DO NOTHING;
   END LOOP;
 
