@@ -16,10 +16,6 @@ module Share.Notifications.API
     CreateSubscriptionRequest (..),
     CreateSubscriptionResponse (..),
     UpdateSubscriptionRequest (..),
-    SubscriptionDeliveryMethodRoutes (..),
-    SubscriptionResourceRoutes (..),
-    AddSubscriptionDeliveryMethodsRequest (..),
-    RemoveSubscriptionDeliveryMethodsRequest (..),
     GetDeliveryMethodsResponse (..),
     CreateEmailDeliveryMethodRequest (..),
     CreateEmailDeliveryMethodResponse (..),
@@ -39,7 +35,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (DeliveryMethodId, HydratedEvent, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, NotificationTopicGroup, SubscriptionFilter)
+import Share.Notifications.Types (HydratedEvent, NotificationDeliveryMethod, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, NotificationTopicGroup, SubscriptionFilter)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.API (Cursor, Paged)
@@ -76,22 +72,7 @@ data SubscriptionRoutes mode
   { getSubscriptionsEndpoint :: mode :- GetSubscriptionsEndpoint,
     createSubscriptionEndpoint :: mode :- CreateSubscriptionEndpoint,
     deleteSubscriptionEndpoint :: mode :- DeleteSubscriptionEndpoint,
-    updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint,
-    subscriptionResourceRoutes :: mode :- Capture "subscriptionId" NotificationSubscriptionId :> NamedRoutes SubscriptionResourceRoutes
-  }
-  deriving stock (Generic)
-
-data SubscriptionResourceRoutes mode
-  = SubscriptionResourceRoutes
-  { subscriptionDeliveryMethodRoutes :: mode :- "delivery-methods" :> NamedRoutes SubscriptionDeliveryMethodRoutes
-  }
-  deriving stock (Generic)
-
-data SubscriptionDeliveryMethodRoutes mode
-  = SubscriptionDeliveryMethodRoutes
-  { getSubscriptionDeliveryMethodsEndpoint :: mode :- GetDeliveryMethodsEndpoint,
-    addSubscriptionDeliveryMethodsEndpoint :: mode :- "add" :> AddSubscriptionDeliveryMethodsEndpoint,
-    removeSubscriptionDeliveryMethodsEndpoint :: mode :- "remove" :> RemoveSubscriptionDeliveryMethodsEndpoint
+    updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint
   }
   deriving stock (Generic)
 
@@ -406,43 +387,3 @@ instance FromJSON UpdateWebhookRequest where
   parseJSON = withObject "UpdateWebhookRequest" $ \o -> do
     url <- o .: "url"
     pure UpdateWebhookRequest {url}
-
-type AddSubscriptionDeliveryMethodsEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] AddSubscriptionDeliveryMethodsRequest
-    :> Post '[JSON] ()
-
-type RemoveSubscriptionDeliveryMethodsEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] RemoveSubscriptionDeliveryMethodsRequest
-    :> Delete '[JSON] ()
-
-data AddSubscriptionDeliveryMethodsRequest
-  = AddSubscriptionDeliveryMethodsRequest
-  { deliveryMethods :: NESet DeliveryMethodId
-  }
-  deriving stock (Show, Eq, Ord)
-
-instance ToJSON AddSubscriptionDeliveryMethodsRequest where
-  toJSON AddSubscriptionDeliveryMethodsRequest {deliveryMethods} =
-    object ["deliveryMethods" .= deliveryMethods]
-
-instance FromJSON AddSubscriptionDeliveryMethodsRequest where
-  parseJSON = withObject "AddSubscriptionDeliveryMethodsRequest" $ \o -> do
-    deliveryMethods <- o .: "deliveryMethods"
-    pure AddSubscriptionDeliveryMethodsRequest {deliveryMethods}
-
-data RemoveSubscriptionDeliveryMethodsRequest
-  = RemoveSubscriptionDeliveryMethodsRequest
-  { deliveryMethods :: NESet DeliveryMethodId
-  }
-  deriving stock (Show, Eq, Ord)
-
-instance ToJSON RemoveSubscriptionDeliveryMethodsRequest where
-  toJSON RemoveSubscriptionDeliveryMethodsRequest {deliveryMethods} =
-    object ["deliveryMethods" .= deliveryMethods]
-
-instance FromJSON RemoveSubscriptionDeliveryMethodsRequest where
-  parseJSON = withObject "RemoveSubscriptionDeliveryMethodsRequest" $ \o -> do
-    deliveryMethods <- o .: "deliveryMethods"
-    pure RemoveSubscriptionDeliveryMethodsRequest {deliveryMethods}
