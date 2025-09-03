@@ -62,7 +62,7 @@ CREATE INDEX notification_events_scope_user_and_project ON notification_events(s
 -- Migrate existing filters to the new column, and also remove
 -- the projectId from the JSONB filter.
 UPDATE notification_subscriptions
-  SET project_id = (filter->>'projectId')::UUID,
+  SET scope_project_id = (filter->>'projectId')::UUID,
       filter = filter - 'projectId'
   WHERE filter ? 'projectId';
 
@@ -71,7 +71,7 @@ UPDATE notification_events
   WHERE data ? 'projectId';
 
 -- Now update the trigger so we use the new projectid columns
-CREATE FUNCTION trigger_notification_event_subscriptions()
+CREATE OR REPLACE FUNCTION trigger_notification_event_subscriptions()
 RETURNS TRIGGER AS $$
 DECLARE
   the_subscription_id UUID;
