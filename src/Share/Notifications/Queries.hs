@@ -214,12 +214,18 @@ createWebhookDeliveryMethod name subscriptionId = do
           RETURNING id
         |]
 
-deleteWebhookDeliveryMethod :: NotificationWebhookId -> Transaction e ()
-deleteWebhookDeliveryMethod webhookDeliveryMethodId = do
+deleteWebhookDeliveryMethod :: SubscriptionOwner -> NotificationWebhookId -> Transaction e ()
+deleteWebhookDeliveryMethod owner webhookDeliveryMethodId = do
+  let ownerFilter = case owner of
+        UserSubscriptionOwner userId -> [sql| nw.subscriber_user_id = #{userId} |]
+        ProjectSubscriptionOwner projectId -> [sql| nw.subscriber_project_id = #{projectId} |]
   execute_
     [sql|
       DELETE FROM notification_webhooks
+        USING notification_subscriptions ns
       WHERE id = #{webhookDeliveryMethodId}
+        AND ns.id = nw.subscription_id
+        AND ^{ownerFilter}
     |]
 
 listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscription NotificationSubscriptionId]
@@ -267,6 +273,7 @@ deleteNotificationSubscription owner subscriptionId = do
     |]
 
 updateNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> Transaction e ()
+updateNotificationSubscription _owner _subscriptionId Nothing Nothing Nothing = pure ()
 updateNotificationSubscription owner subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
   let ownerFilter = case owner of
         UserSubscriptionOwner subscriberUserId -> [sql| subscriber_user_id = #{subscriberUserId}|]
