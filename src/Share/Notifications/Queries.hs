@@ -522,15 +522,15 @@ isUserSubscribedToWatchProject userId projId = do
         WHERE ns.subscriber_user_id = #{userId}
           AND ns.scope_user_id = p.owner_user_id
           AND ns.topic_groups = ARRAY[#{WatchProject}::notification_topic_group]
-          AND ns.project_id = #{projId}
+          AND ns.scope_project_id = #{projId}
           AND ns.filter = #{filter}::jsonb
           LIMIT 1
     |]
 
 -- | We provide a wrapper layer on top of notification subscriptions and webhooks
 -- to make the frontend experience a bit more intuitive.
-listProjectWebhooks :: UserId -> ProjectId -> PG.Transaction e [(NotificationWebhookId, Text, NotificationSubscription NotificationSubscriptionId)]
-listProjectWebhooks caller projectId = do
+listProjectWebhooks :: ProjectId -> PG.Transaction e [(NotificationWebhookId, Text, NotificationSubscription NotificationSubscriptionId)]
+listProjectWebhooks projectId = do
   PG.queryListRows @((NotificationWebhookId, Text) PG.:. NotificationSubscription NotificationSubscriptionId)
     [PG.sql|
       -- Only get one webhook per subscription, there _shouldn't_ be multiple webhooks per
@@ -553,8 +553,7 @@ listProjectWebhooks caller projectId = do
       FROM notification_subscriptions ns
       JOIN notification_by_webhook nbw ON ns.id = nbw.subscription_id
       JOIN notification_webhooks nw ON nbw.webhook_id = nw.id
-      WHERE ns.project_id = #{projectId}
-        AND ns.subscriber_user_id = #{caller}
+      WHERE ns.subscriber_project_id = #{projectId}
     |]
     <&> fmap (\((webhookId, webhookName) PG.:. subscription) -> (webhookId, webhookName, subscription))
 

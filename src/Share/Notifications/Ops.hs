@@ -92,9 +92,9 @@ hydrateEvent hydratedEventPayload = do
 
 -- | We provide a wrapper layer on top of notification subscriptions and webhooks
 -- to make the frontend experience a bit more intuitive.
-listProjectWebhooks :: UserId -> ProjectId -> WebApp [ProjectWebhook]
-listProjectWebhooks caller projectId = do
-  projectWebhooks <- PG.runTransaction $ do NotifQ.listProjectWebhooks caller projectId
+listProjectWebhooks :: ProjectId -> WebApp [ProjectWebhook]
+listProjectWebhooks projectId = do
+  projectWebhooks <- PG.runTransaction $ do NotifQ.listProjectWebhooks projectId
   results <-
     projectWebhooks
       & asListOf (traversed . _1) %%~ \webhookIds ->
