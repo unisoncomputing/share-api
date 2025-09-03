@@ -11,18 +11,9 @@ subscription_id=$(fetch_data_jq "$test_user" PUT subscribe-to-watch-project '/us
   "isSubscribed": true
 }' )
 
-webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"${echo_server}/good-webhook\",
-  \"name\": \"Good Webhook\"
-}" )
-
-failing_webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"${echo_server}/invalid?x-set-response-status-code=500\",
-  \"name\": \"Bad Webhook\"
-}" )
-
-fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/subscriptions/${subscription_id}/delivery-methods/add" "{
-  \"deliveryMethods\": [{\"kind\": \"webhook\",  \"id\": \"${webhook_id}\"}, {\"kind\": \"webhook\",  \"id\": \"${failing_webhook_id}\"}]
+fetch "$test_user" POST add-project-webhook "/users/test/projects/publictestproject/webhooks" "{
+  \"uri\": \"${echo_server}/good-webhook\",
+  \"events\": [\"project:contribution:created\"]
 }"
 
 # Add a subscription within the transcripts user to notifications for some select topics in any project owned by the test
@@ -35,12 +26,6 @@ fetch "$transcripts_user" POST create-subscription-for-other-user-project '/user
   ],
   \"topicGroups\": [\"watch_project\"]
 }"
-
-fetch "$test_user" POST create-email-delivery '/users/test/notifications/delivery-methods/emails' '{
-  "email": "me@example.com"
-}'
-
-fetch "$test_user" GET check-delivery-methods '/users/test/notifications/delivery-methods'
 
 # Create a contribution in a public project, which should trigger a notification for both users, but will be omitted
 # from 'transcripts' notification list since it's a self-notification.
