@@ -44,11 +44,11 @@ listNotificationDeliveryMethods userId maySubscriptionId = do
 
   pure $ (EmailDeliveryMethod <$> emailDeliveryMethods) <> (WebhookDeliveryMethod <$> webhookDeliveryMethods)
 
-addWebhookDeliveryMethod :: UserId -> URIParam -> Text -> NotificationSubscriptionId -> (AppM r (Either Webhooks.WebhookSecretError ()) -> IO (Either Webhooks.WebhookSecretError ())) -> PG.Transaction Webhooks.WebhookSecretError NotificationWebhookId
-addWebhookDeliveryMethod userId uriParam webhookName notificationSubscriptionId runInIO = do
+addWebhookDeliveryMethod :: URIParam -> Text -> NotificationSubscriptionId -> (AppM r (Either Webhooks.WebhookSecretError ()) -> IO (Either Webhooks.WebhookSecretError ())) -> PG.Transaction Webhooks.WebhookSecretError NotificationWebhookId
+addWebhookDeliveryMethod uriParam webhookName notificationSubscriptionId runInIO = do
   let webhookConfig = WebhookConfig {uri = uriParam}
   -- Note that we can't be completely transactional between postgres and vault here.
-  webhookId <- NotifQ.createWebhookDeliveryMethod userId webhookName notificationSubscriptionId
+  webhookId <- NotifQ.createWebhookDeliveryMethod webhookName notificationSubscriptionId
   -- We run this inside the transaction such that, if it fails, the transaction
   -- will be rolled back.
   --
@@ -101,31 +101,41 @@ listProjectWebhooks caller projectId = do
   let webhooks =
         results <&> \(NotificationWebhookConfig {webhookDeliveryUrl = url}, _name, NotificationSubscription {subscriptionTopics, subscriptionId, subscriptionCreatedAt, subscriptionUpdatedAt}) ->
           ProjectWebhook
-            { url = URIParam url,
-              events = subscriptionTopics,
-              notificationSubscriptionId = subscriptionId,
-              createdAt = subscriptionCreatedAt,
-              updatedAt = subscriptionUpdatedAt
+            { projectWebhookUri = URIParam url,
+              projectWebhookEvents = subscriptionTopics,
+              projectWebhookNotificationSubscriptionId = subscriptionId,
+              projectWebhookCreatedAt = subscriptionCreatedAt,
+              projectWebhookUpdatedAt = subscriptionUpdatedAt
             }
   pure webhooks
 
-createProjectWebhook :: UserId -> ProjectId -> URIParam -> Set NotificationTopic -> WebApp ProjectWebhook
-createProjectWebhook subscriberUserId projectId url topics = do
+createProjectWebhook :: ProjectId -> URIParam -> Set NotificationTopic -> WebApp ProjectWebhook
+createProjectWebhook projectId uri topics = do
   let topicGroups = mempty
   let filter = Nothing
   runInIO <- UnliftIO.askRunInIO
   subscriptionId <- PG.runTransactionOrRespondError $ do
     Project {ownerUserId = projectOwner} <- Q.expectProjectById projectId
     subscriptionId <- NotifQ.createNotificationSubscription subscriberUserId projectOwner (Just projectId) topics topicGroups filter
-    addWebhookDeliveryMethod subscriberUserId url "Project Webhook" subscriptionId runInIO
+    addWebhookDeliveryMethod uri "Project Webhook" subscriptionId runInIO
     pure subscriptionId
+  expectProjectWebhook subscriberUserId projectId subscriptionId
+
+expectProjectWebhook :: UserId -> ProjectId -> NotificationSubscriptionId -> WebApp ProjectWebhook
+expectProjectWebhook caller projectId subscriptionId = do
+  (webhookId, _name) <- PG.runTransaction $ do NotifQ.expectProjectWebhook projectId subscriptionId
+  uri <-
+    WebhookSecrets.fetchWebhookConfig webhookId >>= \case
+      Left err -> respondError err
+      Right (WebhookConfig {uri}) -> pure uri
+  subscription <- PG.runTransaction $ do NotifQ.expectNotificationSubscription (ProjectSubscriptionOwner projectId) subscriptionId
   pure $
     ProjectWebhook
-      { url,
-        events = topics,
-        notificationSubscriptionId = subscriptionId,
-        createdAt = Nothing,
-        updatedAt = Nothing
+      { projectWebhookUri = uri,
+        projectWebhookEvents = subscription.subscriptionTopics,
+        projectWebhookNotificationSubscriptionId = subscription.subscriptionId,
+        projectWebhookCreatedAt = subscription.subscriptionCreatedAt,
+        projectWebhookUpdatedAt = subscription.subscriptionUpdatedAt
       }
 
 deleteProjectWebhook :: UserId -> NotificationSubscriptionId -> WebApp ()

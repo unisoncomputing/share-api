@@ -16,13 +16,14 @@ module Share.Notifications.Queries
     createNotificationSubscription,
     deleteNotificationSubscription,
     updateNotificationSubscription,
-    getNotificationSubscription,
+    expectNotificationSubscription,
     hydrateEventPayload,
     hasUnreadNotifications,
     updateWatchProjectSubscription,
     isUserSubscribedToWatchProject,
     listProjectWebhooks,
     webhooksForSubscription,
+    expectProjectWebhook,
   )
 where
 
@@ -204,55 +205,70 @@ deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-createWebhookDeliveryMethod :: UserId -> Text -> NotificationSubscriptionId -> Transaction e NotificationWebhookId
-createWebhookDeliveryMethod userId name subscriptionId = do
+createWebhookDeliveryMethod :: Text -> NotificationSubscriptionId -> Transaction e NotificationWebhookId
+createWebhookDeliveryMethod name subscriptionId = do
   queryExpect1Col
     [sql|
-          INSERT INTO notification_webhooks (subscriber_user_id, name, subscription_id)
-          VALUES (#{userId}, #{name}, #{subscriptionId})
+          INSERT INTO notification_webhooks (name, subscription_id)
+          VALUES (#{name}, #{subscriptionId})
           RETURNING id
         |]
 
-deleteWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> Transaction e ()
-deleteWebhookDeliveryMethod notificationUserId webhookDeliveryMethodId = do
+deleteWebhookDeliveryMethod :: NotificationWebhookId -> Transaction e ()
+deleteWebhookDeliveryMethod webhookDeliveryMethodId = do
   execute_
     [sql|
       DELETE FROM notification_webhooks
       WHERE id = #{webhookDeliveryMethodId}
-        AND subscriber_user_id = #{notificationUserId}
     |]
 
 listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscription NotificationSubscriptionId]
 listNotificationSubscriptions subscriberUserId = do
   queryListRows
     [sql|
-      SELECT ns.id, ns.scope_user_id, ns.project_id, ns.topics, ns.topic_groups, ns.filter, ns.created_at, ns.updated_at
+      SELECT
+        ns.id,
+        ns.scope_user_id,
+        ns.scope_project_id,
+        ns.subscriber_user_id,
+        ns.subscriber_project_id,
+        ns.topics,
+        ns.topic_groups,
+        ns.filter,
+        ns.created_at,
+        ns.updated_at
         FROM notification_subscriptions ns
       WHERE ns.subscriber_user_id = #{subscriberUserId}
       ORDER BY ns.created_at DESC
     |]
 
-createNotificationSubscription :: UserId -> UserId -> Maybe ProjectId -> Set NotificationTopic -> Set NotificationTopicGroup -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
-createNotificationSubscription subscriberUserId subscriptionScope subscriptionProjectId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
+createNotificationSubscription :: SubscriptionOwner -> UserId -> Maybe ProjectId -> Set NotificationTopic -> Set NotificationTopicGroup -> Maybe SubscriptionFilter -> Transaction e NotificationSubscriptionId
+createNotificationSubscription owner subscriptionScope subscriptionProjectId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
+  let (subscriberUserId, subscriberProjectId) = case owner of
+        ProjectSubscriptionOwner projectId -> (Nothing, Just projectId)
+        UserSubscriptionOwner userId -> (Just userId, Nothing)
   queryExpect1Col
     [sql|
-      INSERT INTO notification_subscriptions (subscriber_user_id, scope_user_id, project_id, topics, topic_groups, filter)
-      VALUES (#{subscriberUserId}, #{subscriptionScope}, #{subscriptionProjectId}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{Foldable.toList subscriptionTopicGroups}::notification_topic_group[], #{subscriptionFilter})
+      INSERT INTO notification_subscriptions (subscriber_user_id, subscriber_project_id, scope_user_id, scope_project_id, topics, topic_groups, filter)
+      VALUES (#{subscriberUserId}, #{subscriberProjectId}, #{subscriptionScope}, #{subscriptionProjectId}, #{Foldable.toList subscriptionTopics}::notification_topic[], #{Foldable.toList subscriptionTopicGroups}::notification_topic_group[], #{subscriptionFilter})
       RETURNING id
     |]
 
-deleteNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transaction e ()
-deleteNotificationSubscription subscriberUserId subscriptionId = do
+deleteNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Transaction e ()
+deleteNotificationSubscription owner subscriptionId = do
+  let ownerFilter = case owner of
+        UserSubscriptionOwner subscriberUserId -> [sql| subscriber_user_id = #{subscriberUserId}|]
+        ProjectSubscriptionOwner projectOwnerUserId -> [sql| subscriber_project_id = #{projectOwnerUserId} |]
   execute_
     [sql|
       DELETE FROM notification_subscriptions
       WHERE id = #{subscriptionId}
-        AND subscriber_user_id = #{subscriberUserId}
+        AND ^{ownerFilter}
     |]
 
 updateNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> Transaction e ()
 updateNotificationSubscription owner subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
-  let filter = case owner of
+  let ownerFilter = case owner of
         UserSubscriptionOwner subscriberUserId -> [sql| subscriber_user_id = #{subscriberUserId}|]
         ProjectSubscriptionOwner projectOwnerUserId -> [sql| subscriber_project_id = #{projectOwnerUserId} |]
   execute_
@@ -262,17 +278,30 @@ updateNotificationSubscription owner subscriptionId subscriptionTopics subscript
           topic_groups = COALESCE(#{Foldable.toList <$> subscriptionTopicGroups}::notification_topic_group[], topic_groups),
           filter = COALESCE(#{subscriptionFilter}, filter)
       WHERE id = #{subscriptionId}
-        AND ^{filter}
+        AND ^{ownerFilter}
     |]
 
-getNotificationSubscription :: UserId -> NotificationSubscriptionId -> Transaction e (NotificationSubscription NotificationSubscriptionId)
-getNotificationSubscription subscriberUserId subscriptionId = do
+expectNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Transaction e (NotificationSubscription NotificationSubscriptionId)
+expectNotificationSubscription subscriptionOwner subscriptionId = do
+  let ownerFilter = case subscriptionOwner of
+        UserSubscriptionOwner subscriberUserId -> [sql| ns.subscriber_user_id = #{subscriberUserId}|]
+        ProjectSubscriptionOwner projectOwnerUserId -> [sql| ns.subscriber_project_id = #{projectOwnerUserId} |]
   queryExpect1Row
     [sql|
-      SELECT ns.id, ns.scope_user_id, ns.topics, ns.topic_groups, ns.filter, ns.created_at, ns.updated_at
+      SELECT
+        ns.id,
+        ns.scope_user_id,
+        ns.scope_project_id,
+        ns.subscriber_user_id,
+        ns.subscriber_project_id,
+        ns.topics,
+        ns.topic_groups,
+        ns.filter,
+        ns.created_at,
+        ns.updated_at
         FROM notification_subscriptions ns
       WHERE ns.id = #{subscriptionId}
-        AND ns.subscriber_user_id = #{subscriberUserId}
+        AND ^{ownerFilter}
     |]
 
 -- | Events are complex, so for now we hydrate them one at a time using a simple traverse
@@ -473,7 +502,7 @@ updateWatchProjectSubscription userId projId shouldBeSubscribed = do
             FROM projects p
           WHERE p.id = #{projId}
         |]
-      Just <$> createNotificationSubscription userId projectOwnerUserId (Just projId) mempty (Set.singleton WatchProject) (Just filter)
+      Just <$> createNotificationSubscription (UserSubscriptionOwner userId) projectOwnerUserId (Just projId) mempty (Set.singleton WatchProject) (Just filter)
     _ -> pure Nothing
 
 isUserSubscribedToWatchProject :: UserId -> ProjectId -> Transaction e (Maybe NotificationSubscriptionId)
@@ -506,6 +535,9 @@ listProjectWebhooks caller projectId = do
         -- individual topic events.
         ns.id,
         ns.scope_user_id,
+        ns.scope_project_id,
+        ns.subscriber_user_id,
+        ns.subscriber_project_id,
         ns.topics,
         ns.topic_groups,
         ns.filter,
@@ -519,11 +551,23 @@ listProjectWebhooks caller projectId = do
     |]
     <&> fmap (\((webhookId, webhookName) PG.:. subscription) -> (webhookId, webhookName, subscription))
 
+-- | Gets the (first) webhook associated with a project webhook notification.
+expectProjectWebhook :: ProjectId -> NotificationSubscriptionId -> PG.Transaction e (NotificationWebhookId, Text)
+expectProjectWebhook projectId subscriptionId = do
+  PG.queryExpect1Row @(NotificationWebhookId, Text)
+    [PG.sql|
+      SELECT nw.id, nw.name
+        FROM notification_webhooks nw
+      WHERE nw.subscription_id = #{subscriptionId}
+        AND nw.subscriber_project_id = #{projectId}
+      LIMIT 1
+    |]
+
 webhooksForSubscription :: NotificationSubscriptionId -> Transaction e [NotificationWebhookId]
 webhooksForSubscription subscriptionId = do
   PG.queryListCol
     [PG.sql|
-      SELECT nbw.webhook_id
-        FROM notification_by_webhook nbw
-      WHERE nbw.subscription_id = #{subscriptionId}
+      SELECT nw.id
+        FROM notification_webhooks nw
+      WHERE nw.subscription_id = #{subscriptionId}
     |]
