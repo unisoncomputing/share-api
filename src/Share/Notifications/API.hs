@@ -5,14 +5,9 @@ module Share.Notifications.API
   ( API,
     Routes (..),
     HubEntriesRoutes (..),
-    SubscriptionRoutes (..),
     GetHubEntriesCursor,
     StatusFilter (..),
     UpdateHubEntriesRequest (..),
-    GetSubscriptionsResponse (..),
-    CreateSubscriptionRequest (..),
-    CreateSubscriptionResponse (..),
-    UpdateSubscriptionRequest (..),
   )
 where
 
@@ -25,7 +20,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
-import Share.Notifications.Types (HydratedEvent, NotificationHubEntry, NotificationStatus, NotificationSubscription, NotificationTopic, NotificationTopicGroup, SubscriptionFilter)
+import Share.Notifications.Types (HydratedEvent, NotificationHubEntry, NotificationStatus)
 import Share.OAuth.Session (AuthenticatedUserId)
 import Share.Prelude
 import Share.Utils.API (Cursor, Paged)
@@ -35,8 +30,7 @@ type API = NamedRoutes Routes
 
 data Routes mode
   = Routes
-  { hubRoutes :: mode :- "hub" :> NamedRoutes HubEntriesRoutes,
-    subscriptionsRoutes :: mode :- "subscriptions" :> NamedRoutes SubscriptionRoutes
+  { hubRoutes :: mode :- "hub" :> NamedRoutes HubEntriesRoutes
   }
   deriving stock (Generic)
 
@@ -46,113 +40,6 @@ data HubEntriesRoutes mode
     updateHubEntriesEndpoint :: mode :- UpdateHubEntriesEndpoint
   }
   deriving stock (Generic)
-
-data SubscriptionRoutes mode
-  = SubscriptionRoutes
-  { getSubscriptionsEndpoint :: mode :- GetSubscriptionsEndpoint,
-    createSubscriptionEndpoint :: mode :- CreateSubscriptionEndpoint,
-    deleteSubscriptionEndpoint :: mode :- DeleteSubscriptionEndpoint,
-    updateSubscriptionEndpoint :: mode :- UpdateSubscriptionEndpoint
-  }
-  deriving stock (Generic)
-
-type GetSubscriptionsEndpoint =
-  AuthenticatedUserId
-    :> Get '[JSON] GetSubscriptionsResponse
-
-data GetSubscriptionsResponse
-  = GetSubscriptionsResponse
-  { subscriptions :: [NotificationSubscription NotificationSubscriptionId]
-  }
-
-instance ToJSON GetSubscriptionsResponse where
-  toJSON GetSubscriptionsResponse {subscriptions} =
-    object ["subscriptions" .= subscriptions]
-
-instance FromJSON GetSubscriptionsResponse where
-  parseJSON = withObject "GetSubscriptionsResponse" $ \o -> do
-    subscriptions <- o .: "subscriptions"
-    pure GetSubscriptionsResponse {subscriptions}
-
-type CreateSubscriptionEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] CreateSubscriptionRequest
-    :> Post '[JSON] CreateSubscriptionResponse
-
-data CreateSubscriptionRequest
-  = CreateSubscriptionRequest
-  { subscriptionScope :: UserHandle,
-    subscriptionProjectId :: Maybe ProjectId,
-    subscriptionTopics :: Set NotificationTopic,
-    subscriptionTopicGroups :: Set NotificationTopicGroup,
-    subscriptionFilter :: Maybe SubscriptionFilter
-  }
-
-instance ToJSON CreateSubscriptionRequest where
-  toJSON CreateSubscriptionRequest {subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
-    object
-      [ "scope" .= subscriptionScope,
-        "projectId" .= subscriptionProjectId,
-        "topics" .= subscriptionTopics,
-        "topicGroups" .= subscriptionTopicGroups,
-        "filter" .= subscriptionFilter
-      ]
-
-instance FromJSON CreateSubscriptionRequest where
-  parseJSON = withObject "CreateSubscriptionRequest" $ \o -> do
-    subscriptionScope <- o .: "scope"
-    subscriptionProjectId <- o .:? "projectId"
-    subscriptionTopics <- o .: "topics"
-    subscriptionTopicGroups <- o .: "topicGroups"
-    subscriptionFilter <- o .:? "filter"
-    pure CreateSubscriptionRequest {subscriptionScope, subscriptionProjectId, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
-
-data CreateSubscriptionResponse
-  = CreateSubscriptionResponse
-  { subscription :: NotificationSubscription NotificationSubscriptionId
-  }
-
-instance ToJSON CreateSubscriptionResponse where
-  toJSON CreateSubscriptionResponse {subscription} =
-    object ["subscription" .= subscription]
-
-instance FromJSON CreateSubscriptionResponse where
-  parseJSON = withObject "CreateSubscriptionResponse" $ \o -> do
-    subscription <- o .: "subscription"
-    pure CreateSubscriptionResponse {subscription}
-
-type DeleteSubscriptionEndpoint =
-  AuthenticatedUserId
-    :> Capture "subscription_id" NotificationSubscriptionId
-    :> Delete '[JSON] ()
-
-type UpdateSubscriptionEndpoint =
-  AuthenticatedUserId
-    :> Capture "subscription_id" NotificationSubscriptionId
-    :> ReqBody '[JSON] UpdateSubscriptionRequest
-    :> Patch '[JSON] CreateSubscriptionResponse
-
-data UpdateSubscriptionRequest
-  = UpdateSubscriptionRequest
-  { subscriptionTopics :: Maybe (Set NotificationTopic),
-    subscriptionTopicGroups :: Maybe (Set NotificationTopicGroup),
-    subscriptionFilter :: Maybe SubscriptionFilter
-  }
-
-instance ToJSON UpdateSubscriptionRequest where
-  toJSON UpdateSubscriptionRequest {subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
-    object
-      [ "topics" .= subscriptionTopics,
-        "topicGroups" .= subscriptionTopicGroups,
-        "filter" .= subscriptionFilter
-      ]
-
-instance FromJSON UpdateSubscriptionRequest where
-  parseJSON = withObject "UpdateSubscriptionRequest" $ \o -> do
-    subscriptionTopics <- o .:? "topics"
-    subscriptionTopicGroups <- o .:? "topicGroups"
-    subscriptionFilter <- o .:? "filter"
-    pure UpdateSubscriptionRequest {subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
 
 newtype StatusFilter = StatusFilter
   { getStatusFilter :: NESet NotificationStatus
