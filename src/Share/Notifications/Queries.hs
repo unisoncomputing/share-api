@@ -5,8 +5,6 @@ module Share.Notifications.Queries
     expectEvent,
     listNotificationHubEntryPayloads,
     updateNotificationHubEntries,
-    addSubscriptionDeliveryMethods,
-    removeSubscriptionDeliveryMethods,
     listEmailDeliveryMethods,
     listWebhooks,
     createEmailDeliveryMethod,
@@ -133,70 +131,6 @@ updateNotificationHubEntries hubEntryIds status = do
       WHERE id IN (SELECT notification_id FROM to_update)
     |]
 
--- | Note: If a given delivery method belongs to a different subscriber user, it will simply be ignored,
--- this should never happen in non-malicious workflows so it's fine to ignore it.
-addSubscriptionDeliveryMethods :: UserId -> NotificationSubscriptionId -> NESet DeliveryMethodId -> Transaction e ()
-addSubscriptionDeliveryMethods subscriberUserId subscriptionId deliveryMethods = do
-  let (emailIds, webhookIds) =
-        deliveryMethods & foldMap \case
-          EmailDeliveryMethodId emailId -> ([emailId], mempty)
-          WebhookDeliveryMethodId webhookId -> (mempty, [webhookId])
-  execute_
-    [sql|
-      WITH email_ids(email_id) AS (
-        SELECT * FROM ^{singleColumnTable emailIds}
-      )
-      INSERT INTO notification_by_email (subscription_id, email_id)
-      SELECT #{subscriptionId}, ei.email_id
-        FROM email_ids ei
-        JOIN notification_emails ne ON ei.email_id = ne.id
-      WHERE ne.subscriber_user_id = #{subscriberUserId}
-      ON CONFLICT DO NOTHING
-    |]
-  execute_
-    [sql|
-      WITH webhook_ids(webhook_id) AS (
-        SELECT * FROM ^{singleColumnTable webhookIds}
-      )
-      INSERT INTO notification_by_webhook (subscription_id, webhook_id)
-      SELECT #{subscriptionId}, wi.webhook_id
-        FROM webhook_ids wi
-        JOIN notification_webhooks nw ON wi.webhook_id = nw.id
-      WHERE nw.subscriber_user_id = #{subscriberUserId}
-      ON CONFLICT DO NOTHING
-    |]
-
-removeSubscriptionDeliveryMethods :: UserId -> NotificationSubscriptionId -> NESet DeliveryMethodId -> Transaction e ()
-removeSubscriptionDeliveryMethods subscriberUserId subscriptionId deliveryMethods = do
-  let (emailIds, webhookIds) =
-        deliveryMethods & foldMap \case
-          EmailDeliveryMethodId emailId -> ([emailId], mempty)
-          WebhookDeliveryMethodId webhookId -> (mempty, [webhookId])
-  execute_
-    [sql|
-      DELETE FROM notification_by_email
-      WHERE subscription_id = #{subscriptionId}
-        AND email_id IN (SELECT * FROM ^{singleColumnTable emailIds})
-        AND EXISTS (
-          SELECT 1
-            FROM notification_emails ne
-          WHERE ne.id = email_id
-                AND ne.subscriber_user_id = #{subscriberUserId}
-        )
-    |]
-  execute_
-    [sql|
-      DELETE FROM notification_by_webhook
-      WHERE subscription_id = #{subscriptionId}
-        AND webhook_id IN (SELECT * FROM ^{singleColumnTable webhookIds})
-        AND EXISTS (
-          SELECT 1
-            FROM notification_webhooks nw
-          WHERE nw.id = webhook_id
-                AND nw.subscriber_user_id = #{subscriberUserId}
-        )
-    |]
-
 listEmailDeliveryMethods :: (QueryA m) => UserId -> Maybe NotificationSubscriptionId -> m [NotificationEmailDeliveryConfig]
 listEmailDeliveryMethods userId maySubscriptionId = do
   queryListRows
@@ -270,12 +204,12 @@ deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-createWebhookDeliveryMethod :: UserId -> Text -> Transaction e NotificationWebhookId
-createWebhookDeliveryMethod userId name = do
+createWebhookDeliveryMethod :: UserId -> Text -> NotificationSubscriptionId -> Transaction e NotificationWebhookId
+createWebhookDeliveryMethod userId name subscriptionId = do
   queryExpect1Col
     [sql|
-          INSERT INTO notification_webhooks (subscriber_user_id, name)
-          VALUES (#{userId}, #{name})
+          INSERT INTO notification_webhooks (subscriber_user_id, name, subscription_id)
+          VALUES (#{userId}, #{name}, #{subscriptionId})
           RETURNING id
         |]
 
