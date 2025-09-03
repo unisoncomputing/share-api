@@ -481,12 +481,10 @@ updateProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionI
 deleteProjectWebhookEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.NotificationSubscriptionId -> WebApp ()
 deleteProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionId = do
   caller <- AuthN.requireAuthenticatedUser session
-  Project {projectId, ownerUserId = projectOwner} <- PG.runTransactionOrRespondError $ do
+  Project {ownerUserId = projectOwner} <- PG.runTransactionOrRespondError $ do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkSubscriptionsManage caller projectOwner
-  success <- PG.runTransaction $ NotifsQ.deleteProjectWebhook caller projectId subscriptionId
-  unless success $ respondError (EntityMissing (ErrorID "webhook:not-found") "Webhook not found")
-  pure ()
+  NotifOps.deleteProjectWebhook caller subscriptionId
   where
     projectShortHand :: IDs.ProjectShortHand
     projectShortHand = IDs.ProjectShortHand {userHandle = projectUserHandle, projectSlug}

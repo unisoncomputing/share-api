@@ -24,6 +24,7 @@ module Share.Notifications.Queries
     updateWatchProjectSubscription,
     isUserSubscribedToWatchProject,
     listProjectWebhooks,
+    webhooksForSubscription,
   )
 where
 
@@ -580,3 +581,12 @@ listProjectWebhooks caller projectId = do
         AND ns.subscriber_user_id = #{caller}
     |]
     <&> fmap (\((webhookId, webhookName) PG.:. subscription) -> (webhookId, webhookName, subscription))
+
+webhooksForSubscription :: NotificationSubscriptionId -> Transaction e [NotificationWebhookId]
+webhooksForSubscription subscriptionId = do
+  PG.queryListCol
+    [PG.sql|
+      SELECT nbw.webhook_id
+        FROM notification_by_webhook nbw
+      WHERE nbw.subscription_id = #{subscriptionId}
+    |]
