@@ -38,8 +38,9 @@ ALTER TABLE notification_subscriptions
   ADD COLUMN scope_project_id UUID NULL REFERENCES projects(id) ON DELETE CASCADE,
   -- A subscription can belong to a project itself.
   ADD COLUMN subscriber_project_id UUID NULL REFERENCES projects(id) ON DELETE CASCADE,
-  -- Project subscriptions won't have a subscriber_user_id anymore, they're part of the project.
-  ALTER COLUMN subscriber_user_id SET NOT NULL,
+  -- Project subscriptions won't have a subscriber_user_id, just a subscriber_project_id.
+  -- So allow subscriber_user_id to be nullable
+  ALTER COLUMN subscriber_user_id DROP NOT NULL,
   -- Add a constraint that either subscriber_user_id or subscriber_project_id must be set, but not both.
   ADD CONSTRAINT notification_subscriptions_user_or_project CHECK (
     (subscriber_user_id IS NOT NULL AND subscriber_project_id IS NULL)
