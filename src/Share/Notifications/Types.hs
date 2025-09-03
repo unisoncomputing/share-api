@@ -666,7 +666,7 @@ instance Hasql.DecodeRow (NotificationHubEntry UserId NotificationEventData) whe
     hubEntryId <- PG.decodeField
     hubEntryStatus <- PG.decodeField
     hubEntryCreatedAt <- PG.decodeField
-    hubEntryEvent <- PG.decodeRow
+    hubEntryEvent <- PG.decodeRow @(NotificationEvent NotificationEventId UserId UTCTime NotificationEventData)
     pure $ NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus, hubEntryCreatedAt}
 
 hubEntryUserInfo_ :: Traversal (NotificationHubEntry userInfo eventPayload) (NotificationHubEntry userInfo' eventPayload) userInfo userInfo'
