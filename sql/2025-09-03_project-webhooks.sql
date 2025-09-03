@@ -71,32 +71,33 @@ UPDATE notification_events
   SET project_id = (data->>'projectId')::UUID
   WHERE data ? 'projectId';
 
--- Now update the trigger so we use the new projectid columns
+-- Rework the trigger to use the new topic groups.
 CREATE OR REPLACE FUNCTION trigger_notification_event_subscriptions()
 RETURNS TRIGGER AS $$
 DECLARE
   the_subscription_id UUID;
   the_event_id UUID;
   the_subscriber UUID;
+  rows_affected INTEGER;
 BEGIN
   SELECT NEW.id INTO the_event_id;
   FOR the_subscription_id, the_subscriber IN
     (SELECT ns.id, ns.subscriber_user_id FROM notification_subscriptions ns
       WHERE ns.scope_user_id = NEW.scope_user_id
-        AND NEW.topic = ANY(ns.topics)
-        AND (ns.scope_project_id IS NULL OR ns.scope_project_id = NEW.project_id)
+        AND ( NEW.topic = ANY(ns.topics)
+          OR EXISTS(
+              SELECT FROM notification_topic_group_topics ntgt
+              WHERE ntgt.topic_group = ANY(ns.topic_groups)
+                AND ntgt.topic = NEW.topic
+             )
+        )
         AND (ns.filter IS NULL OR NEW.data @> ns.filter)
         AND
-        -- A subscriber can be notified if:
-        -- * the event is in their own user
-        -- * or if they have permission to the resource.
-        -- * or if the subscription is attached to the project of the event.
-          ((ns.subscriber_user_id IS NOT NULL
-              AND (NEW.scope_user_id = ns.subscriber_user_id
-                    OR user_has_permission(ns.subscriber_user_id, NEW.resource_id, topic_permission(NEW.topic))
-                  )
-            )
-            OR (ns.subscriber_project_id IS NOT NULL AND ns.subscriber_project_id = NEW.project_id)
+        -- A subscriber can be notified if the event is in their scope or if they have permission to the resource.
+        -- The latter is usually a superset of the former, but the former is trivial to compute so it can help
+        -- performance to include it.
+          (NEW.scope_user_id = ns.subscriber_user_id
+            OR user_has_permission(ns.subscriber_user_id, NEW.resource_id, topic_permission(NEW.topic))
           )
     )
   LOOP
@@ -113,21 +114,32 @@ BEGIN
       WHERE nw.subscription_id = the_subscription_id
       ON CONFLICT DO NOTHING;
 
+      -- If there are any new webhooks to process, trigger workers via LISTEN/NOTIFY
+      GET DIAGNOSTICS rows_affected = ROW_COUNT;
+      IF rows_affected > 0 THEN
+        NOTIFY webhooks;
+      END IF;
+
     INSERT INTO notification_email_queue (event_id, email_id)
       SELECT the_event_id AS event_id, ne.id
       FROM notification_emails ne
       WHERE ne.subscription_id = the_subscription_id
       ON CONFLICT DO NOTHING;
 
-    -- Also add the notification to the hub.
-    -- It's possible it was already added by another subscription for this user,
-    -- in which case we just carry on.
-    INSERT INTO notification_hub_entries (event_id, user_id)
-      VALUES (the_event_id, the_subscriber)
-      -- Don't add to the hub if the subscriber is a project, 
-      -- projects don't have a hub.
-      WHERE the_subscriber IS NOT NULL
-      ON CONFLICT DO NOTHING;
+    -- If there are any new webhooks to process, trigger workers via LISTEN/NOTIFY
+    GET DIAGNOSTICS rows_affected = ROW_COUNT;
+    IF rows_affected > 0 THEN
+        NOTIFY emails;
+    END IF;
+
+    IF the_subscriber IS NOT NULL THEN
+      -- Also add the notification to the hub.
+      -- It's possible it was already added by another subscription for this user,
+      -- in which case we just carry on.
+      INSERT INTO notification_hub_entries (event_id, user_id)
+        VALUES (the_event_id, the_subscriber)
+        ON CONFLICT DO NOTHING;
+    END IF;
   END LOOP;
 
   RETURN NEW;
