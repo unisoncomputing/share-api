@@ -441,8 +441,7 @@ instance FromJSON ListProjectWebhooksResponse where
 
 data CreateProjectWebhookRequest = CreateProjectWebhookRequest
   { uri :: URIParam,
-    events :: Set NotificationTopic,
-    subscriber :: UserHandle
+    events :: Set NotificationTopic
   }
   deriving stock (Eq, Show)
 
@@ -450,15 +449,13 @@ instance ToJSON CreateProjectWebhookRequest where
   toJSON CreateProjectWebhookRequest {..} =
     object
       [ "uri" .= uri,
-        "events" .= events,
-        "subscriber" .= (IDs.toText $ PrefixedID @"@" subscriber)
+        "events" .= events
       ]
 
 instance FromJSON CreateProjectWebhookRequest where
   parseJSON = Aeson.withObject "CreateProjectWebhookRequest" $ \o -> do
     uri <- o .: "uri"
     events <- o .: "events"
-    subscriber <- o .: "subscriber"
     pure CreateProjectWebhookRequest {..}
 
 data CreateProjectWebhookResponse = CreateProjectWebhookResponse
