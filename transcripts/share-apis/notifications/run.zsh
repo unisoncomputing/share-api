@@ -16,16 +16,10 @@ fetch "$test_user" POST add-project-webhook "/users/test/projects/publictestproj
   \"events\": [\"project:contribution:created\"]
 }"
 
-# Add a subscription within the transcripts user to notifications for some select topics in any project owned by the test
-# user.
-# No filter is applied.
-fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/transcripts/notifications/subscriptions' "{
-  \"scope\": \"test\",
-  \"topics\": [
-    \"project:branch:updated\", \"project:release:created\"
-  ],
-  \"topicGroups\": [\"watch_project\"]
-}"
+# Subscribe the transcripts user to notifications for a project in the test user.
+fetch "$transcripts_user" PUT subscribe-to-other-user-project '/users/test/projects/publictestproject/subscription' '{
+  "isSubscribed": true
+}'
 
 # Create a contribution in a public project, which should trigger a notification for both users, but will be omitted
 # from 'transcripts' notification list since it's a self-notification.
