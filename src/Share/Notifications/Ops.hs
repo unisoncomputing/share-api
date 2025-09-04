@@ -159,9 +159,13 @@ deleteProjectWebhook projectId subscriptionId = do
   let owner = ProjectSubscriptionOwner projectId
   -- First fetch the webhook id associated with this subscription
   webhooks <- PG.runTransaction $ do NotifQ.webhooksForSubscription subscriptionId
+  -- Next delete the subscription, which cascades to delete the webhook rows.
+  PG.runTransaction $ do NotifQ.deleteNotificationSubscription owner subscriptionId
+  -- Now delete the webhook configs in Vault, it's possible that this fails, but
+  -- it's okay if there are dangling webhooks in vault, we can't be fully transactional here,
+  -- and it's better than having rows that point to missing secrets.
   for_ webhooks \webhookId -> do
     deleteWebhookDeliveryMethod owner webhookId
-  PG.runTransaction $ do NotifQ.deleteNotificationSubscription owner subscriptionId
 
 updateProjectWebhook :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe URIParam -> (Maybe ProjectWebhookTopics) -> WebApp ()
 updateProjectWebhook subscriptionOwner subscriptionId mayURIUpdate webhookTopics = do
