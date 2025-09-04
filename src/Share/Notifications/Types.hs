@@ -121,11 +121,13 @@ instance Aeson.FromJSON NotificationTopic where
 
 data NotificationTopicGroup
   = WatchProject
+  | AllProjectTopics
   deriving (Eq, Show, Ord)
 
 instance PG.EncodeValue NotificationTopicGroup where
   encodeValue = HasqlEncoders.enum \case
     WatchProject -> "watch_project"
+    AllProjectTopics -> "all_project_topics"
 
 instance PG.DecodeValue NotificationTopicGroup where
   decodeValue = HasqlDecoders.enum \case
@@ -135,10 +137,12 @@ instance PG.DecodeValue NotificationTopicGroup where
 instance Aeson.ToJSON NotificationTopicGroup where
   toJSON = \case
     WatchProject -> "watch_project"
+    AllProjectTopics -> "all_project_topics"
 
 instance Aeson.FromJSON NotificationTopicGroup where
   parseJSON = Aeson.withText "NotificationTopicGroup" \case
     "watch_project" -> pure WatchProject
+    "all_project_topics" -> pure AllProjectTopics
     s -> fail $ "Invalid notification topic group: " <> Text.unpack s
 
 data NotificationStatus

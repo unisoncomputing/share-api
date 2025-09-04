@@ -110,7 +110,7 @@ listProjectWebhooks projectId = do
         results <&> \(NotificationWebhookConfig {webhookDeliveryUrl = url}, _name, NotificationSubscription {subscriptionTopics, subscriptionTopicGroups, subscriptionId, subscriptionCreatedAt, subscriptionUpdatedAt}) ->
           let webhookTopics = case (Set.toList subscriptionTopicGroups, NESet.nonEmptySet subscriptionTopics) of
                 ([], Just topics) -> SelectedTopics topics
-                _ -> AllProjectTopics
+                _ -> AllTopicsInProject
            in ProjectWebhook
                 { projectWebhookUri = URIParam url,
                   projectWebhookTopics = webhookTopics,
@@ -123,7 +123,7 @@ listProjectWebhooks projectId = do
 createProjectWebhook :: ProjectId -> URIParam -> ProjectWebhookTopics -> WebApp ProjectWebhook
 createProjectWebhook projectId uri webhookTopics = do
   let (topics, topicGroups) = case webhookTopics of
-        AllProjectTopics -> (mempty, Set.singleton WatchProject)
+        AllTopicsInProject -> (mempty, Set.singleton AllProjectTopics)
         SelectedTopics ts -> (NESet.toSet ts, mempty)
   let filter = Nothing
   runInIO <- UnliftIO.askRunInIO
@@ -144,7 +144,7 @@ expectProjectWebhook projectId subscriptionId = do
   subscription <- PG.runTransaction $ do NotifQ.expectNotificationSubscription (ProjectSubscriptionOwner projectId) subscriptionId
   let subscriptionTopics = case (Set.toList $ subscription.subscriptionTopicGroups, NESet.nonEmptySet subscription.subscriptionTopics) of
         ([], Just topics) -> SelectedTopics topics
-        _ -> AllProjectTopics
+        _ -> AllTopicsInProject
   pure $
     ProjectWebhook
       { projectWebhookUri = uri,
@@ -175,7 +175,7 @@ updateProjectWebhook subscriptionOwner subscriptionId mayURIUpdate webhookTopics
         Right _ -> pure ()
   let (topics, topicGroups) = case webhookTopics of
         Nothing -> (Nothing, Nothing)
-        Just AllProjectTopics -> (Just mempty, Just $ Set.singleton WatchProject)
+        Just AllTopicsInProject -> (Just mempty, Just $ Set.singleton AllProjectTopics)
         Just (SelectedTopics ts) -> (Just $ NESet.toSet ts, Just $ mempty)
   PG.runTransaction $ NotifQ.updateNotificationSubscription subscriptionOwner subscriptionId topics topicGroups Nothing
 
