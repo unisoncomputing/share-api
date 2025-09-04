@@ -16,6 +16,8 @@ fetch "$test_user" POST add-project-webhook "/users/test/projects/publictestproj
   \"topics\": {\"type\": \"all\"}
 }"
 
+fetch "$test_user" GET list-project-webhooks "/users/test/projects/publictestproject/webhooks"
+
 # Subscribe the transcripts user to notifications for a project in the test user.
 fetch "$transcripts_user" PUT subscribe-to-other-user-project '/users/test/projects/publictestproject/subscription' '{
   "isSubscribed": true
@@ -132,3 +134,18 @@ echo "Successful webhooks: $successful_webhooks\nUnsuccessful webhooks: $unsucce
 fetch "$test_user" PUT unsubscribe-from-project '/users/test/projects/publictestproject/subscription' '{
   "isSubscribed": false
 }'
+
+# Get the project webhook id.
+project_webhook_id=$(fetch_data_jq "$test_user" GET project-webhooks-fetch '/users/test/projects/publictestproject/webhooks' '.webhooks[0].notificationSubscriptionId')
+
+# Can update project webhooks
+fetch "$test_user" PATCH update-project-webhook "/users/test/projects/publictestproject/webhooks/$project_webhook_id" "{
+  \"uri\": \"${echo_server}/good-webhook-updated\",
+  \"topics\": {\"type\": \"selected\", \"topics\": [\"project:contribution:created\"]}
+}"
+
+fetch "$test_user" GET list-project-webhooks-after-update "/users/test/projects/publictestproject/webhooks"
+
+fetch "$test_user" DELETE delete-project-webhook "/users/test/projects/publictestproject/webhooks/$project_webhook_id"
+
+fetch "$test_user" GET list-project-webhooks-after-delete "/users/test/projects/publictestproject/webhooks"

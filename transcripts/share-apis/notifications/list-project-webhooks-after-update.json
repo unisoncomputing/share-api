@@ -1,0 +1,23 @@
+{
+  "body": {
+    "webhooks": [
+      {
+        "createdAt": "<TIMESTAMP>",
+        "notificationSubscriptionId": "NS-<UUID>",
+        "topics": {
+          "topics": [
+            "project:contribution:created"
+          ],
+          "type": "selected"
+        },
+        "updatedAt": "<TIMESTAMP>",
+        "uri": "http://<HOST>:9999/good-webhook-updated"
+      }
+    ]
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
