@@ -13,7 +13,7 @@ subscription_id=$(fetch_data_jq "$test_user" PUT subscribe-to-watch-project '/us
 
 fetch "$test_user" POST add-project-webhook "/users/test/projects/publictestproject/webhooks" "{
   \"uri\": \"${echo_server}/good-webhook\",
-  \"events\": [\"project:contribution:created\"]
+  \"topics\": {\"type\": \"all\"}
 }"
 
 # Subscribe the transcripts user to notifications for a project in the test user.
