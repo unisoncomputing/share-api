@@ -13,6 +13,8 @@ module Share.Notifications.Ops
 where
 
 import Control.Lens
+import Data.Set qualified as Set
+import Data.Set.NonEmpty qualified as NESet
 import Share.App (AppM)
 import Share.IDs
 import Share.Notifications.Queries qualified as NotifQ
@@ -27,7 +29,7 @@ import Share.Project (Project (..))
 import Share.Utils.URI (URIParam (..))
 import Share.Web.App (WebApp)
 import Share.Web.Errors (respondError)
-import Share.Web.Share.Projects.Types (ProjectWebhook (..))
+import Share.Web.Share.Projects.Types (ProjectWebhook (..), ProjectWebhookTopics (..))
 import Share.Web.UI.Links qualified as Links
 import UnliftIO qualified
 
@@ -105,19 +107,24 @@ listProjectWebhooks projectId = do
               Right (WebhookConfig {uri = URIParam uri}) -> do
                 pure $ (NotificationWebhookConfig webhookId uri)
   let webhooks =
-        results <&> \(NotificationWebhookConfig {webhookDeliveryUrl = url}, _name, NotificationSubscription {subscriptionTopics, subscriptionId, subscriptionCreatedAt, subscriptionUpdatedAt}) ->
-          ProjectWebhook
-            { projectWebhookUri = URIParam url,
-              projectWebhookEvents = subscriptionTopics,
-              projectWebhookNotificationSubscriptionId = subscriptionId,
-              projectWebhookCreatedAt = subscriptionCreatedAt,
-              projectWebhookUpdatedAt = subscriptionUpdatedAt
-            }
+        results <&> \(NotificationWebhookConfig {webhookDeliveryUrl = url}, _name, NotificationSubscription {subscriptionTopics, subscriptionTopicGroups, subscriptionId, subscriptionCreatedAt, subscriptionUpdatedAt}) ->
+          let webhookTopics = case (Set.toList subscriptionTopicGroups, NESet.nonEmptySet subscriptionTopics) of
+                ([], Just topics) -> SelectedTopics topics
+                _ -> AllTopics
+           in ProjectWebhook
+                { projectWebhookUri = URIParam url,
+                  projectWebhookTopics = webhookTopics,
+                  projectWebhookNotificationSubscriptionId = subscriptionId,
+                  projectWebhookCreatedAt = subscriptionCreatedAt,
+                  projectWebhookUpdatedAt = subscriptionUpdatedAt
+                }
   pure webhooks
 
-createProjectWebhook :: ProjectId -> URIParam -> Set NotificationTopic -> WebApp ProjectWebhook
-createProjectWebhook projectId uri topics = do
-  let topicGroups = mempty
+createProjectWebhook :: ProjectId -> URIParam -> ProjectWebhookTopics -> WebApp ProjectWebhook
+createProjectWebhook projectId uri webhookTopics = do
+  let (topics, topicGroups) = case webhookTopics of
+        AllTopics -> (mempty, Set.singleton WatchProject)
+        SelectedTopics ts -> (NESet.toSet ts, mempty)
   let filter = Nothing
   runInIO <- UnliftIO.askRunInIO
   subscriptionId <- PG.runTransactionOrRespondError $ do
@@ -135,10 +142,13 @@ expectProjectWebhook projectId subscriptionId = do
       Left err -> respondError err
       Right (WebhookConfig {uri}) -> pure uri
   subscription <- PG.runTransaction $ do NotifQ.expectNotificationSubscription (ProjectSubscriptionOwner projectId) subscriptionId
+  let subscriptionTopics = case (Set.toList $ subscription.subscriptionTopicGroups, NESet.nonEmptySet subscription.subscriptionTopics) of
+        ([], Just topics) -> SelectedTopics topics
+        _ -> AllTopics
   pure $
     ProjectWebhook
       { projectWebhookUri = uri,
-        projectWebhookEvents = subscription.subscriptionTopics,
+        projectWebhookTopics = subscriptionTopics,
         projectWebhookNotificationSubscriptionId = subscription.subscriptionId,
         projectWebhookCreatedAt = subscription.subscriptionCreatedAt,
         projectWebhookUpdatedAt = subscription.subscriptionUpdatedAt
@@ -153,8 +163,8 @@ deleteProjectWebhook projectId subscriptionId = do
     deleteWebhookDeliveryMethod owner webhookId
   PG.runTransaction $ do NotifQ.deleteNotificationSubscription owner subscriptionId
 
-updateProjectWebhook :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe URIParam -> (Maybe (Set NotificationTopic)) -> WebApp ()
-updateProjectWebhook subscriptionOwner subscriptionId mayURIUpdate topics = do
+updateProjectWebhook :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe URIParam -> (Maybe ProjectWebhookTopics) -> WebApp ()
+updateProjectWebhook subscriptionOwner subscriptionId mayURIUpdate webhookTopics = do
   for_ mayURIUpdate \uri -> do
     -- First fetch the webhook ids associated with this subscription
     webhooks <- PG.runTransaction $ do NotifQ.webhooksForSubscription subscriptionId
@@ -163,7 +173,11 @@ updateProjectWebhook subscriptionOwner subscriptionId mayURIUpdate topics = do
       WebhookSecrets.putWebhookConfig webhookId (WebhookConfig uri) >>= \case
         Left err -> respondError err
         Right _ -> pure ()
-  PG.runTransaction $ NotifQ.updateNotificationSubscription subscriptionOwner subscriptionId topics mempty Nothing
+  let (topics, topicGroups) = case webhookTopics of
+        Nothing -> (Nothing, Nothing)
+        Just AllTopics -> (Just mempty, Just $ Set.singleton WatchProject)
+        Just (SelectedTopics ts) -> (Just $ NESet.toSet ts, Just $ mempty)
+  PG.runTransaction $ NotifQ.updateNotificationSubscription subscriptionOwner subscriptionId topics topicGroups Nothing
 
 updateWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> URIParam -> WebApp ()
 updateWebhookDeliveryMethod notificationUser webhookDeliveryMethodId url = do

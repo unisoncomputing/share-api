@@ -32,12 +32,15 @@ module Share.Web.Share.Projects.Types
     CreateProjectWebhookResponse (..),
     UpdateProjectWebhookRequest (..),
     UpdateProjectWebhookResponse (..),
+    ProjectWebhookTopics (..),
   )
 where
 
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Set qualified as Set
+import Data.Set.NonEmpty (NESet)
+import Data.Set.NonEmpty qualified as NESet
 import Data.Time (UTCTime)
 import Share.IDs
 import Share.IDs qualified as IDs
@@ -385,30 +388,49 @@ instance Aeson.ToJSON CatalogCategory where
         "projects" .= projects
       ]
 
+data ProjectWebhookTopics
+  = SelectedTopics (NESet NotificationTopic)
+  | AllTopics
+  deriving stock (Eq, Show)
+
+instance ToJSON ProjectWebhookTopics where
+  toJSON (SelectedTopics topics) =
+    object
+      [ "type" .= ("selected" :: Text),
+        "topics" .= topics
+      ]
+  toJSON AllTopics =
+    object
+      [ "type" .= ("all" :: Text)
+      ]
+
+instance FromJSON ProjectWebhookTopics where
+  parseJSON = Aeson.withObject "ProjectWebhookTopics" $ \o -> do
+    typ <- o .: "type"
+    case typ of
+      ("selected" :: Text) -> do
+        topics <- Set.fromList <$> (o .: "topics")
+        case NESet.nonEmptySet topics of
+          Nothing -> fail "SelectedTopics must have at least one topic"
+          Just neset -> pure $ SelectedTopics neset
+      ("all" :: Text) -> pure AllTopics
+      _ -> fail $ "Unknown ProjectWebhookTopics type: " <> show typ
+
 -- | This type provides a view over the subscription <-> webhook many-to-many view.
 data ProjectWebhook = ProjectWebhook
   { projectWebhookUri :: URIParam,
-    projectWebhookEvents :: Set NotificationTopic,
+    projectWebhookTopics :: ProjectWebhookTopics,
     projectWebhookNotificationSubscriptionId :: NotificationSubscriptionId,
     projectWebhookCreatedAt :: Maybe UTCTime,
     projectWebhookUpdatedAt :: Maybe UTCTime
   }
   deriving stock (Eq, Show)
 
-instance PG.DecodeRow ProjectWebhook where
-  decodeRow = do
-    projectWebhookUri <- PG.decodeField
-    projectWebhookEvents <- Set.fromList <$> PG.decodeField
-    projectWebhookNotificationSubscriptionId <- PG.decodeField
-    projectWebhookCreatedAt <- PG.decodeField
-    projectWebhookUpdatedAt <- PG.decodeField
-    pure ProjectWebhook {..}
-
 instance ToJSON ProjectWebhook where
   toJSON ProjectWebhook {..} =
     object
       [ "uri" .= projectWebhookUri,
-        "events" .= projectWebhookEvents,
+        "topics" .= projectWebhookTopics,
         "notificationSubscriptionId" .= projectWebhookNotificationSubscriptionId,
         "createdAt" .= projectWebhookCreatedAt,
         "updatedAt" .= projectWebhookUpdatedAt
@@ -417,7 +439,7 @@ instance ToJSON ProjectWebhook where
 instance FromJSON ProjectWebhook where
   parseJSON = Aeson.withObject "ProjectWebhook" $ \o -> do
     projectWebhookUri <- o .: "uri"
-    projectWebhookEvents <- o .: "events"
+    projectWebhookTopics <- o .: "topics"
     projectWebhookNotificationSubscriptionId <- o .: "notificationSubscriptionId"
     projectWebhookCreatedAt <- o .: "createdAt"
     projectWebhookUpdatedAt <- o .: "updatedAt"
@@ -441,7 +463,7 @@ instance FromJSON ListProjectWebhooksResponse where
 
 data CreateProjectWebhookRequest = CreateProjectWebhookRequest
   { uri :: URIParam,
-    events :: Set NotificationTopic
+    topics :: ProjectWebhookTopics
   }
   deriving stock (Eq, Show)
 
@@ -449,13 +471,13 @@ instance ToJSON CreateProjectWebhookRequest where
   toJSON CreateProjectWebhookRequest {..} =
     object
       [ "uri" .= uri,
-        "events" .= events
+        "topics" .= topics
       ]
 
 instance FromJSON CreateProjectWebhookRequest where
   parseJSON = Aeson.withObject "CreateProjectWebhookRequest" $ \o -> do
     uri <- o .: "uri"
-    events <- o .: "events"
+    topics <- o .: "topics"
     pure CreateProjectWebhookRequest {..}
 
 data CreateProjectWebhookResponse = CreateProjectWebhookResponse
@@ -476,7 +498,7 @@ instance FromJSON CreateProjectWebhookResponse where
 
 data UpdateProjectWebhookRequest = UpdateProjectWebhookRequest
   { uri :: Maybe URIParam,
-    events :: Maybe (Set NotificationTopic)
+    topics :: Maybe ProjectWebhookTopics
   }
   deriving stock (Eq, Show)
 
@@ -484,13 +506,13 @@ instance ToJSON UpdateProjectWebhookRequest where
   toJSON UpdateProjectWebhookRequest {..} =
     object
       [ "uri" .= uri,
-        "events" .= events
+        "topics" .= topics
       ]
 
 instance FromJSON UpdateProjectWebhookRequest where
   parseJSON = Aeson.withObject "UpdateProjectWebhookRequest" $ \o -> do
     uri <- o .:? "uri"
-    events <- o .:? "events"
+    topics <- o .:? "topics"
     pure UpdateProjectWebhookRequest {..}
 
 data UpdateProjectWebhookResponse = UpdateProjectWebhookResponse
