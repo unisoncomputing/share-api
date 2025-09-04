@@ -1,0 +1,18 @@
+{
+  "body": {
+    "webhook": {
+      "createdAt": "<TIMESTAMP>",
+      "notificationSubscriptionId": "NS-<UUID>",
+      "topics": {
+        "type": "all"
+      },
+      "updatedAt": "<TIMESTAMP>",
+      "uri": "http://<HOST>:9999/good-webhook"
+    }
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}
