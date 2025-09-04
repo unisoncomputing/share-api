@@ -1,5 +1,7 @@
 {
-  "body": [],
+  "body": {
+    "subscriptionId": "NS-<UUID>"
+  },
   "status": [
     {
       "status_code": 200

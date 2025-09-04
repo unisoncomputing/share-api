@@ -110,6 +110,7 @@
           },
           "id": "EVENT-<UUID>",
           "occurredAt": "<TIMESTAMP>",
+          "projectId": "P-<UUID>",
           "resourceId": "RES-<UUID>",
           "scope": {
             "info": {
@@ -156,6 +157,7 @@
           },
           "id": "EVENT-<UUID>",
           "occurredAt": "<TIMESTAMP>",
+          "projectId": "P-<UUID>",
           "resourceId": "RES-<UUID>",
           "scope": {
             "info": {
