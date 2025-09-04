@@ -455,25 +455,25 @@ listProjectWebhooksEndpoint session projectUserHandle projectSlug = do
     projectShortHand = IDs.ProjectShortHand {userHandle = projectUserHandle, projectSlug}
 
 createProjectWebhookEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> CreateProjectWebhookRequest -> WebApp CreateProjectWebhookResponse
-createProjectWebhookEndpoint session projectUserHandle projectSlug (CreateProjectWebhookRequest {uri, events}) = do
+createProjectWebhookEndpoint session projectUserHandle projectSlug (CreateProjectWebhookRequest {uri, topics}) = do
   caller <- AuthN.requireAuthenticatedUser session
   Project {projectId} <- PG.runTransactionOrRespondError $ do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectSubscriptionsManage caller projectId
-  webhook <- NotifOps.createProjectWebhook projectId uri events
+  webhook <- NotifOps.createProjectWebhook projectId uri topics
   pure $ CreateProjectWebhookResponse {webhook}
   where
     projectShortHand :: IDs.ProjectShortHand
     projectShortHand = IDs.ProjectShortHand {userHandle = projectUserHandle, projectSlug}
 
 updateProjectWebhookEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.NotificationSubscriptionId -> UpdateProjectWebhookRequest -> WebApp UpdateProjectWebhookResponse
-updateProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionId (UpdateProjectWebhookRequest {uri = mayURIUpdate, events}) = do
+updateProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionId (UpdateProjectWebhookRequest {uri = mayURIUpdate, topics}) = do
   caller <- AuthN.requireAuthenticatedUser session
   Project {projectId} <- PG.runTransactionOrRespondError $ do
     Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectSubscriptionsManage caller projectId
   let owner = ProjectSubscriptionOwner projectId
-  NotifOps.updateProjectWebhook owner subscriptionId mayURIUpdate events
+  NotifOps.updateProjectWebhook owner subscriptionId mayURIUpdate topics
   webhook <- NotifOps.expectProjectWebhook projectId subscriptionId
   pure $ UpdateProjectWebhookResponse {webhook}
   where
