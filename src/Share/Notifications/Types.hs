@@ -132,6 +132,7 @@ instance PG.EncodeValue NotificationTopicGroup where
 instance PG.DecodeValue NotificationTopicGroup where
   decodeValue = HasqlDecoders.enum \case
     "watch_project" -> Just WatchProject
+    "all_project_topics" -> Just AllProjectTopics
     _ -> Nothing
 
 instance Aeson.ToJSON NotificationTopicGroup where

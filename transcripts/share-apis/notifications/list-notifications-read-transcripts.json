@@ -14,16 +14,37 @@
             "kind": "user"
           },
           "data": {
-            "kind": "project:branch:updated",
-            "link": "http://<HOST>:1234/@test/publictestproject/code/newbranch/latest",
+            "kind": "project:contribution:updated",
+            "link": "http://<HOST>:1234/@test/publictestproject/contributions/1",
             "payload": {
-              "branch": {
-                "branchContributorHandle": null,
-                "branchContributorUserId": null,
-                "branchId": "B-<UUID>",
-                "branchName": "newbranch",
-                "branchShortHand": "newbranch",
-                "projectBranchShortHand": "@test/publictestproject/newbranch"
+              "contribution": {
+                "author": {
+                  "avatarUrl": null,
+                  "handle": "test",
+                  "name": null,
+                  "userId": "U-<UUID>"
+                },
+                "contributionId": "C-<UUID>",
+                "description": "This contribution addresses an issue where users were unable to log in due to a validation error in the authentication process.\n\n## Changes made:\n\n* Modified the validation logic for the Auth type to properly authenticate users.\n* Added unit tests to ensure the authentication process works as expected.\n\n## Testing:\n\nI tested this change locally on my development environment and confirmed that users can now log in without any issues. All unit tests are passing.",
+                "number": 1,
+                "sourceBranch": {
+                  "branchContributorHandle": null,
+                  "branchContributorUserId": null,
+                  "branchId": "B-<UUID>",
+                  "branchName": "main",
+                  "branchShortHand": "main",
+                  "projectBranchShortHand": "@test/publictestproject/main"
+                },
+                "status": "closed",
+                "targetBranch": {
+                  "branchContributorHandle": "transcripts",
+                  "branchContributorUserId": "U-<UUID>",
+                  "branchId": "B-<UUID>",
+                  "branchName": "contribution",
+                  "branchShortHand": "@transcripts/contribution",
+                  "projectBranchShortHand": "@test/publictestproject/@transcripts/contribution"
+                },
+                "title": "Fix issue with user authentication"
               },
               "project": {
                 "projectId": "P-<UUID>",
@@ -31,11 +52,16 @@
                 "projectOwnerUserId": "U-<UUID>",
                 "projectShortHand": "@test/publictestproject",
                 "projectSlug": "publictestproject"
+              },
+              "status_update": {
+                "newStatus": "closed",
+                "oldStatus": "in_review"
               }
             }
           },
           "id": "EVENT-<UUID>",
           "occurredAt": "<TIMESTAMP>",
+          "projectId": "P-<UUID>",
           "resourceId": "RES-<UUID>",
           "scope": {
             "info": {

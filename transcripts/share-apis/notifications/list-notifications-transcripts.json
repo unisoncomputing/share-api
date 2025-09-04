@@ -14,55 +14,6 @@
             "kind": "user"
           },
           "data": {
-            "kind": "project:branch:updated",
-            "link": "http://<HOST>:1234/@test/publictestproject/code/newbranch/latest",
-            "payload": {
-              "branch": {
-                "branchContributorHandle": null,
-                "branchContributorUserId": null,
-                "branchId": "B-<UUID>",
-                "branchName": "newbranch",
-                "branchShortHand": "newbranch",
-                "projectBranchShortHand": "@test/publictestproject/newbranch"
-              },
-              "project": {
-                "projectId": "P-<UUID>",
-                "projectOwnerHandle": "test",
-                "projectOwnerUserId": "U-<UUID>",
-                "projectShortHand": "@test/publictestproject",
-                "projectSlug": "publictestproject"
-              }
-            }
-          },
-          "id": "EVENT-<UUID>",
-          "occurredAt": "<TIMESTAMP>",
-          "resourceId": "RES-<UUID>",
-          "scope": {
-            "info": {
-              "avatarUrl": null,
-              "handle": "test",
-              "name": null,
-              "userId": "U-<UUID>"
-            },
-            "kind": "user"
-          }
-        },
-        "id": "NOT-<UUID>",
-        "status": "unread"
-      },
-      {
-        "createdAt": "<TIMESTAMP>",
-        "event": {
-          "actor": {
-            "info": {
-              "avatarUrl": null,
-              "handle": "test",
-              "name": null,
-              "userId": "U-<UUID>"
-            },
-            "kind": "user"
-          },
-          "data": {
             "kind": "project:contribution:updated",
             "link": "http://<HOST>:1234/@test/publictestproject/contributions/1",
             "payload": {
