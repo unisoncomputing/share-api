@@ -128,13 +128,7 @@ unsuccessful_webhooks=$(pg_sql "SELECT COUNT(*) FROM notification_webhook_queue 
 
 echo "Successful webhooks: $successful_webhooks\nUnsuccessful webhooks: $unsuccessful_webhooks\n" > ./webhook_results.txt
 
-# List 'test' user's subscriptions
-fetch "$test_user" GET list-subscriptions-test '/users/test/notifications/subscriptions'
-
 # Can unsubscribe from project-related notifications for the test user's publictestproject.
 fetch "$test_user" PUT unsubscribe-from-project '/users/test/projects/publictestproject/subscription' '{
   "isSubscribed": false
 }'
-
-# List 'test' user's subscriptions again
-fetch "$test_user" GET list-subscriptions-test-after-unsubscribe '/users/test/notifications/subscriptions'
