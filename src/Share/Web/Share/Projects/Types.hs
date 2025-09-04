@@ -390,7 +390,7 @@ instance Aeson.ToJSON CatalogCategory where
 
 data ProjectWebhookTopics
   = SelectedTopics (NESet NotificationTopic)
-  | AllProjectTopics
+  | AllTopicsInProject
   deriving stock (Eq, Show)
 
 instance ToJSON ProjectWebhookTopics where
@@ -399,7 +399,7 @@ instance ToJSON ProjectWebhookTopics where
       [ "type" .= ("selected" :: Text),
         "topics" .= topics
       ]
-  toJSON AllProjectTopics =
+  toJSON AllTopicsInProject =
     object
       [ "type" .= ("all" :: Text)
       ]
@@ -413,7 +413,7 @@ instance FromJSON ProjectWebhookTopics where
         case NESet.nonEmptySet topics of
           Nothing -> fail "SelectedTopics must have at least one topic"
           Just neset -> pure $ SelectedTopics neset
-      ("all" :: Text) -> pure AllProjectTopics
+      ("all" :: Text) -> pure AllTopicsInProject
       _ -> fail $ "Unknown ProjectWebhookTopics type: " <> show typ
 
 -- | This type provides a view over the subscription <-> webhook many-to-many view.

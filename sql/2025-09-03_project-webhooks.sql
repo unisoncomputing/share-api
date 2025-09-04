@@ -1,6 +1,19 @@
 -- This changes webhooks such that each webhook and email delivery method is assigned to exactly one subscription, rather than the
 -- previous many-to-many relationship.
 
+-- Add a new topic group which represents _all_ activity in a project.
+ALTER TYPE notification_topic_group ADD VALUE IF NOT EXISTS 'all_project_topics';
+
+INSERT INTO notification_topic_group_topics (topic_group, topic)
+  VALUES ('all_project_topics', 'project:branch:updated'),
+         ('all_project_topics', 'project:contribution:created'),
+         ('all_project_topics', 'project:contribution:updated'),
+         ('all_project_topics', 'project:contribution:comment'),
+         ('all_project_topics', 'project:ticket:created'),
+         ('all_project_topics', 'project:ticket:updated'),
+         ('all_project_topics', 'project:ticket:comment'),
+         ('all_project_topics', 'project:release:created');
+
 -- WEBHOOKS
 ALTER TABLE notification_webhooks
   ADD COLUMN subscription_id UUID NULL REFERENCES notification_subscriptions(id) ON DELETE CASCADE,
