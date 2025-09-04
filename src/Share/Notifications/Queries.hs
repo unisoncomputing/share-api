@@ -140,11 +140,7 @@ listEmailDeliveryMethods userId maySubscriptionId = do
         FROM notification_emails ne
       WHERE ne.subscriber_user_id = #{userId}
         AND (#{maySubscriptionId} IS NULL
-              OR EXISTS(
-                   SELECT FROM notification_by_email nbe
-                     WHERE nbe.subscription_id = #{maySubscriptionId}
-                           AND nbe.email_id = ne.id
-                       )
+              OR ne.subscription_id = #{maySubscriptionId}
             )
       ORDER BY ne.email
     |]
@@ -157,11 +153,7 @@ listWebhooks userId maySubscriptionId = do
         FROM notification_webhooks nw
       WHERE nw.subscriber_user_id = #{userId}
         AND (#{maySubscriptionId} IS NULL
-              OR EXISTS(
-                   SELECT FROM notification_by_webhook nbw
-                     WHERE nbw.subscription_id = #{maySubscriptionId}
-                           AND nbw.webhook_id = nw.id
-                       )
+              OR nw.subscription_id = #{maySubscriptionId}
             )
         ORDER BY nw.created_at
     |]
@@ -551,8 +543,7 @@ listProjectWebhooks projectId = do
         ns.created_at,
         ns.updated_at
       FROM notification_subscriptions ns
-      JOIN notification_by_webhook nbw ON ns.id = nbw.subscription_id
-      JOIN notification_webhooks nw ON nbw.webhook_id = nw.id
+      JOIN notification_webhooks nw ON nw.subscription_id = ns.id
       WHERE ns.subscriber_project_id = #{projectId}
     |]
     <&> fmap (\((webhookId, webhookName) PG.:. subscription) -> (webhookId, webhookName, subscription))
