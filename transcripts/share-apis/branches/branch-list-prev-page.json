@@ -61,7 +61,7 @@
         "updatedAt": "<TIMESTAMP>"
       }
     ],
-    "nextCursor": null,
+    "nextCursor": "<CURSOR>",
     "prevCursor": null
   },
   "status": [

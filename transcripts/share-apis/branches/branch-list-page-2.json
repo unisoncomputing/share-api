@@ -2,7 +2,7 @@
   "body": {
     "items": [
       {
-        "branchRef": "main",
+        "branchRef": "feature",
         "causalHash": "#sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg",
         "contributions": [],
         "createdAt": "<TIMESTAMP>",
@@ -22,8 +22,8 @@
         "updatedAt": "<TIMESTAMP>"
       }
     ],
-    "nextCursor": null,
-    "prevCursor": null
+    "nextCursor": "<CURSOR>",
+    "prevCursor": "<CURSOR>"
   },
   "status": [
     {

@@ -707,59 +707,69 @@ listBranchesByProject ::
   BranchKindFilter ->
   ProjectId ->
   -- | (branch, contributorHandle)
-  PG.Transaction e [(Branch CausalId, Maybe UserHandle)]
+  PG.Transaction e (Paged (UTCTime, BranchId) (Branch CausalId, Maybe UserHandle))
 listBranchesByProject limit mayCursor mayBranchNamePrefix mayContributorQuery kind projectId = do
-  let kindFilter = case kind of
-        AllBranchKinds -> ""
-        OnlyContributorBranches -> "AND b.contributor_id IS NOT NULL"
-        OnlyCoreBranches -> "AND b.contributor_id IS NULL"
-  let contributorFilter = case mayContributorQuery of
-        Nothing -> mempty
-        -- Allow null contributor here for the case where we're listing 'all' branch kinds.
-        Just (Left contributorId) -> [PG.sql| AND (b.contributor_id IS NULL OR (b.contributor_id = #{contributorId})) |]
-        Just (Right (Query contributorHandlePrefix)) -> [PG.sql| AND (contributor.handle IS NULL OR starts_with(contributor.handle, #{contributorHandlePrefix})) |]
-  let branchNameFilter = case mayBranchNamePrefix of
-        Nothing -> mempty
-        Just (Query branchNamePrefix) -> [PG.sql| AND starts_with(b.name, #{branchNamePrefix}) |]
-  let cursorFilter = case mayCursor of
-        Nothing -> mempty
-        Just (Cursor (beforeTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId})|]
-        Just (Cursor (afterTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId})|]
-  let sql =
-        intercalateMap
-          "\n"
-          id
-          [ ( [PG.sql|
-        SELECT
-          b.id,
-          b.project_id,
-          b.name,
-          b.contributor_id,
-          b.causal_id,
-          b.merge_target_branch_id,
-          b.created_at,
-          b.updated_at,
-          b.creator_id,
-          contributor.handle
-        FROM project_branches b
-        LEFT JOIN users AS contributor ON contributor.id = b.contributor_id
-        WHERE
-          b.deleted_at IS NULL
-          AND b.project_id = #{projectId}
+  results <- query limit (mkCursorFilter mayCursor)
+  let paged@(Paged {prevCursor, nextCursor}) =
+        results
+          & pagedOn (\(Branch {updatedAt, branchId}, _) -> (updatedAt, branchId))
+  hasPrevPage <- not . null <$> query 1 (mkCursorFilter prevCursor)
+  hasNextPage <- not . null <$> query 1 (mkCursorFilter nextCursor)
+  pure $ guardPaged hasPrevPage hasNextPage paged
+  where
+    mkCursorFilter cursor = case cursor of
+      Nothing -> mempty
+      Just (Cursor (afterTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId})|]
+      Just (Cursor (beforeTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId})|]
+    kindFilter = case kind of
+      AllBranchKinds -> ""
+      OnlyContributorBranches -> "AND b.contributor_id IS NOT NULL"
+      OnlyCoreBranches -> "AND b.contributor_id IS NULL"
+    contributorFilter = case mayContributorQuery of
+      Nothing -> mempty
+      -- Allow null contributor here for the case where we're listing 'all' branch kinds.
+      Just (Left contributorId) -> [PG.sql| AND (b.contributor_id IS NULL OR (b.contributor_id = #{contributorId})) |]
+      Just (Right (Query contributorHandlePrefix)) -> [PG.sql| AND (contributor.handle IS NULL OR starts_with(contributor.handle, #{contributorHandlePrefix})) |]
+    branchNameFilter = case mayBranchNamePrefix of
+      Nothing -> mempty
+      Just (Query branchNamePrefix) -> [PG.sql| AND starts_with(b.name, #{branchNamePrefix}) |]
+    query :: Limit -> PG.Sql -> PG.Transaction e [(Branch CausalId, Maybe UserHandle)]
+    query limit cursorFilter = do
+      let sql =
+            intercalateMap
+              "\n"
+              id
+              [ ( [PG.sql|
+            SELECT
+              b.id,
+              b.project_id,
+              b.name,
+              b.contributor_id,
+              b.causal_id,
+              b.merge_target_branch_id,
+              b.created_at,
+              b.updated_at,
+              b.creator_id,
+              contributor.handle
+            FROM project_branches b
+            LEFT JOIN users AS contributor ON contributor.id = b.contributor_id
+            WHERE
+              b.deleted_at IS NULL
+              AND b.project_id = #{projectId}
+              |]
+                ),
+                kindFilter,
+                contributorFilter,
+                branchNameFilter,
+                cursorFilter,
+                ( [PG.sql|
+            ORDER BY b.updated_at DESC, b.id DESC
+            LIMIT #{limit}
           |]
-            ),
-            kindFilter,
-            contributorFilter,
-            branchNameFilter,
-            cursorFilter,
-            ( [PG.sql|
-        ORDER BY b.updated_at DESC, b.id DESC
-        LIMIT #{limit}
-      |]
-            )
-          ]
-  PG.queryListRows sql
-    <&> fmap (\(branch PG.:. PG.Only contributorHandle) -> (branch, contributorHandle))
+                )
+              ]
+      PG.queryListRows sql
+        <&> fmap (\(branch PG.:. PG.Only contributorHandle) -> (branch, contributorHandle))
 
 -- | List all BranchHashes which are reachable within a given user's codebase.
 accessibleCausalsForUser ::
@@ -817,63 +827,72 @@ listContributorBranchesOfUserAccessibleToCaller ::
   Maybe (Cursor (UTCTime, BranchId)) ->
   Maybe Query ->
   Maybe ProjectId ->
-  -- | (branch, project, projectOwnerHandle)
-  PG.Transaction e [(Branch CausalId, Project, ProjectOwner)]
+  PG.Transaction e (Paged (UTCTime, BranchId) (Branch CausalId, Project, ProjectOwner))
 listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserId limit mayCursor mayBranchNamePrefix mayProjectId = do
-  let branchNameFilter = case mayBranchNamePrefix of
-        Nothing -> mempty
-        Just (Query branchNamePrefix) -> [PG.sql| AND starts_with(b.name, #{branchNamePrefix}) |]
-  let cursorFilter = case mayCursor of
-        Nothing -> mempty
-        Just (Cursor (beforeTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId}) |]
-        Just (Cursor (afterTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId}) |]
-  let projectFilter = case mayProjectId of
-        Nothing -> mempty
-        Just projId -> [PG.sql| AND b.project_id = #{projId} |]
-  let sql =
-        intercalateMap
-          "\n"
-          id
-          [ [PG.sql|
-        SELECT
-          b.id,
-          b.project_id,
-          b.name,
-          b.contributor_id,
-          b.causal_id,
-          b.merge_target_branch_id,
-          b.created_at,
-          b.updated_at,
-          b.creator_id,
-          project.id,
-          project.owner_user_id,
-          project.slug,
-          project.summary,
-          project.tags,
-          project.private,
-          project.created_at,
-          project.updated_at,
-          project_owner.handle,
-          project_owner.name,
-          EXISTS (SELECT FROM org_members WHERE org_members.organization_user_id = project.owner_user_id)
-        FROM project_branches b
-        JOIN projects project ON project.id = b.project_id
-        JOIN users AS project_owner ON project_owner.id = project.owner_user_id
-        WHERE
-          b.deleted_at IS NULL
-          AND b.contributor_id = #{contributorUserId}
-          AND user_has_project_permission(#{mayCallerUserId}, b.project_id, #{ProjectView})
-          |],
-            branchNameFilter,
-            cursorFilter,
-            projectFilter,
-            [PG.sql|
-        ORDER BY b.updated_at DESC, b.id DESC
-        LIMIT #{limit}
-      |]
-          ]
-  PG.queryListRows sql
-    <&> fmap (\(branch PG.:. project PG.:. projectOwner) -> (branch, project, projectOwner))
+  results <- query limit (mkCursorFilter mayCursor)
+  let paged@(Paged {prevCursor, nextCursor}) =
+        results
+          & pagedOn (\(Branch {updatedAt, branchId}, _, _) -> (updatedAt, branchId))
+  hasPrevPage <- not . null <$> query 1 (mkCursorFilter prevCursor)
+  hasNextPage <- not . null <$> query 1 (mkCursorFilter nextCursor)
+  pure $ guardPaged hasPrevPage hasNextPage paged
+  where
+    branchNameFilter = case mayBranchNamePrefix of
+      Nothing -> mempty
+      Just (Query branchNamePrefix) -> [PG.sql| AND starts_with(b.name, #{branchNamePrefix}) |]
+    mkCursorFilter cursor = case cursor of
+      Nothing -> mempty
+      Just (Cursor (afterTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId}) |]
+      Just (Cursor (beforeTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId}) |]
+    projectFilter = case mayProjectId of
+      Nothing -> mempty
+      Just projId -> [PG.sql| AND b.project_id = #{projId} |]
+    query :: Limit -> PG.Sql -> PG.Transaction e [(Branch CausalId, Project, ProjectOwner)]
+    query limit cursorFilter = do
+      let sql =
+            intercalateMap
+              "\n"
+              id
+              [ [PG.sql|
+            SELECT
+              b.id,
+              b.project_id,
+              b.name,
+              b.contributor_id,
+              b.causal_id,
+              b.merge_target_branch_id,
+              b.created_at,
+              b.updated_at,
+              b.creator_id,
+              project.id,
+              project.owner_user_id,
+              project.slug,
+              project.summary,
+              project.tags,
+              project.private,
+              project.created_at,
+              project.updated_at,
+              project_owner.handle,
+              project_owner.name,
+              EXISTS (SELECT FROM org_members WHERE org_members.organization_user_id = project.owner_user_id)
+            FROM project_branches b
+            JOIN projects project ON project.id = b.project_id
+            JOIN users AS project_owner ON project_owner.id = project.owner_user_id
+            WHERE
+              b.deleted_at IS NULL
+              AND b.contributor_id = #{contributorUserId}
+              AND user_has_project_permission(#{mayCallerUserId}, b.project_id, #{ProjectView})
+              |],
+                branchNameFilter,
+                cursorFilter,
+                projectFilter,
+                [PG.sql|
+            ORDER BY b.updated_at DESC, b.id DESC
+            LIMIT #{limit}
+          |]
+              ]
+      PG.queryListRows sql
+        <&> fmap (\(branch PG.:. project PG.:. projectOwner) -> (branch, project, projectOwner))
 
 -- | Returns Project Owner information, including whether that user is an organization or not.
 projectOwnerByProjectId :: ProjectId -> PG.Transaction e (Maybe ProjectOwner)
