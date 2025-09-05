@@ -43,6 +43,8 @@ import Share.Web.Share.Branches.API qualified as API
 import Share.Web.Share.Branches.Types (BranchKindFilter (..), ShareBranch (..))
 import Share.Web.Share.Branches.Types qualified as API
 import Share.Web.Share.CodeBrowsing.API qualified as API
+import Share.Web.Share.Contributions.Types
+import Share.Web.Share.DisplayInfo.Types
 import Share.Web.Share.Projects.Types (projectToAPI)
 import Share.Web.Share.Types
 import U.Codebase.HashTags (CausalHash)
@@ -535,7 +537,7 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
   (mayNamePrefix, mayContributorFilter) <- computeSearchFilters
   branches <- PG.runTransaction do
     branches <- Q.listBranchesByProject limit mayCursor mayNamePrefix mayContributorFilter (fromMaybe defaultKindFilter mayKindFilter) projectId
-    branchesWithContributions <-
+    branchesWithContributions :: (Paged (UTCTime, BranchId) (Branch CausalId, [ShareContribution UserDisplayInfo], Maybe UserHandle)) <-
       branches
         & fmap (\(branch@(Branch {branchId}), contributorHandle) -> (branch, branchId, contributorHandle))
         & ContributionsQ.shareContributionsByBranchOf (traversed . _2)
@@ -549,10 +551,7 @@ listBranchesByProjectEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle 
                   let branchShortHand = BranchShortHand {branchName, contributorHandle}
                    in API.branchToShareBranch branchShortHand branch shareProject contributions
               )
-  branches
-    & pagedOn (\(Branch {updatedAt, branchId}, _, _) -> (updatedAt, branchId))
-    & (\p -> p {items = shareBranches})
-    & pure
+  pure shareBranches
   where
     userIdForHandle handle = do
       fmap user_id <$> PG.runTransaction (UserQ.userByHandle handle)
