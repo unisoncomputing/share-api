@@ -719,8 +719,8 @@ listBranchesByProject limit mayCursor mayBranchNamePrefix mayContributorQuery ki
   where
     mkCursorFilter cursor = case cursor of
       Nothing -> mempty
-      Just (Cursor (beforeTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId})|]
-      Just (Cursor (afterTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId})|]
+      Just (Cursor (afterTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId})|]
+      Just (Cursor (beforeTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId})|]
     kindFilter = case kind of
       AllBranchKinds -> ""
       OnlyContributorBranches -> "AND b.contributor_id IS NOT NULL"
@@ -842,8 +842,8 @@ listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserI
       Just (Query branchNamePrefix) -> [PG.sql| AND starts_with(b.name, #{branchNamePrefix}) |]
     mkCursorFilter cursor = case cursor of
       Nothing -> mempty
-      Just (Cursor (beforeTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId}) |]
-      Just (Cursor (afterTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId}) |]
+      Just (Cursor (afterTime, branchId) Previous) -> [PG.sql| AND (b.updated_at, b.id) > (#{afterTime}, #{branchId}) |]
+      Just (Cursor (beforeTime, branchId) Next) -> [PG.sql| AND (b.updated_at, b.id) < (#{beforeTime}, #{branchId}) |]
     projectFilter = case mayProjectId of
       Nothing -> mempty
       Just projId -> [PG.sql| AND b.project_id = #{projId} |]
