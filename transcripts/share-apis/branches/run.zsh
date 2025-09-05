@@ -43,9 +43,11 @@ fetch "$transcripts_user" GET branch-list-private '/users/transcripts/branches'
 fetch "$transcripts_user" GET branch-details '/users/test/projects/publictestproject/branches/main'
 
 # Paging tests
+fetch "$transcripts_user" GET branch-list-page-1 '/users/test/projects/publictestproject/branches?limit=1'
 next_cursor=$(fetch_data_jq "$transcripts_user" GET branch-list-paged '/users/test/projects/publictestproject/branches?limit=1' '.nextCursor')
-
 fetch "$transcripts_user" GET branch-list-page-2 "/users/test/projects/publictestproject/branches?limit=1&cursor=$next_cursor"
+prev_cursor=$(fetch_data_jq "$transcripts_user" GET branch-list-page-2 "/users/test/projects/publictestproject/branches?limit=1&cursor=$next_cursor" '.prevCursor')
+fetch "$transcripts_user" GET branch-list-prev-page "/users/test/projects/publictestproject/branches?limit=1&cursor=$prev_cursor"
 
 # Delete a branch
 fetch "$test_user" DELETE branch-delete '/users/test/projects/publictestproject/branches/main'

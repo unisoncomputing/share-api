@@ -59,29 +59,9 @@
           "visibility": "public"
         },
         "updatedAt": "<TIMESTAMP>"
-      },
-      {
-        "branchRef": "@transcripts/privatecontribution",
-        "causalHash": "#sg60bvjo91fsoo7pkh9gejbn0qgc95vra87ap6l5d35ri0lkaudl7bs12d71sf3fh6p23teemuor7mk1i9n567m50ibakcghjec5ajg",
-        "contributions": [],
-        "createdAt": "<TIMESTAMP>",
-        "project": {
-          "createdAt": "<TIMESTAMP>",
-          "owner": {
-            "handle": "@unison",
-            "name": "Unison Org",
-            "type": "organization"
-          },
-          "slug": "privateorgproject",
-          "summary": "Private Unison Project",
-          "tags": [],
-          "updatedAt": "<TIMESTAMP>",
-          "visibility": "private"
-        },
-        "updatedAt": "<TIMESTAMP>"
       }
     ],
-    "nextCursor": null,
+    "nextCursor": "<CURSOR>",
     "prevCursor": null
   },
   "status": [
