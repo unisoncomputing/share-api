@@ -43,6 +43,7 @@ type ProjectResourceAPI =
            )
       :<|> ("roles" :> MaintainersResourceAPI)
       :<|> ("subscription" :> ProjectNotificationSubscriptionEndpoint)
+      :<|> ("webhooks" :> ProjectWebhooksResourceAPI)
   )
 
 type ProjectDiffNamespacesEndpoint =
@@ -116,3 +117,26 @@ type RemoveRolesEndpoint =
 type ProjectNotificationSubscriptionEndpoint =
   ReqBody '[JSON] ProjectNotificationSubscriptionRequest
     :> Put '[JSON] ProjectNotificationSubscriptionResponse
+
+type ProjectWebhooksResourceAPI =
+  ( ListProjectWebhooksEndpoint
+      :<|> CreateProjectWebhookEndpoint
+      :<|> ( Capture "subscription_id" NotificationSubscriptionId
+               :> ( UpdateProjectWebhookEndpoint
+                      :<|> DeleteProjectWebhookEndpoint
+                  )
+           )
+  )
+
+type ListProjectWebhooksEndpoint = Get '[JSON] ListProjectWebhooksResponse
+
+type CreateProjectWebhookEndpoint =
+  ReqBody '[JSON] CreateProjectWebhookRequest
+    :> Post '[JSON] CreateProjectWebhookResponse
+
+type UpdateProjectWebhookEndpoint =
+  ReqBody '[JSON] UpdateProjectWebhookRequest
+    :> Patch '[JSON] UpdateProjectWebhookResponse
+
+type DeleteProjectWebhookEndpoint =
+  Delete '[JSON] ()

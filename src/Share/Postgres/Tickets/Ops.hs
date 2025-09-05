@@ -60,6 +60,7 @@ createTicket authorId projectId title description status = do
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
+            eventProjectId = Just projectId,
             eventData = ProjectTicketCreatedData projectData ticketData,
             eventScope = projectOwnerUserId,
             eventActor = authorId
@@ -112,6 +113,7 @@ insertTicketStatusChangeEvent projectId ticketId actorUserId oldStatus newStatus
               { eventId = (),
                 eventOccurredAt = (),
                 eventResourceId = projectResourceId,
+                eventProjectId = Just projectId,
                 eventData = ProjectTicketStatusUpdatedData projectData ticketData statusUpdateData,
                 eventScope = projectOwnerUserId,
                 eventActor = actorUserId

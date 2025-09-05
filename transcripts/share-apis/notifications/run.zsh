@@ -11,36 +11,17 @@ subscription_id=$(fetch_data_jq "$test_user" PUT subscribe-to-watch-project '/us
   "isSubscribed": true
 }' )
 
-webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"${echo_server}/good-webhook\",
-  \"name\": \"Good Webhook\"
-}" )
-
-failing_webhook_id=$(fetch_data_jq "$test_user" POST create-webhook  '/users/test/notifications/delivery-methods/webhooks' '.webhookId' "{
-  \"url\": \"${echo_server}/invalid?x-set-response-status-code=500\",
-  \"name\": \"Bad Webhook\"
-}" )
-
-fetch "$test_user" POST add-webhook-to-subscription "/users/test/notifications/subscriptions/${subscription_id}/delivery-methods/add" "{
-  \"deliveryMethods\": [{\"kind\": \"webhook\",  \"id\": \"${webhook_id}\"}, {\"kind\": \"webhook\",  \"id\": \"${failing_webhook_id}\"}]
+fetch "$test_user" POST add-project-webhook "/users/test/projects/publictestproject/webhooks" "{
+  \"uri\": \"${echo_server}/good-webhook\",
+  \"topics\": {\"type\": \"all\"}
 }"
 
-# Add a subscription within the transcripts user to notifications for some select topics in any project owned by the test
-# user.
-# No filter is applied.
-fetch "$transcripts_user" POST create-subscription-for-other-user-project '/users/transcripts/notifications/subscriptions' "{
-  \"scope\": \"test\",
-  \"topics\": [
-    \"project:branch:updated\", \"project:release:created\"
-  ],
-  \"topicGroups\": [\"watch_project\"]
-}"
+fetch "$test_user" GET list-project-webhooks "/users/test/projects/publictestproject/webhooks"
 
-fetch "$test_user" POST create-email-delivery '/users/test/notifications/delivery-methods/emails' '{
-  "email": "me@example.com"
+# Subscribe the transcripts user to notifications for a project in the test user.
+fetch "$transcripts_user" PUT subscribe-to-other-user-project '/users/test/projects/publictestproject/subscription' '{
+  "isSubscribed": true
 }'
-
-fetch "$test_user" GET check-delivery-methods '/users/test/notifications/delivery-methods'
 
 # Create a contribution in a public project, which should trigger a notification for both users, but will be omitted
 # from 'transcripts' notification list since it's a self-notification.
@@ -149,13 +130,22 @@ unsuccessful_webhooks=$(pg_sql "SELECT COUNT(*) FROM notification_webhook_queue 
 
 echo "Successful webhooks: $successful_webhooks\nUnsuccessful webhooks: $unsuccessful_webhooks\n" > ./webhook_results.txt
 
-# List 'test' user's subscriptions
-fetch "$test_user" GET list-subscriptions-test '/users/test/notifications/subscriptions'
-
 # Can unsubscribe from project-related notifications for the test user's publictestproject.
 fetch "$test_user" PUT unsubscribe-from-project '/users/test/projects/publictestproject/subscription' '{
   "isSubscribed": false
 }'
 
-# List 'test' user's subscriptions again
-fetch "$test_user" GET list-subscriptions-test-after-unsubscribe '/users/test/notifications/subscriptions'
+# Get the project webhook id.
+project_webhook_id=$(fetch_data_jq "$test_user" GET project-webhooks-fetch '/users/test/projects/publictestproject/webhooks' '.webhooks[0].notificationSubscriptionId')
+
+# Can update project webhooks
+fetch "$test_user" PATCH update-project-webhook "/users/test/projects/publictestproject/webhooks/$project_webhook_id" "{
+  \"uri\": \"${echo_server}/good-webhook-updated\",
+  \"topics\": {\"type\": \"selected\", \"topics\": [\"project:contribution:created\"]}
+}"
+
+fetch "$test_user" GET list-project-webhooks-after-update "/users/test/projects/publictestproject/webhooks"
+
+fetch "$test_user" DELETE delete-project-webhook "/users/test/projects/publictestproject/webhooks/$project_webhook_id"
+
+fetch "$test_user" GET list-project-webhooks-after-delete "/users/test/projects/publictestproject/webhooks"

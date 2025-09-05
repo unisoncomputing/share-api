@@ -56,6 +56,8 @@ module Share.Web.Authorization
     checkDeliveryMethodsManage,
     checkSubscriptionsView,
     checkSubscriptionsManage,
+    checkProjectSubscriptionsView,
+    checkProjectSubscriptionsManage,
     permissionGuard,
     readPath,
     writePath,
@@ -165,6 +167,8 @@ data ProjectPermission
   | ProjectRolesEdit ProjectId
   | -- (RootHash, TargetHash)
     AccessCausalHash CausalId CausalId
+  | ProjectNotificationSubscriptionsView ProjectId
+  | ProjectNotificationSubscriptionsManage ProjectId
   deriving stock (Show, Eq, Ord)
 
 data UserPermission
@@ -236,6 +240,8 @@ instance Errors.ToServerError AuthZFailure where
       ProjectRolesList _pid -> (ErrorID "authz:maintainers:list", err403 {errBody = "Permission Denied: " <> msg})
       ProjectRolesEdit _pid -> (ErrorID "authz:maintainers:edit", err403 {errBody = "Permission Denied: " <> msg})
       AccessCausalHash _ _ -> (ErrorID "authz:causal-hash", err403 {errBody = "Permission Denied: " <> msg})
+      ProjectNotificationSubscriptionsView _pid -> (ErrorID "authz:project:notification-subscription-get", err403 {errBody = "Permission Denied: " <> msg})
+      ProjectNotificationSubscriptionsManage _pid -> (ErrorID "authz:project:notification-subscription-manage", err403 {errBody = "Permission Denied: " <> msg})
     UserPermission userPermission ->
       case userPermission of
         UserUpdate _uid -> (ErrorID "authz:user:update", err403 {errBody = "Permission Denied: " <> msg})
@@ -299,6 +305,8 @@ authZFailureMessage (AuthZFailure perm) = case perm of
     ProjectRolesList _pid -> "Not permitted to list maintainers"
     ProjectRolesEdit _pid -> "Not permitted to edit maintainers"
     AccessCausalHash _ _ -> "Not permitted to access this causal hash"
+    ProjectNotificationSubscriptionsView _pid -> "Not permitted to get project notifications"
+    ProjectNotificationSubscriptionsManage _pid -> "Not permitted to manage project notifications"
   UserPermission userPermission ->
     case userPermission of
       UserUpdate _uid -> "Not permitted to update this user"
@@ -748,6 +756,16 @@ checkSubscriptionsView caller notificationUser = maybePermissionFailure (UserPer
 checkSubscriptionsManage :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkSubscriptionsManage caller notificationUser = maybePermissionFailure (UserPermission $ UserNotificationSubscriptionManage notificationUser) do
   assertUsersEqual caller notificationUser <|> assertUserHasOrgPermissionByOrgUser caller notificationUser AuthZ.NotificationSubscriptionManage
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkProjectSubscriptionsView :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkProjectSubscriptionsView caller projectId = maybePermissionFailure (ProjectPermission $ ProjectNotificationSubscriptionsView projectId) do
+  assertUserHasProjectPermission AuthZ.ProjectManage (Just caller) projectId
+  pure $ AuthZ.UnsafeAuthZReceipt Nothing
+
+checkProjectSubscriptionsManage :: UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkProjectSubscriptionsManage caller projectId = maybePermissionFailure (ProjectPermission $ ProjectNotificationSubscriptionsManage projectId) do
+  assertUserHasProjectPermission AuthZ.ProjectManage (Just caller) projectId
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | Check whether the given user has administrative privileges,

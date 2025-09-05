@@ -59,6 +59,7 @@ createRelease !_nlReceipt projectId (releaseVersion@ReleaseVersion {major, minor
           { eventId = (),
             eventOccurredAt = (),
             eventResourceId = projectResourceId,
+            eventProjectId = Just projectId,
             eventData = ProjectReleaseCreatedData projectData releaseData,
             eventScope = projectOwnerUserId,
             eventActor = creatorId

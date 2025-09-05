@@ -22,7 +22,9 @@ import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Env qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
+import Share.Notifications.Ops qualified as NotifOps
 import Share.Notifications.Queries qualified as NotifsQ
+import Share.Notifications.Types (SubscriptionOwner (ProjectSubscriptionOwner))
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
@@ -123,6 +125,7 @@ projectServer session handle =
                      :<|> favProjectEndpoint session handle slug
                      :<|> maintainersResourceServer slug
                      :<|> projectNotificationSubscriptionEndpoint session handle slug
+                     :<|> projectWebhooksServer session handle slug
              )
   where
     addTags :: forall x. ProjectSlug -> WebApp x -> WebApp x
@@ -429,3 +432,61 @@ projectNotificationSubscriptionEndpoint session projectUserHandler projectSlug (
     ProjectNotificationSubscriptionResponse
       { subscriptionId = maySubscriptionId
       }
+
+projectWebhooksServer :: Maybe Session -> UserHandle -> ProjectSlug -> ServerT API.ProjectWebhooksResourceAPI WebApp
+projectWebhooksServer session projectUserHandle projectSlug =
+  listProjectWebhooksEndpoint session projectUserHandle projectSlug
+    :<|> createProjectWebhookEndpoint session projectUserHandle projectSlug
+    :<|> ( \subscriptionId ->
+             updateProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionId
+               :<|> deleteProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionId
+         )
+
+listProjectWebhooksEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp ListProjectWebhooksResponse
+listProjectWebhooksEndpoint session projectUserHandle projectSlug = do
+  caller <- AuthN.requireAuthenticatedUser session
+  Project {projectId} <- PG.runTransactionOrRespondError $ do
+    Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectSubscriptionsView caller projectId
+  webhooks <- NotifOps.listProjectWebhooks projectId
+  pure $ ListProjectWebhooksResponse {webhooks}
+  where
+    projectShortHand :: IDs.ProjectShortHand
+    projectShortHand = IDs.ProjectShortHand {userHandle = projectUserHandle, projectSlug}
+
+createProjectWebhookEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> CreateProjectWebhookRequest -> WebApp CreateProjectWebhookResponse
+createProjectWebhookEndpoint session projectUserHandle projectSlug (CreateProjectWebhookRequest {uri, topics}) = do
+  caller <- AuthN.requireAuthenticatedUser session
+  Project {projectId} <- PG.runTransactionOrRespondError $ do
+    Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectSubscriptionsManage caller projectId
+  webhook <- NotifOps.createProjectWebhook projectId uri topics
+  pure $ CreateProjectWebhookResponse {webhook}
+  where
+    projectShortHand :: IDs.ProjectShortHand
+    projectShortHand = IDs.ProjectShortHand {userHandle = projectUserHandle, projectSlug}
+
+updateProjectWebhookEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.NotificationSubscriptionId -> UpdateProjectWebhookRequest -> WebApp UpdateProjectWebhookResponse
+updateProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionId (UpdateProjectWebhookRequest {uri = mayURIUpdate, topics}) = do
+  caller <- AuthN.requireAuthenticatedUser session
+  Project {projectId} <- PG.runTransactionOrRespondError $ do
+    Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectSubscriptionsManage caller projectId
+  let owner = ProjectSubscriptionOwner projectId
+  NotifOps.updateProjectWebhook owner subscriptionId mayURIUpdate topics
+  webhook <- NotifOps.expectProjectWebhook projectId subscriptionId
+  pure $ UpdateProjectWebhookResponse {webhook}
+  where
+    projectShortHand :: IDs.ProjectShortHand
+    projectShortHand = IDs.ProjectShortHand {userHandle = projectUserHandle, projectSlug}
+
+deleteProjectWebhookEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> IDs.NotificationSubscriptionId -> WebApp ()
+deleteProjectWebhookEndpoint session projectUserHandle projectSlug subscriptionId = do
+  caller <- AuthN.requireAuthenticatedUser session
+  Project {projectId} <- PG.runTransactionOrRespondError $ do
+    Q.projectByShortHand projectShortHand `whenNothingM` throwError (EntityMissing (ErrorID "project-not-found") ("Project not found: " <> IDs.toText @IDs.ProjectShortHand projectShortHand))
+  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectSubscriptionsManage caller projectId
+  NotifOps.deleteProjectWebhook projectId subscriptionId
+  where
+    projectShortHand :: IDs.ProjectShortHand
+    projectShortHand = IDs.ProjectShortHand {userHandle = projectUserHandle, projectSlug}

@@ -26,19 +26,30 @@ module Share.Web.Share.Projects.Types
     APIProjectBranchAndReleaseDetails (..),
     PermissionsInfo (..),
     IsSubscribed (..),
+    ListProjectWebhooksResponse (..),
+    ProjectWebhook (..),
+    CreateProjectWebhookRequest (..),
+    CreateProjectWebhookResponse (..),
+    UpdateProjectWebhookRequest (..),
+    UpdateProjectWebhookResponse (..),
+    ProjectWebhookTopics (..),
   )
 where
 
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Set qualified as Set
+import Data.Set.NonEmpty (NESet)
+import Data.Set.NonEmpty qualified as NESet
 import Data.Time (UTCTime)
 import Share.IDs
 import Share.IDs qualified as IDs
+import Share.Notifications.Types
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Project (Project (..), ProjectTag, ProjectVisibility (..))
 import Share.Utils.API
+import Share.Utils.URI (URIParam)
 import Share.Web.Authorization.Types (PermissionsInfo (PermissionsInfo))
 
 projectToAPI :: ProjectOwner -> Project -> APIProject
@@ -376,3 +387,146 @@ instance Aeson.ToJSON CatalogCategory where
       [ "name" .= name,
         "projects" .= projects
       ]
+
+data ProjectWebhookTopics
+  = SelectedTopics (NESet NotificationTopic)
+  | AllTopicsInProject
+  deriving stock (Eq, Show)
+
+instance ToJSON ProjectWebhookTopics where
+  toJSON (SelectedTopics topics) =
+    object
+      [ "type" .= ("selected" :: Text),
+        "topics" .= topics
+      ]
+  toJSON AllTopicsInProject =
+    object
+      [ "type" .= ("all" :: Text)
+      ]
+
+instance FromJSON ProjectWebhookTopics where
+  parseJSON = Aeson.withObject "ProjectWebhookTopics" $ \o -> do
+    typ <- o .: "type"
+    case typ of
+      ("selected" :: Text) -> do
+        topics <- Set.fromList <$> (o .: "topics")
+        case NESet.nonEmptySet topics of
+          Nothing -> fail "SelectedTopics must have at least one topic"
+          Just neset -> pure $ SelectedTopics neset
+      ("all" :: Text) -> pure AllTopicsInProject
+      _ -> fail $ "Unknown ProjectWebhookTopics type: " <> show typ
+
+-- | This type provides a view over the subscription <-> webhook many-to-many view.
+data ProjectWebhook = ProjectWebhook
+  { projectWebhookUri :: URIParam,
+    projectWebhookTopics :: ProjectWebhookTopics,
+    projectWebhookNotificationSubscriptionId :: NotificationSubscriptionId,
+    projectWebhookCreatedAt :: Maybe UTCTime,
+    projectWebhookUpdatedAt :: Maybe UTCTime
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON ProjectWebhook where
+  toJSON ProjectWebhook {..} =
+    object
+      [ "uri" .= projectWebhookUri,
+        "topics" .= projectWebhookTopics,
+        "notificationSubscriptionId" .= projectWebhookNotificationSubscriptionId,
+        "createdAt" .= projectWebhookCreatedAt,
+        "updatedAt" .= projectWebhookUpdatedAt
+      ]
+
+instance FromJSON ProjectWebhook where
+  parseJSON = Aeson.withObject "ProjectWebhook" $ \o -> do
+    projectWebhookUri <- o .: "uri"
+    projectWebhookTopics <- o .: "topics"
+    projectWebhookNotificationSubscriptionId <- o .: "notificationSubscriptionId"
+    projectWebhookCreatedAt <- o .: "createdAt"
+    projectWebhookUpdatedAt <- o .: "updatedAt"
+    pure ProjectWebhook {..}
+
+data ListProjectWebhooksResponse = ListProjectWebhooksResponse
+  { webhooks :: [ProjectWebhook]
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON ListProjectWebhooksResponse where
+  toJSON ListProjectWebhooksResponse {..} =
+    object
+      [ "webhooks" .= webhooks
+      ]
+
+instance FromJSON ListProjectWebhooksResponse where
+  parseJSON = Aeson.withObject "ListProjectWebhooksResponse" $ \o -> do
+    webhooks <- o .: "webhooks"
+    pure ListProjectWebhooksResponse {..}
+
+data CreateProjectWebhookRequest = CreateProjectWebhookRequest
+  { uri :: URIParam,
+    topics :: ProjectWebhookTopics
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON CreateProjectWebhookRequest where
+  toJSON CreateProjectWebhookRequest {..} =
+    object
+      [ "uri" .= uri,
+        "topics" .= topics
+      ]
+
+instance FromJSON CreateProjectWebhookRequest where
+  parseJSON = Aeson.withObject "CreateProjectWebhookRequest" $ \o -> do
+    uri <- o .: "uri"
+    topics <- o .: "topics"
+    pure CreateProjectWebhookRequest {..}
+
+data CreateProjectWebhookResponse = CreateProjectWebhookResponse
+  { webhook :: ProjectWebhook
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON CreateProjectWebhookResponse where
+  toJSON CreateProjectWebhookResponse {..} =
+    object
+      [ "webhook" .= webhook
+      ]
+
+instance FromJSON CreateProjectWebhookResponse where
+  parseJSON = Aeson.withObject "CreateProjectWebhookResponse" $ \o -> do
+    webhook <- o .: "webhook"
+    pure CreateProjectWebhookResponse {..}
+
+data UpdateProjectWebhookRequest = UpdateProjectWebhookRequest
+  { uri :: Maybe URIParam,
+    topics :: Maybe ProjectWebhookTopics
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON UpdateProjectWebhookRequest where
+  toJSON UpdateProjectWebhookRequest {..} =
+    object
+      [ "uri" .= uri,
+        "topics" .= topics
+      ]
+
+instance FromJSON UpdateProjectWebhookRequest where
+  parseJSON = Aeson.withObject "UpdateProjectWebhookRequest" $ \o -> do
+    uri <- o .:? "uri"
+    topics <- o .:? "topics"
+    pure UpdateProjectWebhookRequest {..}
+
+data UpdateProjectWebhookResponse = UpdateProjectWebhookResponse
+  { webhook :: ProjectWebhook
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON UpdateProjectWebhookResponse where
+  toJSON UpdateProjectWebhookResponse {..} =
+    object
+      [ "webhook" .= webhook
+      ]
+
+instance FromJSON UpdateProjectWebhookResponse where
+  parseJSON = Aeson.withObject "UpdateProjectWebhookResponse" $ \o -> do
+    webhook <- o .: "webhook"
+    pure UpdateProjectWebhookResponse {..}

@@ -33,6 +33,7 @@ module Share.Notifications.Types
     CommentPayload (..),
     ReleasePayload (..),
     StatusUpdatePayload (..),
+    SubscriptionOwner (..),
     eventTopic,
     hydratedEventTopic,
     eventData_,
@@ -120,24 +121,29 @@ instance Aeson.FromJSON NotificationTopic where
 
 data NotificationTopicGroup
   = WatchProject
+  | AllProjectTopics
   deriving (Eq, Show, Ord)
 
 instance PG.EncodeValue NotificationTopicGroup where
   encodeValue = HasqlEncoders.enum \case
     WatchProject -> "watch_project"
+    AllProjectTopics -> "all_project_topics"
 
 instance PG.DecodeValue NotificationTopicGroup where
   decodeValue = HasqlDecoders.enum \case
     "watch_project" -> Just WatchProject
+    "all_project_topics" -> Just AllProjectTopics
     _ -> Nothing
 
 instance Aeson.ToJSON NotificationTopicGroup where
   toJSON = \case
     WatchProject -> "watch_project"
+    AllProjectTopics -> "all_project_topics"
 
 instance Aeson.FromJSON NotificationTopicGroup where
   parseJSON = Aeson.withText "NotificationTopicGroup" \case
     "watch_project" -> pure WatchProject
+    "all_project_topics" -> pure AllProjectTopics
     s -> fail $ "Invalid notification topic group: " <> Text.unpack s
 
 data NotificationStatus
@@ -436,6 +442,7 @@ data NotificationEvent id userInfo occurredAt eventPayload = NotificationEvent
   { eventId :: id,
     eventOccurredAt :: occurredAt,
     eventResourceId :: ResourceId,
+    eventProjectId :: Maybe ProjectId,
     eventData :: eventPayload,
     eventScope :: userInfo,
     eventActor :: userInfo
@@ -452,14 +459,15 @@ eventUserInfo_ f NotificationEvent {eventActor, eventScope, ..} = do
   pure $ NotificationEvent {eventActor = eventActor', eventScope = eventScope', ..}
 
 instance (Aeson.ToJSON eventPayload, Aeson.ToJSON userInfo) => Aeson.ToJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
-  toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId} =
+  toJSON NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId, eventProjectId} =
     Aeson.object
       [ "id" Aeson..= eventId,
         "occurredAt" Aeson..= eventOccurredAt,
         "data" Aeson..= eventData,
         "scope" Aeson..= eventScope,
         "actor" Aeson..= eventActor,
-        "resourceId" Aeson..= eventResourceId
+        "resourceId" Aeson..= eventResourceId,
+        "projectId" Aeson..= eventProjectId
       ]
 
 instance (Aeson.FromJSON eventPayload, Aeson.FromJSON userInfo) => Aeson.FromJSON (NotificationEvent NotificationEventId userInfo UTCTime eventPayload) where
@@ -470,7 +478,8 @@ instance (Aeson.FromJSON eventPayload, Aeson.FromJSON userInfo) => Aeson.FromJSO
     eventScope <- o .: "scope"
     eventActor <- o .: "actor"
     eventResourceId <- o .: "resourceId"
-    pure NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId}
+    eventProjectId <- o .: "projectId"
+    pure NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId, eventProjectId}
 
 instance Hasql.DecodeRow (NotificationEvent NotificationEventId UserId UTCTime NotificationEventData) where
   decodeRow = do
@@ -479,8 +488,9 @@ instance Hasql.DecodeRow (NotificationEvent NotificationEventId UserId UTCTime N
     eventScope <- PG.decodeField
     eventActor <- PG.decodeField
     eventResourceId <- PG.decodeField
+    eventProjectId <- PG.decodeField
     eventData <- PG.decodeRow
-    pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId}
+    pure $ NotificationEvent {eventId, eventOccurredAt, eventData, eventScope, eventActor, eventResourceId, eventProjectId}
 
 type NewNotificationEvent = NotificationEvent () UserId () NotificationEventData
 
@@ -574,39 +584,62 @@ instance Aeson.FromJSON NotificationDeliveryMethod where
 
 data NotificationSubscription id = NotificationSubscription
   { subscriptionId :: id,
-    subscriptionScope :: UserId,
+    subscriptionScopeUser :: UserId,
+    subscriptionScopeProject :: Maybe ProjectId,
+    subscriptionOwner :: SubscriptionOwner,
     subscriptionTopics :: Set NotificationTopic,
     subscriptionTopicGroups :: Set NotificationTopicGroup,
-    subscriptionFilter :: Maybe NotificationFilter
+    subscriptionFilter :: Maybe NotificationFilter,
+    subscriptionCreatedAt :: Maybe UTCTime,
+    subscriptionUpdatedAt :: Maybe UTCTime
   }
+  deriving (Show, Eq)
 
 instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) where
   decodeRow = do
     subscriptionId <- PG.decodeField
-    subscriptionScope <- PG.decodeField
+    subscriptionScopeUser <- PG.decodeField
+    subscriptionScopeProject <- PG.decodeField
+    subscriberUser <- PG.decodeField
+    subscriberProject <- PG.decodeField
+    let subscriptionOwner = case (subscriberUser, subscriberProject) of
+          (Just uid, Nothing) -> UserSubscriptionOwner uid
+          (Nothing, Just pid) -> ProjectSubscriptionOwner pid
+          _ -> error "Invalid subscription owner in database"
     subscriptionTopics <- Set.fromList <$> PG.decodeField
     subscriptionTopicGroups <- Set.fromList <$> PG.decodeField
     subscriptionFilter <- PG.decodeField
-    pure $ NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+    subscriptionCreatedAt <- PG.decodeField
+    subscriptionUpdatedAt <- PG.decodeField
+    pure $ NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
 
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
-  toJSON NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter} =
+  toJSON NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt} =
     Aeson.object
       [ "id" Aeson..= subscriptionId,
-        "scope" Aeson..= subscriptionScope,
+        "scope" Aeson..= subscriptionScopeUser,
+        "projectId" Aeson..= subscriptionScopeProject,
+        "owner" Aeson..= subscriptionOwner,
         "topics" Aeson..= subscriptionTopics,
         "topicGroups" Aeson..= subscriptionTopicGroups,
-        "filter" Aeson..= subscriptionFilter
+        "filter" Aeson..= subscriptionFilter,
+        "createdAt" Aeson..= subscriptionCreatedAt,
+        "updatedAt" Aeson..= subscriptionUpdatedAt
       ]
 
 instance Aeson.FromJSON (NotificationSubscription NotificationSubscriptionId) where
   parseJSON = Aeson.withObject "NotificationSubscription" \o -> do
     subscriptionId <- o .: "id"
-    subscriptionScope <- o .: "scope"
+    subscriptionScopeUser <- o .: "scope"
+    subscriptionScopeProject <- o .:? "scope_project"
+    subscriptionOwner <- o .: "owner"
     subscriptionTopics <- o .: "topics"
     subscriptionTopicGroups <- o .: "topicGroups"
     subscriptionFilter <- o .:? "filter"
-    pure NotificationSubscription {subscriptionId, subscriptionScope, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter}
+    subscriptionCreatedAt <- o .:? "createdAt"
+    subscriptionUpdatedAt <- o .:? "updatedAt"
+
+    pure NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
 
 data NotificationHubEntry userInfo eventPayload = NotificationHubEntry
   { hubEntryId :: NotificationHubEntryId,
@@ -638,7 +671,7 @@ instance Hasql.DecodeRow (NotificationHubEntry UserId NotificationEventData) whe
     hubEntryId <- PG.decodeField
     hubEntryStatus <- PG.decodeField
     hubEntryCreatedAt <- PG.decodeField
-    hubEntryEvent <- PG.decodeRow
+    hubEntryEvent <- PG.decodeRow @(NotificationEvent NotificationEventId UserId UTCTime NotificationEventData)
     pure $ NotificationHubEntry {hubEntryId, hubEntryEvent, hubEntryStatus, hubEntryCreatedAt}
 
 hubEntryUserInfo_ :: Traversal (NotificationHubEntry userInfo eventPayload) (NotificationHubEntry userInfo' eventPayload) userInfo userInfo'
@@ -956,3 +989,28 @@ hydratedEventTopic (HydratedEvent {hydratedEventPayload}) = case hydratedEventPa
   HydratedProjectTicketStatusUpdatedPayload {} -> ProjectTicketStatusUpdated
   HydratedProjectTicketCommentPayload {} -> ProjectTicketComment
   HydratedProjectReleaseCreatedPayload {} -> ProjectReleaseCreated
+
+data SubscriptionOwner
+  = ProjectSubscriptionOwner ProjectId
+  | UserSubscriptionOwner UserId
+  deriving stock (Show, Eq, Ord)
+
+instance ToJSON SubscriptionOwner where
+  toJSON (ProjectSubscriptionOwner pid) =
+    Aeson.object
+      [ "kind" .= ("project" :: Text),
+        "id" .= pid
+      ]
+  toJSON (UserSubscriptionOwner uid) =
+    Aeson.object
+      [ "kind" .= ("user" :: Text),
+        "id" .= uid
+      ]
+
+instance FromJSON SubscriptionOwner where
+  parseJSON = Aeson.withObject "SubscriptionOwner" \o -> do
+    kind <- o .: "kind"
+    case kind of
+      "project" -> ProjectSubscriptionOwner <$> o .: "id"
+      "user" -> UserSubscriptionOwner <$> o .: "id"
+      _ -> fail $ "Unknown subscription owner kind: " <> Text.unpack kind
