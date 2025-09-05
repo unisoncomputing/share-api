@@ -627,10 +627,7 @@ listBranchesByUserEndpoint (AuthN.MaybeAuthedUserID callerUserId) contributorHan
                       shareProject = projectToAPI projectOwnerHandle project
                    in API.branchToShareBranch branchShortHand branch shareProject contributions
               )
-  expandedBranches
-    & pagedOn ((\(Branch {updatedAt, branchId}, _contr, _proj, _projOwner) -> (updatedAt, branchId)))
-    & (\p -> p {items = shareBranches})
-    & pure
+  pure shareBranches
   where
     defaultLimit = Limit 20
     limit = fromMaybe defaultLimit mayLimit
