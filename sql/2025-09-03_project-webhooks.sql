@@ -16,8 +16,7 @@ INSERT INTO notification_topic_group_topics (topic_group, topic)
 
 -- WEBHOOKS
 ALTER TABLE notification_webhooks
-  ADD COLUMN subscription_id UUID NULL REFERENCES notification_subscriptions(id) ON DELETE CASCADE,
-  DROP COLUMN subscriber_user_id;
+  ADD COLUMN subscription_id UUID NULL REFERENCES notification_subscriptions(id) ON DELETE CASCADE;
 
 CREATE INDEX notification_webhooks_by_subscription ON notification_webhooks(subscription_id);
 
@@ -29,8 +28,7 @@ ALTER TABLE notification_webhooks
 
 -- EMAILS
 ALTER TABLE notification_emails
-  ADD COLUMN subscription_id UUID NULL REFERENCES notification_subscriptions(id) ON DELETE CASCADE,
-  DROP COLUMN subscriber_user_id;
+  ADD COLUMN subscription_id UUID NULL REFERENCES notification_subscriptions(id) ON DELETE CASCADE;
 
 CREATE INDEX notification_emails_by_subscription ON notification_emails(subscription_id);
 
@@ -159,6 +157,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+
+ALTER TABLE notification_webhooks
+  DROP COLUMN subscriber_user_id;
+
+ALTER TABLE notification_emails
+  DROP COLUMN subscriber_user_id;
 
 -- Now we can drop the old tables
 DROP TABLE notification_by_webhook;
