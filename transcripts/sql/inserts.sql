@@ -23,7 +23,8 @@ INSERT INTO users (
   email_verified,
   avatar_url,
   name,
-  handle
+  handle,
+  is_org
   )
 VALUES (
   'd32f4ddf-2423-4f10-a4de-465939951354',
@@ -31,7 +32,8 @@ VALUES (
   TRUE,
   NULL, -- Test a user with a null avater.
   NULL, -- Test a user with a null name.
-  'test'
+  'test',
+  false
   ),
 (
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
@@ -40,6 +42,7 @@ VALUES (
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'Unison Org',
   'unison'
+  true
   ),
 (
   '43efd5e7-139a-40b2-8a35-3f99b054dc84',
@@ -47,7 +50,8 @@ VALUES (
   TRUE,
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'The Transcript User',
-  'transcripts'
+  'transcripts',
+  false
   ),
 (
   '3dd1a929-28dd-4585-88aa-96b4dae8606d',
@@ -55,7 +59,8 @@ VALUES (
   TRUE,
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'Unauthorized User',
-  'unauthorized'
+  'unauthorized',
+  false
   ),
 (
   'fe8921ca-aee7-40a2-8020-241ca78f2a5c',
@@ -63,7 +68,8 @@ VALUES (
   TRUE,
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'Admin User',
-  'admin'
+  'admin',
+  false
   );
 
 INSERT INTO orgs (
