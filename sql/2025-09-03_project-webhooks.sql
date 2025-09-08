@@ -74,12 +74,12 @@ CREATE INDEX notification_events_scope_user_and_project ON notification_events(s
 -- Migrate existing filters to the new column, and also remove
 -- the projectId from the JSONB filter.
 UPDATE notification_subscriptions
-  SET scope_project_id = (filter->>'projectId')::UUID,
+  SET scope_project_id = regexp_replace(filter->>'projectId', '^P-', '')::UUID,
       filter = filter - 'projectId'
   WHERE filter ? 'projectId';
 
 UPDATE notification_events
-  SET project_id = (data->>'projectId')::UUID
+  SET project_id = regexp_replace(data->>'projectId', '^P-', '')::UUID
   WHERE data ? 'projectId';
 
 -- Rework the trigger to use the new topic groups.
