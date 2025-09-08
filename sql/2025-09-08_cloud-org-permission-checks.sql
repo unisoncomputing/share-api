@@ -1,6 +1,8 @@
 -- Function for cloud to check org permissions.
 CREATE FUNCTION public.user_has_org_permission(user_id UUID, org_user_id UUID, permission permission)
 RETURNS BOOLEAN
+-- Allow access to share's tables within the function.
+SECURITY DEFINER
 STABLE
 PARALLEL SAFE
 AS $$
