@@ -71,16 +71,31 @@ ALTER TABLE notification_events
 
 CREATE INDEX notification_events_scope_user_and_project ON notification_events(scope_user_id, project_id, occurred_at DESC);
 
+-- There may be some existing subscriptions and events with a projectId for a project which no longer exists.
+-- It's safe to delete them.
+DELETE FROM notification_subscriptions
+  WHERE filter ? 'projectId'
+    AND NOT EXISTS (SELECT FROM projects p WHERE p.id = regexp_replace(filter->>'projectId', '^P-', '')::UUID)
+  ;
+
+DELETE FROM notification_events
+  WHERE data ? 'projectId'
+    AND NOT EXISTS (SELECT FROM projects p WHERE p.id = regexp_replace(data->>'projectId', '^P-', '')::UUID)
+  ;
+
 -- Migrate existing filters to the new column, and also remove
 -- the projectId from the JSONB filter.
 UPDATE notification_subscriptions
   SET scope_project_id = regexp_replace(filter->>'projectId', '^P-', '')::UUID,
       filter = filter - 'projectId'
-  WHERE filter ? 'projectId';
+  WHERE filter ? 'projectId'
+    AND EXISTS (SELECT FROM projects p WHERE p.id = regexp_replace(filter->>'projectId', '^P-', '')::UUID)
+  ;
 
 UPDATE notification_events
   SET project_id = regexp_replace(data->>'projectId', '^P-', '')::UUID
-  WHERE data ? 'projectId';
+  WHERE data ? 'projectId'
+  AND EXISTS (SELECT FROM projects p WHERE p.id = regexp_replace(data->>'projectId', '^P-', '')::UUID);
 
 -- Rework the trigger to use the new topic groups.
 CREATE OR REPLACE FUNCTION trigger_notification_event_subscriptions()
@@ -104,11 +119,13 @@ BEGIN
         )
         AND (ns.filter IS NULL OR NEW.data @> ns.filter)
         AND
-        -- A subscriber can be notified if the event is in their scope or if they have permission to the resource.
+        -- A subscriber can be notified if the event is in their scope or if they have permission to the resource, 
+        -- or if the subscription is owned by the project which the event is scoped to.
         -- The latter is usually a superset of the former, but the former is trivial to compute so it can help
         -- performance to include it.
           (NEW.scope_user_id = ns.subscriber_user_id
             OR user_has_permission(ns.subscriber_user_id, NEW.resource_id, topic_permission(NEW.topic))
+            OR (ns.subscriber_project_id IS NOT NULL AND ns.subscriber_project_id = NEW.project_id)
           )
     )
   LOOP
