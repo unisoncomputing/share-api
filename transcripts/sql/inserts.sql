@@ -33,7 +33,7 @@ VALUES (
   NULL, -- Test a user with a null avater.
   NULL, -- Test a user with a null name.
   'test',
-  false
+  FALSE
   ),
 (
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
@@ -41,8 +41,8 @@ VALUES (
   TRUE,
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'Unison Org',
-  'unison'
-  true
+  'unison',
+  TRUE
   ),
 (
   '43efd5e7-139a-40b2-8a35-3f99b054dc84',
@@ -51,7 +51,7 @@ VALUES (
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'The Transcript User',
   'transcripts',
-  false
+  FALSE
   ),
 (
   '3dd1a929-28dd-4585-88aa-96b4dae8606d',
@@ -60,7 +60,7 @@ VALUES (
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'Unauthorized User',
   'unauthorized',
-  false
+  FALSE
   ),
 (
   'fe8921ca-aee7-40a2-8020-241ca78f2a5c',
@@ -69,7 +69,7 @@ VALUES (
   'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro',
   'Admin User',
   'admin',
-  false
+  FALSE
   );
 
 INSERT INTO orgs (
