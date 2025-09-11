@@ -195,7 +195,7 @@ searchProjects caller userIdFilter (Query query) psk limit = do
   pure (results <&> \(project PG.:. PG.Only handle) -> (project, handle))
 
 -- | Returns the list of tours the user has completed.
-getCompletedToursForUser :: UserId -> PG.Transaction e [TourId]
+getCompletedToursForUser :: (PG.QueryA m) => UserId -> m [TourId]
 getCompletedToursForUser uid = do
   PG.queryListCol
     [PG.sql|
