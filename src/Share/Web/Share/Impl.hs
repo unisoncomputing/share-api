@@ -24,6 +24,7 @@ import Share.Notifications.Queries qualified as NotifQ
 import Share.OAuth.Session
 import Share.OAuth.Types (UserId)
 import Share.Postgres qualified as PG
+import Share.Postgres.Authorization.Queries qualified as AuthQ
 import Share.Postgres.Authorization.Queries qualified as AuthZQ
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalHash)
@@ -57,6 +58,7 @@ import Share.Web.Share.Contributions.Impl qualified as Contributions
 import Share.Web.Share.DefinitionSearch qualified as DefinitionSearch
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), UserLike (..))
+import Share.Web.Share.Orgs.Queries qualified as OrgsQ
 import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Types
 import Share.Web.Share.Users.API qualified as Users
@@ -571,22 +573,26 @@ accountInfoEndpoint :: Session -> WebApp UserAccountInfo
 accountInfoEndpoint Session {sessionUserId} = do
   User {user_email, user_id} <- PGO.expectUserById sessionUserId
   PG.runTransaction $ do
-    completedTours <- Q.getCompletedToursForUser user_id
-    organizationMemberships <- Q.organizationMemberships user_id
-    isSuperadmin <- AuthZQ.isSuperadmin user_id
     displayInfo <- DisplayInfoQ.unifiedDisplayInfoForUserOf id user_id
-    planTier <- UserQ.userSubscriptionTier user_id
-    hasUnreadNotifications <- NotifQ.hasUnreadNotifications user_id
-    pure $
-      UserAccountInfo
-        { primaryEmail = user_email,
-          completedTours,
-          organizationMemberships,
-          isSuperadmin,
-          displayInfo,
-          planTier,
-          hasUnreadNotifications
-        }
+    memberOfOrgs <- Q.organizationMemberships user_id
+    PG.pipelined $ do
+      orgDisplayInfos <- OrgsQ.orgDisplayInfoOf traversed memberOfOrgs
+      orgPermissions <- for memberOfOrgs \orgId -> do
+        AuthQ.permissionsForOrg (Just user_id) orgId
+      completedTours <- Q.getCompletedToursForUser user_id
+      isSuperadmin <- AuthZQ.isSuperadmin user_id
+      planTier <- UserQ.userSubscriptionTier user_id
+      hasUnreadNotifications <- NotifQ.hasUnreadNotifications user_id
+      pure $
+        UserAccountInfo
+          { primaryEmail = user_email,
+            completedTours,
+            organizationMemberships = zipWith OrgMembershipInfo orgDisplayInfos orgPermissions,
+            isSuperadmin,
+            displayInfo,
+            planTier,
+            hasUnreadNotifications
+          }
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent
 completeToursEndpoint Session {sessionUserId} flows = do

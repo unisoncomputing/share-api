@@ -973,13 +973,13 @@ isUnisonEmployee uid = do
       |]
 
 -- | Returns the handles of all orgs the provided user is a member of.
-organizationMemberships :: UserId -> PG.Transaction e [UserHandle]
+organizationMemberships :: (PG.QueryA m) => UserId -> m [OrgId]
 organizationMemberships uid = do
   PG.queryListCol
     [PG.sql|
-        SELECT org_user.handle FROM users AS org_user
-          JOIN org_members ON organization_user_id = org_user.id
-          WHERE member_user_id = #{uid}
+        SELECT om.org_id
+          FROM org_members om
+          WHERE om.member_user_id = #{uid}
       |]
 
 releaseByProjectReleaseShortHand :: ProjectReleaseShortHand -> PG.Transaction e (Maybe (Release CausalId UserId))
