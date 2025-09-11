@@ -1,11 +1,11 @@
 module Share.Web.Share.DisplayInfo.Queries (userLikeDisplayInfoOf, unifiedDisplayInfoForUserOf) where
 
-import Share.Prelude
 import Control.Lens
 import Share.IDs
 import Share.Postgres (Transaction)
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Postgres.Users.Queries qualified as UsersQ
+import Share.Prelude
 import Share.Web.Share.DisplayInfo.Types
 import Share.Web.Share.Orgs.Queries qualified as OrgsQ
 

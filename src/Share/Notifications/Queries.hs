@@ -106,7 +106,7 @@ listNotificationHubEntryPayloads notificationUserId mayLimit mayCursor statusFil
           LIMIT #{limit}
         |]
 
-hasUnreadNotifications :: UserId -> Transaction e Bool
+hasUnreadNotifications :: (PG.QueryA m) => UserId -> m Bool
 hasUnreadNotifications notificationUserId = do
   queryExpect1Col
     [sql|

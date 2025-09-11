@@ -297,7 +297,7 @@ searchUsersByNameOrHandlePrefix (Query prefix) usk (Limit limit) = do
       Just orgId -> UnifiedOrg orgId
       Nothing -> UnifiedUser userId
 
-joinOrgIdsToUserIdsOf :: Traversal s t UserId (UserId, Maybe OrgId) -> s -> PG.Transaction e t
+joinOrgIdsToUserIdsOf :: (PG.QueryA m) => Traversal s t UserId (UserId, Maybe OrgId) -> s -> m t
 joinOrgIdsToUserIdsOf trav s = do
   s
     & asListOf trav %%~ \userIds -> do
@@ -342,7 +342,7 @@ allUsers = do
         SELECT id FROM users
       |]
 
-userSubscriptionTier :: UserId -> PG.Transaction e PlanTier
+userSubscriptionTier :: (PG.QueryA m) => UserId -> m PlanTier
 userSubscriptionTier userId =
   fromMaybe Free <$> do
     PG.query1Col

@@ -19,12 +19,12 @@ module Share.Postgres.Authorization.Queries
   )
 where
 
-import Share.Prelude
 import Control.Lens
 import Data.Set qualified as Set
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.IDs (CausalId)
+import Share.Prelude
 import Share.Web.Authorization.Types
 
 -- | A user has access if they own the repo, or if they're a member of an org which owns it.
@@ -42,7 +42,7 @@ checkIsUserMaintainer requestingUserId codebaseOwnerUserId
         )
       |]
 
-isSuperadmin :: UserId -> PG.Transaction e Bool
+isSuperadmin :: (PG.QueryA m) => UserId -> m Bool
 isSuperadmin uid = do
   PG.queryExpect1Col
     [PG.sql|
@@ -155,7 +155,7 @@ permissionsForProject mayUserId projectId = do
       |]
     <&> Set.fromList
 
-permissionsForOrg :: Maybe UserId -> OrgId -> PG.Transaction e (Set RolePermission)
+permissionsForOrg :: (PG.QueryA m) => Maybe UserId -> OrgId -> m (Set RolePermission)
 permissionsForOrg mayUserId orgId = do
   PG.queryListCol @RolePermission
     [PG.sql|
