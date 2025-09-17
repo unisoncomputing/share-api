@@ -17,6 +17,7 @@ import Share.Codebase.Types (CodebaseEnv (..), CodebaseRuntime)
 import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId)
+import Share.Postgres.NameLookups.Queries (NameSearchScope (TransitiveDependencies))
 import Share.Postgres.NameLookups.Types (PathSegments (..))
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Prelude
@@ -62,5 +63,5 @@ findAndRenderDoc codebase@(CodebaseEnv {codebaseOwner}) docNames runtime namespa
     namesPerspective <- NPOps.namesPerspectiveForRootAndPath rootNamespaceHashId (coerce $ Path.toList namespacePath)
     eDoc <- Backend.evalDocRef codebase runtime docRef
     let docDeps = Doc.dependencies eDoc <> Set.singleton (LD.TermReference docRef)
-    docPPE <- PostgresPPE.ppedForReferences namesPerspective docDeps
+    docPPE <- PostgresPPE.ppedForReferences TransitiveDependencies namesPerspective docDeps
     pure $ Doc.renderDoc docPPE eDoc

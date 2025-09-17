@@ -29,6 +29,7 @@ import Share.Postgres (QueryM, transactionSpan)
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (CausalId, ComponentHash (..))
+import Share.Postgres.NameLookups.Queries (NameSearchScope (..))
 import Share.Postgres.NameLookups.Types (pathToPathSegments)
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Postgres.NamesPerspective.Types (NamesPerspective)
@@ -147,9 +148,9 @@ definitionDependencyResults ::
   Maybe Width ->
   m [DefinitionSearchResult]
 definitionDependencyResults codebase codeCache hqName project branchRef np mayWidth = do
-  let nameSearch = PGNameSearch.nameSearchForPerspective np
+  let nameSearch = PGNameSearch.nameSearchForPerspective ProjectDefinitions np
   deps <- definitionDependencies codebase hqName nameSearch
-  ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
+  ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences TransitiveDependencies np deps
   -- TODO: batchify this
   forMaybe (Set.toList $ dependenciesToReferences deps) \dep -> runMaybeT $ case dep of
     Left termRef -> do
@@ -231,9 +232,9 @@ definitionDependentResults ::
   Maybe Width ->
   m [DefinitionSearchResult]
 definitionDependentResults codebase codeCache hqName project branchRef np mayWidth = do
-  let nameSearch = PGNameSearch.nameSearchForPerspective np
+  let nameSearch = PGNameSearch.nameSearchForPerspective ProjectDefinitions np
   deps <- definitionDependents codebase hqName nameSearch
-  ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
+  ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences ProjectDefinitions np deps
   let allRefs = Set.toList $ dependenciesToReferences deps
   let (allTerms, allTypes) = partitionEithers allRefs
   liftA2 (<>) (doTerms ppe allTerms) (doTypes ppe allTypes)
@@ -316,8 +317,8 @@ displayDefinitionByHQName codebase@(CodebaseEnv {codebaseOwner}) perspective roo
       -- `trunk` over those in other releases.
       -- ppe which returns names fully qualified to the current namesRoot,  not to the codebase root.
       let biases = maybeToList $ HQ.toName query
-      let ppedBuilder deps = (PPED.biasTo biases) <$> (PPEPostgres.ppedForReferences perspectiveNP deps)
-      let nameSearch = PGNameSearch.nameSearchForPerspective perspectiveNP
+      let ppedBuilder deps = (PPED.biasTo biases) <$> (PPEPostgres.ppedForReferences TransitiveDependencies perspectiveNP deps)
+      let nameSearch = PGNameSearch.nameSearchForPerspective TransitiveDependencies perspectiveNP
       dr@(Backend.DefinitionResults terms types misses) <- mkDefinitionsForQuery rt.codeCache nameSearch [query]
       let width = mayDefaultWidth renderWidth
       let docResultsOf :: forall s t. Traversal s t Name [(HashQualifiedName, UnisonHash, Doc.Doc)] -> s -> m t

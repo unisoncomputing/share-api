@@ -30,6 +30,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Cursors qualified as Cursors
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NLOps
+import Share.Postgres.NameLookups.Queries (NameSearchScope (..))
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
 import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
 import Share.Postgres.Notifications qualified as Notif
@@ -243,7 +244,7 @@ syncTerms codebase namesPerspective rootBranchHashId termsCursor = do
 
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) refDocs
-    pped <- PG.timeTransaction "Build PPED" $ PPEPostgres.ppedForReferences namesPerspective allDeps
+    pped <- PG.timeTransaction "Build PPED" $ PPEPostgres.ppedForReferences TransitiveDependencies namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
     let namedDocs :: [DefinitionDocument Name (Name, ShortHash)]
         namedDocs =
@@ -426,7 +427,7 @@ syncTypes codebase codeCache namesPerspective rootBranchHashId typesCursor = do
                 }
     -- It's much more efficient to build only one PPE per batch.
     let allDeps = setOf (folded . folding tokens . folded . to LD.TypeReference) defDocuments
-    pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
+    pped <- PPEPostgres.ppedForReferences TransitiveDependencies namesPerspective allDeps
     let ppe = PPED.unsuffixifiedPPE pped
     let namedDocs :: V.Vector (DefinitionDocument Name (Name, ShortHash))
         namedDocs =

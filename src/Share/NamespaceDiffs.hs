@@ -53,6 +53,7 @@ import Share.Postgres qualified as PG
 import Share.Postgres.Definitions.Queries qualified as DefnsQ
 import Share.Postgres.IDs (BranchHashId)
 import Share.Postgres.NameLookups.Ops qualified as NL
+import Share.Postgres.NameLookups.Queries (NameSearchScope (TransitiveDependencies))
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NameLookups.Types qualified as NL
 import Share.Postgres.NamesPerspective.Ops qualified as NPOps
@@ -298,7 +299,7 @@ computeThreeWayNamespaceDiff codebaseEnvs2 aliceCodeCache bobCodeCache branchHas
             traverse NPOps.namesPerspectiveForRoot branchHashIds
         names <-
           PG.transactionSpan "load names" mempty do
-            sequence (PGNames.namesForReferences <$> perspectives <*> ThreeWay.toTwoOrThreeWay dependencies)
+            sequence (PGNames.namesForReferences TransitiveDependencies <$> perspectives <*> ThreeWay.toTwoOrThreeWay dependencies)
         pure (TwoOrThreeWay.toThreeWay Names.empty names)
 
   Merge.makeDiffblob

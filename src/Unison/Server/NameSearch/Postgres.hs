@@ -14,7 +14,7 @@ import Share.Postgres (QueryM)
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops as NLOps
-import Share.Postgres.NameLookups.Queries (ShouldSuffixify (NoSuffixify))
+import Share.Postgres.NameLookups.Queries (NameSearchScope, ShouldSuffixify (NoSuffixify))
 import Share.Postgres.NameLookups.Types
 import Share.Postgres.NamesPerspective.Types (NamesPerspective, perspectiveCurrentMountPathPrefix)
 import Share.Prelude
@@ -30,8 +30,8 @@ import Unison.Server.NameSearch (NameSearch (..), Search (..))
 import Unison.Server.SearchResult qualified as SR
 import Unison.ShortHash qualified as V1ShortHash
 
-nameSearchForPerspective :: forall m. (PG.QueryM m) => NamesPerspective m -> NameSearch m
-nameSearchForPerspective namesPerspective =
+nameSearchForPerspective :: forall m. (PG.QueryM m) => NameSearchScope -> NamesPerspective m -> NameSearch m
+nameSearchForPerspective nameSearchScope namesPerspective =
   NameSearch {typeSearch, termSearch}
   where
     -- Some searches will provide a fully-qualified name, so we need to strip off the
@@ -64,7 +64,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTypes :: V1.Reference -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTypes ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.references1ToPGOf id ref
-      names <- lift $ NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
+      names <- lift $ NLOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify nameSearchScope id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Reference.toShortHash ref))
         & Set.fromList
@@ -72,7 +72,7 @@ nameSearchForPerspective namesPerspective =
     lookupNamesForTerms :: V1Referent.Referent -> m (Set (HQ'.HashQualified Name))
     lookupNamesForTerms ref = fromMaybeT (pure mempty) $ do
       pgRef <- MaybeT $ CV.referents1ToPGOf id ref
-      names <- lift $ NLOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify id pgRef
+      names <- lift $ NLOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify nameSearchScope id pgRef
       names
         & fmap (\(fqnSegments, _suffixSegments) -> HQ'.HashQualified (reversedSegmentsToName fqnSegments) (V1Referent.toShortHash ref))
         & Set.fromList

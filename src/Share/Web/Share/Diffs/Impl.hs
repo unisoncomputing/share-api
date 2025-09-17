@@ -23,6 +23,7 @@ import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionQ
 import Share.Postgres.Hashes.Queries qualified as HashQ
 import Share.Postgres.IDs (BranchHash, BranchHashId, CausalId)
+import Share.Postgres.NameLookups.Queries (NameSearchScope (TransitiveDependencies))
 import Share.Postgres.NameLookups.Types (NameLookupReceipt)
 import Share.Postgres.NamesPerspective.Ops qualified as NLOps
 import Share.Postgres.NamesPerspective.Types (NamesPerspective (..))
@@ -294,7 +295,7 @@ getTermDefinitionsOf codebase rt namesPerspective trav s = do
       Definitions.termDefinitionByNamesOf codebase ppedBuilder namesPerspective renderWidth rt includeDocs traversed names
   where
     includeDocs = False
-    ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
+    ppedBuilder deps = PPEPostgres.ppedForReferences TransitiveDependencies namesPerspective deps
     renderWidth :: Width
     renderWidth = 80
 
@@ -336,7 +337,7 @@ expectTermDefinitionsByNamedRefsOf codebase rt namesPerspective toReferent trav 
         (map (\name -> (name, toReferent name)) names)
   where
     includeDocs = False
-    ppedBuilder deps = PPEPostgres.ppedForReferences namesPerspective deps
+    ppedBuilder deps = PPEPostgres.ppedForReferences TransitiveDependencies namesPerspective deps
     renderWidth :: Width
     renderWidth = 80
 
@@ -371,7 +372,7 @@ getTypeDefinitionsOf codebase rt namesPerspective trav s = do
       Definitions.typeDefinitionsByNamesOf codebase ppedBuilder namesPerspective renderWidth rt includeDocs traversed names
   where
     includeDocs = False
-    ppedBuilder = PPEPostgres.ppedForReferences namesPerspective
+    ppedBuilder = PPEPostgres.ppedForReferences TransitiveDependencies namesPerspective
     renderWidth :: Width
     renderWidth = 80
 
@@ -398,7 +399,7 @@ expectTypeDefinitionsByNamedRefsOf codebase rt namesPerspective toReference trav
         (map (\name -> (name, toReference name)) names)
   where
     includeDocs = False
-    ppedBuilder = PPEPostgres.ppedForReferences namesPerspective
+    ppedBuilder = PPEPostgres.ppedForReferences TransitiveDependencies namesPerspective
     renderWidth :: Width
     renderWidth = 80
 
