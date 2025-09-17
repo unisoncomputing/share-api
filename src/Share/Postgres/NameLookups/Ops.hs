@@ -74,20 +74,20 @@ fuzzySearchDefinitions includeDependencies namesPerspective@NamesPerspective {re
 
 -- | Get the list of (fqn, suffixified) names for a given Referent.
 -- If 'shouldSuffixify' is 'NoSuffixify', the suffixified name will be the same as the fqn.
-termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
-termNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify trav s = do
+termNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Q.NameSearchScope -> Traversal s t PGReferent [(ReversedName, ReversedName)] -> s -> m t
+termNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify nameScope trav s = do
   s
     & asListOf trav %%~ \refs -> do
-      NameLookupQ.termNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify traversed refs
+      NameLookupQ.termNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify nameScope traversed refs
         <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) -> (reversedName, suffixifiedName)
 
 -- | Get the list of (fqn, suffixified) names for a given Reference.
 -- If 'shouldSuffixify' is 'NoSuffixify', the suffixified name will be the same as the fqn.
-typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [(ReversedName, ReversedName)] -> s -> m t
-typeNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify trav s = do
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Q.NameSearchScope -> Traversal s t PGReference [(ReversedName, ReversedName)] -> s -> m t
+typeNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify nameScope trav s = do
   s
     & asListOf trav %%~ \refs -> do
-      NameLookupQ.typeNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify traversed refs
+      NameLookupQ.typeNamesForRefsWithinNamespaceOf namesPerspective maySuffix shouldSuffixify nameScope traversed refs
         <&> (fmap . fmap) \(NameWithSuffix {reversedName, suffixifiedName}) -> (reversedName, suffixifiedName)
 
 termRefsForExactNamesOf :: (PG.QueryM m) => NamesPerspective m -> Traversal s t ReversedName [NamedRef V1.Referent] -> s -> m t

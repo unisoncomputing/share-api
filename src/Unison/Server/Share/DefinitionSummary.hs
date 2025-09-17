@@ -22,6 +22,7 @@ import Share.Backend qualified as Backend
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodeCache)
 import Share.Postgres (QueryM, unrecoverableError)
+import Share.Postgres.NameLookups.Queries (NameSearchScope (TransitiveDependencies))
 import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Prelude
 import Share.PrettyPrintEnvDecl.Postgres qualified as PPEPostgres
@@ -68,7 +69,7 @@ termSummariesForReferentsOf namesPerspective mayWidth trav s = do
     & asListOf trav %%~ \inputs -> do
       let (refs, typeSigs, mayNames) = unzip3 inputs
       let allDeps = foldMap Type.labeledDependencies typeSigs
-      pped <- PPEPostgres.ppedForReferences namesPerspective allDeps
+      pped <- PPEPostgres.ppedForReferences TransitiveDependencies namesPerspective allDeps
       let shortHashes = V2Referent.toShortHash <$> refs
       let displayNames = zipWith (\mayName shortHash -> maybe (HQ.HashOnly shortHash) HQ.NameOnly mayName) mayNames shortHashes
       let termReferences = V2Referent.toReference <$> refs

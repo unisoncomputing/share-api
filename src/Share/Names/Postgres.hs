@@ -7,7 +7,7 @@ import Data.Set qualified as Set
 import Share.Postgres qualified as PG
 import Share.Postgres.NameLookups.Conversions qualified as CV
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
-import Share.Postgres.NameLookups.Queries (ShouldSuffixify (NoSuffixify))
+import Share.Postgres.NameLookups.Queries (NameSearchScope, ShouldSuffixify (NoSuffixify))
 import Share.Postgres.NameLookups.Types qualified as NameLookups
 import Share.Postgres.NamesPerspective.Types (NamesPerspective)
 import Share.Postgres.Refs.Types
@@ -19,8 +19,8 @@ import Unison.Names qualified as Names
 import Unison.Reference qualified as V1
 import Unison.Referent qualified as V1
 
-namesForReferences :: forall m. (PG.QueryM m) => NamesPerspective m -> Set LabeledDependency -> m Names
-namesForReferences namesPerspective refs = do
+namesForReferences :: forall m. (PG.QueryM m) => NameSearchScope -> NamesPerspective m -> Set LabeledDependency -> m Names
+namesForReferences namesScope namesPerspective refs = do
   (pgRefTerms, pgRefTypes) <-
     Set.toList refs
       & CV.labeledDependencies1ToPG
@@ -38,7 +38,7 @@ namesForReferences namesPerspective refs = do
         & asListOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           typeNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
-            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify traversed pgRefs
+            NameLookupOps.typeNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify namesScope traversed pgRefs
           pure $ do
             ((ref, _pgRef), names) <- zip refs typeNames
             pure $ do
@@ -51,7 +51,7 @@ namesForReferences namesPerspective refs = do
         & asListOf trav %%~ \refs -> do
           let pgRefs = snd <$> refs
           termNames :: [[(NameLookups.ReversedName, NameLookups.ReversedName)]] <-
-            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify traversed pgRefs
+            NameLookupOps.termNamesForRefsWithinNamespaceOf namesPerspective Nothing NoSuffixify namesScope traversed pgRefs
           pure $ do
             ((ref, _pgRef), names) <- zip refs termNames
             pure $ do

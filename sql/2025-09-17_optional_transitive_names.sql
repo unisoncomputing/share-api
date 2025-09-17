@@ -1,5 +1,5 @@
 -- Add an additional argument for whether to include dependencies or transitive dependencies.
-CREATE OR REPLACE FUNCTION term_names_for_ref_within_namespace(
+CREATE FUNCTION term_names_for_ref(
   arg_bh_id integer,
   arg_namespace_prefix text,
   arg_reversed_name_prefix text,
@@ -8,8 +8,8 @@ CREATE OR REPLACE FUNCTION term_names_for_ref_within_namespace(
   arg_referent_component_hash_id integer,
   arg_referent_component_index bigint,
   arg_referent_constructor_index bigint,
-  arg_include_dependencies boolean DEFAULT true,
-  arg_include_transitive_dependencies boolean DEFAULT true
+  arg_include_dependencies boolean,
+  arg_include_transitive_dependencies boolean
 ) RETURNS TABLE (
   reversed_name text,
   suffixified_name text
@@ -100,7 +100,7 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 
-CREATE OR REPLACE FUNCTION type_names_for_ref_within_namespace(
+CREATE FUNCTION type_names_for_ref(
   arg_bh_id integer,
   arg_namespace_prefix text,
   arg_reversed_name_prefix text,
@@ -108,8 +108,8 @@ CREATE OR REPLACE FUNCTION type_names_for_ref_within_namespace(
   arg_reference_builtin text,
   arg_reference_component_hash_id integer,
   arg_reference_component_index bigint,
-  arg_include_dependencies boolean DEFAULT true,
-  arg_include_transitive_dependencies boolean DEFAULT true
+  arg_include_dependencies boolean,
+  arg_include_transitive_dependencies boolean
 ) RETURNS TABLE (
   reversed_name text,
   suffixified_name text

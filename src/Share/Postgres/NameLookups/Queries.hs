@@ -4,6 +4,7 @@
 module Share.Postgres.NameLookups.Queries
   ( termNamesForRefsWithinNamespaceOf,
     typeNamesForRefsWithinNamespaceOf,
+    NameSearchScope (..),
     ShouldSuffixify (..),
     termRefsForExactNamesOf,
     typeRefsForExactNamesOf,
@@ -52,13 +53,19 @@ import Unison.Util.Monoid qualified as Monoid
 
 data ShouldSuffixify = Suffixify | NoSuffixify
 
+data NameSearchScope
+  = ProjectDefinitions
+  | Dependencies
+  | TransitiveDependencies
+  deriving (Show, Eq, Ord)
+
 -- | Get the list of term names and suffixifications for a given Referent within a given root namespace perspective.
 -- Considers one level of dependencies, but not transitive dependencies.
 --
 -- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
 termNamesForRefsWithinNamespaceOf ::
-  (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
-termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
+  (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> NameSearchScope -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
+termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify nameScope trav s = do
   s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64)]
         refsTable =
@@ -74,7 +81,7 @@ termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
           -- Need COALESCE because array_agg will return NULL rather than the empty array
           -- if there are no results.
           SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
-          FROM term_names_for_ref_within_namespace(
+          FROM term_names_for_ref(
             #{bhId},
             #{namespacePrefix},
             #{reversedNamePrefix},
@@ -82,7 +89,9 @@ termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
             refs.referent_builtin,
             refs.referent_component_hash_id,
             refs.referent_component_index,
-            refs.referent_constructor_index
+            refs.referent_constructor_index,
+            #{includeDependencies},
+            #{includeTransitiveDependencies}
           ) AS names(reversed_name, suffixified_name)
         ) AS ref_names
         FROM refs
@@ -90,6 +99,10 @@ termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
       |]
       <&> over (traversed . traversed . field @"reversedName") (qualifyNameToPerspective np)
   where
+    (includeDependencies, includeTransitiveDependencies) = case nameScope of
+      ProjectDefinitions -> (False, False)
+      Dependencies -> (True, False)
+      TransitiveDependencies -> (True, True)
     -- Look in the current mount.
     bhId = perspectiveCurrentMountBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
@@ -104,8 +117,8 @@ termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
 -- Considers one level of dependencies, but not transitive dependencies.
 --
 -- If NoSuffixify is provided, the suffixified name will be the same as the fqn.
-typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
-typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
+typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> NameSearchScope -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
+typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify nameScope trav s = do
   s & asListOf trav \refs -> do
     let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64)]
         refsTable =
@@ -121,14 +134,16 @@ typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
           -- Need COALESCE because array_agg will return NULL rather than the empty array
           -- if there are no results.
           SELECT COALESCE(array_agg((names.reversed_name, names.suffixified_name) ORDER BY length(names.reversed_name) ASC), '{}')
-          FROM type_names_for_ref_within_namespace(
+          FROM type_names_for_ref(
             #{bhId},
             #{namespacePrefix},
             #{reversedNamePrefix},
             #{shouldSuffixifyArg},
             refs.reference_builtin,
             refs.reference_component_hash_id,
-            refs.reference_component_index
+            refs.reference_component_index,
+            #{includeDependencies},
+            #{includeTransitiveDependencies}
           ) AS names(reversed_name, suffixified_name)
         ) AS ref_names
         FROM refs
@@ -136,6 +151,10 @@ typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify trav s = do
       |]
       <&> over (traversed . traversed . field @"reversedName") (qualifyNameToPerspective np)
   where
+    (includeDependencies, includeTransitiveDependencies) = case nameScope of
+      ProjectDefinitions -> (False, False)
+      Dependencies -> (True, False)
+      TransitiveDependencies -> (True, True)
     bhId = perspectiveCurrentMountBranchHashId np
     shouldSuffixifyArg = case shouldSuffixify of
       Suffixify -> True

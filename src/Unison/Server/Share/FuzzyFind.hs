@@ -30,6 +30,7 @@ import Share.Postgres (QueryM)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.IDs (BranchHashId, CausalId)
 import Share.Postgres.NameLookups.Ops qualified as NameLookupOps
+import Share.Postgres.NameLookups.Queries (NameSearchScope (TransitiveDependencies))
 import Share.Postgres.NameLookups.Queries qualified as Q
 import Share.Postgres.NameLookups.Types (NamedRef (..), PathSegments (..))
 import Share.Postgres.NameLookups.Types qualified as NameLookups
@@ -232,7 +233,7 @@ serveFuzzyFind codebase inScratch searchDependencies rootCausal perspective mayL
                     (r,) <$> Backend.typeListEntry (ExactName (NameSegment n) r)
                 )
       let allLabeledDependencies = foldMap (either (termEntryLabeledDependencies . snd) (typeEntryLabeledDependencies . snd)) entries
-      pped <- PPED.ppedForReferences namesPerspective allLabeledDependencies
+      pped <- PPED.ppedForReferences TransitiveDependencies namesPerspective allLabeledDependencies
       let ppe = PPED.suffixifiedPPE pped
       for entries \case
         Left (_r, termEntry) ->
