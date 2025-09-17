@@ -8,6 +8,7 @@ module Share.Web.Admin.Impl where
 
 import Data.Either (partitionEithers)
 import Data.Time qualified as Time
+import Servant
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.Admin qualified as Admin
@@ -20,7 +21,8 @@ import Share.Web.Admin.Types
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
-import Servant
+import Share.Web.Share.Orgs.Operations qualified as OrgOps
+import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Unison.Util.Monoid qualified as Monoid
 
 -- | Ensure we have name lookups for views for this user.
@@ -69,6 +71,13 @@ removeFromCatalogCategoryEndpoint !_authzReceipt removals = do
     respondError (EntityMissing (ErrorID "catalog-categories:missing") msg)
   pure NoContent
 
+createOrgEndpoint :: AuthZ.AuthZReceipt -> AdminCreateOrgRequest -> WebApp AdminCreateOrgResponse
+createOrgEndpoint !authZReceipt AdminCreateOrgRequest {orgName, orgHandle, orgEmail, orgAvatarUrl, orgOwner, isCommercial} = do
+  User {user_id = ownerUserId} <- PGO.expectUserByHandle orgOwner
+  PG.runTransactionOrRespondError $ do
+    orgId <- OrgOps.createOrg authZReceipt orgName orgHandle orgEmail orgAvatarUrl ownerUserId ownerUserId isCommercial
+    AdminCreateOrgResponse <$> OrgQ.orgDisplayInfoOf id orgId
+
 server :: ServerT Admin.API WebApp
 server authedSession =
   let catalogServer authzReceipt = addToCatalogCategoryEndpoint authzReceipt :<|> removeFromCatalogCategoryEndpoint authzReceipt
@@ -76,6 +85,7 @@ server authedSession =
         catalogServer authzReceipt
           :<|> ( \userHandle -> deleteUserEndpoint authzReceipt userHandle
                )
+          :<|> createOrgEndpoint authzReceipt
   where
     -- Require that the user has re-authenticated within the last 2 hours in order to
     -- perform admin actions.

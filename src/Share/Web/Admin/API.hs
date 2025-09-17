@@ -5,10 +5,10 @@
 
 module Share.Web.Admin.API where
 
+import Servant
 import Share.IDs
 import Share.OAuth.Session
 import Share.Web.Admin.Types
-import Servant
 
 type API =
   AuthenticatedSession :> UnauthenticatedAPI
@@ -21,6 +21,7 @@ type UnauthenticatedAPI =
              :> ( ("delete-user" :> DeleteUserEndpoint)
                 )
          )
+    :<|> ("orgs" :> "create" :> AdminCreateOrgEndpoint)
 
 type CreateMissingLooseCodeMappingsEndpoint =
   Post '[JSON] ()
@@ -54,3 +55,7 @@ type AddCloudUserEndpoint =
 type RemoveCloudUserEndpoint =
   ReqBody '[JSON] RemoveCloudUserRequest
     :> Delete '[JSON] ()
+
+type AdminCreateOrgEndpoint =
+  ReqBody '[JSON] AdminCreateOrgRequest
+    :> Post '[JSON] AdminCreateOrgResponse
