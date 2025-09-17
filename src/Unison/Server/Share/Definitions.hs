@@ -185,15 +185,17 @@ definitionDependents codebase name nameSearch = do
           & Set.mapMaybe dependencyToComponentHash
           & Set.toList
   -- Check whether the components we're getting dependents of contain multiple elements.
-  containsMultiElementComponent <- any (> 1) <$> Codebase.componentSizeOf traversed componentHashes
-  (dependentTerms, dependentTypes) <- fold <$> Codebase.definitionComponentDirectDependentsOf codebase traversed componentHashes
+  containsMultiElementComponent <- transactionSpan "checking-component-sizes" mempty $ do
+    any (> 1) <$> Codebase.componentSizeOf traversed componentHashes
+  (dependentTerms, dependentTypes) <- transactionSpan "resolving-dependents" mempty $ do
+    fold <$> Codebase.definitionComponentDirectDependentsOf codebase traversed componentHashes
   -- TODO: If the component we're getting dependents of contains multiple elements then we should really
   -- fully load each of the dependents and check whether they depend on the correct component
   -- element, but this going to significantly slow things down and the results will be
   -- _mostly_ right without it, so we can likely put this off until later.
   -- If we end up changing the storage format we may be able to do this check directly in the
   -- DB instead.
-  when containsMultiElementComponent do
+  when containsMultiElementComponent $ transactionSpan "multi-element-queries" mempty do
     Logging.logInfoText "Encountered a multi-element component when getting definition dependents. Results may be inaccurate."
   (termRefIds, typeRefIds) <- PG.pipelined $ do
     termRefIds <- Codebase.expectRefIdsByTermIdsOf traversed (Set.toList dependentTerms)
@@ -232,11 +234,12 @@ definitionDependentResults ::
   m [DefinitionSearchResult]
 definitionDependentResults codebase codeCache hqName project branchRef np mayWidth = do
   let nameSearch = PGNameSearch.nameSearchForPerspective np
-  deps <- definitionDependents codebase hqName nameSearch
-  ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
+  deps <- transactionSpan "getting dependents" mempty $ do
+    definitionDependents codebase hqName nameSearch
+  ppe <- transactionSpan "building-ppe" mempty $ PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences np deps
   let allRefs = Set.toList $ dependenciesToReferences deps
   let (allTerms, allTypes) = partitionEithers allRefs
-  liftA2 (<>) (doTerms ppe allTerms) (doTypes ppe allTypes)
+  transactionSpan "building-results" mempty $ liftA2 (<>) (doTerms ppe allTerms) (doTypes ppe allTypes)
   where
     doTerms :: PPE.PrettyPrintEnv -> [TermReference] -> m [DefinitionSearchResult]
     doTerms ppe termRefs = do
@@ -246,12 +249,14 @@ definitionDependentResults codebase codeCache hqName project branchRef np mayWid
       let v2Referents = CV.referent1to2 <$> referentsMap
       let fqns = HQ'.toName <$> hqFqns
       typs <-
-        Codebase.loadTypesOfReferentsOf codebase traversed v2Referents
-          <&> catMaybes
+        transactionSpan "load-types-of-referents" mempty $ do
+          Codebase.loadTypesOfReferentsOf codebase traversed v2Referents
+            <&> catMaybes
       let combined = Data.zip3 v2Referents typs (Just <$> fqns)
       termSummaries <-
-        Summary.termSummariesForReferentsOf np mayWidth traversed combined
-          <&> fmap ToTTermSummary
+        transactionSpan "load-term-summaries" mempty $ do
+          Summary.termSummariesForReferentsOf np mayWidth traversed combined
+            <&> fmap ToTTermSummary
       Data.zipWith2 fqns termSummaries (\fqn summary -> DefinitionSearchResult {fqn, summary, project, branchRef})
         & Map.elems
         & pure
