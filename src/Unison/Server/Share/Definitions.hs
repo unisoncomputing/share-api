@@ -148,7 +148,7 @@ definitionDependencyResults ::
   Maybe Width ->
   m [DefinitionSearchResult]
 definitionDependencyResults codebase codeCache hqName project branchRef np mayWidth = do
-  let nameSearch = PGNameSearch.nameSearchForPerspective ProjectDefinitions np
+  let nameSearch = PGNameSearch.nameSearchForPerspective TransitiveDependencies np
   deps <- definitionDependencies codebase hqName nameSearch
   ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences TransitiveDependencies np deps
   -- TODO: batchify this
@@ -232,7 +232,7 @@ definitionDependentResults ::
   Maybe Width ->
   m [DefinitionSearchResult]
 definitionDependentResults codebase codeCache hqName project branchRef np mayWidth = do
-  let nameSearch = PGNameSearch.nameSearchForPerspective ProjectDefinitions np
+  let nameSearch = PGNameSearch.nameSearchForPerspective TransitiveDependencies np
   deps <- definitionDependents codebase hqName nameSearch
   ppe <- PPED.unsuffixifiedPPE <$> PPEPostgres.ppedForReferences ProjectDefinitions np deps
   let allRefs = Set.toList $ dependenciesToReferences deps
