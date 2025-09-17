@@ -4,8 +4,11 @@
 module Share.Web.Admin.Types where
 
 import Data.Aeson
+import Data.Text (Text)
 import Data.Time (Day)
 import Share.IDs
+import Share.Utils.URI
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo)
 
 data ProjectCategory = ProjectCategory
   { categoryName :: CategoryName,
@@ -46,3 +49,50 @@ data DeleteUserRequest = DeleteUserRequest
 instance FromJSON DeleteUserRequest where
   parseJSON = withObject "DeleteUserRequest" $ \o ->
     DeleteUserRequest <$> o .: "currentDate"
+
+data AdminCreateOrgRequest = AdminCreateOrgRequest
+  { orgName :: Text,
+    orgHandle :: OrgHandle,
+    orgEmail :: Maybe Email,
+    orgAvatarUrl :: Maybe URIParam,
+    orgOwner :: UserHandle,
+    isCommercial :: Bool
+  }
+  deriving (Show)
+
+instance FromJSON AdminCreateOrgRequest where
+  parseJSON = withObject "AdminCreateOrgRequest" $ \o -> do
+    orgName <- o .: "name"
+    orgHandle <- o .: "handle"
+    orgEmail <- o .:? "email"
+    orgAvatarUrl <- o .:? "avatarUrl"
+    orgOwner <- o .: "owner"
+    isCommercial <- o .:? "isCommercial" .!= False
+    pure AdminCreateOrgRequest {..}
+
+instance ToJSON AdminCreateOrgRequest where
+  toJSON AdminCreateOrgRequest {..} =
+    object
+      [ "name" .= orgName,
+        "handle" .= orgHandle,
+        "email" .= orgEmail,
+        "avatarUrl" .= orgAvatarUrl,
+        "owner" .= orgOwner,
+        "isCommercial" .= isCommercial
+      ]
+
+data AdminCreateOrgResponse = AdminCreateOrgResponse
+  { org :: OrgDisplayInfo
+  }
+  deriving (Show)
+
+instance FromJSON AdminCreateOrgResponse where
+  parseJSON = withObject "AdminCreateOrgResponse" $ \o -> do
+    org <- o .: "org"
+    pure AdminCreateOrgResponse {..}
+
+instance ToJSON AdminCreateOrgResponse where
+  toJSON AdminCreateOrgResponse {..} =
+    object
+      [ "org" .= org
+      ]
