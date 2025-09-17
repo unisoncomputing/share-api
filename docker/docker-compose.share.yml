@@ -53,3 +53,4 @@ services:
       - OTEL_RESOURCE_ATTRIBUTES=service.name=share-api,service.version=local,deployment.environment=local
       - OTEL_TRACES_SAMPLER=traceidratio
       - OTEL_TRACES_SAMPLER_ARG=1.0
+      - OTEL_PROPAGATORS=tracecontext,baggage
