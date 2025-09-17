@@ -15,7 +15,6 @@ import OpenTelemetry.Trace.Sampler qualified as Sampler
 import OpenTelemetry.Trace.TraceState (TraceState)
 import OpenTelemetry.Trace.TraceState qualified as TraceState
 import Share.Prelude
-import Unison.Debug qualified as Debug
 
 initSampler :: IO Sampler.Sampler
 initSampler =
@@ -29,21 +28,22 @@ initSampler =
         Trace.AttributeValue (Trace.TextAttribute t) -> Just t
         _ -> Nothing
     dropSample = (Sampler.Drop, HM.empty, TraceState.empty)
-    -- Configure some custom sampling logic.
+    -- Allow forcing a sample with the following header:
+    -- "baggage: force-trace=true"
     shouldForceSample :: Context -> Bool
     shouldForceSample ctx = fromMaybe False do
       baggage <- Context.lookupBaggage ctx
       let baggageMap = Baggage.values baggage
       forceTraceToken <- Baggage.mkToken "force-trace"
       forceTrace <- Baggage.value <$> HM.lookup forceTraceToken baggageMap
-      Debug.debugLogM Debug.Temp ("Force trace token: " <> show forceTrace)
       case Text.toLower forceTrace of
         "false" -> Just False
         "0" -> Just False
         _ -> Just True
     shouldSample :: Sampler.Sampler -> Context -> TraceId -> Text -> Trace.SpanArguments -> IO (Sampler.SamplingResult, HashMap Text Trace.Attribute, TraceState)
     shouldSample defaultSampler ctx tid name args
-      | shouldForceSample ctx = Sampler.shouldSample Sampler.alwaysOn ctx tid name args
+      | shouldForceSample ctx = do
+          Sampler.shouldSample Sampler.alwaysOn ctx tid name args
       | otherwise = do
           case (lookupTextAttribute "http.target" args >>= URI.parseURIReference . Text.unpack) <&> URI.pathSegments of
             Just ("metrics" : _) -> pure dropSample
