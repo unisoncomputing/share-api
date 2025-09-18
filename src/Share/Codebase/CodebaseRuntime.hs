@@ -1,5 +1,6 @@
 module Share.Codebase.CodebaseRuntime
   ( withCodebaseRuntime,
+    UnisonRuntime,
   )
 where
 
@@ -8,10 +9,12 @@ import Share.Codebase.CodeCache qualified as CC
 import Share.Codebase.Types
 import Share.Postgres qualified as PG
 import Share.Prelude
-import Unison.Codebase.Runtime (Runtime)
+import Unison.Runtime (Runtime)
 import Unison.Symbol (Symbol)
 import Unison.Term qualified as Term
 import UnliftIO qualified
+
+type UnisonRuntime = Runtime Symbol
 
 -- | Construct a Runtime linked to a specific codebase and transaction.
 -- Don't use the runtime for one codebase with another codebase.

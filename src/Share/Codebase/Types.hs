@@ -18,6 +18,7 @@ import Share.IDs
 import Unison.Codebase.CodeLookup qualified as CL
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.Runtime qualified as Rt
+import Unison.Runtime (Runtime)
 import Unison.DataDeclaration qualified as V1
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Parser.Ann (Ann)
@@ -57,7 +58,7 @@ data CodebaseRuntime scope m = CodebaseRuntime
     codeCache :: CodeCache scope,
     -- Function to look up cached evaluation results for the runtime.
     cachedEvalResult :: Reference.Id -> m (Maybe (Rt.Term Symbol)),
-    unisonRuntime :: Rt.Runtime Symbol
+    unisonRuntime :: Runtime Symbol
   }
 
 hoistCodebaseRuntime :: (Monad m) => (forall x. m x -> n x) -> CodebaseRuntime s m -> CodebaseRuntime s n

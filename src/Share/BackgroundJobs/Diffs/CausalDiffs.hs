@@ -25,8 +25,6 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import System.Clock qualified as Clock
-import Unison.Codebase.Runtime (Runtime)
-import Unison.Symbol (Symbol)
 
 -- | Check every 10 minutes if we haven't heard on the notifications channel.
 -- Just in case we missed a notification.
@@ -44,14 +42,14 @@ worker scope = do
 -- Process diffs until we run out of them. We claim a diff in a transaction and compute the diff in the same
 -- transaction, with a row lock on the contribution id (which is skipped by other workers). There's therefore no chance
 -- that we claim a diff but fail to write the result of computing that diff back to the database.
-processDiffs :: AuthZ.AuthZReceipt -> Runtime Symbol -> Background ()
+processDiffs :: AuthZ.AuthZReceipt -> CR.UnisonRuntime -> Background ()
 processDiffs authZReceipt unisonRuntime = do
   processDiff authZReceipt unisonRuntime >>= \case
     True -> processDiffs authZReceipt unisonRuntime
     False -> pure ()
 
 -- | Process a diff, then return whether or not we did any work.
-processDiff :: AuthZ.AuthZReceipt -> Runtime Symbol -> Background Bool
+processDiff :: AuthZ.AuthZReceipt -> CR.UnisonRuntime -> Background Bool
 processDiff authZReceipt unisonRuntime = do
   result <- Trace.withSpan "background:causal-diffs:process-diff" mempty $
     PG.runTransactionMode PG.RepeatableRead PG.ReadWrite do
@@ -90,7 +88,7 @@ processDiff authZReceipt unisonRuntime = do
 -- Returns whether or not we did any work.
 maybeComputeAndStoreCausalDiff ::
   AuthZ.AuthZReceipt ->
-  Runtime Symbol ->
+  CR.UnisonRuntime ->
   CausalDiffInfo ->
   PG.Transaction EntityMissing Bool
 maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime (CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner}) = PG.transactionSpan "maybeComputeAndStoreCausalDiff" mempty $ do

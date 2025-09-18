@@ -18,7 +18,7 @@ import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Utils.Tags (HasTags (..))
 import System.Log.FastLogger (FormattedTime, LogStr)
 import System.Log.Raven.Types (SentryService)
-import Unison.Codebase.Runtime (Runtime)
+import Unison.Runtime (Runtime)
 import Unison.Symbol (Symbol)
 import Vault qualified
 
