@@ -36,6 +36,9 @@ fetch "$test_user" POST grant-project-contributor '/orgs/unison/roles' "
     ]
 }"
 
+# Now the user should be a member of the org
+fetch "$test_user" GET check-contributor-membership-addition '/orgs/unison/members'
+
 fetch "$some_user" GET maintainer-project-view '/users/unison/projects/privateorgproject'
 
 # Remove the user from the org again
@@ -49,3 +52,6 @@ fetch "$test_user" DELETE revoke-project-contributor '/orgs/unison/roles' "
 }"
 
 fetch "$some_user" GET non-maintainer-project-view '/users/unison/projects/privateorgproject'
+
+# Now the user should be no longer be a member of the org
+fetch "$test_user" GET check-contributor-membership-removal '/orgs/unison/members'
