@@ -4,6 +4,7 @@ module Share.Web.Share.Orgs.Impl (server) where
 
 import Control.Lens
 import Data.Either (isRight)
+import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Servant
 import Servant.Server.Generic
@@ -104,6 +105,11 @@ addRolesEndpoint orgHandle caller (AddRolesRequest {roleAssignments}) = do
   assertNoOrgSubjects roleAssignments
   PG.runTransaction do
     orgRoles <- OrgQ.addOrgRoles orgId roleAssignments
+    let newMembers =
+          (computeOrgMembershipChanges roleAssignments)
+            & Map.filter id
+            & Map.keysSet
+    OrgQ.addOrgMembers orgId newMembers
     ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
 
 removeRolesEndpoint :: UserHandle -> UserId -> RemoveRolesRequest -> WebApp ListRolesResponse
@@ -115,6 +121,12 @@ removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
     OrgQ.doesOrgHaveOwner orgId >>= \case
       False -> throwError OrgMustHaveOwnerError
       True -> pure ()
+    let evictedMembers =
+          (computeOrgMembershipChanges orgRoles)
+            -- Only keep users who should no longer be members
+            & Map.filter not
+            & Map.keysSet
+    OrgQ.removeOrgMembers orgId evictedMembers
 
     ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
 
@@ -158,3 +170,35 @@ assertNoOrgSubjects roleAssignments = do
             )
   when hasOrgSubject do
     respondError OrgMemberOfOrgError
+
+-- | This is part of a hack to temporarily fix org membership issues
+-- until we have time for a more robust solution.
+shouldRoleBeOrgMember :: RoleRef -> Bool
+shouldRoleBeOrgMember = \case
+  RoleOrgViewer -> False
+  RoleOrgContributor -> True
+  RoleOrgMaintainer -> True
+  RoleOrgAdmin -> True
+  RoleOrgOwner -> True
+  RoleOrgDefault -> True
+  RoleTeamAdmin -> False
+  RoleProjectViewer -> False
+  RoleProjectContributor -> False
+  RoleProjectMaintainer -> True
+  RoleProjectAdmin -> False
+  RoleProjectOwner -> False
+  RoleProjectPublicAccess -> False
+
+-- | Returns a list of users and whether they should end up as members of the org or not
+computeOrgMembershipChanges :: [RoleAssignment ResolvedAuthSubject] -> Map UserId Bool
+computeOrgMembershipChanges roleAssignments =
+  roleAssignments
+    & foldMap
+      ( \RoleAssignment {subject, roles} ->
+          case subject of
+            UserSubject userId ->
+              let shouldBeMember = any shouldRoleBeOrgMember roles
+               in [(userId, shouldBeMember)]
+            _ -> mempty
+      )
+    & Map.fromListWith (||)
