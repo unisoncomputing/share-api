@@ -304,6 +304,7 @@ library
     , parallel
     , parser-combinators
     , pem
+    , profunctors
     , prometheus-client
     , prometheus-metrics-ghc
     , random
@@ -463,6 +464,7 @@ executable share-api
     , parallel
     , parser-combinators
     , pem
+    , profunctors
     , prometheus-client
     , prometheus-metrics-ghc
     , random

@@ -97,6 +97,7 @@ dependencies:
 - parallel
 - parser-combinators
 - pem
+- profunctors
 - hasql
 - hasql-pool
 - hasql-interpolate
