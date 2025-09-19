@@ -1,27 +1,15 @@
 -- | Utils for working with `unison` packages and types
 module Share.Utils.Unison where
 
-import Control.Monad.Except
-import Control.Monad.Reader
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Text.Encoding qualified as Text
+import Servant
 import Share.Postgres.IDs
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
-import Share.Web.App (WebApp)
-import Share.Web.Errors (respondError)
 import Share.Web.Errors qualified as Errors
-import Servant
 import Unison.Hash qualified as Hash
 import Unison.Hash32 qualified as Hash32
-import Unison.Server.Backend qualified as Backend
-
-liftBackend :: Backend.Backend IO a -> WebApp a
-liftBackend m = do
-  result <- liftIO (runExceptT . flip runReaderT env . Backend.runBackend $ m)
-  either respondError pure result
-  where
-    env = Backend.BackendEnv {Backend.useNamesIndex = True}
 
 newtype InvalidCausalHash = InvalidCausalHash CausalHash
   deriving stock (Show, Eq)
