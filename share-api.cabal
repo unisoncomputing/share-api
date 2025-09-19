@@ -130,6 +130,7 @@ library
       Share.Utils.Servant.Client
       Share.Utils.Servant.PathInfo
       Share.Utils.Servant.RawRequest
+      Share.Utils.Servant.Websockets
       Share.Utils.Tags
       Share.Utils.Unison
       Share.Web.Admin.API
@@ -200,6 +201,8 @@ library
       Share.Web.UCM.SyncV2.Impl
       Share.Web.UCM.SyncV2.Queries
       Share.Web.UCM.SyncV2.Types
+      Share.Web.UCM.SyncV3.API
+      Share.Web.UCM.SyncV3.Impl
       Share.Web.UI.Links
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
@@ -314,6 +317,7 @@ library
     , servant-client-core
     , servant-conduit
     , servant-server
+    , servant-websockets
     , share-auth
     , share-utils
     , stm
@@ -354,6 +358,7 @@ library
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509
@@ -471,6 +476,7 @@ executable share-api
     , servant-client-core
     , servant-conduit
     , servant-server
+    , servant-websockets
     , share-api
     , share-auth
     , share-utils
@@ -512,6 +518,7 @@ executable share-api
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509

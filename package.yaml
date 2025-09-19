@@ -113,6 +113,7 @@ dependencies:
 - servant-client-core
 - servant-server
 - servant-conduit
+- servant-websockets
 - serialise
 - stm
 - stm-chans
@@ -153,6 +154,7 @@ dependencies:
 - wai-cors
 - wai-extra
 - wai-middleware-prometheus
+- websockets
 - warp
 - witch
 - witherable
