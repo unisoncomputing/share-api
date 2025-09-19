@@ -117,15 +117,26 @@ removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
   PG.runTransactionOrRespondError do
+    let updatedUsersMap =
+          roleAssignments
+            & foldMap
+              ( \RoleAssignment {subject} ->
+                  case subject of
+                    UserSubject userId -> Map.singleton userId Set.empty
+                    _ -> Map.empty
+              )
     orgRoles <- OrgQ.removeOrgRoles orgId roleAssignments
     OrgQ.doesOrgHaveOwner orgId >>= \case
       False -> throwError OrgMustHaveOwnerError
       True -> pure ()
+    let remainingRolesMap = computeOrgMembershipChanges orgRoles
+    let usersWithNoRemainingRoles = Map.keysSet updatedUsersMap `Set.difference` Map.keysSet remainingRolesMap
     let evictedMembers =
-          (computeOrgMembershipChanges orgRoles)
+          remainingRolesMap
             -- Only keep users who should no longer be members
             & Map.filter not
             & Map.keysSet
+            & Set.union usersWithNoRemainingRoles
     OrgQ.removeOrgMembers orgId evictedMembers
 
     ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
@@ -181,12 +192,12 @@ shouldRoleBeOrgMember = \case
   RoleOrgAdmin -> True
   RoleOrgOwner -> True
   RoleOrgDefault -> True
-  RoleTeamAdmin -> False
+  RoleTeamAdmin -> True
   RoleProjectViewer -> False
-  RoleProjectContributor -> False
+  RoleProjectContributor -> True
   RoleProjectMaintainer -> True
-  RoleProjectAdmin -> False
-  RoleProjectOwner -> False
+  RoleProjectAdmin -> True
+  RoleProjectOwner -> True
   RoleProjectPublicAccess -> False
 
 -- | Returns a list of users and whether they should end up as members of the org or not
