@@ -20,7 +20,18 @@
     },
     "permissions": [
       "project:view",
-      "project:contribute"
+      "project:contribute",
+      "project:maintain",
+      "project:create",
+      "org:view",
+      "org:edit",
+      "team:view",
+      "notification_hub_entry:view",
+      "notification_hub_entry:update",
+      "notification_subscription:view",
+      "notification_subscription:manage",
+      "notification_delivery_method:view",
+      "notification_delivery_method:manage"
     ],
     "releaseDownloads": [],
     "slug": "privateorgproject",
