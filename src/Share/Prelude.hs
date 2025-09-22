@@ -18,6 +18,7 @@ module Share.Prelude
     altSum,
     altMap,
     foldMapM,
+    foldMapMOf,
     onNothing,
     onNothingM,
     whenNothing,
@@ -56,6 +57,7 @@ where
 import Control.Applicative as X
 import Control.Arrow ((&&&))
 import Control.Category hiding (id, (.))
+import Control.Lens
 import Control.Monad as X
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader as X
@@ -73,7 +75,6 @@ import Data.Foldable as X
 import Data.Function as X
 import Data.Functor as X
 import Data.Functor.Compose (Compose (..))
-import Data.Functor.Contravariant (contramap)
 import Data.Functor.Identity as X
 import Data.Int as X
 import Data.List.NonEmpty (NonEmpty (..))
@@ -219,3 +220,8 @@ unifyEither = either id id
 
 traverseFirst :: (Bitraversable t, Applicative f) => (a -> f b) -> t a x -> f (t b x)
 traverseFirst f = bitraverse f pure
+
+foldMapMOf :: (Monad m, Monoid w) => Fold s a -> (a -> m w) -> s -> m w
+foldMapMOf foc f s =
+  toListOf foc s
+    & foldMapM f
