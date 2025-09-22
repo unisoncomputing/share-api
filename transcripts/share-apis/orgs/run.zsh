@@ -51,7 +51,7 @@ fetch "$admin_user" POST org-create-by-admin-commercial '/orgs' '{
 fetch "$transcripts_user" POST org-add-members '/orgs/acme/members' '{
   "members": [
     { "subject": "test", 
-      "roles": "org_maintainer"
+      "role": "org_maintainer"
     }
   ]
 }'
@@ -68,7 +68,7 @@ fetch "$unauthorized_user" GET org-get-members-public '/orgs/acme/members'
 fetch "$unauthorized_user" POST org-add-members-unauthorized '/orgs/acme/members' '{
   "members": [
     { "subject": "unauthorized", 
-      "roles": "org_maintainer"
+      "role": "org_maintainer"
     }
   ]
 }'
@@ -76,7 +76,7 @@ fetch "$unauthorized_user" POST org-add-members-unauthorized '/orgs/acme/members
 fetch "$transcripts_user" POST org-add-members-new-user '/orgs/acme/members' '{
   "members": [
     { "subject": "newuser", 
-      "roles": "org_maintainer"
+      "role": "org_maintainer"
     }
   ]
 }'
@@ -85,7 +85,7 @@ fetch "$transcripts_user" POST org-add-members-new-user '/orgs/acme/members' '{
 fetch "$transcripts_user" POST org-cant-have-org-members '/orgs/acme/members' '{
   "members": [
     { "subject": "unison", 
-      "roles": "org_maintainer"
+      "role": "org_maintainer"
     }
   ]
 }'

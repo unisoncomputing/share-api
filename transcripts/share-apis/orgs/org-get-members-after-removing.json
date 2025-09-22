@@ -2,7 +2,7 @@
   "body": {
     "members": [
       {
-        "roles": "org_maintainer",
+        "role": "org_maintainer",
         "subject": {
           "avatarUrl": null,
           "handle": "test",
@@ -11,7 +11,7 @@
         }
       },
       {
-        "roles": "org_owner",
+        "role": "org_owner",
         "subject": {
           "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
           "handle": "transcripts",
