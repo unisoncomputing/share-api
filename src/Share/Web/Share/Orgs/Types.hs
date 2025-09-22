@@ -57,7 +57,7 @@ instance FromJSON CreateOrgRequest where
     pure CreateOrgRequest {..}
 
 data OrgMembersAddRequest = OrgMembersAddRequest
-  { members :: [UserHandle]
+  { members :: [RoleAssignment UserHandle]
   }
   deriving (Show, Eq)
 
@@ -73,7 +73,7 @@ instance FromJSON OrgMembersAddRequest where
     pure OrgMembersAddRequest {..}
 
 data OrgMembersListResponse = OrgMembersListResponse
-  { members :: [UserDisplayInfo]
+  { members :: [RoleAssignment UserDisplayInfo]
   }
   deriving (Show, Eq)
 
