@@ -32,7 +32,7 @@ BEGIN
       SELECT
         FROM org_members om
           WHERE om.org_id = OLD.org_id
-            AND om.role_id = (SELECT id FROM roles WHERE name = 'org_owner' LIMIT 1)
+            AND om.role_id = (SELECT id FROM roles WHERE ref = 'org_owner' LIMIT 1)
     ) THEN
         RAISE EXCEPTION 'Each organization must have at least one owner.';
     END IF;
