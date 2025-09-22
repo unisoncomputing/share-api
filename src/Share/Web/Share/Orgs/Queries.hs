@@ -156,21 +156,27 @@ removeOrgRoles orgId toRemove = do
 
 listOrgMembers :: OrgId -> Transaction e [RoleAssignment Identity UserDisplayInfo]
 listOrgMembers orgId = do
-  queryListRows @(UserDisplayInfo, [RoleRef])
+  queryListRows @((UserHandle, Maybe Text, Maybe URIParam, UserId) :. Only RoleRef)
     [sql|
-      SELECT u.handle, u.name, u.avatar_url, u.id, array_agg(role.ref :: role_ref) as role_refs
+      SELECT u.handle, u.name, u.avatar_url, u.id, role.ref :: role_ref
         FROM org_members om
         JOIN users u ON om.member_user_id = u.id
+        JOIN roles role ON role.id = om.role_id
       WHERE om.org_id = #{orgId}
         ORDER BY u.handle
     |]
-    <&> fmap \(handle, name, avatarUrl, userId) ->
-      UserDisplayInfo
-        { handle,
-          name,
-          avatarUrl = unpackURI <$> avatarUrl,
-          userId
-        }
+    <&> fmap \((handle, name, avatarUrl, userId) :. Only role) ->
+      let subject =
+            UserDisplayInfo
+              { handle,
+                name,
+                avatarUrl = unpackURI <$> avatarUrl,
+                userId
+              }
+       in RoleAssignment
+            { subject,
+              roles = Identity role
+            }
 
 addOrgMembers :: OrgId -> Set UserId -> Transaction e ()
 addOrgMembers orgId newMembers = do
