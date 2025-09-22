@@ -386,7 +386,7 @@ projectReadmeEndpoint session userHandle projectSlug = do
     Nothing -> getProjectBranchReadmeEndpoint session userHandle projectSlug defaultBranchShorthand Nothing
     Just release -> getProjectReleaseReadmeEndpoint session userHandle projectSlug release.version
 
-listRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp ListRolesResponse
+listRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> WebApp (ListRolesResponse Set)
 listRolesEndpoint session projectUserHandle projectSlug = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
@@ -399,7 +399,7 @@ listRolesEndpoint session projectUserHandle projectSlug = do
     pure (isPremiumProject, roleAssignments)
   pure $ ListRolesResponse {active = isPremiumProject, roleAssignments}
 
-addRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> AddRolesRequest -> WebApp AddRolesResponse
+addRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> (AddRolesRequest Set) -> WebApp (AddRolesResponse Set)
 addRolesEndpoint session projectUserHandle projectSlug (AddRolesRequest {roleAssignments}) = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do
@@ -410,7 +410,7 @@ addRolesEndpoint session projectUserHandle projectSlug (AddRolesRequest {roleAss
     roleAssignments <- canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) updatedRoles
     pure $ AddRolesResponse {roleAssignments}
 
-removeRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> RemoveRolesRequest -> WebApp RemoveRolesResponse
+removeRolesEndpoint :: Maybe Session -> UserHandle -> ProjectSlug -> (RemoveRolesRequest Set) -> WebApp (RemoveRolesResponse Set)
 removeRolesEndpoint session projectUserHandle projectSlug (RemoveRolesRequest {roleAssignments}) = do
   caller <- AuthN.requireAuthenticatedUser session
   projectId <- PG.runTransactionOrRespondError $ do

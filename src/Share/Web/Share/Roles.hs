@@ -9,7 +9,7 @@ import Share.Web.Authorization.Types
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo (..), TeamDisplayInfo (..), UserDisplayInfo (..))
 
 -- | The ordering isn't necessary logic, it just makes transcript tests much easier.
-canonicalRoleAssignmentOrdering :: [RoleAssignment DisplayAuthSubject] -> [RoleAssignment DisplayAuthSubject]
+canonicalRoleAssignmentOrdering :: (Ord (f RoleRef)) => [RoleAssignment f DisplayAuthSubject] -> [RoleAssignment f DisplayAuthSubject]
 canonicalRoleAssignmentOrdering =
   List.sortOn \(RoleAssignment {roles, subject}) ->
     case subject of

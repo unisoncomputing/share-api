@@ -27,7 +27,7 @@ isPremiumProject projId =
     SELECT EXISTS (SELECT FROM premium_projects WHERE project_id = #{projId})
     |]
 
-listProjectRoles :: ProjectId -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+listProjectRoles :: ProjectId -> Transaction e [(RoleAssignment Set ResolvedAuthSubject)]
 listProjectRoles projId = do
   queryListRows @(ResolvedAuthSubject PG.:. Only ([RoleRef]))
     [sql|
@@ -42,7 +42,7 @@ listProjectRoles projId = do
     |]
     <&> fmap \(subject PG.:. Only roleRefs) -> (RoleAssignment {subject, roles = Set.fromList roleRefs})
 
-addProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+addProjectRoles :: ProjectId -> [RoleAssignment Set ResolvedAuthSubject] -> Transaction e [(RoleAssignment Set ResolvedAuthSubject)]
 addProjectRoles projId toAdd = do
   let addedRolesTable =
         toAdd
@@ -66,7 +66,7 @@ addProjectRoles projId toAdd = do
         |]
   listProjectRoles projId
 
-removeProjectRoles :: ProjectId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [(RoleAssignment ResolvedAuthSubject)]
+removeProjectRoles :: ProjectId -> [RoleAssignment Set ResolvedAuthSubject] -> Transaction e [(RoleAssignment Set ResolvedAuthSubject)]
 removeProjectRoles projId toRemove = do
   let removedRolesTable =
         toRemove
