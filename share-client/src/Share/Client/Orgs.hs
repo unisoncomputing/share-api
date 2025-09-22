@@ -4,9 +4,6 @@
 
 module Share.Client.Orgs
   ( createOrg,
-    addOrgRoles,
-    listOrgRoles,
-    removeOrgRoles,
     listOrgMembers,
     addOrgMembers,
     removeOrgMembers,
@@ -36,19 +33,8 @@ import Share.Web.Share.Orgs.Types
 orgsClient :: Client ClientM OrgsAPI
 orgsClient = client (Proxy :: Proxy OrgsAPI)
 
-resourceRoutes :: UserHandle -> Client ClientM (NamedRoutes OrgsAPI.ResourceRoutes)
-orgRolesRoutes :: UserHandle -> Client ClientM (NamedRoutes OrgsAPI.OrgRolesRoutes)
-orgRolesRoutes = OrgsAPI.orgRoles <$> resourceRoutes
-
 orgMembersRoutes :: UserHandle -> Client ClientM (NamedRoutes OrgsAPI.OrgMembersRoutes)
 orgMembersRoutes = OrgsAPI.orgMembers <$> resourceRoutes
-
-listOrgRoles :: JWT.SignedJWT -> UserHandle -> ClientM ListRolesResponse
-listOrgRoles jwt userHandle = OrgsAPI.listOrgRoles (orgRolesRoutes userHandle) (jwtToAuthenticatedRequest jwt)
-
-removeOrgRoles :: JWT.SignedJWT -> UserHandle -> OrgsAPI.RemoveRolesRequest -> ClientM ListRolesResponse
-removeOrgRoles jwt userHandle removeRolesReq =
-  OrgsAPI.removeOrgRoles (orgRolesRoutes userHandle) (jwtToAuthenticatedRequest jwt) removeRolesReq
 
 listOrgMembers :: JWT.SignedJWT -> UserHandle -> ClientM OrgMembersListResponse
 listOrgMembers jwt userHandle = OrgsAPI.listOrgMembers (orgMembersRoutes userHandle) (jwtToAuthenticatedRequest jwt)
@@ -61,13 +47,10 @@ removeOrgMembers :: JWT.SignedJWT -> UserHandle -> OrgMembersRemoveRequest -> Cl
 removeOrgMembers jwt userHandle removeMembersReq =
   OrgsAPI.removeOrgMembers (orgMembersRoutes userHandle) (jwtToAuthenticatedRequest jwt) removeMembersReq
 
-addOrgRoles :: JWT.SignedJWT -> UserHandle -> OrgsAPI.AddRolesRequest -> ClientM ListRolesResponse
-addOrgRoles jwt userHandle addRolesReq =
-  OrgsAPI.addOrgRoles (orgRolesRoutes userHandle) (jwtToAuthenticatedRequest jwt) addRolesReq
-
 createOrg :: JWT.SignedJWT -> CreateOrgRequest -> ClientM OrgDisplayInfo
 createOrg jwt createOrgReq =
   createOrg' (jwtToAuthenticatedRequest jwt) createOrgReq
 
 createOrg' :: AuthenticatedRequest AuthenticatedUserId -> CreateOrgRequest -> ClientM OrgDisplayInfo
+resourceRoutes :: UserHandle -> OrgsAPI.ResourceRoutes (AsClientT ClientM)
 (createOrg' :<|> resourceRoutes) = orgsClient
