@@ -6,11 +6,11 @@ ALTER TABLE org_members
 
 -- set all existing org members to be maintiners
 UPDATE org_members 
-  SET role_id = (SELECT id FROM roles WHERE name = 'org_maintainer' LIMIT 1);
+  SET role_id = (SELECT id FROM roles WHERE ref = 'org_maintainer' LIMIT 1);
 
 -- Elevate the current org owners to have the org_owner role
 UPDATE org_members
-  SET role_id = 'org_owner'
+  SET role_id = (SELECT id FROM roles WHERE ref = 'org_owner' LIMIT 1)
   WHERE EXISTS (
     SELECT
     FROM orgs org
@@ -58,6 +58,7 @@ CREATE OR REPLACE VIEW direct_resource_permissions(subject_id, resource_id, perm
     -- Include permissions from org membership roles
     SELECT u.subject_id, org.resource_id, permission
       FROM org_members om
+      JOIN users u ON om.member_user_id = u.id
       JOIN roles r ON om.role_id = r.id
       JOIN orgs org ON om.org_id = org.id
       , UNNEST(r.permissions) AS permission
@@ -65,7 +66,7 @@ CREATE OR REPLACE VIEW direct_resource_permissions(subject_id, resource_id, perm
   -- Include public resource permissions
   SELECT NULL, prp.resource_id, permission
     FROM public_resource_permissions prp
-)
+);
 
 
 -- This view builds on top of direct_resource_permissions to include inherited permissions
@@ -74,8 +75,8 @@ CREATE OR REPLACE VIEW subject_resource_permissions(subject_id, resource_id, per
     FROM direct_resource_permissions drp
   UNION
   -- Inherit permissions from parent resources
-  SELECT drp.subject_id, drp.resource_id, bp.permission
+  SELECT drp.subject_id, drp.resource_id, drp.permission
     FROM direct_resource_permissions drp
-    JOIN resource_hierarchy rh ON bp.resource_id = rh.parent_resource_id
+    JOIN resource_hierarchy rh ON drp.resource_id = rh.parent_resource_id
 );
 
