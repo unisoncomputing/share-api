@@ -34,7 +34,8 @@ CREATE OR REPLACE VIEW user_resource_permissions(user_id, resource_id, permissio
   JOIN subject_resource_permissions srp 
     ON sbu.subject_id = srp.subject_id
   UNION
-  -- Include public resource permissions
+  -- Include public resource permissions explicitly, 
+  -- since the above joins on subject_id which is NULL for public perms
   SELECT NULL, prp.resource_id, permission
     FROM public_resource_permissions prp
 );
