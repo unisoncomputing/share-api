@@ -8,8 +8,42 @@ ALTER TABLE org_members
 UPDATE org_members 
   SET role_id = (SELECT id FROM roles WHERE name = 'org_maintainer' LIMIT 1);
 
+-- Elevate the current org owners to have the org_owner role
+UPDATE org_members
+  SET role_id = 'org_owner'
+  WHERE EXISTS (
+    SELECT
+    FROM orgs org
+    JOIN users u ON org_members.member_user_id = u.id
+    JOIN role_memberships rm ON rm.subject_id = u.subject_id AND rm.resource_id = org.resource_id
+    JOIN roles r ON rm.role_id = r.id
+    WHERE org.id = org_members.org_id
+      AND r.ref = 'org_owner'
+  );
+
 ALTER TABLE org_members
     ALTER COLUMN role_id SET NOT NULL;
+
+-- Now add a check that each org always has an owner.
+CREATE OR REPLACE FUNCTION check_orgs_have_an_owner()
+RETURNS trigger AS $$
+BEGIN
+    IF NOT EXISTS (
+      SELECT
+        FROM org_members om
+          WHERE om.org_id = OLD.org_id
+            AND om.role_id = (SELECT id FROM roles WHERE name = 'org_owner' LIMIT 1)
+    ) THEN
+        RAISE EXCEPTION 'Each organization must have at least one owner.';
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_org_owners_trigger
+    AFTER UPDATE OR DELETE ON org_members
+    FOR EACH ROW 
+    EXECUTE FUNCTION check_orgs_have_an_owner();
 
 -- Split out view containing all the direct subject<->resource permissions.
 --
