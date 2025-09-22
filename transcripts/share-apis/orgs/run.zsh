@@ -100,7 +100,7 @@ fetch "$transcripts_user" DELETE org-remove-members '/orgs/acme/members' '{
 }'
 
 # Cannot remove the only owner
-fetch "$transcripts_user" DELETE org-remove-members '/orgs/acme/members' '{
+fetch "$transcripts_user" DELETE org-remove-only-owner '/orgs/acme/members' '{
   "members": [
     "transcripts"
   ]
