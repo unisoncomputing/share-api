@@ -353,27 +353,27 @@ deriving instance (Ord (f RoleRef), Ord subject) => Ord (RoleAssignment f subjec
 
 deriving instance (Show (f RoleRef), Show subject) => Show (RoleAssignment f subject)
 
-instance (ToJSON user) => ToJSON (RoleAssignment Identity user) where
+instance {-# OVERLAPPING #-} (ToJSON user) => ToJSON (RoleAssignment Identity user) where
   toJSON RoleAssignment {..} =
     object
       [ "subject" Aeson..= subject,
         "role" Aeson..= roles
       ]
 
-instance (ToJSON user) => ToJSON (RoleAssignment Set user) where
+instance {-# OVERLAPPABLE #-} (ToJSON user, ToJSON (f RoleRef)) => ToJSON (RoleAssignment f user) where
   toJSON RoleAssignment {..} =
     object
       [ "subject" Aeson..= subject,
         "roles" Aeson..= roles
       ]
 
-instance (FromJSON user) => FromJSON (RoleAssignment Identity user) where
+instance {-# OVERLAPPING #-}  (FromJSON user) => FromJSON (RoleAssignment Identity user) where
   parseJSON = Aeson.withObject "RoleAssignment" $ \o -> do
     subject <- o Aeson..: "subject"
     roles <- o Aeson..: "role"
     pure RoleAssignment {..}
 
-instance (FromJSON user) => FromJSON (RoleAssignment Set user) where
+instance {-# OVERLAPPABLE #-} (FromJSON user, FromJSON (f RoleRef)) => FromJSON (RoleAssignment f user) where
   parseJSON = Aeson.withObject "RoleAssignment" $ \o -> do
     subject <- o Aeson..: "subject"
     roles <- o Aeson..: "roles"
