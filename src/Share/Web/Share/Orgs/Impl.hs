@@ -2,6 +2,9 @@
 
 module Share.Web.Share.Orgs.Impl (server) where
 
+import Control.Lens
+import Data.Map qualified as Map
+import Data.Monoid (Any (..))
 import Data.Set qualified as Set
 import Servant
 import Servant.Server.Generic
@@ -13,6 +16,7 @@ import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.Authorization.Types (RoleAssignment (..))
 import Share.Web.Errors
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo)
 import Share.Web.Share.Orgs.API as API
@@ -86,12 +90,17 @@ addMembersEndpoint orgHandle caller (OrgMembersAddRequest {members}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
   PG.runTransactionOrRespondError do
-    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
-    hasOrgMember <- runMaybeT $ for_ userIds \userId -> do
-      MaybeT $ OrgQ.orgByUserId userId
-    when (isJust hasOrgMember) do
+    userIdAssignments :: [RoleAssignment Identity UserId] <- UserQ.userIdsByHandlesOf (traversed . traversed) members
+    Any newMemberIsOrg <-
+      userIdAssignments & foldMapMOf (folded . folded) \userId -> do
+        Any . isJust <$> OrgQ.orgByUserId userId
+    when newMemberIsOrg do
       throwError OrgMemberOfOrgError
-    OrgQ.addOrgMembers orgId userIds
+    let membersMap =
+          userIdAssignments
+            <&> (\RoleAssignment {subject, roles = Identity role} -> (subject, role))
+            & Map.fromList
+    OrgQ.addOrgMembers orgId membersMap
     OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
 
 removeMembersEndpoint :: UserHandle -> UserId -> OrgMembersRemoveRequest -> WebApp OrgMembersListResponse

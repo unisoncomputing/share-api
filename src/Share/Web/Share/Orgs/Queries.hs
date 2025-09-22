@@ -17,6 +17,7 @@ module Share.Web.Share.Orgs.Queries
 where
 
 import Control.Lens
+import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Share.IDs (OrgId, UserHandle, UserId)
 import Share.Postgres
@@ -178,16 +179,18 @@ listOrgMembers orgId = do
               roles = Identity role
             }
 
-addOrgMembers :: OrgId -> Set UserId -> Transaction e ()
+addOrgMembers :: OrgId -> Map UserId RoleRef -> Transaction e ()
 addOrgMembers orgId newMembers = do
+  let newMembersTable = Map.toList newMembers
   execute_
     [sql|
-        WITH values(member_user_id) AS (
-          SELECT t.member_user_id
-            FROM ^{singleColumnTable (toList newMembers)} AS t(member_user_id)
-        ) INSERT INTO org_members (org_id, organization_user_id,  member_user_id)
-          SELECT #{orgId}, (SELECT o.user_id FROM orgs o WHERE o.id = #{orgId}),  v.member_user_id
+        WITH values(member_user_id, role_ref) AS (
+          SELECT t.member_user_id, t.role_ref
+            FROM ^{toTable newMembersTable} AS t(member_user_id, role_ref)
+        ) INSERT INTO org_members (org_id, organization_user_id,  member_user_id, role_id)
+          SELECT #{orgId}, (SELECT o.user_id FROM orgs o WHERE o.id = #{orgId}),  v.member_user_id, role.id
             FROM values v
+            JOIN roles role ON role.ref = (v.role_ref::role_ref)
           ON CONFLICT DO NOTHING
         |]
 
