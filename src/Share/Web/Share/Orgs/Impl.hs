@@ -17,13 +17,13 @@ import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Authorization.Types (RoleAssignment (..))
+import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors
-import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo, UserDisplayInfo (..))
 import Share.Web.Share.Orgs.API as API
 import Share.Web.Share.Orgs.Operations qualified as OrgOps
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (CreateOrgRequest (..), Org (..), OrgMembersAddRequest (..), OrgMembersListResponse (..), OrgMembersRemoveRequest (..))
-import Unison.Util.Set qualified as Set
 
 data OrgError
   = OrgMemberOfOrgError
@@ -107,7 +107,15 @@ removeMembersEndpoint :: UserHandle -> UserId -> OrgMembersRemoveRequest -> WebA
 removeMembersEndpoint orgHandle caller (OrgMembersRemoveRequest {members}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
-  PG.runTransaction do
-    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
-    OrgQ.removeOrgMembers orgId userIds
-    OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
+  PG.runTransactionOrRespondError do
+    userIds <- Set.fromList <$> UserQ.userIdsByHandlesOf traversed members
+    otherOwnerStillExists orgId userIds >>= \case
+      False -> throwError OrgMustHaveOwnerError
+      True -> do
+        OrgQ.removeOrgMembers orgId userIds
+        OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
+  where
+    otherOwnerStillExists orgId removedMembers = do
+      OrgQ.listOrgMembers orgId
+        <&> any \RoleAssignment {subject = UserDisplayInfo {userId}, roles = Identity role} ->
+          role == AuthZ.RoleOrgOwner && not (Set.member userId removedMembers)
