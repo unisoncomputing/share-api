@@ -353,18 +353,32 @@ deriving instance (Ord (f RoleRef), Ord subject) => Ord (RoleAssignment f subjec
 
 deriving instance (Show (f RoleRef), Show subject) => Show (RoleAssignment f subject)
 
-instance (ToJSON user, ToJSON (f RoleRef)) => ToJSON (RoleAssignment f user) where
+instance (ToJSON user) => ToJSON (RoleAssignment Identity user) where
+  toJSON RoleAssignment {..} =
+    object
+      [ "subject" Aeson..= subject,
+        "role" Aeson..= roles
+      ]
+
+instance (ToJSON user) => ToJSON (RoleAssignment Set user) where
   toJSON RoleAssignment {..} =
     object
       [ "subject" Aeson..= subject,
         "roles" Aeson..= roles
       ]
 
-instance (FromJSON user, FromJSON (f RoleRef)) => FromJSON (RoleAssignment f user) where
+instance (FromJSON user) => FromJSON (RoleAssignment Identity user) where
+  parseJSON = Aeson.withObject "RoleAssignment" $ \o -> do
+    subject <- o Aeson..: "subject"
+    roles <- o Aeson..: "role"
+    pure RoleAssignment {..}
+
+instance (FromJSON user) => FromJSON (RoleAssignment Set user) where
   parseJSON = Aeson.withObject "RoleAssignment" $ \o -> do
     subject <- o Aeson..: "subject"
     roles <- o Aeson..: "roles"
     pure RoleAssignment {..}
+
 
 -- | A type for mixing in permissions info on a response for a resource.
 newtype PermissionsInfo = PermissionsInfo (Set RolePermission)
