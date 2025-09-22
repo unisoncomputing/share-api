@@ -93,7 +93,7 @@ userDisplayInfoByOrgIdOf trav s = do
                 userId
               }
 
-listOrgRoles :: OrgId -> Transaction e [RoleAssignment ResolvedAuthSubject]
+listOrgRoles :: OrgId -> Transaction e [RoleAssignment Set ResolvedAuthSubject]
 listOrgRoles orgId = do
   queryListRows @(ResolvedAuthSubject :. Only [RoleRef])
     [sql|
@@ -107,7 +107,7 @@ listOrgRoles orgId = do
     |]
     <&> fmap \(subject :. Only roleRefs) -> RoleAssignment {subject, roles = Set.fromList roleRefs}
 
-addOrgRoles :: OrgId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [RoleAssignment ResolvedAuthSubject]
+addOrgRoles :: OrgId -> [RoleAssignment Set ResolvedAuthSubject] -> Transaction e [RoleAssignment Set ResolvedAuthSubject]
 addOrgRoles orgId newRoles = do
   let newRolesTable =
         newRoles
@@ -130,7 +130,7 @@ addOrgRoles orgId newRoles = do
         |]
   listOrgRoles orgId
 
-removeOrgRoles :: OrgId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [RoleAssignment ResolvedAuthSubject]
+removeOrgRoles :: OrgId -> [RoleAssignment Set ResolvedAuthSubject] -> Transaction e [RoleAssignment Set ResolvedAuthSubject]
 removeOrgRoles orgId toRemove = do
   let removedRolesTable =
         toRemove
@@ -154,11 +154,11 @@ removeOrgRoles orgId toRemove = do
         |]
   listOrgRoles orgId
 
-listOrgMembers :: OrgId -> Transaction e [UserDisplayInfo]
+listOrgMembers :: OrgId -> Transaction e [RoleAssignment Identity UserDisplayInfo]
 listOrgMembers orgId = do
-  queryListRows
+  queryListRows @(UserDisplayInfo, [RoleRef])
     [sql|
-      SELECT u.handle, u.name, u.avatar_url, u.id
+      SELECT u.handle, u.name, u.avatar_url, u.id, array_agg(role.ref :: role_ref) as role_refs
         FROM org_members om
         JOIN users u ON om.member_user_id = u.id
       WHERE om.org_id = #{orgId}

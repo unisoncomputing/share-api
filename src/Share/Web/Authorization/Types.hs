@@ -1,6 +1,9 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Share.Web.Authorization.Types
   ( RolePermission (..),
@@ -338,20 +341,26 @@ instance Hasql.EncodeValue RoleRef where
         RoleProjectOwner -> "project_owner"
         RoleProjectPublicAccess -> "project_public_access"
 
-data RoleAssignment subject = RoleAssignment
+data RoleAssignment f subject = RoleAssignment
   { subject :: subject,
-    roles :: Set RoleRef
+    roles :: f RoleRef
   }
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Functor, Foldable, Traversable)
 
-instance (ToJSON user) => ToJSON (RoleAssignment user) where
+deriving instance (Eq (f RoleRef), Eq subject) => Eq (RoleAssignment f subject)
+
+deriving instance (Ord (f RoleRef), Ord subject) => Ord (RoleAssignment f subject)
+
+deriving instance (Show (f RoleRef), Show subject) => Show (RoleAssignment f subject)
+
+instance (ToJSON user, ToJSON (f RoleRef)) => ToJSON (RoleAssignment f user) where
   toJSON RoleAssignment {..} =
     object
       [ "subject" Aeson..= subject,
         "roles" Aeson..= roles
       ]
 
-instance (FromJSON user) => FromJSON (RoleAssignment user) where
+instance (FromJSON user, FromJSON (f RoleRef)) => FromJSON (RoleAssignment f user) where
   parseJSON = Aeson.withObject "RoleAssignment" $ \o -> do
     subject <- o Aeson..: "subject"
     roles <- o Aeson..: "roles"
@@ -385,84 +394,87 @@ instance FromJSON ProjectMaintainerPermissions where
     pure ProjectMaintainerPermissions {canView, canMaintain, canAdmin}
 
 -- Generic request/response types
-data ListRolesResponse = ListRolesResponse
+data ListRolesResponse f = ListRolesResponse
   { -- Whether the caller is able to edit the roles.
     active :: Bool,
-    roleAssignments :: [RoleAssignment DisplayAuthSubject]
+    roleAssignments :: [RoleAssignment f DisplayAuthSubject]
   }
-  deriving (Show)
 
-instance ToJSON ListRolesResponse where
+deriving instance (Show (f RoleRef)) => Show (ListRolesResponse f)
+
+instance (ToJSON (f RoleRef)) => ToJSON (ListRolesResponse f) where
   toJSON ListRolesResponse {..} =
     object
       [ "role_assignments" Aeson..= roleAssignments,
         "active" .= active
       ]
 
-instance FromJSON ListRolesResponse where
+instance (FromJSON (f RoleRef)) => FromJSON (ListRolesResponse f) where
   parseJSON = Aeson.withObject "ListRolesResponse" $ \o -> do
     roleAssignments <- o Aeson..: "role_assignments"
     active <- o Aeson..: "active"
     pure ListRolesResponse {roleAssignments, active}
 
-data AddRolesResponse = AddRolesResponse
-  { roleAssignments :: [RoleAssignment DisplayAuthSubject]
+data AddRolesResponse f = AddRolesResponse
+  { roleAssignments :: [RoleAssignment f DisplayAuthSubject]
   }
 
-instance ToJSON AddRolesResponse where
+instance (ToJSON (f RoleRef)) => ToJSON (AddRolesResponse f) where
   toJSON AddRolesResponse {..} =
     object
       [ "role_assignments" Aeson..= roleAssignments
       ]
 
-instance FromJSON AddRolesResponse where
+instance (FromJSON (f RoleRef)) => FromJSON (AddRolesResponse f) where
   parseJSON = Aeson.withObject "AddRolesResponse" $ \o -> do
     roleAssignments <- o Aeson..: "role_assignments"
     pure AddRolesResponse {roleAssignments}
 
-data RemoveRolesResponse = RemoveRolesResponse
-  { roleAssignments :: [RoleAssignment DisplayAuthSubject]
+data RemoveRolesResponse f = RemoveRolesResponse
+  { roleAssignments :: [RoleAssignment f DisplayAuthSubject]
   }
 
-instance ToJSON RemoveRolesResponse where
+instance (ToJSON (f RoleRef)) => ToJSON (RemoveRolesResponse f) where
   toJSON RemoveRolesResponse {..} =
     object
       [ "role_assignments" Aeson..= roleAssignments
       ]
 
-instance FromJSON RemoveRolesResponse where
+instance (FromJSON (f RoleRef)) => FromJSON (RemoveRolesResponse f) where
   parseJSON = Aeson.withObject "RemoveRolesResponse" $ \o -> do
     roleAssignments <- o Aeson..: "role_assignments"
     pure RemoveRolesResponse {roleAssignments}
 
-data AddRolesRequest = AddRolesRequest
-  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
+data AddRolesRequest f = AddRolesRequest
+  { roleAssignments :: [RoleAssignment f ResolvedAuthSubject]
   }
-  deriving (Show)
 
-instance ToJSON AddRolesRequest where
+deriving instance (Show (f RoleRef)) => Show (AddRolesRequest f)
+
+instance (ToJSON (f RoleRef)) => ToJSON (AddRolesRequest f) where
   toJSON AddRolesRequest {..} =
     object
       [ "role_assignments" .= roleAssignments
       ]
 
-instance FromJSON AddRolesRequest where
+instance (FromJSON (f RoleRef)) => FromJSON (AddRolesRequest f) where
   parseJSON = Aeson.withObject "AddRolesRequest" $ \o -> do
     roleAssignments <- o Aeson..: "role_assignments"
     pure AddRolesRequest {..}
 
-data RemoveRolesRequest = RemoveRolesRequest
-  { roleAssignments :: [RoleAssignment ResolvedAuthSubject]
+data RemoveRolesRequest f = RemoveRolesRequest
+  { roleAssignments :: [RoleAssignment f ResolvedAuthSubject]
   }
-  deriving (Show)
 
-instance ToJSON RemoveRolesRequest where
+deriving instance (Show (f RoleRef)) => Show (RemoveRolesRequest f)
+
+instance (ToJSON (f RoleRef)) => ToJSON (RemoveRolesRequest f) where
   toJSON RemoveRolesRequest {..} =
     object
       [ "role_assignments" .= roleAssignments
       ]
 
-instance FromJSON RemoveRolesRequest where
+instance (FromJSON (f RoleRef)) => FromJSON (RemoveRolesRequest f) where
   parseJSON = Aeson.withObject "RemoveRolesRequest" $ \o -> do
     roleAssignments <- o Aeson..: "role_assignments"
     pure RemoveRolesRequest {..}
