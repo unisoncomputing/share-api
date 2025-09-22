@@ -3,7 +3,7 @@
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.tables 
+    SELECT 1 FROM information_schema.tables
     WHERE table_name = 'is_local_database'
   ) THEN
     RAISE EXCEPTION 'Refusing to insert fixtures on non-local database.';
@@ -74,7 +74,7 @@ VALUES (
 
 INSERT INTO orgs (
   id,
-  user_id) 
+  user_id)
 VALUES (
   '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9'
@@ -83,25 +83,30 @@ VALUES (
 INSERT INTO org_members (
   org_id,
   organization_user_id,
-  member_user_id)
+  member_user_id,
+  role_id
+)
 VALUES (
   '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
-  'd32f4ddf-2423-4f10-a4de-465939951354'),
+  -- @test
+  'd32f4ddf-2423-4f10-a4de-465939951354',
+  (SELECT r.id FROM roles r WHERE r.ref = 'org_owner')
+),
 (
   '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
-  '43efd5e7-139a-40b2-8a35-3f99b054dc84'),
+  -- @transcripts
+  '43efd5e7-139a-40b2-8a35-3f99b054dc84',
+  (SELECT r.id FROM roles r WHERE r.ref = 'org_maintainer')
+),
 (
   '7ab35ad5-6755-4dd1-9753-bc3ba6b88039',
   'e5e7635c-8db2-4b7f-9fee-86ee8d120ef9',
-  'fe8921ca-aee7-40a2-8020-241ca78f2a5c');
-
--- Make 'test' the owner of the unison org
-INSERT INTO role_memberships(subject_id, resource_id, role_id)
-  SELECT (SELECT u.subject_id FROM users u WHERE u.handle = 'test'),
-         (SELECT org.resource_id FROM orgs org JOIN users orgu ON org.user_id = orgu.id WHERE orgu.handle = 'unison'), 
-         (SELECT r.id FROM roles r WHERE r.ref = 'org_owner');
+  -- @admin
+  'fe8921ca-aee7-40a2-8020-241ca78f2a5c',
+  (SELECT r.id FROM roles r WHERE r.ref = 'org_maintainer')
+);
 
 INSERT INTO tours (
   user_id,
