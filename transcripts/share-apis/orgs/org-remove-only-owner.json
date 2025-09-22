@@ -1,0 +1,8 @@
+{
+  "body": "Cannot remove the only owner of an org.",
+  "status": [
+    {
+      "status_code": 400
+    }
+  ]
+}

@@ -1,8 +1,29 @@
 {
-  "body": "Cannot remove the only owner of an org.",
+  "body": {
+    "members": [
+      {
+        "roles": "org_maintainer",
+        "subject": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        }
+      },
+      {
+        "roles": "org_owner",
+        "subject": {
+          "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+          "handle": "transcripts",
+          "name": "The Transcript User",
+          "userId": "U-<UUID>"
+        }
+      }
+    ]
+  },
   "status": [
     {
-      "status_code": 400
+      "status_code": 200
     }
   ]
 }
