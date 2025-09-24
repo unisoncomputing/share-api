@@ -4,7 +4,6 @@
 module Share.Web.Share.Orgs.API
   ( API,
     ResourceRoutes (..),
-    OrgRolesRoutes (..),
     OrgMembersRoutes (..),
   )
 where
@@ -13,7 +12,6 @@ import GHC.Generics (Generic)
 import Servant
 import Share.IDs
 import Share.OAuth.Session (AuthenticatedUserId)
-import Share.Web.Authorization.Types (AddRolesRequest, ListRolesResponse, RemoveRolesRequest)
 import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo)
 import Share.Web.Share.Orgs.Types
 
@@ -24,16 +22,7 @@ type API =
 
 data ResourceRoutes mode
   = ResourceRoutes
-  { orgRoles :: mode :- "roles" :> NamedRoutes OrgRolesRoutes,
-    orgMembers :: mode :- "members" :> NamedRoutes OrgMembersRoutes
-  }
-  deriving stock (Generic)
-
-data OrgRolesRoutes mode
-  = OrgRolesRoutes
-  { listOrgRoles :: mode :- OrgRolesListEndpoint,
-    addOrgRoles :: mode :- OrgRolesAddEndpoint,
-    removeOrgRoles :: mode :- OrgRolesRemoveEndpoint
+  { orgMembers :: mode :- "members" :> NamedRoutes OrgMembersRoutes
   }
   deriving stock (Generic)
 
@@ -44,20 +33,6 @@ data OrgMembersRoutes mode
     removeOrgMembers :: mode :- OrgMembersRemoveEndpoint
   }
   deriving stock (Generic)
-
-type OrgRolesAddEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] AddRolesRequest
-    :> Post '[JSON] ListRolesResponse
-
-type OrgRolesRemoveEndpoint =
-  AuthenticatedUserId
-    :> ReqBody '[JSON] RemoveRolesRequest
-    :> Delete '[JSON] ListRolesResponse
-
-type OrgRolesListEndpoint =
-  AuthenticatedUserId
-    :> Get '[JSON] ListRolesResponse
 
 type CreateOrgEndpoint =
   AuthenticatedUserId

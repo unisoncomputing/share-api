@@ -2,16 +2,22 @@
   "body": {
     "members": [
       {
-        "avatarUrl": null,
-        "handle": "test",
-        "name": null,
-        "userId": "U-<UUID>"
+        "role": "org_maintainer",
+        "subject": {
+          "avatarUrl": null,
+          "handle": "test",
+          "name": null,
+          "userId": "U-<UUID>"
+        }
       },
       {
-        "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
-        "handle": "transcripts",
-        "name": "The Transcript User",
-        "userId": "U-<UUID>"
+        "role": "org_owner",
+        "subject": {
+          "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+          "handle": "transcripts",
+          "name": "The Transcript User",
+          "userId": "U-<UUID>"
+        }
       }
     ]
   },

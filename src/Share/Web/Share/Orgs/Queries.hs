@@ -17,6 +17,7 @@ module Share.Web.Share.Orgs.Queries
 where
 
 import Control.Lens
+import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Share.IDs (OrgId, UserHandle, UserId)
 import Share.Postgres
@@ -93,7 +94,7 @@ userDisplayInfoByOrgIdOf trav s = do
                 userId
               }
 
-listOrgRoles :: OrgId -> Transaction e [RoleAssignment ResolvedAuthSubject]
+listOrgRoles :: OrgId -> Transaction e [RoleAssignment Set ResolvedAuthSubject]
 listOrgRoles orgId = do
   queryListRows @(ResolvedAuthSubject :. Only [RoleRef])
     [sql|
@@ -107,7 +108,7 @@ listOrgRoles orgId = do
     |]
     <&> fmap \(subject :. Only roleRefs) -> RoleAssignment {subject, roles = Set.fromList roleRefs}
 
-addOrgRoles :: OrgId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [RoleAssignment ResolvedAuthSubject]
+addOrgRoles :: OrgId -> [RoleAssignment Set ResolvedAuthSubject] -> Transaction e [RoleAssignment Set ResolvedAuthSubject]
 addOrgRoles orgId newRoles = do
   let newRolesTable =
         newRoles
@@ -130,7 +131,7 @@ addOrgRoles orgId newRoles = do
         |]
   listOrgRoles orgId
 
-removeOrgRoles :: OrgId -> [RoleAssignment ResolvedAuthSubject] -> Transaction e [RoleAssignment ResolvedAuthSubject]
+removeOrgRoles :: OrgId -> [RoleAssignment Set ResolvedAuthSubject] -> Transaction e [RoleAssignment Set ResolvedAuthSubject]
 removeOrgRoles orgId toRemove = do
   let removedRolesTable =
         toRemove
@@ -154,34 +155,42 @@ removeOrgRoles orgId toRemove = do
         |]
   listOrgRoles orgId
 
-listOrgMembers :: OrgId -> Transaction e [UserDisplayInfo]
+listOrgMembers :: OrgId -> Transaction e [RoleAssignment Identity UserDisplayInfo]
 listOrgMembers orgId = do
-  queryListRows
+  queryListRows @((UserHandle, Maybe Text, Maybe URIParam, UserId) :. Only RoleRef)
     [sql|
-      SELECT u.handle, u.name, u.avatar_url, u.id
+      SELECT u.handle, u.name, u.avatar_url, u.id, role.ref :: role_ref
         FROM org_members om
         JOIN users u ON om.member_user_id = u.id
+        JOIN roles role ON role.id = om.role_id
       WHERE om.org_id = #{orgId}
         ORDER BY u.handle
     |]
-    <&> fmap \(handle, name, avatarUrl, userId) ->
-      UserDisplayInfo
-        { handle,
-          name,
-          avatarUrl = unpackURI <$> avatarUrl,
-          userId
-        }
+    <&> fmap \((handle, name, avatarUrl, userId) :. Only role) ->
+      let subject =
+            UserDisplayInfo
+              { handle,
+                name,
+                avatarUrl = unpackURI <$> avatarUrl,
+                userId
+              }
+       in RoleAssignment
+            { subject,
+              roles = Identity role
+            }
 
-addOrgMembers :: OrgId -> Set UserId -> Transaction e ()
+addOrgMembers :: OrgId -> Map UserId RoleRef -> Transaction e ()
 addOrgMembers orgId newMembers = do
+  let newMembersTable = Map.toList newMembers
   execute_
     [sql|
-        WITH values(member_user_id) AS (
-          SELECT t.member_user_id
-            FROM ^{singleColumnTable (toList newMembers)} AS t(member_user_id)
-        ) INSERT INTO org_members (org_id, organization_user_id,  member_user_id)
-          SELECT #{orgId}, (SELECT o.user_id FROM orgs o WHERE o.id = #{orgId}),  v.member_user_id
+        WITH values(member_user_id, role_ref) AS (
+          SELECT t.member_user_id, t.role_ref
+            FROM ^{toTable newMembersTable} AS t(member_user_id, role_ref)
+        ) INSERT INTO org_members (org_id, organization_user_id,  member_user_id, role_id)
+          SELECT #{orgId}, (SELECT o.user_id FROM orgs o WHERE o.id = #{orgId}),  v.member_user_id, role.id
             FROM values v
+            JOIN roles role ON role.ref = (v.role_ref::role_ref)
           ON CONFLICT DO NOTHING
         |]
 

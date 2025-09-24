@@ -3,6 +3,7 @@
 
 module Share.Web.Share.Projects.API where
 
+import Data.Set (Set)
 import Servant
 import Share.IDs
 import Share.OAuth.Session (MaybeAuthenticatedSession)
@@ -98,21 +99,21 @@ type MaintainersResourceAPI =
   )
 
 -- | List all maintainers of the project.
-type ListRolesEndpoint = Get '[JSON] ListRolesResponse
+type ListRolesEndpoint = Get '[JSON] (ListRolesResponse Set)
 
 -- | Add new maintainers to the project.
 type AddRolesEndpoint =
-  ReqBody '[JSON] AddRolesRequest
+  ReqBody '[JSON] (AddRolesRequest Set)
     :>
     -- Return the updated list of maintainers
-    Post '[JSON] AddRolesResponse
+    Post '[JSON] (AddRolesResponse Set)
 
 -- | Remove maintainers from the project.
 type RemoveRolesEndpoint =
-  ReqBody '[JSON] RemoveRolesRequest
+  ReqBody '[JSON] (RemoveRolesRequest Set)
     :>
     -- Return the updated list of maintainers
-    Delete '[JSON] RemoveRolesResponse
+    Delete '[JSON] (RemoveRolesResponse Set)
 
 type ProjectNotificationSubscriptionEndpoint =
   ReqBody '[JSON] ProjectNotificationSubscriptionRequest
