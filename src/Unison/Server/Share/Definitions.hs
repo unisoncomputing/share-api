@@ -68,7 +68,7 @@ import Unison.Server.QueryResult (QueryResult (..))
 import Unison.Server.SearchResult qualified as SR
 import Unison.Server.Share.DefinitionSummary qualified as Summary
 import Unison.Server.Share.Docs qualified as Docs
-import Unison.Server.Types
+import Unison.Server.Types hiding (DefinitionSearchResult(..), TermOrTypeSummary(..))
 import Unison.Symbol (Symbol)
 import Unison.Syntax.HashQualified qualified as HQ (toText)
 import Unison.Term (Term)
