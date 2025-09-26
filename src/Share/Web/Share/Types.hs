@@ -277,11 +277,30 @@ instance PG.DecodeValue PlanTier where
         "Pro" -> Pro
         _ -> Free
 
+data OrgMembershipInfo = OrgMembershipInfo
+  { org :: OrgDisplayInfo,
+    permissions :: Set RolePermission
+  }
+  deriving (Show, Eq, Ord)
+
+instance ToJSON OrgMembershipInfo where
+  toJSON OrgMembershipInfo {..} =
+    Aeson.object
+      [ "org" .= org,
+        "permissions" .= permissions
+      ]
+
+instance FromJSON OrgMembershipInfo where
+  parseJSON = Aeson.withObject "OrgMembershipInfo" $ \o -> do
+    org <- o Aeson..: "org"
+    permissions <- o Aeson..: "permissions"
+    pure OrgMembershipInfo {org, permissions}
+
 data UserAccountInfo = UserAccountInfo
   { primaryEmail :: Maybe Email,
     -- List of tours which the user has completed.
     completedTours :: [TourId],
-    organizationMemberships :: [UserHandle],
+    organizationMemberships :: [OrgMembershipInfo],
     isSuperadmin :: Bool,
     planTier :: PlanTier,
     displayInfo :: UnifiedDisplayInfo,

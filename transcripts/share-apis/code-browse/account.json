@@ -8,7 +8,33 @@
     "kind": "user",
     "name": "The Transcript User",
     "organizationMemberships": [
-      "unison"
+      {
+        "org": {
+          "isCommercial": false,
+          "orgId": "ORG-<UUID>",
+          "user": {
+            "avatarUrl": "https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?f=y&d=retro",
+            "handle": "unison",
+            "name": "Unison Org",
+            "userId": "U-<UUID>"
+          }
+        },
+        "permissions": [
+          "project:view",
+          "project:contribute",
+          "project:maintain",
+          "project:create",
+          "org:view",
+          "org:edit",
+          "team:view",
+          "notification_hub_entry:view",
+          "notification_hub_entry:update",
+          "notification_subscription:view",
+          "notification_subscription:manage",
+          "notification_delivery_method:view",
+          "notification_delivery_method:manage"
+        ]
+      }
     ],
     "planTier": "Free",
     "primaryEmail": "transcripts@example.com",
