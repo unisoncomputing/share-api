@@ -7,11 +7,12 @@ module Share.Utils.Servant.Websockets
 where
 
 import Conduit
-import Control.Concurrent.STM (retry)
-import Control.Concurrent.STM.TBMQueue
+import Control.Applicative
 import Control.Lens (Profunctor (..))
 import Control.Monad
 import Data.Text (Text)
+import GHC.Natural
+import Ki.Unlifted qualified as Ki
 import Network.WebSockets
 import UnliftIO
 
@@ -21,27 +22,26 @@ data Queues i o = Queues
     receive :: STM o,
     -- Send to the client
     send :: i -> STM (),
-    shutdown :: IO ()
+    shutdown :: IO (),
+    isConnectionClosed :: STM Bool
   }
 
 instance Profunctor Queues where
-  dimap f g (Queues {receive, send, shutdown}) =
+  dimap f g (Queues {receive, send, shutdown, isConnectionClosed}) =
     Queues
       { receive = g <$> receive,
         send = send . f,
-        shutdown
+        shutdown,
+        isConnectionClosed
       }
 
-withQueues :: forall i o m a. (MonadUnliftIO m, WebSocketsData i, WebSocketsData o) => Int -> Int -> Connection -> (Queues i o -> m a) -> m a
-withQueues inputBuffer outputBuffer conn action = do
-  receiveQ <- liftIO $ newTBMQueueIO inputBuffer
-  sendQ <- liftIO $ newTBMQueueIO outputBuffer
-  let receive = do
-        readTBMQueue receiveQ >>= \case
-          Nothing -> retry
-          Just msg -> pure msg
-  let send msg = writeTBMQueue sendQ msg
-  isClosedVar <- newTVarIO False
+withQueues :: forall i o m a. (MonadUnliftIO m, WebSocketsData i, WebSocketsData o) => Natural -> Natural -> Connection -> (Queues i o -> m a) -> m a
+withQueues inputBuffer outputBuffer conn action = Ki.scoped $ \scope -> do
+  receiveQ <- liftIO $ newTBQueueIO inputBuffer
+  sendQ <- liftIO $ newTBQueueIO outputBuffer
+  isClosedVar <- liftIO $ newTVarIO False
+  let receive = do readTBQueue receiveQ
+  let send msg = writeTBQueue sendQ msg
 
   let triggerClose :: IO ()
       triggerClose = do
@@ -49,23 +49,22 @@ withQueues inputBuffer outputBuffer conn action = do
           isClosed <- readTVar isClosedVar
           when (not isClosed) $ do
             writeTVar isClosedVar True
-            closeTBMQueue sendQ
-            closeTBMQueue receiveQ
             pure ()
           pure isClosed
         when (not alreadyClosed) $ do
           sendClose conn ("Server is shutting down" :: Text)
 
-  let queues = Queues {receive, send, shutdown = triggerClose}
-  a <- withAsync (recvWorker receiveQ) $ \_ ->
-    withAsync (sendWorker sendQ) $ \_ -> action queues
+  let queues = Queues {receive, send, shutdown = triggerClose, isConnectionClosed = readTVar isClosedVar}
+  Ki.fork scope $ recvWorker receiveQ
+  Ki.fork scope $ sendWorker sendQ
+  r <- action queues
   liftIO $ triggerClose
-  pure a
+  pure r
   where
-    recvWorker :: TBMQueue o -> m ()
+    recvWorker :: TBQueue o -> m ()
     recvWorker q = UnliftIO.handle handler $ do
       msg <- liftIO $ receiveData conn
-      atomically $ writeTBMQueue q msg
+      atomically $ writeTBQueue q msg
       recvWorker q
 
     handler :: ConnectionException -> m ()
@@ -74,12 +73,8 @@ withQueues inputBuffer outputBuffer conn action = do
       ConnectionClosed -> pure ()
       err -> throwIO err
 
-    sendWorker :: TBMQueue i -> m ()
+    sendWorker :: TBQueue i -> m ()
     sendWorker q = UnliftIO.handle handler $ do
-      outMsg <- atomically $ readTBMQueue q
-      case outMsg of
-        Nothing -> pure () -- Queue closed, exit the worker
-        Just outMsg' -> do
-          -- TODO: send multiple at once
-          liftIO $ sendBinaryDatas conn [outMsg']
-          sendWorker q
+      outMsgs <- atomically $ some $ readTBQueue q
+      liftIO $ sendBinaryDatas conn outMsgs
+      sendWorker q
