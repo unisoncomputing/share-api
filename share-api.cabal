@@ -203,6 +203,8 @@ library
       Share.Web.UCM.SyncV2.Types
       Share.Web.UCM.SyncV3.API
       Share.Web.UCM.SyncV3.Impl
+      Share.Web.UCM.SyncV3.Queries
+      Share.Web.UCM.SyncV3.Types
       Share.Web.UI.Links
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
