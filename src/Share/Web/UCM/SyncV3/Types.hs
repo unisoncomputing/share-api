@@ -56,8 +56,8 @@ instance (FromJSON authedHash) => FromJSON (InitMsg authedHash) where
       <*> o .: "rootCausal"
       <*> o .:? "requestedDepth"
 
-data EntityRequestMsg sh = EntityRequestMsg
-  { hashes :: [sh]
+data EntityRequestMsg hash = EntityRequestMsg
+  { hashes :: [(EntityKind, hash)]
   }
   deriving (Show, Eq)
 
@@ -66,7 +66,7 @@ instance (CBOR.Serialise sh) => CBOR.Serialise (EntityRequestMsg sh) where
     CBOR.encode hashes
 
   decode = do
-    hashes <- CBOR.decode @[sh]
+    hashes <- CBOR.decode @[(EntityKind, sh)]
     pure $ EntityRequestMsg {hashes}
 
 data FromReceiverMessageTag

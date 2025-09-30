@@ -15,6 +15,7 @@ import Ki.Unlifted qualified as Ki
 import Network.WebSockets qualified as WS
 import Share.Codebase (CodebaseEnv)
 import Share.IDs (UserId)
+import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.Servant.Websockets (Queues (..), withQueues)
 import Share.Web.App
@@ -163,7 +164,7 @@ shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validReque
       --   send (HashMappingsMsg (HashMappings (newMappings)))
 
       atomically $ do
-        let newHashes = setOf (folded . to snd) newEntities
+        let newHashes = setOf (folded . to (entityKind &&& entityHash)) newEntities
         modifyTVar' entitiesAlreadySentVar (Set.union newHashes)
         for newEntities \entity -> do
           send (EntityMsg entity)
@@ -179,4 +180,4 @@ shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validReque
 
 fetchEntities :: CodebaseEnv -> Set (EntityKind, Hash32) -> WebApp (Vector (Entity Hash32 Text))
 fetchEntities codebase reqs = do
-  Q.fetchSerialisedEntities codebase reqs
+  PG.runTransaction $ Q.fetchSerialisedEntities codebase reqs
