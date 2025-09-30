@@ -11,8 +11,10 @@ import Control.Monad.Trans.Except (ExceptT)
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as BL
+import Data.Functor.Contravariant (phantom)
 import Data.Map qualified as Map
 import Data.Set qualified as Set
+import Data.Set.Lens (setOf)
 import GHC.Natural
 import Ki.Unlifted qualified as Ki
 import Network.WebSockets (WebSocketsData)
@@ -77,6 +79,7 @@ instance (FromJSON authedHash) => FromJSON (InitMsg authedHash) where
 data EntityRequestMsg sh = EntityRequestMsg
   { hashes :: [sh]
   }
+  deriving (Show, Eq)
 
 instance (CBOR.Serialise sh) => CBOR.Serialise (EntityRequestMsg sh) where
   encode (EntityRequestMsg {hashes}) =
@@ -115,6 +118,7 @@ instance CBOR.Serialise FromReceiverMessageTag where
 data FromReceiverMessage ah sh
   = InitStream (InitMsg ah)
   | EntityRequest (EntityRequestMsg sh)
+  deriving (Show, Eq)
 
 instance (ToJSON ah, FromJSON ah) => CBOR.Serialise (InitMsg ah) where
   encode msg = do
@@ -172,9 +176,9 @@ instance CBOR.Serialise SyncError where
 data FromEmitterMessage hash smallHash text
   = ErrorMsg SyncError
   | HashMappingsMsg (HashMappings hash smallHash)
-  | EntityMsg (Entity smallHash hash text)
+  | EntityMsg (Entity smallHash text)
 
-instance (CBOR.Serialise hash, CBOR.Serialise smallHash) => WebSocketsData (FromEmitterMessage hash smallHash text) where
+instance (CBOR.Serialise hash, CBOR.Serialise smallHash, Ord smallHash, CBOR.Serialise text) => WebSocketsData (FromEmitterMessage hash smallHash text) where
   fromLazyByteString bytes =
     CBOR.deserialiseOrFailCBORBytes (CBOR.CBORBytes bytes)
       & either (\err -> ErrorMsg . EncodingFailure $ "Error decoding CBOR message from bytes: " <> tShow err) id
@@ -187,7 +191,7 @@ instance (CBOR.Serialise hash, CBOR.Serialise smallHash) => WebSocketsData (From
       WS.Binary bytes -> WS.fromLazyByteString bytes
 
 data HashMappings hash smallHash = HashMappings
-  { hashMappings :: [(smallHash, hash)]
+  { hashMappings :: Map smallHash hash
   }
 
 data EntityKind
@@ -216,51 +220,76 @@ instance CBOR.Serialise EntityKind where
       4 -> pure PatchEntity
       _ -> fail $ "Unknown EntityKind tag: " <> show tag
 
-data Entity smallHash hash text = Entity
-  { entityHash :: smallHash,
+-- | The number of _levels_ of dependencies an entity has,
+-- this has no real semantic meaning on its own, but provides the
+-- property that out of a given set of synced entities, if you process
+-- them in order of increasing EntityDepth, you will always have
+-- processed an entity's dependencies before you see the entity itself.
+newtype EntityDepth = EntityDepth {unEntityDepth :: Int64}
+  deriving (Show, Eq, Ord)
+  deriving newtype (CBOR.Serialise)
+
+data Entity hash text = Entity
+  { entityHash :: hash,
     entityKind :: EntityKind,
+    entityDepth :: EntityDepth,
     entityData :: Entity.SyncEntity' text hash hash hash hash hash hash
   }
 
-entityHashIds_ :: Lens (Entity smallHash hash text) (Entity smallHash' hash text) smallHash smallHash'
-entityHashIds_ = lens entityHash (\e h -> e {entityHash = h})
-
-entityTexts_ :: Traversal (Entity smallHash hash text) (Entity smallHash hash text') text text'
+entityTexts_ :: Traversal (Entity smallHash text) (Entity smallHash text') text text'
 entityTexts_ f (Entity {entityData, ..}) =
   (\entityData' -> Entity {entityData = entityData', ..}) <$> Entity.texts_ f entityData
 
-entityHashes_ :: Traversal (Entity smallHash hash text) (Entity smallHash hash' text) hash hash'
-entityHashes_ f (Entity {entityData, ..}) =
-  (\entityData' -> Entity {entityData = entityData', ..})
-    <$> ( entityData
+entityHashesSetter_ :: (Monad m) => LensLike m (Entity smallHash text) (Entity smallHash' text) smallHash smallHash'
+entityHashesSetter_ f (Entity {entityHash, entityData, ..}) =
+  (\entityHash' entityData' -> Entity {entityHash = entityHash', entityData = entityData', ..})
+    <$> f entityHash
+    <*> ( entityData
             & Entity.hashes_ f
             >>= Entity.defns_ f
             >>= Entity.patches_ f
             >>= Entity.branchHashes_ f
             >>= Entity.branches_ f
+            >>= Entity.causalHashes_ f
         )
 
-entityDefns_ :: Traversal (Entity smallHash hash text) (Entity smallHash hash text) hash hash
-entityDefns_ f (Entity {entityData, ..}) =
-  (\entityData' -> Entity {entityData = entityData', ..}) <$> Entity.defns_ f entityData
+-- | It's technically possible to implement entityHashesGetter_ and entityHashesSetter_
+-- as a single Traversal, but it's a ton of extra unpacking/packing that's probably not worth
+-- it.
+entityHashesGetter_ :: Fold (Entity smallHash text) smallHash
+entityHashesGetter_ f (Entity {entityHash, entityData}) =
+  phantom (f entityHash)
+    *> phantom (Entity.hashes_ f entityData)
+    *> phantom (Entity.defns_ f entityData)
+    *> phantom (Entity.patches_ f entityData)
+    *> phantom (Entity.branchHashes_ f entityData)
+    *> phantom (Entity.branches_ f entityData)
+    *> phantom (Entity.causalHashes_ f entityData)
 
-instance (CBOR.Serialise smallHash, CBOR.Serialise hash, CBOR.Serialise text) => CBOR.Serialise (Entity smallHash hash text) where
-  encode (Entity {entityHash, entityKind, entityData}) =
-    CBOR.encode (entityHash, entityKind, entityData)
+instance (CBOR.Serialise smallHash, CBOR.Serialise text) => CBOR.Serialise (Entity smallHash text) where
+  encode (Entity {entityHash, entityKind, entityDepth, entityData}) =
+    CBOR.encode entityHash
+      <> CBOR.encode entityKind
+      <> CBOR.encode entityDepth
+      <> CBOR.encode entityData
 
   decode = do
-    (entityHash, entityKind, entityData) <- CBOR.decode @(smallHash, EntityKind, ByteString)
-    pure $ Entity {entityHash, entityKind, entityData}
+    entityHash <- CBOR.decode @smallHash
+    entityKind <- CBOR.decode @EntityKind
+    entityDepth <- CBOR.decode @EntityDepth
+    entityData <- CBOR.decode @(Entity.SyncEntity' text smallHash smallHash smallHash smallHash smallHash smallHash)
 
-instance (CBOR.Serialise hash, CBOR.Serialise smallHash) => CBOR.Serialise (HashMappings hash smallHash) where
+    pure $ Entity {entityHash, entityKind, entityData, entityDepth}
+
+instance (Ord smallHash, CBOR.Serialise hash, CBOR.Serialise smallHash) => CBOR.Serialise (HashMappings hash smallHash) where
   encode (HashMappings {hashMappings}) =
     CBOR.encode hashMappings
 
   decode = do
-    hashMappings <- CBOR.decode @[(smallHash, hash)]
+    hashMappings <- CBOR.decode @(Map smallHash hash)
     pure $ HashMappings {hashMappings}
 
-instance (CBOR.Serialise hash, CBOR.Serialise smallHash) => CBOR.Serialise (FromEmitterMessage hash smallHash text) where
+instance (Ord smallHash, CBOR.Serialise hash, CBOR.Serialise smallHash, CBOR.Serialise text) => CBOR.Serialise (FromEmitterMessage hash smallHash text) where
   encode = \case
     ErrorMsg err -> CBOR.encode ErrorMsgTag <> CBOR.encode err
     HashMappingsMsg msg -> CBOR.encode HashMappingsTag <> CBOR.encode msg
@@ -308,7 +337,7 @@ instance (CBOR.Serialise a, CBOR.Serialise err) => CBOR.Serialise (MsgOrError er
       1 -> Err <$> CBOR.decode
       _ -> fail $ "Unknown MsgOrError tag: " <> show tag
 
-instance (CBOR.Serialise h, ToJSON ah, FromJSON ah) => WebSocketsData (MsgOrError SyncError (FromReceiverMessage ah h)) where
+instance (CBOR.Serialise sh, ToJSON ah, FromJSON ah) => WebSocketsData (MsgOrError SyncError (FromReceiverMessage ah sh)) where
   fromLazyByteString bytes =
     CBOR.deserialiseOrFailCBORBytes (CBOR.CBORBytes bytes)
       & either (\err -> Err . EncodingFailure $ "Error decoding CBOR message from bytes: " <> tShow err) Msg
@@ -324,12 +353,26 @@ downloadEntitiesImpl :: Maybe UserId -> WS.Connection -> WebApp ()
 downloadEntitiesImpl _mayCallerUserId conn = do
   -- Auth is currently done via HashJWTs
   _authZReceipt <- AuthZ.checkDownloadFromUserCodebase
-  withQueues @(FromEmitterMessage Hash32 HashTag Text) @(MsgOrError SyncError (FromReceiverMessage HashJWT Hash32))
+  doSyncEmitter shareEmitter conn
+
+-- | Given a helper which understands how to wire things into its backend, This
+-- implements the sync emitter logic which is independent of the backend.
+doSyncEmitter ::
+  forall m.
+  (MonadUnliftIO m) =>
+  ( (SyncState HashTag Hash32) ->
+    Queues (FromEmitterMessage Hash32 HashTag Text) (MsgOrError SyncError (FromReceiverMessage HashJWT HashTag)) ->
+    m (Maybe SyncError)
+  ) ->
+  WS.Connection ->
+  m ()
+doSyncEmitter emitterImpl conn = do
+  withQueues @(FromEmitterMessage Hash32 HashTag Text) @(MsgOrError SyncError (FromReceiverMessage HashJWT HashTag))
     recvBufferSize
     sendBufferSize
     conn
     \(q@Queues {receive}) -> handleErr q $ do
-      let recvM :: ExceptT SyncError m (FromReceiverMessage HashJWT Hash32)
+      let recvM :: ExceptT SyncError m (FromReceiverMessage HashJWT HashTag)
           recvM = do
             result <- liftIO $ atomically receive
             case result of
@@ -339,7 +382,7 @@ downloadEntitiesImpl _mayCallerUserId conn = do
       syncState <- case initMsg of
         InitStream initMsg -> lift $ initialize initMsg
         other -> throwError $ InitializationError ("Expected InitStream message, got: " <> tShow other)
-      lift (shareSync syncState q) >>= \case
+      lift (emitterImpl syncState q) >>= \case
         Nothing -> pure ()
         Just err -> throwError err
   where
@@ -351,7 +394,15 @@ downloadEntitiesImpl _mayCallerUserId conn = do
           liftIO $ shutdown
         Right r -> pure r
 
-initialize :: InitMsg ah -> WebApp (SyncState sh hash)
+-- | Given a helper which understands how to wire things into its backend, This
+-- implements the sync receiver logic which is independent of the backend.
+doSyncReceiver ::
+  Queues (FromEmitterMessage Hash32 HashTag Text) (MsgOrError SyncError (FromReceiverMessage HashJWT HashTag)) ->
+  m ()
+doSyncReceiver _receiverImpl = do
+  _
+
+initialize :: InitMsg ah -> m (SyncState sh hash)
 initialize = undefined
 
 data SyncState sh hash = SyncState
@@ -363,11 +414,11 @@ data SyncState sh hash = SyncState
     mappedHashesVar :: TVar (Map sh hash)
   }
 
-shareSync ::
+shareEmitter ::
   (SyncState HashTag Hash32) ->
-  Queues (FromEmitterMessage Hash32 HashTag Text) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
+  Queues (FromEmitterMessage Hash32 HashTag Text) (MsgOrError SyncError (FromReceiverMessage HashJWT HashTag)) ->
   WebApp (Maybe SyncError)
-shareSync SyncState {requestedEntitiesVar, entitiesAlreadySentVar, mappedHashesVar} (Queues {send, receive, shutdown}) = Ki.scoped $ \scope -> do
+shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, mappedHashesVar} (Queues {send, receive, shutdown}) = Ki.scoped $ \scope -> do
   errVar <- newEmptyTMVarIO
   let onErr :: SyncError -> STM ()
       onErr e = do
@@ -379,7 +430,7 @@ shareSync SyncState {requestedEntitiesVar, entitiesAlreadySentVar, mappedHashesV
   pure r
   where
     sendWorker :: (SyncError -> STM ()) -> WebApp ()
-    sendWorker onErr = forever $ do
+    sendWorker _onErr = forever $ do
       reqs <- atomically $ do
         reqs <- readTVar requestedEntitiesVar
         guard (not $ Set.null reqs)
@@ -393,19 +444,22 @@ shareSync SyncState {requestedEntitiesVar, entitiesAlreadySentVar, mappedHashesV
       let hashMappings :: Map HashTag Hash32
           hashMappings =
             newEntities
-              & toListOf (folded . folded)
+              & toListOf (folded . entityHashesGetter_)
               & Map.fromList
       atomically $ do
         alreadyMapped <- readTVar mappedHashesVar
         let newMappings = Map.difference hashMappings alreadyMapped
         modifyTVar' mappedHashesVar (Map.union newMappings)
-        send (HashMappingsMsg (HashMappings (Set.toList newMappings)))
+        send (HashMappingsMsg (HashMappings (newMappings)))
 
       atomically $ do
-        let newHashIds = setOf (folded . entityHashIds_)
+        let newHashIds = setOf (folded . entityHashesGetter_ . _1) newEntities
         modifyTVar' entitiesAlreadySentVar (Set.union newHashIds)
         for newEntities \entity -> do
-          send (EntityMsg entity)
+          let entityWithHashIds =
+                entity
+                  & entityHashesSetter_ %~ view _1
+          send (EntityMsg entityWithHashIds)
 
     receiveWorker :: (SyncError -> STM ()) -> WebApp ()
     receiveWorker onErr = forever $ do
@@ -416,20 +470,21 @@ shareSync SyncState {requestedEntitiesVar, entitiesAlreadySentVar, mappedHashesV
           Msg (EntityRequest (EntityRequestMsg {hashes})) -> do
             modifyTVar' requestedEntitiesVar (\s -> Set.union s (Set.fromList hashes))
 
-    recvM :: ExceptT SyncError m (FromReceiverMessage HashJWT Hash32)
+    recvM :: ExceptT SyncError WebApp (FromReceiverMessage HashJWT HashTag)
     recvM = do
       result <- liftIO $ atomically receive
       case result of
         Msg msg -> pure msg
         Err err -> throwError err
 
-fetchEntities :: Set sh -> WebApp [Entity HashTag (HashTag, Hash32) Text]
+fetchEntities :: Set sh -> WebApp [Entity (HashTag, Hash32) Text]
 fetchEntities shs = _
 
 -- Application level compression of Hash references.
 -- We can send a mapping of Hash <-> HashTag at the start of the stream,
 -- and then use the smaller HashTag in all subsequent messages.
 data HashTag = HashTag (EntityKind, Int64)
+  deriving (Show, Eq, Ord)
 
 instance CBOR.Serialise HashTag where
   encode (HashTag (kind, idx)) =
