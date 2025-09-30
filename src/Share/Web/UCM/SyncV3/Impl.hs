@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Share.Web.UCM.SyncV3.Impl where
@@ -221,6 +222,28 @@ data Entity smallHash hash text = Entity
     entityData :: Entity.SyncEntity' text hash hash hash hash hash hash
   }
 
+entityHashIds_ :: Lens (Entity smallHash hash text) (Entity smallHash' hash text) smallHash smallHash'
+entityHashIds_ = lens entityHash (\e h -> e {entityHash = h})
+
+entityTexts_ :: Traversal (Entity smallHash hash text) (Entity smallHash hash text') text text'
+entityTexts_ f (Entity {entityData, ..}) =
+  (\entityData' -> Entity {entityData = entityData', ..}) <$> Entity.texts_ f entityData
+
+entityHashes_ :: Traversal (Entity smallHash hash text) (Entity smallHash hash' text) hash hash'
+entityHashes_ f (Entity {entityData, ..}) =
+  (\entityData' -> Entity {entityData = entityData', ..})
+    <$> ( entityData
+            & Entity.hashes_ f
+            >>= Entity.defns_ f
+            >>= Entity.patches_ f
+            >>= Entity.branchHashes_ f
+            >>= Entity.branches_ f
+        )
+
+entityDefns_ :: Traversal (Entity smallHash hash text) (Entity smallHash hash text) hash hash
+entityDefns_ f (Entity {entityData, ..}) =
+  (\entityData' -> Entity {entityData = entityData', ..}) <$> Entity.defns_ f entityData
+
 instance (CBOR.Serialise smallHash, CBOR.Serialise hash, CBOR.Serialise text) => CBOR.Serialise (Entity smallHash hash text) where
   encode (Entity {entityHash, entityKind, entityData}) =
     CBOR.encode (entityHash, entityKind, entityData)
@@ -335,7 +358,7 @@ data SyncState sh hash = SyncState
   { -- Entities which have been requested by the client but not yet sent.
     requestedEntitiesVar :: TVar (Set sh),
     -- Hashes which have been sent to the client
-    hashesAlreadySentVar :: TVar (Set sh),
+    entitiesAlreadySentVar :: TVar (Set sh),
     -- Hash mappings we've already sent to the client.
     mappedHashesVar :: TVar (Map sh hash)
   }
@@ -344,7 +367,7 @@ shareSync ::
   (SyncState HashTag Hash32) ->
   Queues (FromEmitterMessage Hash32 HashTag Text) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
   WebApp (Maybe SyncError)
-shareSync SyncState {requestedEntitiesVar, hashesAlreadySentVar, mappedHashesVar} (Queues {send, receive, shutdown}) = Ki.scoped $ \scope -> do
+shareSync SyncState {requestedEntitiesVar, entitiesAlreadySentVar, mappedHashesVar} (Queues {send, receive, shutdown}) = Ki.scoped $ \scope -> do
   errVar <- newEmptyTMVarIO
   let onErr :: SyncError -> STM ()
       onErr e = do
@@ -356,13 +379,13 @@ shareSync SyncState {requestedEntitiesVar, hashesAlreadySentVar, mappedHashesVar
   pure r
   where
     sendWorker :: (SyncError -> STM ()) -> WebApp ()
-    sendWorker onErr = do
+    sendWorker onErr = forever $ do
       reqs <- atomically $ do
         reqs <- readTVar requestedEntitiesVar
         guard (not $ Set.null reqs)
         -- TODO: Add reasonable batch sizes
         modifyTVar' requestedEntitiesVar (const Set.empty)
-        sent <- readTVar hashesAlreadySentVar
+        sent <- readTVar entitiesAlreadySentVar
         let unsent = Set.difference reqs sent
         guard (not $ Set.null unsent)
         pure unsent
@@ -379,20 +402,21 @@ shareSync SyncState {requestedEntitiesVar, hashesAlreadySentVar, mappedHashesVar
         send (HashMappingsMsg (HashMappings (Set.toList newMappings)))
 
       atomically $ do
-        modifyTVar' hashesAlreadySentVar (\s -> s <> Set.fromList (map entityHash newEntities))
+        let newHashIds = setOf (folded . entityHashIds_)
+        modifyTVar' entitiesAlreadySentVar (Set.union newHashIds)
         for newEntities \entity -> do
           send (EntityMsg entity)
 
     receiveWorker :: (SyncError -> STM ()) -> WebApp ()
-    receiveWorker onErr = forever do
+    receiveWorker onErr = forever $ do
       atomically $ do
         receive >>= \case
           Err err -> onErr err
           Msg (InitStream {}) -> onErr (InitializationError "Received duplicate InitStream message")
           Msg (EntityRequest (EntityRequestMsg {hashes})) -> do
-            modifyTVar' requestedEntitiesVar (\s -> s <> Set.fromList hashes)
+            modifyTVar' requestedEntitiesVar (\s -> Set.union s (Set.fromList hashes))
 
-    recvM :: ExceptT SyncError m (FromReceiverMessage ah hash)
+    recvM :: ExceptT SyncError m (FromReceiverMessage HashJWT Hash32)
     recvM = do
       result <- liftIO $ atomically receive
       case result of
