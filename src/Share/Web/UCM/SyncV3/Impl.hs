@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Share.Web.UCM.SyncV3.Impl where
+module Share.Web.UCM.SyncV3.Impl (server) where
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Except (runExceptT)
@@ -28,6 +28,7 @@ import Unison.SyncV3.Types
 import Unison.Util.Websockets (Queues (..), withQueues)
 import UnliftIO qualified
 import UnliftIO.STM
+import Unison.Debug qualified as Debug
 
 -- Amount of entities to buffer from the network into the send/recv queues.
 sendBufferSize :: Natural
@@ -36,10 +37,10 @@ sendBufferSize = 100
 recvBufferSize :: Natural
 recvBufferSize = 100
 
-data StreamInitInfo = StreamInitInfo
+-- data StreamInitInfo = StreamInitInfo
 
-streamSettings :: StreamInitInfo
-streamSettings = StreamInitInfo
+-- streamSettings :: StreamInitInfo
+-- streamSettings = StreamInitInfo
 
 server :: Maybe UserId -> SyncV3.Routes WebAppServer
 server mayUserId =
@@ -49,6 +50,7 @@ server mayUserId =
 
 downloadEntitiesImpl :: Maybe UserId -> WS.Connection -> WebApp ()
 downloadEntitiesImpl _mayCallerUserId conn = do
+  Debug.debugLogM Debug.Temp "Got connection"
   -- Auth is currently done via HashJWTs
   _authZReceipt <- AuthZ.checkDownloadFromUserCodebase
   doSyncEmitter shareEmitter conn
@@ -70,13 +72,18 @@ doSyncEmitter emitterImpl conn = do
     sendBufferSize
     conn
     \(q@Queues {receive}) -> handleErr q $ do
+      Debug.debugLogM Debug.Temp "Got queues"
       let recvM :: ExceptT SyncError m (FromReceiverMessage HashJWT Hash32)
           recvM = do
             result <- liftIO $ atomically receive
+            Debug.debugM Debug.Temp "Received: " result
             case result of
               Msg msg -> pure msg
               Err err -> throwError err
+
+      Debug.debugLogM Debug.Temp "Waiting for init message"
       initMsg <- recvM
+      Debug.debugM Debug.Temp "Got init: " initMsg
       syncState <- case initMsg of
         ReceiverInitStream initMsg -> lift $ initialize initMsg
         other -> throwError $ InitializationError ("Expected ReceiverInitStream message, got: " <> tShow other)
@@ -93,7 +100,17 @@ doSyncEmitter emitterImpl conn = do
         Right r -> pure r
 
 initialize :: InitMsg ah -> m (SyncState sh hash)
-initialize = undefined
+initialize InitMsg{initMsgClientVersion, initMsgBranchRef, initMsgRootCausal, initMsgRequestedDepth} = do
+  let initialCausalHash = hashjwtHash initMsgRootCausal
+  validRequestsVar <- newTVarIO Set.empty
+  requestedEntitiesVar <- newTVarIO (Set.singleton initialCausalHash)
+  entitiesAlreadySentVar <- newTVarIO Set.empty
+  pure $ SyncState
+    { codebase = PG.codebaseEnv,
+      validRequestsVar,
+      requestedEntitiesVar,
+      entitiesAlreadySentVar
+    }
 
 data SyncState sh hash = SyncState
   { codebase :: CodebaseEnv,
