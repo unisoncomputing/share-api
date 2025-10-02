@@ -7,7 +7,7 @@ import Data.Vector (Vector)
 import Share.Codebase.Types (CodebaseEnv (..))
 import Share.Postgres
 import Share.Prelude
-import Share.Web.UCM.SyncV3.Types
+import Unison.SyncV3.Types
 import U.Codebase.Sqlite.TempEntity (TempEntity)
 import Unison.Hash32 (Hash32)
 import Unison.SyncV2.Types (CBORBytes)
@@ -47,6 +47,8 @@ fetchSerialisedEntities (CodebaseEnv {codebaseOwner}) requestedEntities =
                WHERE req.kind = 'namespace'
            )
            UNION ALL
+           -- TODO: Should probably join in a batch of causal spines here too
+           -- to improve parallelism and avoid long-spine bottlenecks.
            (SELECT req.kind, bytes.bytes, tc.causal_hash, cd.depth
              FROM requested req
                JOIN causals c ON req.hash = c.hash
