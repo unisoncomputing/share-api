@@ -17,15 +17,15 @@ import Share.Codebase (CodebaseEnv)
 import Share.IDs (UserId)
 import Share.Postgres qualified as PG
 import Share.Prelude
-import Share.Utils.Servant.Websockets (Queues (..), withQueues)
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.UCM.SyncV3.API qualified as SyncV3
 import Share.Web.UCM.SyncV3.Queries qualified as Q
-import Share.Web.UCM.SyncV3.Types
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWT)
+import Unison.SyncV3.Types
+import Unison.Util.Websockets (Queues (..), withQueues)
 import UnliftIO qualified
 import UnliftIO.STM
 
@@ -59,13 +59,13 @@ doSyncEmitter ::
   forall m.
   (MonadUnliftIO m) =>
   ( (SyncState HashTag Hash32) ->
-    Queues (FromEmitterMessage Hash32 Text) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
+    Queues (MsgOrError SyncError (FromEmitterMessage Hash32 Text)) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
     m (Maybe SyncError)
   ) ->
   WS.Connection ->
   m ()
 doSyncEmitter emitterImpl conn = do
-  withQueues @(FromEmitterMessage Hash32 Text) @(MsgOrError SyncError (FromReceiverMessage HashJWT Hash32))
+  withQueues @(MsgOrError SyncError (FromEmitterMessage Hash32 Text)) @(MsgOrError SyncError (FromReceiverMessage HashJWT Hash32))
     recvBufferSize
     sendBufferSize
     conn
@@ -78,8 +78,8 @@ doSyncEmitter emitterImpl conn = do
               Err err -> throwError err
       initMsg <- recvM
       syncState <- case initMsg of
-        InitStream initMsg -> lift $ initialize initMsg
-        other -> throwError $ InitializationError ("Expected InitStream message, got: " <> tShow other)
+        ReceiverInitStream initMsg -> lift $ initialize initMsg
+        other -> throwError $ InitializationError ("Expected ReceiverInitStream message, got: " <> tShow other)
       lift (emitterImpl syncState q) >>= \case
         Nothing -> pure ()
         Just err -> throwError err
@@ -88,17 +88,9 @@ doSyncEmitter emitterImpl conn = do
       runExceptT action >>= \case
         Left err -> do
           atomically $ do
-            send (ErrorMsg err)
+            send (Err err)
           liftIO $ shutdown
         Right r -> pure r
-
--- | Given a helper which understands how to wire things into its backend, This
--- implements the sync receiver logic which is independent of the backend.
-doSyncReceiver ::
-  Queues (FromEmitterMessage Hash32 Text) (MsgOrError SyncError (FromReceiverMessage HashJWT HashTag)) ->
-  m ()
-doSyncReceiver _receiverImpl = do
-  _
 
 initialize :: InitMsg ah -> m (SyncState sh hash)
 initialize = undefined
@@ -118,7 +110,7 @@ data SyncState sh hash = SyncState
 
 shareEmitter ::
   (SyncState HashTag Hash32) ->
-  Queues (FromEmitterMessage Hash32 Text) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
+  Queues (MsgOrError SyncError (FromEmitterMessage Hash32 Text)) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
   WebApp (Maybe SyncError)
 shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validRequestsVar, codebase} (Queues {send, receive, shutdown}) = Ki.scoped $ \scope -> do
   errVar <- newEmptyTMVarIO
@@ -167,15 +159,15 @@ shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validReque
         let newHashes = setOf (folded . to (entityKind &&& entityHash)) newEntities
         modifyTVar' entitiesAlreadySentVar (Set.union newHashes)
         for newEntities \entity -> do
-          send (EntityMsg entity)
+          send $ Msg (EmitterEntityMsg entity)
 
     receiveWorker :: (SyncError -> STM ()) -> WebApp ()
     receiveWorker onErr = forever $ do
       atomically $ do
         receive >>= \case
           Err err -> onErr err
-          Msg (InitStream {}) -> onErr (InitializationError "Received duplicate InitStream message")
-          Msg (EntityRequest (EntityRequestMsg {hashes})) -> do
+          Msg (ReceiverInitStream {}) -> onErr (InitializationError "Received duplicate ReceiverInitStream message")
+          Msg (ReceiverEntityRequest (EntityRequestMsg {hashes})) -> do
             modifyTVar' requestedEntitiesVar (\s -> Set.union s (Set.fromList hashes))
 
 fetchEntities :: CodebaseEnv -> Set (EntityKind, Hash32) -> WebApp (Vector (Entity Hash32 Text))

@@ -38,6 +38,7 @@ import Unison.Hash32 qualified as Hash32
 import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.SyncV2.Types (CBORBytes (..))
+import Unison.SyncV3.Types qualified as SyncV3
 import Unison.Syntax.Name qualified as Name
 import UnliftIO (MonadUnliftIO (..))
 
@@ -286,3 +287,21 @@ instance MonadUnliftIO Hasql.Session where
     case res of
       Left e -> throwError e
       Right a -> pure a
+
+instance Hasql.DecodeValue SyncV3.EntityKind where
+  decodeValue = do
+    Decoders.enum \case
+      "causal" -> Just SyncV3.CausalEntity
+      "namespace" -> Just SyncV3.NamespaceEntity
+      "component" -> Just SyncV3.DefnComponentEntity
+      "patch" -> Just SyncV3.PatchEntity
+      _ -> Nothing
+
+instance Hasql.EncodeValue SyncV3.EntityKind where
+  encodeValue = Encoders.enum \case
+    SyncV3.CausalEntity -> "causal"
+    SyncV3.NamespaceEntity -> "namespace"
+    SyncV3.DefnComponentEntity -> "component"
+    SyncV3.PatchEntity -> "patch"
+
+deriving newtype instance Hasql.DecodeValue SyncV3.EntityDepth
