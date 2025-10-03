@@ -196,6 +196,8 @@ library
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
       Share.Web.UCM.Sync.Types
+      Share.Web.UCM.SyncCommon.Impl
+      Share.Web.UCM.SyncCommon.Types
       Share.Web.UCM.SyncV2.API
       Share.Web.UCM.SyncV2.Impl
       Share.Web.UCM.SyncV2.Queries

@@ -5,8 +5,8 @@
 module Share.Web.UCM.SyncV3.Impl (server) where
 
 import Control.Lens hiding ((.=))
+import Control.Monad.Cont (ContT (..), MonadCont (..))
 import Control.Monad.Except (runExceptT)
-import Control.Monad.Trans.Except (ExceptT)
 import Data.Set qualified as Set
 import Data.Set.Lens (setOf)
 import Data.Vector (Vector)
@@ -18,17 +18,21 @@ import Share.IDs (UserId)
 import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Web.App
+import Share.Web.Authentication.Types qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
+import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
+import Share.Web.UCM.SyncCommon.Impl (codebaseForBranchRef)
+import Share.Web.UCM.SyncCommon.Types
 import Share.Web.UCM.SyncV3.API qualified as SyncV3
 import Share.Web.UCM.SyncV3.Queries qualified as Q
 import U.Codebase.Sqlite.Orphans ()
+import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
-import Unison.Share.API.Hash (HashJWT)
+import Unison.Share.API.Hash (HashJWT, HashJWTClaims (..))
 import Unison.SyncV3.Types
 import Unison.Util.Websockets (Queues (..), withQueues)
 import UnliftIO qualified
 import UnliftIO.STM
-import Unison.Debug qualified as Debug
 
 -- Amount of entities to buffer from the network into the send/recv queues.
 sendBufferSize :: Natural
@@ -48,69 +52,90 @@ server mayUserId =
     { downloadEntities = downloadEntitiesImpl mayUserId
     }
 
+type SyncM = ContT (Either SyncError ()) WebApp
+
 downloadEntitiesImpl :: Maybe UserId -> WS.Connection -> WebApp ()
-downloadEntitiesImpl _mayCallerUserId conn = do
+downloadEntitiesImpl mayCallerUserId conn = do
   Debug.debugLogM Debug.Temp "Got connection"
   -- Auth is currently done via HashJWTs
   _authZReceipt <- AuthZ.checkDownloadFromUserCodebase
-  doSyncEmitter shareEmitter conn
+  doSyncEmitter mayCallerUserId conn
 
 -- | Given a helper which understands how to wire things into its backend, This
 -- implements the sync emitter logic which is independent of the backend.
 doSyncEmitter ::
-  forall m.
-  (MonadUnliftIO m) =>
-  ( (SyncState HashTag Hash32) ->
-    Queues (MsgOrError SyncError (FromEmitterMessage Hash32 Text)) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
-    m (Maybe SyncError)
-  ) ->
+  Maybe UserId ->
   WS.Connection ->
-  m ()
-doSyncEmitter emitterImpl conn = do
+  WebApp ()
+doSyncEmitter mayCallerUserId conn = do
   withQueues @(MsgOrError SyncError (FromEmitterMessage Hash32 Text)) @(MsgOrError SyncError (FromReceiverMessage HashJWT Hash32))
     recvBufferSize
     sendBufferSize
     conn
-    \(q@Queues {receive}) -> handleErr q $ do
-      Debug.debugLogM Debug.Temp "Got queues"
-      let recvM :: ExceptT SyncError m (FromReceiverMessage HashJWT Hash32)
-          recvM = do
-            result <- liftIO $ atomically receive
-            Debug.debugM Debug.Temp "Received: " result
-            case result of
-              Msg msg -> pure msg
-              Err err -> throwError err
+    \(q@Queues {receive}) -> do
+      handleErr q $ do
+        withErrorCont \onErr -> do
+          Debug.debugLogM Debug.Temp "Got queues"
+          let recvM :: SyncM (FromReceiverMessage HashJWT Hash32)
+              recvM = do
+                result <- liftIO $ atomically receive
+                Debug.debugM Debug.Temp "Received: " result
+                case result of
+                  Msg msg -> pure msg
+                  Err err -> onErr err
 
-      Debug.debugLogM Debug.Temp "Waiting for init message"
-      initMsg <- recvM
-      Debug.debugM Debug.Temp "Got init: " initMsg
-      syncState <- case initMsg of
-        ReceiverInitStream initMsg -> lift $ initialize initMsg
-        other -> throwError $ InitializationError ("Expected ReceiverInitStream message, got: " <> tShow other)
-      lift (emitterImpl syncState q) >>= \case
-        Nothing -> pure ()
-        Just err -> throwError err
+          Debug.debugLogM Debug.Temp "Waiting for init message"
+          initMsg <- recvM
+          Debug.debugM Debug.Temp "Got init: " initMsg
+          syncState <- case initMsg of
+            ReceiverInitStream initMsg -> initialize onErr mayCallerUserId initMsg
+            other -> onErr $ InitializationError ("Expected ReceiverInitStream message, got: " <> tShow other)
+          lift (shareEmitter syncState q)
+            >>= maybe (pure ()) (onErr)
   where
+    -- Given a continuation-based action, run it in the base monad, capturing any early exits
+    withErrorCont ::
+      ((forall x. SyncError -> SyncM x) -> SyncM ()) ->
+      WebApp (Either SyncError ())
+    withErrorCont action = do
+      flip runContT pure $ callCC \cc -> do
+        Right <$> action (fmap absurd . cc . Left)
+    -- If we get an error, send it to the client then shut down.
+    handleErr ::
+      Queues (MsgOrError err a) o ->
+      WebApp (Either err ()) ->
+      WebApp ()
     handleErr (Queues {send, shutdown}) action = do
-      runExceptT action >>= \case
+      action >>= \case
         Left err -> do
           atomically $ do
             send (Err err)
           liftIO $ shutdown
         Right r -> pure r
 
-initialize :: InitMsg ah -> m (SyncState sh hash)
-initialize InitMsg{initMsgClientVersion, initMsgBranchRef, initMsgRootCausal, initMsgRequestedDepth} = do
-  let initialCausalHash = hashjwtHash initMsgRootCausal
+initialize :: (forall x. SyncError -> SyncM x) -> (Maybe UserId) -> InitMsg HashJWT -> SyncM (SyncState sh Hash32)
+initialize onErr caller InitMsg {initMsgRootCausal, initMsgBranchRef} = do
+  HashJWTClaims {hash = initialCausalHash} <-
+    lift (HashJWT.verifyHashJWT caller initMsgRootCausal) >>= \case
+      Right ch -> pure ch
+      Left err -> onErr $ HashJWTVerificationError (AuthN.authErrMsg err)
   validRequestsVar <- newTVarIO Set.empty
-  requestedEntitiesVar <- newTVarIO (Set.singleton initialCausalHash)
+  requestedEntitiesVar <- newTVarIO (Set.singleton (CausalEntity, initialCausalHash))
   entitiesAlreadySentVar <- newTVarIO Set.empty
-  pure $ SyncState
-    { codebase = PG.codebaseEnv,
-      validRequestsVar,
-      requestedEntitiesVar,
-      entitiesAlreadySentVar
-    }
+  (lift . runExceptT $ codebaseForBranchRef initMsgBranchRef) >>= \case
+    Left err -> case err of
+      CodebaseLoadingErrorNoReadPermission {} -> onErr $ NoReadPermission initMsgBranchRef
+      CodebaseLoadingErrorProjectNotFound {} -> onErr $ ProjectNotFound initMsgBranchRef
+      CodebaseLoadingErrorUserNotFound {} -> onErr $ UserNotFound initMsgBranchRef
+      CodebaseLoadingErrorInvalidBranchRef msg _ -> onErr $ InvalidBranchRef msg initMsgBranchRef
+    Right codebase ->
+      pure $
+        SyncState
+          { codebase,
+            validRequestsVar,
+            requestedEntitiesVar,
+            entitiesAlreadySentVar
+          }
 
 data SyncState sh hash = SyncState
   { codebase :: CodebaseEnv,
@@ -129,19 +154,18 @@ shareEmitter ::
   (SyncState HashTag Hash32) ->
   Queues (MsgOrError SyncError (FromEmitterMessage Hash32 Text)) (MsgOrError SyncError (FromReceiverMessage HashJWT Hash32)) ->
   WebApp (Maybe SyncError)
-shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validRequestsVar, codebase} (Queues {send, receive, shutdown}) = Ki.scoped $ \scope -> do
-  errVar <- newEmptyTMVarIO
-  let onErr :: SyncError -> STM ()
-      onErr e = do
-        UnliftIO.putTMVar errVar e
-  Ki.fork scope $ sendWorker onErr
-  Ki.fork scope $ receiveWorker onErr
-  r <- atomically $ (Ki.awaitAll scope $> Nothing) <|> (Just <$> UnliftIO.takeTMVar errVar)
-  liftIO $ shutdown
-  pure r
+shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validRequestsVar, codebase} (Queues {send, receive}) = do
+  Ki.scoped $ \scope -> do
+    errVar <- newEmptyTMVarIO
+    let onErrSTM :: SyncError -> STM ()
+        onErrSTM e = do
+          UnliftIO.putTMVar errVar e
+    Ki.fork scope $ sendWorker onErrSTM
+    Ki.fork scope $ receiveWorker onErrSTM
+    atomically ((Ki.awaitAll scope $> Nothing) <|> (Just <$> UnliftIO.takeTMVar errVar))
   where
     sendWorker :: (SyncError -> STM ()) -> WebApp ()
-    sendWorker onErr = forever $ do
+    sendWorker onErrSTM = forever $ do
       reqs <- atomically $ do
         reqs <- readTVar requestedEntitiesVar
         validRequests <- readTVar validRequestsVar
@@ -149,7 +173,7 @@ shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validReque
         validRequests <-
           if not (Set.null forbiddenRequests)
             then do
-              onErr (ForbiddenEntityRequest forbiddenRequests)
+              onErrSTM (ForbiddenEntityRequest forbiddenRequests)
               pure $ Set.difference validRequests forbiddenRequests
             else do
               pure validRequests
@@ -179,11 +203,11 @@ shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validReque
           send $ Msg (EmitterEntityMsg entity)
 
     receiveWorker :: (SyncError -> STM ()) -> WebApp ()
-    receiveWorker onErr = forever $ do
+    receiveWorker onErrSTM = forever $ do
       atomically $ do
         receive >>= \case
-          Err err -> onErr err
-          Msg (ReceiverInitStream {}) -> onErr (InitializationError "Received duplicate ReceiverInitStream message")
+          Err err -> onErrSTM err
+          Msg (ReceiverInitStream {}) -> onErrSTM (InitializationError "Received duplicate ReceiverInitStream message")
           Msg (ReceiverEntityRequest (EntityRequestMsg {hashes})) -> do
             modifyTVar' requestedEntitiesVar (\s -> Set.union s (Set.fromList hashes))
 
