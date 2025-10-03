@@ -7,34 +7,29 @@ import Codec.Serialise qualified as CBOR
 import Conduit qualified as C
 import Control.Concurrent.STM qualified as STM
 import Control.Concurrent.STM.TBMQueue qualified as STM
-import Control.Monad.Except (ExceptT (ExceptT), withExceptT)
+import Control.Monad.Except (withExceptT)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Binary.Builder qualified as Builder
 import Data.Set qualified as Set
-import Data.Text.Encoding qualified as Text
 import Data.Vector qualified as Vector
 import Ki.Unlifted qualified as Ki
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
 import Servant.Types.SourceT (SourceT (..))
 import Servant.Types.SourceT qualified as SourceT
-import Share.Codebase qualified as Codebase
-import Share.IDs (ProjectBranchShortHand (..), ProjectReleaseShortHand (..), ProjectShortHand (..), UserHandle, UserId)
+import Share.IDs (UserId)
 import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Cursors qualified as Cursor
-import Share.Postgres.Queries qualified as PGQ
-import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
-import Share.Project (Project (..))
-import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Unison (hash32ToCausalHash)
 import Share.Web.App
-import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
+import Share.Web.UCM.SyncCommon.Impl
+import Share.Web.UCM.SyncCommon.Types
 import Share.Web.UCM.SyncV2.Queries qualified as SSQ
 import Share.Web.UCM.SyncV2.Types (IsCausalSpine (..), IsLibRoot (..))
 import U.Codebase.Sqlite.Orphans ()
@@ -57,17 +52,6 @@ server mayUserId =
     { downloadEntitiesStream = downloadEntitiesStreamImpl mayUserId,
       causalDependenciesStream = causalDependenciesStreamImpl mayUserId
     }
-
-parseBranchRef :: SyncV2.BranchRef -> Either Text (Either ProjectReleaseShortHand ProjectBranchShortHand)
-parseBranchRef (SyncV2.BranchRef branchRef) =
-  case parseRelease <|> parseBranch of
-    Just a -> Right a
-    Nothing -> Left $ "Invalid repo info: " <> branchRef
-  where
-    parseBranch :: Maybe (Either ProjectReleaseShortHand ProjectBranchShortHand)
-    parseBranch = fmap Right . eitherToMaybe $ IDs.fromText @ProjectBranchShortHand branchRef
-    parseRelease :: Maybe (Either ProjectReleaseShortHand ProjectBranchShortHand)
-    parseRelease = fmap Left . eitherToMaybe $ IDs.fromText @ProjectReleaseShortHand branchRef
 
 downloadEntitiesStreamImpl :: Maybe UserId -> SyncV2.DownloadEntitiesRequest -> WebApp (SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk))
 downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {causalHash = causalHashJWT, branchRef, knownHashes}) = do
