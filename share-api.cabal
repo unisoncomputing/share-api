@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -196,10 +196,15 @@ library
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
       Share.Web.UCM.Sync.Types
+      Share.Web.UCM.SyncCommon.Impl
+      Share.Web.UCM.SyncCommon.Types
       Share.Web.UCM.SyncV2.API
       Share.Web.UCM.SyncV2.Impl
       Share.Web.UCM.SyncV2.Queries
       Share.Web.UCM.SyncV2.Types
+      Share.Web.UCM.SyncV3.API
+      Share.Web.UCM.SyncV3.Impl
+      Share.Web.UCM.SyncV3.Queries
       Share.Web.UI.Links
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
@@ -301,6 +306,7 @@ library
     , parallel
     , parser-combinators
     , pem
+    , profunctors
     , prometheus-client
     , prometheus-metrics-ghc
     , random
@@ -314,6 +320,7 @@ library
     , servant-client-core
     , servant-conduit
     , servant-server
+    , servant-websockets
     , share-auth
     , share-utils
     , stm
@@ -354,6 +361,7 @@ library
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509
@@ -458,6 +466,7 @@ executable share-api
     , parallel
     , parser-combinators
     , pem
+    , profunctors
     , prometheus-client
     , prometheus-metrics-ghc
     , random
@@ -471,6 +480,7 @@ executable share-api
     , servant-client-core
     , servant-conduit
     , servant-server
+    , servant-websockets
     , share-api
     , share-auth
     , share-utils
@@ -512,6 +522,7 @@ executable share-api
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509
