@@ -29,7 +29,9 @@ import U.Codebase.Sqlite.Orphans ()
 import Unison.Debug qualified as Debug
 import Unison.Hash32 (Hash32)
 import Unison.Share.API.Hash (HashJWT, HashJWTClaims (..))
+import Unison.Share.API.Hash qualified as HashJWT
 import Unison.SyncV3.Types
+import Unison.SyncV3.Utils (entityDependencies)
 import Unison.Util.Websockets (Queues (..), withQueues)
 import UnliftIO qualified
 import UnliftIO.STM
@@ -90,6 +92,7 @@ doSyncEmitter mayCallerUserId conn = do
           syncState <- case initMsg of
             ReceiverInitStream initMsg -> initialize onErr mayCallerUserId initMsg
             other -> onErr $ InitializationError ("Expected ReceiverInitStream message, got: " <> tShow other)
+          Debug.debugLogM Debug.Temp "Initialized sync state, starting sync process."
           lift (shareEmitter syncState q)
             >>= maybe (pure ()) (onErr)
   where
@@ -102,12 +105,14 @@ doSyncEmitter mayCallerUserId conn = do
         Right <$> action (fmap absurd . cc . Left)
     -- If we get an error, send it to the client then shut down.
     handleErr ::
+      (Show err) =>
       Queues (MsgOrError err a) o ->
       WebApp (Either err ()) ->
       WebApp ()
     handleErr (Queues {send, shutdown}) action = do
       action >>= \case
         Left err -> do
+          Debug.debugM Debug.Temp "Sync error, shutting down: " err
           atomically $ do
             send (Err err)
           liftIO $ shutdown
@@ -115,11 +120,14 @@ doSyncEmitter mayCallerUserId conn = do
 
 initialize :: (forall x. SyncError -> SyncM x) -> (Maybe UserId) -> InitMsg HashJWT -> SyncM (SyncState sh Hash32)
 initialize onErr caller InitMsg {initMsgRootCausal, initMsgBranchRef} = do
+  let decoded = HashJWT.decodeHashJWT initMsgRootCausal
+  Debug.debugM Debug.Temp "Decoded root causal hash jwt" decoded
+  Debug.debugM Debug.Temp "Caller: " caller
   HashJWTClaims {hash = initialCausalHash} <-
     lift (HashJWT.verifyHashJWT caller initMsgRootCausal) >>= \case
       Right ch -> pure ch
       Left err -> onErr $ HashJWTVerificationError (AuthN.authErrMsg err)
-  validRequestsVar <- newTVarIO Set.empty
+  validRequestsVar <- newTVarIO (Set.singleton (CausalEntity, initialCausalHash))
   requestedEntitiesVar <- newTVarIO (Set.singleton (CausalEntity, initialCausalHash))
   entitiesAlreadySentVar <- newTVarIO Set.empty
   (lift . runExceptT $ codebaseForBranchRef initMsgBranchRef) >>= \case
@@ -160,47 +168,45 @@ shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validReque
     let onErrSTM :: SyncError -> STM ()
         onErrSTM e = do
           UnliftIO.putTMVar errVar e
+
+    Debug.debugLogM Debug.Temp "Launching workers"
     Ki.fork scope $ sendWorker onErrSTM
     Ki.fork scope $ receiveWorker onErrSTM
+    Debug.debugLogM Debug.Temp "Waiting on errors or completion..."
     atomically ((Ki.awaitAll scope $> Nothing) <|> (Just <$> UnliftIO.takeTMVar errVar))
   where
     sendWorker :: (SyncError -> STM ()) -> WebApp ()
     sendWorker onErrSTM = forever $ do
-      reqs <- atomically $ do
+      (validRequests, reqs) <- atomically $ do
         reqs <- readTVar requestedEntitiesVar
+        writeTVar requestedEntitiesVar Set.empty
+        alreadySent <- readTVar entitiesAlreadySentVar
+        Debug.debugM Debug.Temp "Processing Requested entities: " reqs
         validRequests <- readTVar validRequestsVar
-        let forbiddenRequests = Set.difference reqs validRequests
-        validRequests <-
-          if not (Set.null forbiddenRequests)
-            then do
-              onErrSTM (ForbiddenEntityRequest forbiddenRequests)
-              pure $ Set.difference validRequests forbiddenRequests
-            else do
-              pure validRequests
-        guard (not $ Set.null validRequests)
-        -- TODO: Add reasonable batch sizes
-        modifyTVar' requestedEntitiesVar (const Set.empty)
-        sent <- readTVar entitiesAlreadySentVar
-        let unsent = Set.difference reqs sent
-        guard (not $ Set.null unsent)
-        pure unsent
-      newEntities <- fetchEntities codebase reqs
-      -- let hashMappings :: Map HashTag Hash32
-      --     hashMappings =
-      --       newEntities
-      --         & toListOf (folded . entityHashesGetter_)
-      --         & Map.fromList
-      -- atomically $ do
-      --   alreadyMapped <- readTVar mappedHashesVar
-      --   let newMappings = Map.difference hashMappings alreadyMapped
-      --   modifyTVar' mappedHashesVar (Map.union newMappings)
-      --   send (HashMappingsMsg (HashMappings (newMappings)))
-
-      atomically $ do
-        let newHashes = setOf (folded . to (entityKind &&& entityHash)) newEntities
-        modifyTVar' entitiesAlreadySentVar (Set.union newHashes)
-        for newEntities \entity -> do
-          send $ Msg (EmitterEntityMsg entity)
+        pure (validRequests, reqs `Set.difference` alreadySent)
+      let forbiddenRequests = Set.difference reqs validRequests
+      validatedRequests <-
+        if not (Set.null forbiddenRequests)
+          then do
+            atomically (onErrSTM (ForbiddenEntityRequest forbiddenRequests))
+            pure $ Set.difference validRequests forbiddenRequests
+          else do
+            pure validRequests
+      Debug.debugM Debug.Temp "Validated requests: " validatedRequests
+      when (not $ Set.null validatedRequests) $ do
+        Debug.debugM Debug.Temp "Fetching Entities." validatedRequests
+        newEntities <- fetchEntities codebase validatedRequests
+        Debug.debugM Debug.Temp "Fetched entities: " (length newEntities)
+        -- Do work outside of transactions to avoid conflicts
+        deps <- UnliftIO.evaluate $ foldMap entityDependencies newEntities
+        Debug.debugLogM Debug.Temp "Adding new valid requests"
+        atomically $ modifyTVar' validRequestsVar (\s -> Set.union s deps)
+        Debug.debugM Debug.Temp "Sending entities: " (length newEntities)
+        atomically $ do
+          let newHashes = setOf (folded . to (entityKind &&& entityHash)) newEntities
+          modifyTVar' entitiesAlreadySentVar (Set.union newHashes)
+          for_ newEntities \entity -> do
+            send $ Msg (EmitterEntityMsg entity)
 
     receiveWorker :: (SyncError -> STM ()) -> WebApp ()
     receiveWorker onErrSTM = forever $ do
@@ -209,8 +215,12 @@ shareEmitter SyncState {requestedEntitiesVar, entitiesAlreadySentVar, validReque
           Err err -> onErrSTM err
           Msg (ReceiverInitStream {}) -> onErrSTM (InitializationError "Received duplicate ReceiverInitStream message")
           Msg (ReceiverEntityRequest (EntityRequestMsg {hashes})) -> do
+            Debug.debugM Debug.Temp "Got new entity requests" hashes
             modifyTVar' requestedEntitiesVar (\s -> Set.union s (Set.fromList hashes))
 
 fetchEntities :: CodebaseEnv -> Set (EntityKind, Hash32) -> WebApp (Vector (Entity Hash32 Text))
 fetchEntities codebase reqs = do
   PG.runTransaction $ Q.fetchSerialisedEntities codebase reqs
+
+-- entityDependencies :: Entity hash text -> Set (EntityKind, Hash32)
+-- entityDependencies (Entity {entityData}) = do

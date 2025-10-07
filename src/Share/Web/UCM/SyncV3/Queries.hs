@@ -23,13 +23,13 @@ fetchSerialisedEntities (CodebaseEnv {codebaseOwner}) requestedEntities =
            (SELECT req.kind, bytes.bytes, ch.base32, cd.depth
              FROM requested req
                JOIN component_hashes ch ON req.hash = ch.base32
-               JOIN serialized_components sc ON sc.user_id = #{codebaseOwner} AND ch.component_hash_id = sc.component_hash_id
+               JOIN serialized_components sc ON sc.user_id = #{codebaseOwner} AND ch.id = sc.component_hash_id
                JOIN bytes ON sc.bytes_id = bytes.id
                JOIN component_depth cd ON ch.id = cd.component_hash_id
                WHERE req.kind = 'component'
            )
            UNION ALL
-           (SELECT req.kind, bytes.bytes, ap.patch_hash, pd.depth
+           (SELECT req.kind, bytes.bytes, req.hash, pd.depth
              FROM requested req
                JOIN patches p ON req.hash = p.hash
                JOIN serialized_patches sp ON p.id = sp.patch_id
@@ -38,7 +38,7 @@ fetchSerialisedEntities (CodebaseEnv {codebaseOwner}) requestedEntities =
                WHERE req.kind = 'patch'
            )
            UNION ALL
-           (SELECT req.kind, bytes.bytes, an.namespace_hash, nd.depth
+           (SELECT req.kind, bytes.bytes, req.hash, nd.depth
              FROM requested req
                JOIN branch_hashes bh ON req.hash = bh.base32
                JOIN serialized_namespaces sn ON bh.id = sn.namespace_hash_id
@@ -49,7 +49,7 @@ fetchSerialisedEntities (CodebaseEnv {codebaseOwner}) requestedEntities =
            UNION ALL
            -- TODO: Should probably join in a batch of causal spines here too
            -- to improve parallelism and avoid long-spine bottlenecks.
-           (SELECT req.kind, bytes.bytes, tc.causal_hash, cd.depth
+           (SELECT req.kind, bytes.bytes, req.hash, cd.depth
              FROM requested req
                JOIN causals c ON req.hash = c.hash
                JOIN serialized_causals sc ON c.id = sc.causal_id
