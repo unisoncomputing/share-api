@@ -2,21 +2,21 @@
 -- makes the data more consistent,  no need to rely on triggers, and makes it much easier to display in the UI.
 
 -- Update the role permissions, some roles had an incorrect 'org:create_project' rather than 'project:create' permission
--- UPDATE roles
---   SET permissions = ARRAY['org:view', 'org:manage', 'org:admin', 'team:view', 'team:manage', 'project:view', 'project:create', 'project:manage', 'project:contribute', 'project:delete', 'project:maintain']
---   WHERE ref = 'org_admin'
---   ;
+UPDATE roles
+  SET permissions = ARRAY['org:view', 'org:manage', 'org:admin', 'team:view', 'team:manage', 'project:view', 'project:create', 'project:manage', 'project:contribute', 'project:delete', 'project:maintain']
+  WHERE ref = 'org_admin'
+  ;
 
--- UPDATE roles
---   SET permissions = ARRAY['org:view', 'org:manage', 'org:admin', 'org:delete', 'org:change_owner', 'team:view', 'team:manage', 'project:view', 'project:create', 'project:manage', 'project:contribute', 'project:delete', 'project:maintain']
---   WHERE ref = 'org_owner'
---   ;
+UPDATE roles
+  SET permissions = ARRAY['org:view', 'org:manage', 'org:admin', 'org:delete', 'org:change_owner', 'team:view', 'team:manage', 'project:view', 'project:create', 'project:manage', 'project:contribute', 'project:delete', 'project:maintain']
+  WHERE ref = 'org_owner'
+  ;
 
--- -- After migrating, this will no longer be used.
--- UPDATE roles
---   SET permissions = ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:create', 'project:maintain', 'project:contribute']
---   WHERE ref = 'org_default'
---   ;
+-- After migrating, this will no longer be used.
+UPDATE roles
+  SET permissions = ARRAY['org:view', 'org:edit', 'team:view', 'project:view', 'project:create', 'project:maintain', 'project:contribute']
+  WHERE ref = 'org_default'
+  ;
 
 ALTER TABLE org_members
     ADD COLUMN role_id UUID REFERENCES roles(id) NULL;
