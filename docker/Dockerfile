@@ -1,4 +1,4 @@
-FROM debian:bookworm
+FROM debian:trixie
 RUN apt-get  update && apt-get install -y ssl-cert libpq5 ca-certificates curl locales
 RUN openssl genrsa -out /etc/ssl/private/share.key &&\
     echo "C.UTF-8 UTF-8" > /etc/locale.gen &&\
