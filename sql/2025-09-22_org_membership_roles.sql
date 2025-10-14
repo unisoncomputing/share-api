@@ -1,6 +1,22 @@
 -- Org membership is now associated with a specific role within the org, this simplifies things,
 -- makes the data more consistent,  no need to rely on triggers, and makes it much easier to display in the UI.
 
+
+-- SANITY CHECK:
+-- SELECT org_user.handle, member_user.handle, role.ref
+--   FROM orgs org 
+--   JOIN role_memberships rm ON rm.resource_id = org.resource_id 
+--   JOIN users member_user ON rm.subject_id = member_user.subject_id 
+--   JOIN roles role ON role.id = rm.role_id 
+--   JOIN users org_user ON org.user_id = org_user.id;
+
+-- SELECT org_user.handle, member_user.handle
+--   FROM org_members om 
+--   JOIN users org_user ON om.organization_user_id = org_user.id
+--   JOIN users member_user ON om.member_user_id = member_user.id
+--   ;
+
+
 ALTER TABLE org_members
     ADD COLUMN role_id UUID REFERENCES roles(id) NULL;
 
@@ -80,9 +96,24 @@ CREATE OR REPLACE VIEW subject_resource_permissions(subject_id, resource_id, per
     JOIN resource_hierarchy rh ON drp.resource_id = rh.parent_resource_id
 );
 
+-- -- SANITY CHECK
+-- SELECT rm.subject_id, r.ref
+--   FROM role_memberships rm
+--   JOIN roles r ON rm.role_id = r.id
+--   -- JOIN users u ON rm.subject_id = u.subject_id
+--   WHERE
+--     r.ref::text IN ('org_viewer', 'org_maintainer', 'org_contributor', 'org_admin', 'org_owner', 'org_default');
 
 DELETE FROM role_memberships rm
   USING roles r
   WHERE
     rm.role_id = r.id
     AND r.ref::text IN ('org_viewer', 'org_maintainer', 'org_contributor', 'org_admin', 'org_owner', 'org_default');
+
+-- SANITY CHECK
+-- SELECT org_user.handle, member_user.handle, role.ref
+--   FROM org_members om 
+--   JOIN users org_user ON om.organization_user_id = org_user.id
+--   JOIN users member_user ON om.member_user_id = member_user.id 
+--   JOIN roles role ON role.id = om.role_id
+--   ;
