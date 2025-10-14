@@ -9,80 +9,174 @@
                 "diff": {
                   "diff": {
                     "diff": {
-                      "contents": [
-                        {
-                          "diffTag": "both",
-                          "elements": [
-                            {
-                              "annotation": {
-                                "contents": "term",
-                                "tag": "HashQualifier"
+                      "contents": {
+                        "left": [
+                          {
+                            "kind": "unchanged",
+                            "value": [
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "contents": "term",
+                                    "tag": "HashQualifier"
+                                  },
+                                  "segment": "term"
+                                }
                               },
-                              "segment": "term"
-                            },
-                            {
-                              "annotation": {
-                                "tag": "TypeAscriptionColon"
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "tag": "TypeAscriptionColon"
+                                  },
+                                  "segment": " :"
+                                }
                               },
-                              "segment": " :"
-                            },
-                            {
-                              "annotation": null,
-                              "segment": " "
-                            },
-                            {
-                              "annotation": {
-                                "contents": "##Text",
-                                "tag": "HashQualifier"
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": null,
+                                  "segment": " "
+                                }
                               },
-                              "segment": "##Text"
-                            },
-                            {
-                              "annotation": null,
-                              "segment": "\n"
-                            },
-                            {
-                              "annotation": {
-                                "contents": "term",
-                                "tag": "HashQualifier"
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "contents": "##Text",
+                                    "tag": "HashQualifier"
+                                  },
+                                  "segment": "##Text"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "changed",
+                            "value": [
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "contents": "term",
+                                    "tag": "HashQualifier"
+                                  },
+                                  "segment": "term"
+                                }
                               },
-                              "segment": "term"
-                            },
-                            {
-                              "annotation": {
-                                "tag": "BindingEquals"
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "tag": "BindingEquals"
+                                  },
+                                  "segment": " ="
+                                }
                               },
-                              "segment": " ="
-                            },
-                            {
-                              "annotation": null,
-                              "segment": " "
-                            }
-                          ]
-                        },
-                        {
-                          "diffTag": "old",
-                          "elements": [
-                            {
-                              "annotation": {
-                                "tag": "TextLiteral"
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": null,
+                                  "segment": " "
+                                }
                               },
-                              "segment": "\"start\""
-                            }
-                          ]
-                        },
-                        {
-                          "diffTag": "new",
-                          "elements": [
-                            {
-                              "annotation": {
-                                "tag": "TextLiteral"
+                              {
+                                "diffTag": "one-sided",
+                                "elements": {
+                                  "annotation": {
+                                    "tag": "TextLiteral"
+                                  },
+                                  "segment": "\"start\""
+                                }
+                              }
+                            ]
+                          }
+                        ],
+                        "right": [
+                          {
+                            "kind": "unchanged",
+                            "value": [
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "contents": "term",
+                                    "tag": "HashQualifier"
+                                  },
+                                  "segment": "term"
+                                }
                               },
-                              "segment": "\"feature-one\""
-                            }
-                          ]
-                        }
-                      ],
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "tag": "TypeAscriptionColon"
+                                  },
+                                  "segment": " :"
+                                }
+                              },
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": null,
+                                  "segment": " "
+                                }
+                              },
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "contents": "##Text",
+                                    "tag": "HashQualifier"
+                                  },
+                                  "segment": "##Text"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "changed",
+                            "value": [
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "contents": "term",
+                                    "tag": "HashQualifier"
+                                  },
+                                  "segment": "term"
+                                }
+                              },
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": {
+                                    "tag": "BindingEquals"
+                                  },
+                                  "segment": " ="
+                                }
+                              },
+                              {
+                                "diffTag": "both",
+                                "elements": {
+                                  "annotation": null,
+                                  "segment": " "
+                                }
+                              },
+                              {
+                                "diffTag": "one-sided",
+                                "elements": {
+                                  "annotation": {
+                                    "tag": "TextLiteral"
+                                  },
+                                  "segment": "\"feature-one\""
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
                       "tag": "UserObject"
                     },
                     "diffKind": "diff"

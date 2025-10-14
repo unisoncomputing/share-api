@@ -1,71 +1,129 @@
 {
   "body": {
     "diff": {
-      "contents": [
-        {
-          "diffTag": "both",
-          "elements": [
-            {
-              "annotation": {
-                "tag": "DataTypeKeyword"
+      "contents": {
+        "left": [
+          {
+            "kind": "changed",
+            "value": [
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": {
+                    "tag": "DataTypeKeyword"
+                  },
+                  "segment": "type"
+                }
               },
-              "segment": "type"
-            },
-            {
-              "annotation": null,
-              "segment": " "
-            },
-            {
-              "annotation": {
-                "contents": "DataUpdateMe",
-                "tag": "HashQualifier"
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": null,
+                  "segment": " "
+                }
               },
-              "segment": "DataUpdateMe"
-            },
-            {
-              "annotation": {
-                "tag": "DelimiterChar"
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": {
+                    "contents": "DataUpdateMe",
+                    "tag": "HashQualifier"
+                  },
+                  "segment": "DataUpdateMe"
+                }
               },
-              "segment": " = "
-            }
-          ]
-        },
-        {
-          "diffTag": "old",
-          "elements": [
-            {
-              "annotation": {
-                "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
-                "tag": "TermReference"
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": {
+                    "tag": "DelimiterChar"
+                  },
+                  "segment": " = "
+                }
               },
-              "segment": "D"
-            }
-          ]
-        },
-        {
-          "diffTag": "new",
-          "elements": [
-            {
-              "annotation": {
-                "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
-                "tag": "TermReference"
+              {
+                "diffTag": "one-sided",
+                "elements": {
+                  "annotation": {
+                    "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
+                    "tag": "TermReference"
+                  },
+                  "segment": "D"
+                }
+              }
+            ]
+          }
+        ],
+        "right": [
+          {
+            "kind": "changed",
+            "value": [
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": {
+                    "tag": "DataTypeKeyword"
+                  },
+                  "segment": "type"
+                }
               },
-              "segment": "D2"
-            },
-            {
-              "annotation": null,
-              "segment": " "
-            },
-            {
-              "annotation": {
-                "contents": "##Nat",
-                "tag": "TypeReference"
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": null,
+                  "segment": " "
+                }
               },
-              "segment": "Nat"
-            }
-          ]
-        }
-      ],
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": {
+                    "contents": "DataUpdateMe",
+                    "tag": "HashQualifier"
+                  },
+                  "segment": "DataUpdateMe"
+                }
+              },
+              {
+                "diffTag": "both",
+                "elements": {
+                  "annotation": {
+                    "tag": "DelimiterChar"
+                  },
+                  "segment": " = "
+                }
+              },
+              {
+                "diffTag": "one-sided",
+                "elements": {
+                  "annotation": {
+                    "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
+                    "tag": "TermReference"
+                  },
+                  "segment": "D2"
+                }
+              },
+              {
+                "diffTag": "one-sided",
+                "elements": {
+                  "annotation": null,
+                  "segment": " "
+                }
+              },
+              {
+                "diffTag": "one-sided",
+                "elements": {
+                  "annotation": {
+                    "contents": "##Nat",
+                    "tag": "TypeReference"
+                  },
+                  "segment": "Nat"
+                }
+              }
+            ]
+          }
+        ]
+      },
       "tag": "UserObject"
     },
     "diffKind": "diff",
