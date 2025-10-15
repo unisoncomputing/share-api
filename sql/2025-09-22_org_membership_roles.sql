@@ -1,6 +1,12 @@
 -- Org membership is now associated with a specific role within the org, this simplifies things,
 -- makes the data more consistent,  no need to rely on triggers, and makes it much easier to display in the UI.
 
+UPDATE roles
+  SET permissions = array_append(permissions, 'org:create_project'::permission)
+  WHERE ref = 'org_maintainer'
+  AND NOT permissions @> (ARRAY['org:create_project']::permission[])
+;
+
 
 -- SANITY CHECK:
 -- SELECT org_user.handle, member_user.handle, role.ref
