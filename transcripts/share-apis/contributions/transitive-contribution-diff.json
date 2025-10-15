@@ -16,39 +16,32 @@
                             "value": [
                               {
                                 "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "contents": "term",
-                                    "tag": "HashQualifier"
+                                "elements": [
+                                  {
+                                    "annotation": {
+                                      "contents": "term",
+                                      "tag": "HashQualifier"
+                                    },
+                                    "segment": "term"
                                   },
-                                  "segment": "term"
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "tag": "TypeAscriptionColon"
+                                  {
+                                    "annotation": {
+                                      "tag": "TypeAscriptionColon"
+                                    },
+                                    "segment": " :"
                                   },
-                                  "segment": " :"
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": null,
-                                  "segment": " "
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "contents": "##Text",
-                                    "tag": "HashQualifier"
+                                  {
+                                    "annotation": null,
+                                    "segment": " "
                                   },
-                                  "segment": "##Text"
-                                }
+                                  {
+                                    "annotation": {
+                                      "contents": "##Text",
+                                      "tag": "HashQualifier"
+                                    },
+                                    "segment": "##Text"
+                                  }
+                                ]
                               }
                             ]
                           },
@@ -57,38 +50,36 @@
                             "value": [
                               {
                                 "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "contents": "term",
-                                    "tag": "HashQualifier"
+                                "elements": [
+                                  {
+                                    "annotation": {
+                                      "contents": "term",
+                                      "tag": "HashQualifier"
+                                    },
+                                    "segment": "term"
                                   },
-                                  "segment": "term"
-                                }
+                                  {
+                                    "annotation": {
+                                      "tag": "BindingEquals"
+                                    },
+                                    "segment": " ="
+                                  },
+                                  {
+                                    "annotation": null,
+                                    "segment": " "
+                                  }
+                                ]
                               },
                               {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "tag": "BindingEquals"
-                                  },
-                                  "segment": " ="
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": null,
-                                  "segment": " "
-                                }
-                              },
-                              {
-                                "diffTag": "one-sided",
-                                "elements": {
-                                  "annotation": {
-                                    "tag": "TextLiteral"
-                                  },
-                                  "segment": "\"feature-one\""
-                                }
+                                "diffTag": "oneSided",
+                                "elements": [
+                                  {
+                                    "annotation": {
+                                      "tag": "TextLiteral"
+                                    },
+                                    "segment": "\"feature-one\""
+                                  }
+                                ]
                               }
                             ]
                           }
@@ -99,39 +90,32 @@
                             "value": [
                               {
                                 "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "contents": "term",
-                                    "tag": "HashQualifier"
+                                "elements": [
+                                  {
+                                    "annotation": {
+                                      "contents": "term",
+                                      "tag": "HashQualifier"
+                                    },
+                                    "segment": "term"
                                   },
-                                  "segment": "term"
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "tag": "TypeAscriptionColon"
+                                  {
+                                    "annotation": {
+                                      "tag": "TypeAscriptionColon"
+                                    },
+                                    "segment": " :"
                                   },
-                                  "segment": " :"
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": null,
-                                  "segment": " "
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "contents": "##Text",
-                                    "tag": "HashQualifier"
+                                  {
+                                    "annotation": null,
+                                    "segment": " "
                                   },
-                                  "segment": "##Text"
-                                }
+                                  {
+                                    "annotation": {
+                                      "contents": "##Text",
+                                      "tag": "HashQualifier"
+                                    },
+                                    "segment": "##Text"
+                                  }
+                                ]
                               }
                             ]
                           },
@@ -140,38 +124,36 @@
                             "value": [
                               {
                                 "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "contents": "term",
-                                    "tag": "HashQualifier"
+                                "elements": [
+                                  {
+                                    "annotation": {
+                                      "contents": "term",
+                                      "tag": "HashQualifier"
+                                    },
+                                    "segment": "term"
                                   },
-                                  "segment": "term"
-                                }
+                                  {
+                                    "annotation": {
+                                      "tag": "BindingEquals"
+                                    },
+                                    "segment": " ="
+                                  },
+                                  {
+                                    "annotation": null,
+                                    "segment": " "
+                                  }
+                                ]
                               },
                               {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": {
-                                    "tag": "BindingEquals"
-                                  },
-                                  "segment": " ="
-                                }
-                              },
-                              {
-                                "diffTag": "both",
-                                "elements": {
-                                  "annotation": null,
-                                  "segment": " "
-                                }
-                              },
-                              {
-                                "diffTag": "one-sided",
-                                "elements": {
-                                  "annotation": {
-                                    "tag": "TextLiteral"
-                                  },
-                                  "segment": "\"feature-two\""
-                                }
+                                "diffTag": "oneSided",
+                                "elements": [
+                                  {
+                                    "annotation": {
+                                      "tag": "TextLiteral"
+                                    },
+                                    "segment": "\"feature-two\""
+                                  }
+                                ]
                               }
                             ]
                           }

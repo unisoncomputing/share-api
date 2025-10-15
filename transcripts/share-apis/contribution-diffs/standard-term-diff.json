@@ -8,39 +8,32 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "termUpdateMe",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "termUpdateMe",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "termUpdateMe"
                   },
-                  "segment": "termUpdateMe"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
                   },
-                  "segment": " :"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Text",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "Text"
-                }
+                  {
+                    "annotation": {
+                      "contents": "##Text",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Text"
+                  }
+                ]
               }
             ]
           },
@@ -49,38 +42,36 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "termUpdateMe",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "termUpdateMe",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "termUpdateMe"
                   },
-                  "segment": "termUpdateMe"
-                }
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
               },
               {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
-                  },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "TextLiteral"
-                  },
-                  "segment": "\"original\""
-                }
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TextLiteral"
+                    },
+                    "segment": "\"original\""
+                  }
+                ]
               }
             ]
           }
@@ -91,39 +82,32 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "termUpdateMe",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "termUpdateMe",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "termUpdateMe"
                   },
-                  "segment": "termUpdateMe"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
                   },
-                  "segment": " :"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Text",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "Text"
-                }
+                  {
+                    "annotation": {
+                      "contents": "##Text",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Text"
+                  }
+                ]
               }
             ]
           },
@@ -132,38 +116,36 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "termUpdateMe",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "termUpdateMe",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "termUpdateMe"
                   },
-                  "segment": "termUpdateMe"
-                }
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
               },
               {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
-                  },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "TextLiteral"
-                  },
-                  "segment": "\"updated\""
-                }
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TextLiteral"
+                    },
+                    "segment": "\"updated\""
+                  }
+                ]
               }
             ]
           }

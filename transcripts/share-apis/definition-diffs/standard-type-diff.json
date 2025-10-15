@@ -8,47 +8,47 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DataTypeKeyword"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DataTypeKeyword"
+                    },
+                    "segment": "type"
                   },
-                  "segment": "type"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "BeforeType",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "BeforeType"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "BeforeType",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DelimiterChar"
+                    },
+                    "segment": " = "
                   },
-                  "segment": "BeforeType"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelimiterChar"
-                  },
-                  "segment": " = "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelimiterChar"
-                  },
-                  "segment": "{ "
-                }
+                  {
+                    "annotation": {
+                      "tag": "DelimiterChar"
+                    },
+                    "segment": "{ "
+                  }
+                ]
               },
               {
                 "diffTag": "annotationChange",
@@ -64,38 +64,31 @@
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
                   },
-                  "segment": " :"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelimiterChar"
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
                   },
-                  "segment": " }"
-                }
+                  {
+                    "annotation": {
+                      "tag": "DelimiterChar"
+                    },
+                    "segment": " }"
+                  }
+                ]
               }
             ]
           }
@@ -106,47 +99,47 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DataTypeKeyword"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DataTypeKeyword"
+                    },
+                    "segment": "type"
                   },
-                  "segment": "type"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "AfterType",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "AfterType"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "AfterType",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DelimiterChar"
+                    },
+                    "segment": " = "
                   },
-                  "segment": "AfterType"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelimiterChar"
-                  },
-                  "segment": " = "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelimiterChar"
-                  },
-                  "segment": "{ "
-                }
+                  {
+                    "annotation": {
+                      "tag": "DelimiterChar"
+                    },
+                    "segment": "{ "
+                  }
+                ]
               },
               {
                 "diffTag": "annotationChange",
@@ -162,90 +155,75 @@
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
                   },
-                  "segment": " :"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DelimiterChar"
+                    },
+                    "segment": ","
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "contents": "#kumofu6ae22blpbip9rl33nvbkqfho86mohivuum8uabph37i4po78fi0120hmka4blrabancldnp93o75s35cc18vi8o9hdu3qrku8",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "fieldTwo"
+                  },
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Text",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Text"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelimiterChar"
-                  },
-                  "segment": ","
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "#kumofu6ae22blpbip9rl33nvbkqfho86mohivuum8uabph37i4po78fi0120hmka4blrabancldnp93o75s35cc18vi8o9hdu3qrku8",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "fieldTwo"
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
-                  },
-                  "segment": " :"
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Text",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Text"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelimiterChar"
-                  },
-                  "segment": " }"
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DelimiterChar"
+                    },
+                    "segment": " }"
+                  }
+                ]
               }
             ]
           }

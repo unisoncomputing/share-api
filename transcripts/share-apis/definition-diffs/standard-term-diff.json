@@ -7,115 +7,86 @@
             "kind": "changed",
             "value": [
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "beforeTerm",
-                    "tag": "HashQualifier"
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "beforeTerm",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "beforeTerm"
+                  }
+                ]
+              },
+              {
+                "diffTag": "both",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
                   },
-                  "segment": "beforeTerm"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": " :"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
                   },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeOperator"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "tag": "TypeOperator"
+                    },
+                    "segment": "->"
                   },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeOperator"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelayForceChar"
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
                   },
-                  "segment": "'"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "Nat"
-                }
+                  {
+                    "annotation": {
+                      "tag": "TypeOperator"
+                    },
+                    "segment": "->"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "DelayForceChar"
+                    },
+                    "segment": "'"
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
+                  }
+                ]
               }
             ]
           },
@@ -123,71 +94,57 @@
             "kind": "changed",
             "value": [
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "beforeTerm",
-                    "tag": "HashQualifier"
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "beforeTerm",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "beforeTerm"
+                  }
+                ]
+              },
+              {
+                "diffTag": "both",
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "beforeTerm"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "x"
                   },
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "y"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "y"
                   },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "ControlKeyword"
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
                   },
-                  "segment": "do"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "ControlKeyword"
+                    },
+                    "segment": "do"
+                  }
+                ]
               }
             ]
           },
@@ -196,44 +153,34 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "UseKeyword"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "use "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "UsePrefix"
+                  {
+                    "annotation": {
+                      "tag": "UseKeyword"
+                    },
+                    "segment": "use "
                   },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "UseSuffix"
+                  {
+                    "annotation": {
+                      "tag": "UsePrefix"
+                    },
+                    "segment": "Nat"
                   },
-                  "segment": "+"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "UseSuffix"
+                    },
+                    "segment": "+"
+                  }
+                ]
               }
             ]
           },
@@ -242,84 +189,62 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "myList",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "myList"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
+                  {
+                    "annotation": {
+                      "contents": "myList",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "myList"
                   },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
                   },
-                  "segment": "["
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "["
                   },
-                  "segment": ", "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "x"
                   },
-                  "segment": "y"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": ", "
                   },
-                  "segment": ", "
-                }
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "y"
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": ", "
+                  }
+                ]
               },
               {
                 "diffTag": "annotationChange",
@@ -335,13 +260,15 @@
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
-                  },
-                  "segment": ", "
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": ", "
+                  }
+                ]
               },
               {
                 "annotation": {
@@ -354,13 +281,15 @@
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "]"
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "]"
+                  }
+                ]
               }
             ]
           },
@@ -369,152 +298,113 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "myList2",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "myList2"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
+                  {
+                    "annotation": {
+                      "contents": "myList2",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "myList2"
                   },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
-                    "tag": "TermReference"
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
                   },
-                  "segment": "List.map"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Parenthesis"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "("
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "ControlKeyword"
+                  {
+                    "annotation": {
+                      "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
+                      "tag": "TermReference"
+                    },
+                    "segment": "List.map"
                   },
-                  "segment": " ->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat.+",
-                    "tag": "TermReference"
+                  {
+                    "annotation": {
+                      "tag": "Parenthesis"
+                    },
+                    "segment": "("
                   },
-                  "segment": "+"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "NumericLiteral"
+                  {
+                    "annotation": null,
+                    "segment": "x"
                   },
-                  "segment": "1"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Parenthesis"
+                  {
+                    "annotation": {
+                      "tag": "ControlKeyword"
+                    },
+                    "segment": " ->"
                   },
-                  "segment": ")"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "myList"
-                }
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "x"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Nat.+",
+                      "tag": "TermReference"
+                    },
+                    "segment": "+"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "NumericLiteral"
+                    },
+                    "segment": "1"
+                  }
+                ]
+              },
+              {
+                "diffTag": "both",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "Parenthesis"
+                    },
+                    "segment": ")"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "myList"
+                  }
+                ]
               }
             ]
           },
@@ -523,36 +413,29 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##List.size",
-                    "tag": "TermReference"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "List.size"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": {
+                      "contents": "##List.size",
+                      "tag": "TermReference"
+                    },
+                    "segment": "List.size"
                   },
-                  "segment": "myList2"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "myList2"
+                  }
+                ]
               }
             ]
           }
@@ -562,148 +445,117 @@
             "kind": "changed",
             "value": [
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "afterTerm",
-                    "tag": "HashQualifier"
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "afterTerm",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "afterTerm"
+                  }
+                ]
+              },
+              {
+                "diffTag": "both",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
                   },
-                  "segment": "afterTerm"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": " :"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
                   },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeOperator"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "tag": "TypeOperator"
+                    },
+                    "segment": "->"
                   },
-                  "segment": "Nat"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "TypeOperator"
+                    },
+                    "segment": "->"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "TypeOperator"
+                    },
+                    "segment": "->"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeOperator"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DelayForceChar"
+                    },
+                    "segment": "'"
                   },
-                  "segment": "->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeOperator"
-                  },
-                  "segment": "->"
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DelayForceChar"
-                  },
-                  "segment": "'"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Nat"
-                }
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
+                  }
+                ]
               }
             ]
           },
@@ -711,87 +563,77 @@
             "kind": "changed",
             "value": [
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "afterTerm",
-                    "tag": "HashQualifier"
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "afterTerm",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "afterTerm"
+                  }
+                ]
+              },
+              {
+                "diffTag": "both",
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "afterTerm"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "x"
                   },
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "y"
-                }
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "y"
+                  }
+                ]
               },
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "z"
-                }
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "z"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
                   },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "ControlKeyword"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "do"
-                }
+                  {
+                    "annotation": {
+                      "tag": "ControlKeyword"
+                    },
+                    "segment": "do"
+                  }
+                ]
               }
             ]
           },
@@ -800,44 +642,34 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "UseKeyword"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "use "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "UsePrefix"
+                  {
+                    "annotation": {
+                      "tag": "UseKeyword"
+                    },
+                    "segment": "use "
                   },
-                  "segment": "Nat"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "UseSuffix"
+                  {
+                    "annotation": {
+                      "tag": "UsePrefix"
+                    },
+                    "segment": "Nat"
                   },
-                  "segment": "+"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "UseSuffix"
+                    },
+                    "segment": "+"
+                  }
+                ]
               }
             ]
           },
@@ -846,84 +678,62 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "myList",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "myList"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
+                  {
+                    "annotation": {
+                      "contents": "myList",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "myList"
                   },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
                   },
-                  "segment": "["
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "["
                   },
-                  "segment": ", "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "x"
                   },
-                  "segment": "y"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": ", "
                   },
-                  "segment": ", "
-                }
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "y"
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": ", "
+                  }
+                ]
               },
               {
                 "diffTag": "annotationChange",
@@ -939,13 +749,15 @@
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
-                  },
-                  "segment": ", "
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": ", "
+                  }
+                ]
               },
               {
                 "annotation": {
@@ -958,13 +770,15 @@
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Sequence",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "]"
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "##Sequence",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "]"
+                  }
+                ]
               }
             ]
           },
@@ -973,152 +787,113 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "myList2",
-                    "tag": "HashQualifier"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "myList2"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "BindingEquals"
+                  {
+                    "annotation": {
+                      "contents": "myList2",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "myList2"
                   },
-                  "segment": " ="
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
-                    "tag": "TermReference"
+                  {
+                    "annotation": {
+                      "tag": "BindingEquals"
+                    },
+                    "segment": " ="
                   },
-                  "segment": "List.map"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Parenthesis"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "("
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "ControlKeyword"
+                  {
+                    "annotation": {
+                      "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
+                      "tag": "TermReference"
+                    },
+                    "segment": "List.map"
                   },
-                  "segment": " ->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "x"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat.+",
-                    "tag": "TermReference"
+                  {
+                    "annotation": {
+                      "tag": "Parenthesis"
+                    },
+                    "segment": "("
                   },
-                  "segment": "+"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": "x"
                   },
-                  "segment": "z"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Parenthesis"
+                  {
+                    "annotation": {
+                      "tag": "ControlKeyword"
+                    },
+                    "segment": " ->"
                   },
-                  "segment": ")"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "myList"
-                }
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "x"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "contents": "##Nat.+",
+                      "tag": "TermReference"
+                    },
+                    "segment": "+"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "z"
+                  }
+                ]
+              },
+              {
+                "diffTag": "both",
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "Parenthesis"
+                    },
+                    "segment": ")"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "myList"
+                  }
+                ]
               }
             ]
           },
@@ -1127,36 +902,29 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##List.size",
-                    "tag": "TermReference"
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
                   },
-                  "segment": "List.size"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "Var"
+                  {
+                    "annotation": {
+                      "contents": "##List.size",
+                      "tag": "TermReference"
+                    },
+                    "segment": "List.size"
                   },
-                  "segment": "myList2"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "Var"
+                    },
+                    "segment": "myList2"
+                  }
+                ]
               }
             ]
           }

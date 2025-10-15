@@ -8,38 +8,41 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DataTypeKeyword"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DataTypeKeyword"
+                    },
+                    "segment": "ability"
                   },
-                  "segment": "ability"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "BeforeAbility",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "BeforeAbility"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "BeforeAbility",
-                    "tag": "HashQualifier"
-                  },
-                  "segment": "BeforeAbility"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "ControlKeyword"
-                  },
-                  "segment": " where"
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "ControlKeyword"
+                    },
+                    "segment": " where"
+                  }
+                ]
               }
             ]
           },
@@ -48,107 +51,106 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
+                  }
+                ]
               },
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "#ebotvibo97n9s8ggp2n32jf6splp86102tjh70q395gmmdsfi45pvrvtkpot5e97ugg6t4j602ol001i3p28t62c8iga2rlma0ckfs0#a0",
-                    "tag": "TermReference"
-                  },
-                  "segment": "beforeAbility"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
-                  },
-                  "segment": " :"
-                }
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "#ebotvibo97n9s8ggp2n32jf6splp86102tjh70q395gmmdsfi45pvrvtkpot5e97ugg6t4j602ol001i3p28t62c8iga2rlma0ckfs0#a0",
+                      "tag": "TermReference"
+                    },
+                    "segment": "beforeAbility"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
               },
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Nat",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Nat"
-                }
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "##Nat",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Nat"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "TypeOperator"
+                    },
+                    "segment": "->"
+                  },
+                  {
+                    "annotation": {
+                      "tag": "AbilityBraces"
+                    },
+                    "segment": "{"
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "#ebotvibo97n9s8ggp2n32jf6splp86102tjh70q395gmmdsfi45pvrvtkpot5e97ugg6t4j602ol001i3p28t62c8iga2rlma0ckfs0",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "BeforeAbility"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeOperator"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "AbilityBraces"
+                    },
+                    "segment": "}"
                   },
-                  "segment": "->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "AbilityBraces"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "{"
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "#ebotvibo97n9s8ggp2n32jf6splp86102tjh70q395gmmdsfi45pvrvtkpot5e97ugg6t4j602ol001i3p28t62c8iga2rlma0ckfs0",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "BeforeAbility"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "AbilityBraces"
-                  },
-                  "segment": "}"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Text",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Text"
-                }
+                  {
+                    "annotation": {
+                      "contents": "##Text",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Text"
+                  }
+                ]
               }
             ]
           }
@@ -159,38 +161,41 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "DataTypeKeyword"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "DataTypeKeyword"
+                    },
+                    "segment": "ability"
                   },
-                  "segment": "ability"
-                }
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "AfterAbility",
+                      "tag": "HashQualifier"
+                    },
+                    "segment": "AfterAbility"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "AfterAbility",
-                    "tag": "HashQualifier"
-                  },
-                  "segment": "AfterAbility"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "ControlKeyword"
-                  },
-                  "segment": " where"
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "ControlKeyword"
+                    },
+                    "segment": " where"
+                  }
+                ]
               }
             ]
           },
@@ -199,107 +204,106 @@
             "value": [
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": "  "
-                }
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": "  "
+                  }
+                ]
               },
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "#i1i6tae2gi8jp12lukns1e027i98ekbqhh6p5b944i44l6otiltjphbnmt2r844e2ukr2kppob3c5gvdpegc6ej54h9eg2j9gkc6ifg#a0",
-                    "tag": "TermReference"
-                  },
-                  "segment": "afterAbility"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeAscriptionColon"
-                  },
-                  "segment": " :"
-                }
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "#i1i6tae2gi8jp12lukns1e027i98ekbqhh6p5b944i44l6otiltjphbnmt2r844e2ukr2kppob3c5gvdpegc6ej54h9eg2j9gkc6ifg#a0",
+                      "tag": "TermReference"
+                    },
+                    "segment": "afterAbility"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "TypeAscriptionColon"
+                    },
+                    "segment": " :"
+                  },
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  }
+                ]
               },
               {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Int",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Int"
-                }
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "##Int",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Int"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
+                "elements": [
+                  {
+                    "annotation": null,
+                    "segment": " "
+                  },
+                  {
+                    "annotation": {
+                      "tag": "TypeOperator"
+                    },
+                    "segment": "->"
+                  },
+                  {
+                    "annotation": {
+                      "tag": "AbilityBraces"
+                    },
+                    "segment": "{"
+                  }
+                ]
+              },
+              {
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "#i1i6tae2gi8jp12lukns1e027i98ekbqhh6p5b944i44l6otiltjphbnmt2r844e2ukr2kppob3c5gvdpegc6ej54h9eg2j9gkc6ifg",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "AfterAbility"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "TypeOperator"
+                "elements": [
+                  {
+                    "annotation": {
+                      "tag": "AbilityBraces"
+                    },
+                    "segment": "}"
                   },
-                  "segment": "->"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "AbilityBraces"
+                  {
+                    "annotation": null,
+                    "segment": " "
                   },
-                  "segment": "{"
-                }
-              },
-              {
-                "diffTag": "one-sided",
-                "elements": {
-                  "annotation": {
-                    "contents": "#i1i6tae2gi8jp12lukns1e027i98ekbqhh6p5b944i44l6otiltjphbnmt2r844e2ukr2kppob3c5gvdpegc6ej54h9eg2j9gkc6ifg",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "AfterAbility"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "tag": "AbilityBraces"
-                  },
-                  "segment": "}"
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": null,
-                  "segment": " "
-                }
-              },
-              {
-                "diffTag": "both",
-                "elements": {
-                  "annotation": {
-                    "contents": "##Text",
-                    "tag": "TypeReference"
-                  },
-                  "segment": "Text"
-                }
+                  {
+                    "annotation": {
+                      "contents": "##Text",
+                      "tag": "TypeReference"
+                    },
+                    "segment": "Text"
+                  }
+                ]
               }
             ]
           }
