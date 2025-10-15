@@ -1,4 +1,4 @@
-.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts reset_fixtures
+.PHONY: all clean install docker_server_build docker_push serve auth_example transcripts fixtures transcripts serve_transcripts reset_fixtures
 
 SHARE_PROJECT_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 export SHARE_PROJECT_ROOT
@@ -80,6 +80,14 @@ reset_fixtures: $(installed_share)
 	kill $$SERVER_PID 2>/dev/null || true; \
 	) 
 	@echo "Done!";
+
+
+serve_transcripts: $(installed_share)
+	@echo "Taking down any existing docker dependencies"
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
+	@echo "Booting up transcript docker dependencies..."
+	docker compose -f docker/docker-compose.base.yml up --remove-orphans
 
 transcripts: $(installed_share)
 	@echo "Taking down any existing docker dependencies"

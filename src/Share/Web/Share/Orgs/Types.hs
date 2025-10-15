@@ -10,10 +10,11 @@ module Share.Web.Share.Orgs.Types
 where
 
 import Data.Aeson
-import Data.Text (Text)
 import Share.IDs
 import Share.Postgres (DecodeRow (..), decodeField)
+import Share.Prelude
 import Share.Utils.URI (URIParam)
+import Share.Web.Authorization.Types (RoleAssignment (..))
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 
 data Org = Org {orgId :: OrgId, isCommercial :: Bool}
@@ -57,7 +58,7 @@ instance FromJSON CreateOrgRequest where
     pure CreateOrgRequest {..}
 
 data OrgMembersAddRequest = OrgMembersAddRequest
-  { members :: [UserHandle]
+  { members :: [RoleAssignment Identity UserHandle]
   }
   deriving (Show, Eq)
 
@@ -73,7 +74,7 @@ instance FromJSON OrgMembersAddRequest where
     pure OrgMembersAddRequest {..}
 
 data OrgMembersListResponse = OrgMembersListResponse
-  { members :: [UserDisplayInfo]
+  { members :: [RoleAssignment Identity UserDisplayInfo]
   }
   deriving (Show, Eq)
 

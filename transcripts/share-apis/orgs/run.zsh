@@ -50,7 +50,9 @@ fetch "$admin_user" POST org-create-by-admin-commercial '/orgs' '{
 # Owner can add members
 fetch "$transcripts_user" POST org-add-members '/orgs/acme/members' '{
   "members": [
-    "test"
+    { "subject": "test", 
+      "role": "org_maintainer"
+    }
   ]
 }'
 
@@ -65,20 +67,26 @@ fetch "$unauthorized_user" GET org-get-members-public '/orgs/acme/members'
 # Members without permission can't edit members lists.
 fetch "$unauthorized_user" POST org-add-members-unauthorized '/orgs/acme/members' '{
   "members": [
-    "unauthorized"
+    { "subject": "unauthorized", 
+      "role": "org_maintainer"
+    }
   ]
 }'
 
-fetch "$transcripts_user" POST org-add-members '/orgs/acme/members' '{
+fetch "$transcripts_user" POST org-add-members-new-user '/orgs/acme/members' '{
   "members": [
-    "newuser"
+    { "subject": "newuser", 
+      "role": "org_maintainer"
+    }
   ]
 }'
 
 # Can't add an org to another org
 fetch "$transcripts_user" POST org-cant-have-org-members '/orgs/acme/members' '{
   "members": [
-    "unison"
+    { "subject": "unison", 
+      "role": "org_maintainer"
+    }
   ]
 }'
 
@@ -91,9 +99,17 @@ fetch "$transcripts_user" DELETE org-remove-members '/orgs/acme/members' '{
   ]
 }'
 
+# Cannot remove the only owner
+fetch "$transcripts_user" DELETE org-remove-only-owner '/orgs/acme/members' '{
+  "members": [
+    "transcripts"
+  ]
+}'
+
 fetch "$transcripts_user" GET org-get-members-after-removing '/orgs/acme/members'
 
 # Create projects in each org.
+login_user_for_ucm 'transcripts'
 transcript_ucm transcript create-org-projects.md
 
 # Get projects for each org

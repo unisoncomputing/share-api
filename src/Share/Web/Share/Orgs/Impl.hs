@@ -3,8 +3,8 @@
 module Share.Web.Share.Orgs.Impl (server) where
 
 import Control.Lens
-import Data.Either (isRight)
 import Data.Map qualified as Map
+import Data.Monoid (Any (..))
 import Data.Set qualified as Set
 import Servant
 import Servant.Server.Generic
@@ -16,16 +16,14 @@ import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
-import Share.Web.Authorization.Types
+import Share.Web.Authorization.Types (RoleAssignment (..))
+import Share.Web.Authorization.Types qualified as AuthZ
 import Share.Web.Errors
-import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo)
+import Share.Web.Share.DisplayInfo.Types (OrgDisplayInfo, UserDisplayInfo (..))
 import Share.Web.Share.Orgs.API as API
 import Share.Web.Share.Orgs.Operations qualified as OrgOps
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Share.Web.Share.Orgs.Types (CreateOrgRequest (..), Org (..), OrgMembersAddRequest (..), OrgMembersListResponse (..), OrgMembersRemoveRequest (..))
-import Share.Web.Share.Roles (canonicalRoleAssignmentOrdering)
-import Share.Web.Share.Roles.Queries (displaySubjectsOf)
-import Unison.Util.Set qualified as Set
 
 data OrgError
   = OrgMemberOfOrgError
@@ -54,8 +52,7 @@ server :: ServerT API.API WebApp
 server =
   let orgResourceServer orgHandle =
         API.ResourceRoutes
-          { API.orgRoles = rolesServer orgHandle,
-            API.orgMembers = membersServer orgHandle
+          { API.orgMembers = membersServer orgHandle
           }
    in orgCreateEndpoint :<|> orgResourceServer
 
@@ -65,14 +62,6 @@ orgCreateEndpoint callerUserId (CreateOrgRequest {name, handle, avatarUrl, email
   authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkCreateOrg callerUserId ownerUserId isCommercial
   orgId <- PG.runTransactionOrRespondError $ OrgOps.createOrg authZReceipt name handle email avatarUrl ownerUserId callerUserId isCommercial
   PG.runTransaction $ OrgQ.orgDisplayInfoOf id orgId
-
-rolesServer :: UserHandle -> API.OrgRolesRoutes (AsServerT WebApp)
-rolesServer orgHandle =
-  API.OrgRolesRoutes
-    { API.listOrgRoles = listRolesEndpoint orgHandle,
-      API.addOrgRoles = addRolesEndpoint orgHandle,
-      API.removeOrgRoles = removeRolesEndpoint orgHandle
-    }
 
 membersServer :: UserHandle -> API.OrgMembersRoutes (AsServerT WebApp)
 membersServer orgHandle =
@@ -89,58 +78,6 @@ orgIdByHandle orgHandle = do
       respondError (EntityMissing (ErrorID "missing-org") "Organization not found")
   pure orgId
 
-listRolesEndpoint :: UserHandle -> UserId -> WebApp ListRolesResponse
-listRolesEndpoint orgHandle caller = do
-  orgId <- orgIdByHandle orgHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkReadOrgRolesList caller orgId
-  callerCanEdit <- isRight <$> AuthZ.checkEditOrgRoles caller orgId
-  PG.runTransaction do
-    orgRoles <- OrgQ.listOrgRoles orgId
-    ListRolesResponse callerCanEdit . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
-
-addRolesEndpoint :: UserHandle -> UserId -> AddRolesRequest -> WebApp ListRolesResponse
-addRolesEndpoint orgHandle caller (AddRolesRequest {roleAssignments}) = do
-  orgId <- orgIdByHandle orgHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
-  assertNoOrgSubjects roleAssignments
-  PG.runTransaction do
-    orgRoles <- OrgQ.addOrgRoles orgId roleAssignments
-    let newMembers =
-          (computeOrgMembershipChanges roleAssignments)
-            & Map.filter id
-            & Map.keysSet
-    OrgQ.addOrgMembers orgId newMembers
-    ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
-
-removeRolesEndpoint :: UserHandle -> UserId -> RemoveRolesRequest -> WebApp ListRolesResponse
-removeRolesEndpoint orgHandle caller (RemoveRolesRequest {roleAssignments}) = do
-  orgId <- orgIdByHandle orgHandle
-  _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgRoles caller orgId
-  PG.runTransactionOrRespondError do
-    let updatedUsersMap =
-          roleAssignments
-            & foldMap
-              ( \RoleAssignment {subject} ->
-                  case subject of
-                    UserSubject userId -> Map.singleton userId Set.empty
-                    _ -> Map.empty
-              )
-    orgRoles <- OrgQ.removeOrgRoles orgId roleAssignments
-    OrgQ.doesOrgHaveOwner orgId >>= \case
-      False -> throwError OrgMustHaveOwnerError
-      True -> pure ()
-    let remainingRolesMap = computeOrgMembershipChanges orgRoles
-    let usersWithNoRemainingRoles = Map.keysSet updatedUsersMap `Set.difference` Map.keysSet remainingRolesMap
-    let evictedMembers =
-          remainingRolesMap
-            -- Only keep users who should no longer be members
-            & Map.filter not
-            & Map.keysSet
-            & Set.union usersWithNoRemainingRoles
-    OrgQ.removeOrgMembers orgId evictedMembers
-
-    ListRolesResponse True . canonicalRoleAssignmentOrdering <$> displaySubjectsOf (traversed . traversed) orgRoles
-
 listMembersEndpoint :: UserHandle -> UserId -> WebApp OrgMembersListResponse
 listMembersEndpoint orgHandle caller = do
   orgId <- orgIdByHandle orgHandle
@@ -153,63 +90,32 @@ addMembersEndpoint orgHandle caller (OrgMembersAddRequest {members}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
   PG.runTransactionOrRespondError do
-    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
-    hasOrgMember <- runMaybeT $ for_ userIds \userId -> do
-      MaybeT $ OrgQ.orgByUserId userId
-    when (isJust hasOrgMember) do
+    userIdAssignments :: [RoleAssignment Identity UserId] <- UserQ.userIdsByHandlesOf (traversed . traversed) members
+    Any newMemberIsOrg <-
+      userIdAssignments & foldMapMOf (folded . folded) \userId -> do
+        Any . isJust <$> OrgQ.orgByUserId userId
+    when newMemberIsOrg do
       throwError OrgMemberOfOrgError
-    OrgQ.addOrgMembers orgId userIds
+    let membersMap =
+          userIdAssignments
+            <&> (\RoleAssignment {subject, roles = Identity role} -> (subject, role))
+            & Map.fromList
+    OrgQ.addOrgMembers orgId membersMap
     OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
 
 removeMembersEndpoint :: UserHandle -> UserId -> OrgMembersRemoveRequest -> WebApp OrgMembersListResponse
 removeMembersEndpoint orgHandle caller (OrgMembersRemoveRequest {members}) = do
   orgId <- orgIdByHandle orgHandle
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkEditOrgMembers caller orgId
-  PG.runTransaction do
-    userIds <- UserQ.userIdsByHandlesOf Set.traverse (Set.fromList members)
-    OrgQ.removeOrgMembers orgId userIds
-    OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
-
-assertNoOrgSubjects :: [RoleAssignment ResolvedAuthSubject] -> WebApp ()
-assertNoOrgSubjects roleAssignments = do
-  let hasOrgSubject =
-        roleAssignments
-          & any
-            ( \RoleAssignment {subject} -> case subject of
-                OrgSubject {} -> True
-                _ -> False
-            )
-  when hasOrgSubject do
-    respondError OrgMemberOfOrgError
-
--- | This is part of a hack to temporarily fix org membership issues
--- until we have time for a more robust solution.
-shouldRoleBeOrgMember :: RoleRef -> Bool
-shouldRoleBeOrgMember = \case
-  RoleOrgViewer -> False
-  RoleOrgContributor -> True
-  RoleOrgMaintainer -> True
-  RoleOrgAdmin -> True
-  RoleOrgOwner -> True
-  RoleOrgDefault -> True
-  RoleTeamAdmin -> True
-  RoleProjectViewer -> False
-  RoleProjectContributor -> True
-  RoleProjectMaintainer -> True
-  RoleProjectAdmin -> True
-  RoleProjectOwner -> True
-  RoleProjectPublicAccess -> False
-
--- | Returns a list of users and whether they should end up as members of the org or not
-computeOrgMembershipChanges :: [RoleAssignment ResolvedAuthSubject] -> Map UserId Bool
-computeOrgMembershipChanges roleAssignments =
-  roleAssignments
-    & foldMap
-      ( \RoleAssignment {subject, roles} ->
-          case subject of
-            UserSubject userId ->
-              let shouldBeMember = any shouldRoleBeOrgMember roles
-               in [(userId, shouldBeMember)]
-            _ -> mempty
-      )
-    & Map.fromListWith (||)
+  PG.runTransactionOrRespondError do
+    userIds <- Set.fromList <$> UserQ.userIdsByHandlesOf traversed members
+    otherOwnerStillExists orgId userIds >>= \case
+      False -> throwError OrgMustHaveOwnerError
+      True -> do
+        OrgQ.removeOrgMembers orgId userIds
+        OrgMembersListResponse <$> OrgQ.listOrgMembers orgId
+  where
+    otherOwnerStillExists orgId removedMembers = do
+      OrgQ.listOrgMembers orgId
+        <&> any \RoleAssignment {subject = UserDisplayInfo {userId}, roles = Identity role} ->
+          role == AuthZ.RoleOrgOwner && not (Set.member userId removedMembers)
