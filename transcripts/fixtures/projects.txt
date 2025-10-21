@@ -1,1 +1,10 @@
 @unison/base/releases/4.8.0 @test/base/main
+@hojberg/doc-examples/main @test/doc-examples/main
+@hojberg/html/releases/2.8.0 @test/html/main
+@hojberg/textExtra/releases/1.0.0 @test/textExtra/main
+@unison/blog-engine/releases/2.3.0 @test/blog-engine/main
+@unison/cloud/releases/21.1.0 @test/cloud/main
+@unison/cloud-start/releases/8.3.3 @test/cloud-start/main
+@unison/http/releases/5.0.2 @test/http/main
+@systemfw/volturno/releases/0.11.0 @test/volturno/main
+@baccata/schemas/releases/0.0.11 @test/schemas/main
