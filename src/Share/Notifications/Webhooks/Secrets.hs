@@ -19,7 +19,7 @@ import Servant.Client qualified as ServantClient
 import Servant.Server (err500)
 import Share.App (AppM)
 import Share.Env qualified as Env
-import Share.IDs (NotificationWebhookId)
+import Share.IDs 
 import Share.IDs qualified as IDs
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging

@@ -8,13 +8,10 @@ module Share.BackgroundJobs.Webhooks.Worker (worker) where
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Except (ExceptT (..), runExceptT)
-import Crypto.JWT (JWTError)
-import Data.Aeson (FromJSON (..), ToJSON (..))
+import Data.Aeson (ToJSON (..))
 import Data.Aeson qualified as Aeson
-import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.List.Extra qualified as List
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
 import Data.Time (UTCTime)
 import Ki.Unlifted qualified as Ki
 import Network.HTTP.Client qualified as HTTPClient
@@ -24,6 +21,7 @@ import Network.URI qualified as URI
 import Share.BackgroundJobs.Errors (reportError)
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Webhooks.Queries qualified as WQ
+import Share.BackgroundJobs.Webhooks.Types
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.ChatApps (Author (..))
 import Share.ChatApps qualified as ChatApps
@@ -37,7 +35,7 @@ import Share.Metrics qualified as Metrics
 import Share.Notifications.Ops qualified as NotOps
 import Share.Notifications.Queries qualified as NQ
 import Share.Notifications.Types
-import Share.Notifications.Webhooks.Secrets (WebhookConfig (..), WebhookSecretError)
+import Share.Notifications.Webhooks.Secrets (WebhookConfig (..))
 import Share.Notifications.Webhooks.Secrets qualified as Webhooks
 import Share.Postgres qualified as PG
 import Share.Postgres.Notifications qualified as Notif
@@ -52,42 +50,6 @@ import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 import Share.Web.Share.DisplayInfo.Types qualified as DisplayInfo
 import Share.Web.UI.Links qualified as Links
 import UnliftIO qualified
-
-data WebhookSendFailure
-  = ReceiverError NotificationEventId NotificationWebhookId HTTP.Status BL.ByteString
-  | InvalidRequest NotificationEventId NotificationWebhookId UnliftIO.SomeException
-  | WebhookSecretFetchError NotificationEventId NotificationWebhookId WebhookSecretError
-  | JWTError NotificationEventId NotificationWebhookId JWTError
-  deriving stock (Show)
-
-instance Logging.Loggable WebhookSendFailure where
-  toLog = \case
-    ReceiverError eventId webhookId status body ->
-      Logging.textLog
-        ( "Webhook receiver error: "
-            <> Text.pack (show status)
-            <> " "
-            <> Text.decodeUtf8 (BL.toStrict body)
-        )
-        & Logging.withTag ("status", tShow status)
-        & Logging.withTag ("event_id", tShow eventId)
-        & Logging.withTag ("webhook_id", tShow webhookId)
-        & Logging.withSeverity Logging.UserFault
-    InvalidRequest eventId webhookId err ->
-      Logging.textLog ("Invalid request: " <> Text.pack (show err))
-        & Logging.withTag ("event_id", tShow eventId)
-        & Logging.withTag ("webhook_id", tShow webhookId)
-        & Logging.withSeverity Logging.UserFault
-    WebhookSecretFetchError eventId webhookId err ->
-      Logging.textLog ("Failed to fetch webhook secret: " <> Text.pack (show err))
-        & Logging.withTag ("event_id", tShow eventId)
-        & Logging.withTag ("webhook_id", tShow webhookId)
-        & Logging.withSeverity Logging.Error
-    JWTError eventId webhookId err ->
-      Logging.textLog ("JWT error: " <> Text.pack (show err))
-        & Logging.withTag ("event_id", tShow eventId)
-        & Logging.withTag ("webhook_id", tShow webhookId)
-        & Logging.withSeverity Logging.Error
 
 -- | Check every 10 minutes if we haven't heard on the notifications channel.
 -- Just in case we missed a notification.
@@ -139,49 +101,6 @@ processWebhook authZReceipt = withSpan "background:webhooks:process-webhook" mem
 --
 webhookTimeout :: HTTPClient.ResponseTimeout
 webhookTimeout = HTTPClient.responseTimeoutMicro (20 * 1000000 {- 20 seconds -})
-
-data WebhookEventPayload jwt = WebhookEventPayload
-  { -- | The event ID of the notification event.
-    eventId :: NotificationEventId,
-    -- | The time at which the event occurred.
-    occurredAt :: UTCTime,
-    -- | The topic of the notification event.
-    topic :: NotificationTopic,
-    -- | The data associated with the notification event.
-    data_ :: HydratedEvent,
-    -- | A signed token containing all of the same data.
-    jwt :: jwt
-  }
-  deriving stock (Show, Eq)
-
-deriving via JWT.JSONJWTClaims (WebhookEventPayload ()) instance JWT.AsJWTClaims (WebhookEventPayload ())
-
-instance ToJSON (WebhookEventPayload JWTParam) where
-  toJSON WebhookEventPayload {eventId, occurredAt, topic, data_, jwt} =
-    Aeson.object
-      [ "eventId" Aeson..= eventId,
-        "occurredAt" Aeson..= occurredAt,
-        "topic" Aeson..= topic,
-        "data" Aeson..= data_,
-        "signed" Aeson..= jwt
-      ]
-
-instance ToJSON (WebhookEventPayload ()) where
-  toJSON WebhookEventPayload {eventId, occurredAt, topic, data_} =
-    Aeson.object
-      [ "eventId" Aeson..= eventId,
-        "occurredAt" Aeson..= occurredAt,
-        "topic" Aeson..= topic,
-        "data" Aeson..= data_
-      ]
-
-instance FromJSON (WebhookEventPayload ()) where
-  parseJSON = Aeson.withObject "WebhookEventPayload" $ \o -> do
-    eventId <- o Aeson..: "eventId"
-    occurredAt <- o Aeson..: "occurredAt"
-    topic <- o Aeson..: "topic"
-    data_ <- o Aeson..: "data"
-    pure WebhookEventPayload {eventId, occurredAt, topic, data_, jwt = ()}
 
 tryWebhook ::
   NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent ->
