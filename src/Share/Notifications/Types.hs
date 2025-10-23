@@ -71,7 +71,7 @@ data NotificationTopic
   | ProjectTicketStatusUpdated
   | ProjectTicketComment
   | ProjectReleaseCreated
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Enum, Bounded)
 
 instance PG.EncodeValue NotificationTopic where
   encodeValue = HasqlEncoders.enum \case

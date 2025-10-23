@@ -14,6 +14,7 @@ import Share.Web.Share.API qualified as Share
 import Share.Web.Share.Orgs.API qualified as Orgs
 import Share.Web.Share.Projects.API qualified as Projects
 import Share.Web.Share.Users.API qualified as Users
+import Share.Web.Share.Webhooks.API qualified as Webhooks
 import Share.Web.Support.API qualified as Support
 import Share.Web.Types
 import Share.Web.UCM.SyncV2.API qualified as SyncV2
@@ -55,6 +56,7 @@ type API =
     :<|> ("ucm" :> "v1" :> "projects" :> MaybeAuthenticatedSession :> UCMProjects.ProjectsAPI)
     :<|> ("ucm" :> "v2" :> "sync" :> MaybeAuthenticatedUserId :> SyncV2.API)
     :<|> ("admin" :> Admin.API)
+    :<|> ("webhooks" :> Webhooks.API)
 
 api :: Proxy API
 api = Proxy @API
