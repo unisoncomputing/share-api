@@ -62,7 +62,7 @@ import Unison.Codebase.Path (Path)
 import Unison.Codebase.Path qualified as Path
 import Unison.Codebase.SqliteCodebase.Conversions qualified as Cv
 import Unison.DataDeclaration (Decl)
-import Unison.DeclCoherencyCheck (checkDeclCoherency, lenientCheckDeclCoherency)
+import Unison.DeclCoherencyCheck (asOneRandomIncoherentDeclReason, checkAllDeclCoherency, lenientCheckDeclCoherency)
 import Unison.LabeledDependency (LabeledDependency)
 import Unison.Merge qualified as Merge
 import Unison.Merge.EitherWay qualified as EitherWay
@@ -262,8 +262,8 @@ computeThreeWayNamespaceDiff codebaseEnvs2 aliceCodeCache bobCodeCache branchHas
       PG.transactionSpan "check decl coherency" mempty do
         sequence $
           ( \v c e ->
-              checkDeclCoherency v.nametree c
-                & mapLeft (IncoherentDecl . e)
+              checkAllDeclCoherency v.nametree c
+                & mapLeft (IncoherentDecl . e . asOneRandomIncoherentDeclReason)
                 & liftEither
           )
             <$> ThreeWay.forgetLca defns
