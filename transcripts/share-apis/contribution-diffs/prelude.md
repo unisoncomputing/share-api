@@ -46,6 +46,8 @@ aDoc = {{ Test Doc }}
 aTest = [Ok "Done"]
 
 deleteMeAfterFork = "delete me after fork"
+
+type MyType = { x : Nat }
 ```
 
 ```ucm:hide
@@ -83,6 +85,8 @@ ability AbilityUpdateMe where
 
 ability AbilityNew where
     abilityNew : Text
+
+type MyType = { x : Nat, newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope : Text, y : Boolean}
 ```
 
 ```ucm
