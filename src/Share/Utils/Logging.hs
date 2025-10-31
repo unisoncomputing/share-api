@@ -244,3 +244,26 @@ ioLogger handle formatter msg = liftIO do
 
 instance Loggable Sync.EntityValidationError where
   toLog = withSeverity Error . showLog
+
+instance Loggable Sync.HashMismatchForEntity where
+  toLog = withSeverity Error . showLog
+
+instance Loggable Sync.UploadEntitiesError where
+  toLog = \case
+    Sync.UploadEntitiesError'EntityValidationFailure err -> toLog err
+    Sync.UploadEntitiesError'HashMismatchForEntity mismatch -> toLog mismatch
+    Sync.UploadEntitiesError'InvalidRepoInfo msg repoInfo ->
+      textLog ("Invalid repo info: " <> msg <> " RepoInfo: " <> tShow repoInfo)
+        & withSeverity Error
+    Sync.UploadEntitiesError'NeedDependencies nd ->
+      textLog ("Need dependencies: " <> tShow nd)
+        & withSeverity Error
+    Sync.UploadEntitiesError'NoWritePermission repoInfo ->
+      textLog ("No write permission for repo: " <> tShow repoInfo)
+        & withSeverity UserFault
+    Sync.UploadEntitiesError'ProjectNotFound projectShorthand ->
+      textLog ("Project not found: " <> projectShorthand)
+        & withSeverity UserFault
+    Sync.UploadEntitiesError'UserNotFound userHandle ->
+      textLog ("User not found: " <> userHandle)
+        & withSeverity UserFault

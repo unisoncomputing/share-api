@@ -189,7 +189,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
 
 uploadEntitiesEndpoint :: UserId -> UploadEntitiesRequest -> WebApp UploadEntitiesResponse
 uploadEntitiesEndpoint callingUserId (UploadEntitiesRequest {repoInfo, entities}) = do
-  either id id <$> runExceptT do
+  finalizeResponse =<< runExceptT do
     addRequestTag "repo-info" (unRepoInfo repoInfo)
     codebase <-
       case repoInfoKind repoInfo of
@@ -224,6 +224,14 @@ uploadEntitiesEndpoint callingUserId (UploadEntitiesRequest {repoInfo, entities}
         Right Nothing -> UploadEntitiesSuccess
         -- There were missing dependencies, so we need to ask the client for them.
         Right (Just missingDeps) -> UploadEntitiesFailure $ Share.UploadEntitiesError'NeedDependencies (NeedDependencies missingDeps)
+  where
+    finalizeResponse :: Either UploadEntitiesResponse UploadEntitiesResponse -> WebApp UploadEntitiesResponse
+    finalizeResponse result = case either id id result of
+      success@(UploadEntitiesSuccess) -> pure success
+      failure@(UploadEntitiesFailure err) -> do
+        -- Report the error, but return it to the client as well.
+        reportError err
+        pure failure
 
 -- | Insert entities to the user's codebase (either temp storage or main), returning the hashes of any missing dependencies
 -- we still need from the client.

@@ -404,9 +404,25 @@ throwSomeServerError = throwError . SomeServerError . withCallstack
 
 -- Instances from unison types.
 
+
 instance ToServerError Sync.EntityValidationError where
   toServerError = \case
     Sync.EntityHashMismatch {} -> ("entity-hash-mismatch", err500)
     Sync.UnsupportedEntityType {} -> ("unsupported-entity-type", err500)
     Sync.InvalidByteEncoding {} -> ("invalid-byte-encoding", err500)
     Sync.HashResolutionFailure {} -> ("hash-resolution-failure", err500)
+
+instance ToServerError Sync.HashMismatchForEntity where
+  toServerError _ = ("hash-mismatch-for-entity", err400 {errBody = "Hash Mismatch for Entity"})
+
+instance ToServerError Sync.UploadEntitiesError where
+  toServerError = \case
+    Sync.UploadEntitiesError'EntityValidationFailure err -> toServerError err
+    Sync.UploadEntitiesError'HashMismatchForEntity mismatch -> toServerError mismatch
+    Sync.UploadEntitiesError'InvalidRepoInfo _ _ -> ("invalid-repo-info", err400 {errBody = "Invalid Repo Info"})
+    Sync.UploadEntitiesError'NeedDependencies _ -> ("need-dependencies", err400 {errBody = "Need Dependencies"})
+    Sync.UploadEntitiesError'NoWritePermission _ -> ("no-write-permission", err403 {errBody = "No Write Permission"})
+    Sync.UploadEntitiesError'ProjectNotFound _ -> ("project-not-found", err404 {errBody = "Project Not Found"})
+    Sync.UploadEntitiesError'UserNotFound _ -> ("user-not-found", err404 {errBody = "User Not Found"})
+
+
