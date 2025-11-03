@@ -118,6 +118,7 @@ BEGIN
              )
         )
         AND (ns.filter IS NULL OR NEW.data @> ns.filter)
+        AND (ns.scope_project_id IS NULL OR ns.scope_project_id IS NOT DISTINCT FROM NEW.project_id)
         AND
         -- A subscriber can be notified if the event is in their scope or if they have permission to the resource, 
         -- or if the subscription is owned by the project which the event is scoped to.
