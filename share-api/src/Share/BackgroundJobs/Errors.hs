@@ -12,7 +12,7 @@ import Control.Monad.Except
 import Data.HashMap.Lazy qualified as HM
 import Data.Typeable qualified as Typeable
 import Share.BackgroundJobs.Monad
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.Monitoring qualified as Monitoring
 import Share.Prelude
 import Share.Utils.Logging (Loggable)

@@ -6,7 +6,7 @@ import Crypto.JOSE.JWK qualified as JWK
 import Data.Set qualified as Set
 import Servant
 import Share.App
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.JWT qualified as JWT
 import Share.JWT.Types (Issuer (..))
 import Share.OAuth.Session

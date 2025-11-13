@@ -10,7 +10,7 @@ module Share.BackgroundJobs.Monad
 where
 
 import Share.App
-import Share.Env
+import Share.Env.Types
 import Share.Prelude
 import Share.Utils.Tags (HasTags (..))
 

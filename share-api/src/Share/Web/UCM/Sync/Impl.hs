@@ -26,7 +26,7 @@ import Servant
 import Share.App
 import Share.Codebase qualified as Codebase
 import Share.Codebase.Types (CodebaseEnv)
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs (ProjectBranchShortHand (..), ProjectReleaseShortHand (..), ProjectShortHand (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session (Session (..))

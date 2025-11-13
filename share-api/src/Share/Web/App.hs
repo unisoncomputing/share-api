@@ -20,7 +20,7 @@ import Network.URI
 import Servant
 import Servant.Server.Generic (AsServerT)
 import Share.App
-import Share.Env
+import Share.Env.Types
 import Share.IDs (RequestId, UserId)
 import Share.Prelude
 import Share.Utils.Tags

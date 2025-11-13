@@ -7,7 +7,7 @@ import Data.Time qualified as Time
 import Servant
 import Share.ChatApps
 import Share.ChatApps qualified as ChatApps
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.OAuth.Session
 import Share.Prelude
 import Share.Web.App

@@ -46,7 +46,7 @@ import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
 import GHC.Stack (CallStack, callStack, prettyCallStack)
 import Servant.Client qualified as Servant
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.OAuth.Errors (OAuth2Error)
 import Share.OAuth.Types (RedirectReceiverErr)
 import Share.Prelude

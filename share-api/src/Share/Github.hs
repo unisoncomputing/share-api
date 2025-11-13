@@ -12,7 +12,7 @@ import Network.HTTP.Types (Status (..))
 import Network.URI (URIAuth (URIAuth))
 import Servant
 import Servant.Client
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.OAuth.Types (OAuth2State)
 import Share.OAuth.Types qualified as OAuth2
 import Share.Prelude

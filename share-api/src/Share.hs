@@ -37,7 +37,7 @@ import Servant
 import Share.App
 import Share.BackgroundJobs qualified as BackgroundJobs
 import Share.BackgroundJobs.Monad (runBackground)
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs (RequestId, UserId)
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT

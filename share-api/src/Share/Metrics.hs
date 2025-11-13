@@ -26,7 +26,7 @@ import Network.Wai qualified as Wai
 import Network.Wai.Middleware.Prometheus qualified as Prom
 import Prometheus qualified as Prom
 import Prometheus.Metric.GHC qualified as Prom
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.Postgres qualified as PG
 import Share.Postgres.Metrics.Queries qualified as Q
 import Share.Prelude

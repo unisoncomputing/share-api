@@ -55,7 +55,7 @@ import GHC.Stack qualified as GHC
 import GHC.TypeLits qualified as TL
 import Servant
 import Servant.Client
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.Monitoring qualified as Monitoring
 import Share.OAuth.Errors (OAuth2Error (..), OAuth2ErrorCode (..), OAuth2ErrorRedirect (..))
 import Share.OAuth.Types (AuthenticationRequest (..), RedirectReceiverErr (..))
@@ -404,7 +404,6 @@ throwSomeServerError = throwError . SomeServerError . withCallstack
 
 -- Instances from unison types.
 
-
 instance ToServerError Sync.EntityValidationError where
   toServerError = \case
     Sync.EntityHashMismatch {} -> ("entity-hash-mismatch", err500)
@@ -424,5 +423,3 @@ instance ToServerError Sync.UploadEntitiesError where
     Sync.UploadEntitiesError'NoWritePermission _ -> ("no-write-permission", err403 {errBody = "No Write Permission"})
     Sync.UploadEntitiesError'ProjectNotFound _ -> ("project-not-found", err404 {errBody = "Project Not Found"})
     Sync.UploadEntitiesError'UserNotFound _ -> ("user-not-found", err404 {errBody = "User Not Found"})
-
-

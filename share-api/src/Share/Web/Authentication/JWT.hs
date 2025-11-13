@@ -8,7 +8,7 @@ import Crypto.JWT (SignedJWT)
 import Data.Either.Combinators qualified as Either
 import Data.Time (NominalDiffTime, addUTCTime, getCurrentTime)
 import Share.App
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs (JTI (..), SessionId (..), UserId (..))
 import Share.IDs qualified as IDs
 import Share.JWT

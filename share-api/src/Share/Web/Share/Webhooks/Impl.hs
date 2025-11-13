@@ -5,7 +5,7 @@ import Data.UUID qualified as UUID
 import Servant
 import Share.BackgroundJobs.Webhooks.Types
 import Share.Contribution
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs
 import Share.JWT
 import Share.JWT qualified as JWT

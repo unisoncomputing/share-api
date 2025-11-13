@@ -32,7 +32,7 @@ import Network.URI
 import Network.URI qualified as URI
 import Servant (ToHttpApiData (..))
 import Share.App
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Notifications.Types

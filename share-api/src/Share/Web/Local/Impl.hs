@@ -9,8 +9,8 @@ import Control.Monad.Reader
 import Data.Set qualified as Set
 import Servant
 import Share.App (shareAud, shareIssuer)
-import Share.Env
-import Share.Env qualified as Env
+import Share.Env.Types
+import Share.Env.Types qualified as Env
 import Share.IDs
 import Share.JWT (JWTParam (..))
 import Share.JWT qualified as JWT

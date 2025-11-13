@@ -26,7 +26,7 @@ import Share.BackgroundJobs.Workers (newWorker)
 import Share.ChatApps (Author (..))
 import Share.ChatApps qualified as ChatApps
 import Share.Contribution (displayContributionStatus)
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.JWT (JWTParam (..))

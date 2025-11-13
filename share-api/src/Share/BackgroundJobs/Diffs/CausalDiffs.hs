@@ -10,7 +10,7 @@ import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Workers (newWorker)
 import Share.Codebase qualified as Codebase
 import Share.Codebase.CodebaseRuntime qualified as CR
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs qualified as IDs
 import Share.Metrics qualified as Metrics
 import Share.Postgres qualified as PG

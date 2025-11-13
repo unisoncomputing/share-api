@@ -5,14 +5,14 @@ import Data.Aeson qualified as Aeson
 import Data.HashMap.Strict qualified as HM
 import Data.Map qualified as Map
 import Data.Text qualified as Text
-import Share.Env
-import Share.Env qualified as Env
+import GHC.Stack qualified as Stack
+import Network.URI (URI)
+import Share.Env.Types
+import Share.Env.Types qualified as Env
 import Share.Prelude
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
-import GHC.Stack qualified as Stack
-import Network.URI (URI)
 import System.Log.Raven qualified as Sentry
 import System.Log.Raven.Types qualified as Sentry
 

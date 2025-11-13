@@ -15,7 +15,7 @@ import Share.Branch (Branch (..), branchCausals_)
 import Share.Codebase qualified as Codebase
 import Share.Codebase.CodeCache qualified as CodeCache
 import Share.Codebase.CodebaseRuntime qualified as CR
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs (BranchId, BranchShortHand (..), ProjectBranchShortHand (..), ProjectShortHand (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session

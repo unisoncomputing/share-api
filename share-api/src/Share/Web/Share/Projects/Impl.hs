@@ -19,7 +19,7 @@ import Share.Branch qualified as Branch
 import Share.Codebase (CodebaseEnv)
 import Share.Codebase qualified as Codebase
 import Share.Codebase.CodebaseRuntime qualified as CR
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle, UserId)
 import Share.IDs qualified as IDs
 import Share.Notifications.Ops qualified as NotifOps

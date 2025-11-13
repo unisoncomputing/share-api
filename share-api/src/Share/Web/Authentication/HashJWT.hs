@@ -2,7 +2,7 @@ module Share.Web.Authentication.HashJWT where
 
 import Crypto.JWT
 import Data.Aeson qualified as Aeson
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Web.App

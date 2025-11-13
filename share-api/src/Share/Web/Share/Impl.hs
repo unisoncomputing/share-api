@@ -15,7 +15,7 @@ import Share.Codebase qualified as Codebase
 import Share.Codebase.CodeCache qualified as CodeCache
 import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Codebase.Types qualified as Codebase
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs (BranchOrReleaseShortHand (..), TourId, UserHandle (..))
 import Share.IDs qualified as IDs
 import Share.JWT qualified as JWT

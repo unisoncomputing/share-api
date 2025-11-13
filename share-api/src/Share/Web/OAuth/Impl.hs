@@ -25,7 +25,7 @@ import Data.Text qualified as Text
 import Network.URI (parseURI)
 import Servant
 import Share.App (shareAud, shareIssuer)
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.Github qualified as Github
 import Share.IDs (PendingSessionId, UserHandle, fromId)
 import Share.IDs qualified as IDs

@@ -113,7 +113,7 @@ import OpenTelemetry.Trace qualified as Trace
 import OpenTelemetry.Trace.Monad (MonadTracer (..))
 import Safe (headMay)
 import Share.Debug qualified as Debug
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.Postgres.Composites
 import Share.Postgres.Orphans ()
 import Share.Prelude

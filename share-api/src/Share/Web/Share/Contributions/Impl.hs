@@ -25,7 +25,7 @@ import Share.Branch qualified as Branch
 import Share.Codebase qualified as Codebase
 import Share.Codebase.CodebaseRuntime qualified as CR
 import Share.Contribution
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs (PrefixedHash (..), ProjectSlug (..), UserHandle)
 import Share.IDs qualified as IDs
 import Share.OAuth.Session

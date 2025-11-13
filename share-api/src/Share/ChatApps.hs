@@ -25,7 +25,7 @@ import Network.HTTP.Types qualified as HTTP
 import Network.URI (URI)
 import Network.URI qualified as URI
 import Share.App (AppM)
-import Share.Env qualified as Env
+import Share.Env.Types qualified as Env
 import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Postgres.Users.Queries qualified as UsersQ

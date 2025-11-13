@@ -1,7 +1,7 @@
 module Main where
 
 import Share
-import Env (withEnv)
+import Share.Env (withEnv)
 
 main :: IO ()
 main = do

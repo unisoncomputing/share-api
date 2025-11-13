@@ -49,6 +49,7 @@ library
       Share.Codebase.Types
       Share.Contribution
       Share.Env
+      Share.Env.Types
       Share.Github
       Share.IDs
       Share.Metrics
@@ -366,7 +367,6 @@ library
 executable share-api
   main-is: Main.hs
   other-modules:
-      Env
       Paths_share_api
   hs-source-dirs:
       app

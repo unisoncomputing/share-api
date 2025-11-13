@@ -15,8 +15,8 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Database.Redis qualified as R
 import OpenTelemetry.Trace.Monad (MonadTracer (..))
-import Share.Env (Env (..))
-import Share.Env qualified as Env
+import Share.Env.Types (Env (..))
+import Share.Env.Types qualified as Env
 import Share.JWT.Types (Audience (..), Issuer (..))
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
