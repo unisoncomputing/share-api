@@ -12,8 +12,6 @@ bug-reports:    https://github.com/unisoncomputing/share-api/issues
 author:         Unison Computing
 maintainer:     unison.cloud
 copyright:      2024 Unison Computing
-license:        MIT
-license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
     README.md
