@@ -1,7 +1,8 @@
 resolver: lts-22.26
 
 packages:
-- .
+- share-api
+- share-task-runner
 - share-auth
 - share-auth/example
 - share-utils

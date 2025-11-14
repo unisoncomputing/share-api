@@ -27,7 +27,7 @@ endif
 $(target_dir):
 	mkdir $@
 
-$(exe): $(shell find . unison -type f -name '*.hs') package.yaml stack.yaml
+$(exe): $(shell find . unison -type f -name '*.hs') $(shell find . unison -type f -name '*.yaml')
 	@echo $(exe)
 	@echo $@
 	stack build $(STACK_FLAGS) share-api:share-api
