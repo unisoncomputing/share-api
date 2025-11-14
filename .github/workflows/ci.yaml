@@ -20,7 +20,6 @@ on:
 env:
   ormolu_version: 0.5.2.0
   is_published_build: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
-  is_task_build: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/task-') }}
   exe_cache_prefix: share-ci-exe
   share_local_bin: share-api
 
@@ -92,7 +91,7 @@ jobs:
           path: ${{env.share_local_bin}}
 
       - name: Save exes for share-task-runner docker build
-        if: env.is_task_build
+        if: ${{ startsWith(github.ref, 'refs/heads/task-') }}
         uses: actions/upload-artifact@v4
         with:
           name: share-task-runner-exe
@@ -108,7 +107,7 @@ jobs:
 
   # Separate jobs for the docker builds because they requires elevated github token permissions.
   share-task-runner-docker-build:
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/task-') }}
+    if: ${{ startsWith(github.ref, 'refs/heads/task-') }}
     env:
       container_registry: ghcr.io
       docker_image_name: unisoncomputing/share-task-runner
