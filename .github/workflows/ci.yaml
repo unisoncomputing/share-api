@@ -193,7 +193,7 @@ jobs:
     env:
       container_registry: ghcr.io
       docker_image_name: share-api
-    needs: [build-exe]
+    needs: [build-exes]
     runs-on: ubuntu-24.04
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:
