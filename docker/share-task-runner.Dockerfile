@@ -6,13 +6,13 @@ RUN openssl genrsa -out /etc/ssl/private/share.key &&\
     update-locale LANG=C.UTF-8
 ENV LANG=C.UTF-8
 
-COPY share-entrypoint.sh /usr/local/bin/share-entrypoint
-RUN chmod 555 /usr/local/bin/share-entrypoint
+COPY share-task-runner-entrypoint.sh /usr/local/bin/share-task-runner-entrypoint
+RUN chmod 555 /usr/local/bin/share-task-runner-entrypoint
 
-COPY tmp/share-api /usr/local/bin/share
-RUN chmod 555 /usr/local/bin/share
+COPY tmp/share-task-runner /usr/local/bin/share-task-runner
+RUN chmod 555 /usr/local/bin/share-task-runner
 
-ENTRYPOINT /usr/local/bin/share-entrypoint
+ENTRYPOINT /usr/local/bin/share-task-runner-entrypoint
 
 ARG SHARE_COMMIT
 ENV SHARE_COMMIT=$SHARE_COMMIT
