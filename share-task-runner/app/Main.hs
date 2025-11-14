@@ -3,7 +3,6 @@ module Main where
 import Share.BackgroundJobs.Monad
 import Share.Env (withEnv)
 import Share.Tasks.AmbiguousComponentCheck qualified as AmbiguousComponentCheck
-import UnliftIO
 
 main :: IO ()
 main = do
