@@ -111,7 +111,7 @@ jobs:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/task-') }}
     env:
       container_registry: ghcr.io
-      docker_image_name: share-task-runner
+      docker_image_name: unisoncomputing/share-task-runner
     needs: [build-exes]
     runs-on: ubuntu-24.04
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
@@ -193,7 +193,7 @@ jobs:
   share-api-docker-build:
     env:
       container_registry: ghcr.io
-      docker_image_name: share-api
+      docker_image_name: unisoncomputing/share-api
     needs: [build-exes]
     runs-on: ubuntu-24.04
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
