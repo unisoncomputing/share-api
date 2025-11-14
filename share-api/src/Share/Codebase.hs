@@ -111,6 +111,7 @@ import Unison.ConstructorType qualified as CT
 import Unison.DataDeclaration qualified as DD
 import Unison.DataDeclaration qualified as V1
 import Unison.Hash (Hash)
+import Unison.OrBuiltin (OrBuiltin (..))
 import Unison.Parser.Ann
 import Unison.Parser.Ann qualified as Ann
 import Unison.Reference (TermReferenceId)
@@ -327,12 +328,12 @@ expectTypeDeclarationsByRefIdsOf codebase trav s = do
 -- Includes decl constructors.
 termReferentsByShortHash :: (QueryM m) => ShortHash -> m (Set V1.Referent)
 termReferentsByShortHash = \case
-  ShortHash.Builtin b ->
+  Builtin b ->
     Builtin.intrinsicTermReferences
       & Set.filter (\r -> V1.ReferenceBuiltin b == r)
       & Set.map V1Referent.Ref
       & pure
-  ShortHash.ShortHash prefix cycle cid -> do
+  NotBuiltin (ShortHash.ShortHash prefix cycle cid) -> do
     termReferents <-
       DefnQ.termReferencesByPrefix prefix cycle
         <&> Set.map (V1Referent.Ref . V1.ReferenceDerived)
@@ -341,13 +342,13 @@ termReferentsByShortHash = \case
 
 typeReferencesByShortHash :: (QueryA m) => ShortHash -> m (Set V1.Reference)
 typeReferencesByShortHash = \case
-  ShortHash.Builtin b ->
+  Builtin b ->
     Builtin.intrinsicTypeReferences
       & Set.filter (\r -> V1.ReferenceBuiltin b == r)
       & pure
   -- type references shouldn't have a constructor.
-  (ShortHash.ShortHash _prefix _cycle (Just {})) -> pure mempty
-  (ShortHash.ShortHash prefix cycle Nothing) -> do
+  (NotBuiltin (ShortHash.ShortHash _prefix _cycle (Just {}))) -> pure mempty
+  (NotBuiltin (ShortHash.ShortHash prefix cycle Nothing)) -> do
     DefnQ.declReferencesByPrefix prefix cycle
       <&> Set.map V1.ReferenceDerived
 
