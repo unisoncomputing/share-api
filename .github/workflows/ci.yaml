@@ -91,7 +91,7 @@ jobs:
           path: ${{env.share_local_bin}}
 
       - name: Save exes for share-task-runner docker build
-        if: ${{ startsWith(github.ref, 'refs/heads/task-') }}
+        if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/task-')) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'task-')) }}
         uses: actions/upload-artifact@v4
         with:
           name: share-task-runner-exe
@@ -107,7 +107,7 @@ jobs:
 
   # Separate jobs for the docker builds because they requires elevated github token permissions.
   share-task-runner-docker-build:
-    if: ${{ startsWith(github.ref, 'refs/heads/task-') }}
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/task-')) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'task-')) }}
     env:
       container_registry: ghcr.io
       docker_image_name: unisoncomputing/share-task-runner
