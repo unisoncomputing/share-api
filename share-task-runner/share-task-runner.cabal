@@ -21,6 +21,8 @@ source-repository head
   location: https://github.com/unisoncomputing/share-task-runner
 
 library
+  exposed-modules:
+      Share.Tasks
   hs-source-dirs:
       src
   default-extensions:

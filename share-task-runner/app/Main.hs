@@ -8,7 +8,3 @@ main :: IO ()
 main = do
   withEnv \env -> runBackground env "share-task-runner" task
 
-task :: Background ()
-task = do
-  liftIO $ putStrLn "Hello from the task runner!"
-  pure ()
