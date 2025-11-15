@@ -1,14 +1,9 @@
 module Main where
 
-import Share.Env (withEnv)
 import Share.BackgroundJobs.Monad
-import UnliftIO
+import Share.Env (withEnv)
+import Share.Tasks.AmbiguousComponentCheck qualified as AmbiguousComponentCheck
 
 main :: IO ()
 main = do
-  withEnv \env -> runBackground env "share-task-runner" task
-
-task :: Background ()
-task = do
-  liftIO $ putStrLn "Hello from the task runner!"
-  pure ()
+  withEnv \env -> runBackground env "share-task-runner" AmbiguousComponentCheck.run

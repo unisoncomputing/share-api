@@ -36,6 +36,12 @@ dependencies:
 - base >= 4.7 && < 5
 - share-api
 - unliftio
+- unison-share-api
+- unison-codebase-sqlite
+- unison-hash
+- serialise
+- transformers
+- cborg
 
 default-extensions:
   - ApplicativeDo
