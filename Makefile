@@ -30,7 +30,7 @@ $(target_dir):
 $(exe): $(shell find . unison -type f -name '*.hs') $(shell find . unison -type f -name '*.yaml')
 	@echo $(exe)
 	@echo $@
-	stack build $(STACK_FLAGS) share-api:share-api
+	stack build $(STACK_FLAGS)
 
 $(installed_share): $(exe) $(target_dir)
 	cp $(exe) $(installed_share)
@@ -109,3 +109,24 @@ transcripts: $(installed_share)
 		kill $$SERVER_PID 2>/dev/null || true; \
 	) 
 	@echo "Transcripts complete!";
+
+task-runner: $(installed_share)
+	@echo "Taking down any existing docker dependencies"
+	@docker compose -f docker/docker-compose.base.yml down || true
+	@trap 'docker compose -f docker/docker-compose.base.yml down' EXIT INT TERM
+	@echo "Booting up task docker dependencies..."
+	docker compose -f docker/docker-compose.base.yml up --remove-orphans --detach
+	@while  ! (  pg_isready --host localhost -U postgres -p 5432 >/dev/null 2>&1 && redis-cli -p 6379 ping  >/dev/null 2>&1 && VAULT_ADDR=http://localhost:8200 vault status >/dev/null 2>&1 )  do \
+	  sleep 1; \
+	done;
+	./transcripts/configure_transcript_database.zsh
+	@echo "Booting up share";
+	( . ./local.env ; \
+		$(exe) & \
+		SERVER_PID=$$!; \
+		trap "kill $$SERVER_PID 2>/dev/null || true" EXIT INT TERM; \
+		echo "Running task"; \
+		stack exec share-task-runner; \
+		kill $$SERVER_PID 2>/dev/null || true; \
+	) 
+	@echo "Task complete!";
