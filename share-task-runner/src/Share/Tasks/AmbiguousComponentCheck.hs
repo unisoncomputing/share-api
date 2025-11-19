@@ -18,7 +18,7 @@ import Unison.Util.Servant.CBOR qualified as CBOR
 
 data AmbiguousComponentCheckError
   = TaskAmbiguousComponentCheckError Hash32
-  | TaskEntityValidationError Hash32 (Either HH.IncompleteElementOrderingError Sync.EntityValidationError)
+  | TaskEntityValidationError Hash32 (Either HH.HashingFailure Sync.EntityValidationError)
   | TaskEntityDecodingError Hash32 CBOR.DeserialiseFailure
   deriving (Show, Eq)
 

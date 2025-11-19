@@ -398,7 +398,7 @@ batchValidateEntities ::
   (ComponentHash -> ComponentHash -> IO Bool) ->
   (CausalHash -> CausalHash -> IO Bool) ->
   f (Hash32, Sync.Entity Text Hash32 Hash32) ->
-  IO (Maybe (NonEmpty (Either HH.IncompleteElementOrderingError Sync.EntityValidationError)))
+  IO (Maybe (NonEmpty (Either HH.HashingFailure Sync.EntityValidationError)))
 batchValidateEntities maxParallelism checkIfComponentHashMismatchIsAllowed checkIfCausalHashMismatchIsAllowed entities = do
   errs <- UnliftIO.pooledForConcurrentlyN maxParallelism entities \(hash, entity) ->
     validateEntity checkIfComponentHashMismatchIsAllowed checkIfCausalHashMismatchIsAllowed hash entity
@@ -410,7 +410,7 @@ validateEntity ::
   (CausalHash -> CausalHash -> m Bool) ->
   Hash32 ->
   Share.Entity Text Hash32 Hash32 ->
-  m (Maybe (Either HH.IncompleteElementOrderingError Sync.EntityValidationError))
+  m (Maybe (Either HH.HashingFailure Sync.EntityValidationError))
 validateEntity checkIfComponentHashMismatchIsAllowed checkIfCausalHashMismatchIsAllowed hash entity = do
   case (Sync.validateEntity hash entity) of
     Just (Right (err@(Sync.EntityHashMismatch Sync.TermComponentType (Sync.HashMismatchForEntity {supplied = expectedHash, computed = actualHash})))) ->
