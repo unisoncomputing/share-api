@@ -1,5 +1,6 @@
 
--- Return all other causals in the history of a causal, including itself.
+-- Return all other causals in the history (a.k.a. spine) of a causal, including itself.
+-- This does not include any namespace child causals.
 CREATE FUNCTION causal_history(causal_id INTEGER)
 RETURNS TABLE (causal_id INTEGER)
 AS $$
