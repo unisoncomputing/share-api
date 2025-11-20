@@ -19,6 +19,7 @@ packages:
 - unison/lib/orphans/unison-hash-orphans-aeson
 - unison/lib/orphans/unison-hash-orphans-sqlite
 - unison/lib/orphans/uuid-orphans-sqlite
+- unison/lib/unison-credentials
 - unison/lib/unison-dynlib
 - unison/lib/unison-hash
 - unison/lib/unison-hashing
