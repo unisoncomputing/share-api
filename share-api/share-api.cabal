@@ -194,6 +194,9 @@ library
       Share.Web.Support.Impl
       Share.Web.Support.Types
       Share.Web.Types
+      Share.Web.UCM.HistoryComments.API
+      Share.Web.UCM.HistoryComments.Impl
+      Share.Web.UCM.HistoryComments.Queries
       Share.Web.UCM.Projects.Impl
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
