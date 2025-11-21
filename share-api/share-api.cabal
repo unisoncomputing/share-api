@@ -130,6 +130,7 @@ library
       Share.Utils.Servant.Client
       Share.Utils.Servant.PathInfo
       Share.Utils.Servant.RawRequest
+      Share.Utils.Servant.Streaming
       Share.Utils.Tags
       Share.Utils.Unison
       Share.Web.Admin.API
