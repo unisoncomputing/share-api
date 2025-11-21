@@ -8,6 +8,7 @@ import Share.Postgres.Cursors qualified as PG
 import Share.Prelude
 import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
+import U.Codebase.Sqlite.HashHandle qualified as HH
 import U.Codebase.Sqlite.TempEntity
 import Unison.Hash32
 import Unison.Sync.EntityValidation qualified as EV
@@ -17,7 +18,7 @@ import Unison.Util.Servant.CBOR qualified as CBOR
 
 data AmbiguousComponentCheckError
   = TaskAmbiguousComponentCheckError Hash32
-  | TaskEntityValidationError Hash32 Sync.EntityValidationError
+  | TaskEntityValidationError Hash32 (Either HH.HashingFailure Sync.EntityValidationError)
   | TaskEntityDecodingError Hash32 CBOR.DeserialiseFailure
   deriving (Show, Eq)
 
@@ -51,12 +52,15 @@ run = withWorkerName "ambiguous-component-task" do
       PG.newRowCursor @(CBORBytes TempEntity, Hash32)
         "component_cursor"
         [PG.sql|
-      (SELECT DISTINCT ON (t.component_hash_id) bytes.bytes, ch.base32
-        FROM terms t
-          JOIN serialized_components sc ON t.component_hash_id = sc.component_hash_id
-          JOIN bytes ON sc.bytes_id = bytes.id
-          JOIN component_hashes ch ON t.component_hash_id = ch.id
-      )
+        WITH component_hash_ids(component_hash_id) AS (
+          SELECT DISTINCT component_hash_id
+          FROM terms t
+            WHERE t.component_index = 1
+        ) SELECT DISTINCT ON (bytes.id) bytes.bytes, ch.base32
+            FROM component_hash_ids chi
+              JOIN serialized_components sc ON chi.component_hash_id = sc.component_hash_id
+              JOIN bytes ON sc.bytes_id = bytes.id
+              JOIN component_hashes ch ON chi.component_hash_id = ch.id
       |]
     PG.foldBatched cursor 100 \rows -> do
       rows

@@ -52,6 +52,7 @@ import Share.Web.Errors
 import Share.Web.UCM.Sync.HashJWT qualified as HashJWT
 import Share.Web.UCM.Sync.Types (EntityBunch (..), RepoInfoKind (..), entityKind)
 import U.Codebase.Causal qualified as Causal
+import U.Codebase.Sqlite.HashHandle qualified as HH
 import U.Codebase.Sqlite.Orphans ()
 import Unison.Codebase.Path qualified as Path
 import Unison.Hash32 (Hash32)
@@ -259,7 +260,11 @@ insertEntitiesToCodebase codebase entities = do
     mayErrs <- PG.transactionUnsafeIO $ batchValidateEntities maxParallelismPerUploadRequest isComponentHashMismatchAllowedIO isCausalHashMismatchAllowedIO unsavedEntities
     case mayErrs of
       Nothing -> pure ()
-      Just (err :| _errs) -> throwError err
+      Just (err :| _errs) ->
+        case err of
+          Right e -> throwError e
+          Left (HH.IncompleteElementOrderingError (ComponentHash hash)) ->
+            throwError $ Sync.InvalidByteEncoding (Hash32.fromHash hash) Sync.TermComponentType "Incomplete element ordering in term components"
     SyncQ.saveTempEntities codebase unsavedEntities
     let hashesNowInTemp = Set.fromList (fst <$> Foldable.toList unsavedEntities) <> (Set.fromList . Foldable.toList $ hashesAlreadyInTemp)
     pure hashesNowInTemp
@@ -393,7 +398,7 @@ batchValidateEntities ::
   (ComponentHash -> ComponentHash -> IO Bool) ->
   (CausalHash -> CausalHash -> IO Bool) ->
   f (Hash32, Sync.Entity Text Hash32 Hash32) ->
-  IO (Maybe (NonEmpty (Sync.EntityValidationError)))
+  IO (Maybe (NonEmpty (Either HH.HashingFailure Sync.EntityValidationError)))
 batchValidateEntities maxParallelism checkIfComponentHashMismatchIsAllowed checkIfCausalHashMismatchIsAllowed entities = do
   errs <- UnliftIO.pooledForConcurrentlyN maxParallelism entities \(hash, entity) ->
     validateEntity checkIfComponentHashMismatchIsAllowed checkIfCausalHashMismatchIsAllowed hash entity
@@ -405,16 +410,16 @@ validateEntity ::
   (CausalHash -> CausalHash -> m Bool) ->
   Hash32 ->
   Share.Entity Text Hash32 Hash32 ->
-  m (Maybe Sync.EntityValidationError)
+  m (Maybe (Either HH.HashingFailure Sync.EntityValidationError))
 validateEntity checkIfComponentHashMismatchIsAllowed checkIfCausalHashMismatchIsAllowed hash entity = do
   case (Sync.validateEntity hash entity) of
-    Just err@(Sync.EntityHashMismatch Sync.TermComponentType (Sync.HashMismatchForEntity {supplied = expectedHash, computed = actualHash})) ->
+    Just (Right (err@(Sync.EntityHashMismatch Sync.TermComponentType (Sync.HashMismatchForEntity {supplied = expectedHash, computed = actualHash})))) ->
       checkIfComponentHashMismatchIsAllowed (ComponentHash . Hash32.toHash $ expectedHash) (ComponentHash . Hash32.toHash $ actualHash) >>= \case
-        False -> pure (Just err)
+        False -> pure (Just $ Right err)
         True -> pure Nothing
-    Just err@(Sync.EntityHashMismatch Sync.CausalType (Sync.HashMismatchForEntity {supplied = expectedHash, computed = actualHash})) ->
+    Just (Right (err@(Sync.EntityHashMismatch Sync.CausalType (Sync.HashMismatchForEntity {supplied = expectedHash, computed = actualHash})))) ->
       checkIfCausalHashMismatchIsAllowed (CausalHash . Hash32.toHash $ expectedHash) (CausalHash . Hash32.toHash $ actualHash) >>= \case
-        False -> pure (Just err)
+        False -> pure (Just $ Right err)
         True -> pure Nothing
     Just err ->
       -- This shouldn't happen unless the ucm client is buggy or malicious
