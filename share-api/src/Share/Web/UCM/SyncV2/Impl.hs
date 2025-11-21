@@ -92,7 +92,7 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
-      queueToStream q
+      queueToCBORStream q
   where
     emitErr :: SyncV2.DownloadEntitiesError -> SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk)
     emitErr err = SourceT.source [SyncV2.CBORStream . CBOR.serialise $ ErrorC (ErrorChunk err)]
