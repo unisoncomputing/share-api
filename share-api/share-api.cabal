@@ -198,10 +198,15 @@ library
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
       Share.Web.UCM.Sync.Types
+      Share.Web.UCM.SyncCommon.Impl
+      Share.Web.UCM.SyncCommon.Types
       Share.Web.UCM.SyncV2.API
       Share.Web.UCM.SyncV2.Impl
       Share.Web.UCM.SyncV2.Queries
       Share.Web.UCM.SyncV2.Types
+      Share.Web.UCM.SyncV3.API
+      Share.Web.UCM.SyncV3.Impl
+      Share.Web.UCM.SyncV3.Queries
       Share.Web.UI.Links
       Unison.Server.NameSearch.Postgres
       Unison.Server.Share.Definitions
