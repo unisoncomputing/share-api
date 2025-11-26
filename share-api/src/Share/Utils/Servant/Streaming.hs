@@ -1,5 +1,6 @@
 module Share.Utils.Servant.Streaming
   ( toConduit,
+    cborStreamToConduit,
     fromConduit,
     sourceIOWithAsync,
     queueToCBORStream,
@@ -12,6 +13,7 @@ where
 import Codec.Serialise qualified as CBOR
 import Conduit
 import Control.Concurrent.STM.TBMQueue qualified as STM
+import Control.Monad.Except
 import Data.ByteString.Builder qualified as Builder
 import Ki.Unlifted qualified as Ki
 import Servant
@@ -34,6 +36,9 @@ sourceIOWithAsync action (SourceT k) =
 
 toConduit :: (MonadIO m, MonadIO n) => SourceIO o -> m (ConduitT void o n ())
 toConduit sourceIO = fmap (transPipe liftIO) . liftIO $ fromSourceIO $ sourceIO
+
+cborStreamToConduit :: (MonadIO m, MonadIO n, CBOR.Serialise o) => SourceIO (CBORStream o) -> m (ConduitT void o (ExceptT CBORStreamError n) ())
+cborStreamToConduit sourceIO = toConduit sourceIO <&> \stream -> (stream .| unpackCBORBytesStream)
 
 fromConduit :: ConduitT void o IO () -> SourceIO o
 fromConduit = conduitToSourceIO
