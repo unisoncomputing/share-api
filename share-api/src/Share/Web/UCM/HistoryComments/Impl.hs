@@ -1,22 +1,23 @@
 module Share.Web.UCM.HistoryComments.Impl (server) where
 
-import Conduit (ConduitT)
+import Control.Monad.Except
+import Control.Monad.Trans.Maybe
 import Data.Either (partitionEithers)
-import Data.Void
 import Network.WebSockets.Connection
-import Servant
 import Share.IDs
+import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
+import Share.Postgres.Queries qualified as PGQ
+import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
-import Share.Utils.Servant.Streaming qualified as Streaming
 import Share.Web.App (WebApp, WebAppServer)
+import Share.Web.Authentication qualified as AuthN
+import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (Unimplemented (Unimplemented), reportError, respondError)
-import Share.Web.UCM.HistoryComments.Queries (insertHistoryComments)
 import Share.Web.UCM.HistoryComments.Queries qualified as Q
 import Unison.Server.HistoryComments.API qualified as HistoryComments
-import Unison.Server.HistoryComments.Types (DownloadCommentsRequest (DownloadCommentsRequest), HistoryCommentChunk (..), UploadCommentsResponse)
+import Unison.Server.HistoryComments.Types (DownloadCommentsRequest (DownloadCommentsRequest), HistoryCommentChunk (..), UploadCommentsResponse (..))
 import Unison.Server.Types
-import Unison.Util.Servant.CBOR
 import Unison.Util.Websockets
 import UnliftIO
 
@@ -54,23 +55,42 @@ fetchChunk size action = do
   go size
 
 uploadHistoryCommentsStreamImpl :: Maybe UserId -> BranchRef -> Connection -> WebApp ()
-uploadHistoryCommentsStreamImpl mayUserId branchRef conn = do
-  authZ <- error "AUTH CHECK HERE"
-  projectId <- error "Process Branch Ref"
-  result <- withQueues @HistoryCommentChunk @_ wsMessageBufferSize wsMessageBufferSize conn \Queues {receive} -> do
-    let loop :: WebApp ()
+uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = do
+  callerUserId <- AuthN.requireAuthenticatedUser' mayCallerUserId
+  result <- withQueues @UploadCommentsResponse @HistoryCommentChunk wsMessageBufferSize wsMessageBufferSize conn \q@(Queues {receive}) -> runExceptT $ do
+    projectBranchSH@ProjectBranchShortHand {userHandle, projectSlug, contributorHandle} <- case IDs.fromText @ProjectBranchShortHand branchRef of
+      Left err -> handleErrInQueue q (UploadCommentsGenericFailure $ IDs.toText err)
+      Right pbsh -> pure pbsh
+    let projectSH = ProjectShortHand {userHandle, projectSlug}
+    mayInfo <- runMaybeT $ mapMaybeT PG.runTransaction $ do
+      project <- MaybeT $ PGQ.projectByShortHand projectSH
+      branch <- MaybeT $ PGQ.branchByProjectBranchShortHand projectBranchSH
+      contributorUser <- MaybeT $ for contributorHandle UserQ.userByHandle
+      pure (project, branch, contributorUser)
+    (project, branch, contributorUser) <- maybe (handleErrInQueue q $ UploadCommentsProjectBranchNotFound br) pure $ mayInfo
+    authZ <-
+      lift (AuthZ.checkUploadToProjectBranchCodebase callerUserId project.projectId contributorUser.user_id) >>= \case
+        Left _authErr -> handleErrInQueue q (UploadCommentsNotAuthorized br)
+        Right authZ -> pure authZ
+    projectId <- error "Process Branch Ref"
+    let loop :: ExceptT UploadCommentsResponse WebApp ()
         loop = do
           (chunk, closed) <- atomically $ fetchChunk insertCommentBatchSize do
             receive <&> fmap \case
-              HistoryCommentErrorChunk err -> (Left err)
+              HistoryCommentErrorChunk err -> (Left $ UploadCommentsGenericFailure err)
               chunk -> (Right chunk)
           let (errs, chunks) = partitionEithers chunk
-          for_ errs reportError
           PG.runTransaction $ Q.insertHistoryComments authZ projectId chunks
+          for errs $ \err -> handleErrInQueue q err
           when (not closed) loop
     loop
   case result of
     Left err -> reportError err
-    Right () -> pure ()
+    Right (Left err) -> reportError err
+    Right (Right ()) -> pure ()
   where
     insertCommentBatchSize = 100
+    handleErrInQueue :: forall o x. Queues UploadCommentsResponse o -> UploadCommentsResponse -> ExceptT UploadCommentsResponse WebApp x
+    handleErrInQueue Queues {send} e = do
+      _ <- atomically $ send e
+      throwError e
