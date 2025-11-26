@@ -67,7 +67,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
       branch <- MaybeT $ PGQ.branchByProjectBranchShortHand projectBranchSH
       contributorUser <- MaybeT $ for contributorHandle UserQ.userByHandle
       pure (project, branch, contributorUser)
-    (project, branch, contributorUser) <- maybe (handleErrInQueue q $ UploadCommentsProjectBranchNotFound br) pure $ mayInfo
+    (project, _branch, contributorUser) <- maybe (handleErrInQueue q $ UploadCommentsProjectBranchNotFound br) pure $ mayInfo
     authZ <-
       lift (AuthZ.checkUploadToProjectBranchCodebase callerUserId project.projectId contributorUser.user_id) >>= \case
         Left _authErr -> handleErrInQueue q (UploadCommentsNotAuthorized br)
