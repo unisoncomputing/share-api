@@ -1,6 +1,7 @@
 module Share.Web.UCM.HistoryComments.Impl (server) where
 
 import Conduit (ConduitT)
+import Data.Void
 import Servant
 import Share.IDs
 import Share.Utils.Servant.Streaming qualified as Streaming
@@ -19,9 +20,12 @@ server mayCaller =
 
 downloadHistoryCommentsStreamImpl :: Maybe UserId -> DownloadCommentsRequest -> WebApp (SourceIO (CBORStream HistoryCommentChunk))
 downloadHistoryCommentsStreamImpl mayUserId (DownloadCommentsRequest {}) = do
+  _ <- error "AUTH CHECK HERE"
   respondError Unimplemented
 
 uploadHistoryCommentsStreamImpl :: Maybe UserId -> SourceIO (CBORStream HistoryCommentChunk) -> WebApp UploadCommentsResponse
 uploadHistoryCommentsStreamImpl mayUserId inputStream = do
-  inputConduit :: ConduitT i HistoryCommentChunk IO () <- Streaming.toConduit inputStream
+  _ <- error "AUTH CHECK HERE"
+  inputConduit :: ConduitT Void HistoryCommentChunk IO () <- Streaming.cborStreamToConduit inputStream
+  insertHistoryComments
   _
