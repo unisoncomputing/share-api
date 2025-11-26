@@ -6,6 +6,7 @@
 module Share.Web.Authentication
   ( cookieSessionTTL,
     requireAuthenticatedUser,
+    requireAuthenticatedUser',
     UnauthenticatedError (..),
     pattern MaybeAuthedUserID,
     pattern AuthenticatedUser,
@@ -39,3 +40,7 @@ instance ToServerError UnauthenticatedError where
 requireAuthenticatedUser :: Maybe Session -> WebApp UserId
 requireAuthenticatedUser (AuthenticatedUser uid) = pure uid
 requireAuthenticatedUser _ = Errors.respondError UnauthenticatedError
+
+requireAuthenticatedUser' :: Maybe UserId -> WebApp UserId
+requireAuthenticatedUser' (Just uid) = pure uid
+requireAuthenticatedUser' _ = Errors.respondError UnauthenticatedError
