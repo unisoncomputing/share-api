@@ -360,6 +360,7 @@ library
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509
@@ -517,6 +518,7 @@ executable share-api
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509
