@@ -303,6 +303,7 @@ library
     , parallel
     , parser-combinators
     , pem
+    , profunctors
     , prometheus-client
     , prometheus-metrics-ghc
     , random
@@ -316,6 +317,7 @@ library
     , servant-client-core
     , servant-conduit
     , servant-server
+    , servant-websockets
     , share-auth
     , share-utils
     , stm
@@ -356,6 +358,7 @@ library
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509
@@ -459,6 +462,7 @@ executable share-api
     , parallel
     , parser-combinators
     , pem
+    , profunctors
     , prometheus-client
     , prometheus-metrics-ghc
     , random
@@ -472,6 +476,7 @@ executable share-api
     , servant-client-core
     , servant-conduit
     , servant-server
+    , servant-websockets
     , share-api
     , share-auth
     , share-utils
@@ -513,6 +518,7 @@ executable share-api
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509

@@ -30,6 +30,7 @@ import Share.Web.Types
 import Share.Web.UCM.Projects.Impl qualified as UCMProjects
 import Share.Web.UCM.Sync.Impl qualified as Sync
 import Share.Web.UCM.SyncV2.Impl qualified as SyncV2
+import Share.Web.UCM.SyncV3.Impl qualified as SyncV3
 import Share.Web.UI.Links qualified as Links
 
 discoveryEndpoint :: WebApp DiscoveryDocument
@@ -91,5 +92,6 @@ server =
     :<|> Sync.server
     :<|> UCMProjects.server
     :<|> SyncV2.server
+    :<|> SyncV3.server
     :<|> Admin.server
     :<|> Webhooks.server
