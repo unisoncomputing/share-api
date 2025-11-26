@@ -18,14 +18,19 @@ server mayCaller =
       uploadHistoryComments = uploadHistoryCommentsStreamImpl mayCaller
     }
 
-downloadHistoryCommentsStreamImpl :: Maybe UserId -> DownloadCommentsRequest -> WebApp (SourceIO (CBORStream HistoryCommentChunk))
+wsMessageBufferSize :: Int
+wsMessageBufferSize = 100
+
+downloadHistoryCommentsStreamImpl :: Maybe UserId -> Connection -> WebApp ()
 downloadHistoryCommentsStreamImpl mayUserId (DownloadCommentsRequest {}) = do
   _ <- error "AUTH CHECK HERE"
   respondError Unimplemented
 
-uploadHistoryCommentsStreamImpl :: Maybe UserId -> SourceIO (CBORStream HistoryCommentChunk) -> WebApp UploadCommentsResponse
-uploadHistoryCommentsStreamImpl mayUserId inputStream = do
+uploadHistoryCommentsStreamImpl :: Maybe UserId -> BranchRef -> Connection -> WebApp ()
+uploadHistoryCommentsStreamImpl mayUserId branchRef conn = do
   _ <- error "AUTH CHECK HERE"
+  withQueues @HistoryCommentChunk @_ wsMessageBufferSize wsMessageBufferSize conn \Queues{receive, send, shutdown, connectionClosed} -> do
+    atomically receive
   inputConduit :: ConduitT Void HistoryCommentChunk IO () <- Streaming.cborStreamToConduit inputStream
   insertHistoryComments
   _
