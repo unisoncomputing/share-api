@@ -1,17 +1,24 @@
 module Share.Web.UCM.HistoryComments.Impl (server) where
 
 import Conduit (ConduitT)
+import Data.Either (partitionEithers)
 import Data.Void
 import Network.WebSockets.Connection
 import Servant
 import Share.IDs
+import Share.Postgres qualified as PG
+import Share.Prelude
 import Share.Utils.Servant.Streaming qualified as Streaming
 import Share.Web.App (WebApp, WebAppServer)
-import Share.Web.Errors (Unimplemented (Unimplemented), respondError)
+import Share.Web.Errors (Unimplemented (Unimplemented), reportError, respondError)
+import Share.Web.UCM.HistoryComments.Queries (insertHistoryComments)
+import Share.Web.UCM.HistoryComments.Queries qualified as Q
 import Unison.Server.HistoryComments.API qualified as HistoryComments
-import Unison.Server.HistoryComments.Types (DownloadCommentsRequest (DownloadCommentsRequest), HistoryCommentChunk, UploadCommentsResponse)
+import Unison.Server.HistoryComments.Types (DownloadCommentsRequest (DownloadCommentsRequest), HistoryCommentChunk (..), UploadCommentsResponse)
+import Unison.Server.Types
 import Unison.Util.Servant.CBOR
 import Unison.Util.Websockets
+import UnliftIO
 
 server :: Maybe UserId -> HistoryComments.Routes WebAppServer
 server mayCaller =
@@ -32,7 +39,7 @@ downloadHistoryCommentsStreamImpl mayUserId (DownloadCommentsRequest {}) = do
 -- If the action returns Nothing, stop early and return what has been collected so far, along with a Bool indicating whether the action was exhausted.
 fetchChunk :: Int -> STM (Maybe a) -> STM ([a], Bool)
 fetchChunk size action = do
-  let go 0 = pure []
+  let go 0 = pure ([], False)
       go n = do
         optional action >>= \case
           Nothing -> do
@@ -50,14 +57,20 @@ uploadHistoryCommentsStreamImpl :: Maybe UserId -> BranchRef -> Connection -> We
 uploadHistoryCommentsStreamImpl mayUserId branchRef conn = do
   authZ <- error "AUTH CHECK HERE"
   projectId <- error "Process Branch Ref"
-  withQueues @HistoryCommentChunk @_ wsMessageBufferSize wsMessageBufferSize conn \Queues {receive} -> do
-    errVar <- newEmptyMVar
-    let loop = do
-          chunk <- fetchChunk insertCommentBatchSize do
+  result <- withQueues @HistoryCommentChunk @_ wsMessageBufferSize wsMessageBufferSize conn \Queues {receive} -> do
+    let loop :: WebApp ()
+        loop = do
+          (chunk, closed) <- atomically $ fetchChunk insertCommentBatchSize do
             receive <&> fmap \case
-                  HistoryCommentErrorChunk err -> Just (Left err)
-                  chunk -> Just (Right chunk)
-          PG.runTransaction $ Q.insertHistoryComments authZ projectId chunk
-   loop
-    where
-      insertCommentBatchSize = 100
+              HistoryCommentErrorChunk err -> (Left err)
+              chunk -> (Right chunk)
+          let (errs, chunks) = partitionEithers chunk
+          for_ errs reportError
+          PG.runTransaction $ Q.insertHistoryComments authZ projectId chunks
+          when (not closed) loop
+    loop
+  case result of
+    Left err -> reportError err
+    Right () -> pure ()
+  where
+    insertCommentBatchSize = 100
