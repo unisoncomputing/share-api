@@ -121,15 +121,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION suffixify_term_fqn(root_bh_id integer, namespace_prefix text, mount_path text, term_name scoped_term_name_lookup)
+CREATE OR REPLACE FUNCTION suffixify_term_fqn(root_bh_id integer, namespace_prefix text, arg_reversed_mount_path text, term_name scoped_term_name_lookup)
 RETURNS text AS $$
 DECLARE
     suffixes text[];
     current_suffix text;
     fallback_suffix text := NULL;
 BEGIN
-    suffixes := generate_valid_suffixifications(term_name.reversed_name || coalesce(mount_path, ''));
-    FOR current_suffix IN SELECT unnest(suffixes)
+    suffixes := generate_valid_suffixifications(term_name.reversed_name || coalesce(arg_reversed_mount_path, ''));
+    FOREACH current_suffix IN ARRAY suffixes
     LOOP
         IF NOT has_name_matching_term_suffixification(root_bh_id, namespace_prefix, current_suffix, term_name)
           THEN
@@ -151,7 +151,7 @@ DECLARE
     fallback_suffix text := NULL;
 BEGIN
     suffixes := generate_valid_suffixifications(type_name.reversed_name || coalesce(mount_path, ''));
-    FOR current_suffix IN SELECT unnest(suffixes)
+    FOREACH current_suffix IN ARRAY suffixes
     LOOP
         IF NOT has_name_matching_type_suffixification(root_bh_id, namespace_prefix, current_suffix, type_name)
           THEN
