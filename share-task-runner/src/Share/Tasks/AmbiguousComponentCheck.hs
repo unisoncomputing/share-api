@@ -8,7 +8,6 @@ import Share.Postgres.Cursors qualified as PG
 import Share.Prelude
 import Share.Utils.Logging (Loggable (..))
 import Share.Utils.Logging qualified as Logging
-import U.Codebase.Sqlite.HashHandle qualified as HH
 import U.Codebase.Sqlite.TempEntity
 import Unison.Hash32
 import Unison.Sync.EntityValidation qualified as EV
@@ -18,7 +17,7 @@ import Unison.Util.Servant.CBOR qualified as CBOR
 
 data AmbiguousComponentCheckError
   = TaskAmbiguousComponentCheckError Hash32
-  | TaskEntityValidationError Hash32 (Either HH.HashingFailure Sync.EntityValidationError)
+  | TaskEntityValidationError Hash32 (Sync.EntityValidationError)
   | TaskEntityDecodingError Hash32 CBOR.DeserialiseFailure
   deriving (Show, Eq)
 
