@@ -12,7 +12,7 @@ done;
 
 source "$(realpath "$(dirname "$0")")/transcript_helpers.sh"
 
-# Base directory containing all transcripts
+# Base directory containing share-api transcripts
 transcripts_location="transcripts/share-apis"
 
 # Find all directories within transcripts_location
