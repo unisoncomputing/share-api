@@ -78,6 +78,8 @@ myproject/main> branch.create-empty dest
 
 myproject/dest> pull.without-history @transcripts/myproject/main
 
+  Updating branch from #sg60bvjo91 to #gd3audeh9u
+
   ✅
 
   Successfully updated myproject/dest from

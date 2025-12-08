@@ -30,7 +30,7 @@ ys = [!a, !b] :+ 3
 
   + a  : 'Nat
   + b  : 'Nat
-  + xs : ['{g} Nat]
+  + xs : ['Nat]
   + ys : [Nat]
 
   Run `update` to apply these changes to your codebase.
@@ -45,7 +45,7 @@ Push and pull it back.
 ``` ucm
 proj/main> push @transcripts/proj/main
 
-  Uploaded 457 entities.
+  Uploaded 464 entities.
 
   I just created @transcripts/proj on http://localhost:5424
 
@@ -66,13 +66,13 @@ proj/pulled> pull @transcripts/proj/main
 proj/pulled> ls .
 
   1. A        (type)
-  2. A/       (2 terms)
+  2. A.       (2 terms)
   3. B        (type)
-  4. B/       (2 terms)
+  4. B.       (2 terms)
   5. a        ('Nat)
   6. b        ('Nat)
-  7. builtin/ (609 terms, 101 types)
-  8. xs       (['{g} Nat])
+  7. builtin. (667 terms, 104 types)
+  8. xs       (['Nat])
   9. ys       ([Nat])
 ```
 
@@ -147,13 +147,13 @@ proj/diverge> pull @transcripts/proj/main
 
   When you're done, you can run
 
-    merge.commit
+    update
 
   to merge your changes back into diverge and delete the
   temporary branch. Or, if you decide to cancel the merge
   instead, you can run
 
-    delete.branch /merge-remote-main-into-diverge
+    cancel
 
   to delete the temporary branch and switch back to diverge.
 ```
