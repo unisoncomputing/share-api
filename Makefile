@@ -4,9 +4,8 @@ SHARE_PROJECT_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 export SHARE_PROJECT_ROOT
 UNAME := $(shell uname)
 STACK_FLAGS := "--fast"
-dist_dir := $(shell stack path | awk '/^dist-dir/{print $$2}')
 exe_name := share-api
-exe := $(dist_dir)/build/$(exe_name)/$(exe_name)
+exe := $(shell stack exec -- which $(exe_name))
 target_dir := docker/tmp
 installed_share := $(target_dir)/$(exe_name)
 unison := $(shell command -v unison)
