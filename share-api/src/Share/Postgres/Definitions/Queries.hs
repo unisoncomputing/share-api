@@ -800,9 +800,17 @@ _localizeTermAndType tm typ = do
 -- variable names.
 saveCachedEvalResult :: forall m. (QueryM m) => CodebaseEnv -> Reference.Id -> V2.Term Symbol -> m ()
 saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash compI) term = do
-  ensureEvalResult >>= \case
-    (True, _) -> pure () -- Already saved.
-    (False, evalResultId) -> doSave evalResultId
+  evalResultId <- ensureEvalResult
+  (alreadySaved :: Bool) <-
+    queryExpect1Col
+      [sql|
+      SELECT EXISTS (
+        SELECT FROM sandboxed_eval_result
+          WHERE user_id = #{codebaseOwner}
+            AND eval_result_id = #{evalResultId}
+      )
+      |]
+  when (not alreadySaved) $ doSave evalResultId
   where
     doSave :: EvalResultId -> m ()
     doSave evalResultId = do
@@ -837,11 +845,11 @@ saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash comp
               FROM values
         |]
     -- Ensure there's a row for this eval result, returning whether it already exists.
-    ensureEvalResult :: m (Bool, EvalResultId)
+    ensureEvalResult :: m EvalResultId
     ensureEvalResult = do
       resultHashId <- HashQ.ensureComponentHashIdsOf id (ComponentHash resultHash)
       let compIndex = pgComponentIndex compI
-      queryExpect1Row @(Bool, EvalResultId)
+      queryExpect1Col @EvalResultId
         [sql|
         WITH values(component_hash_id, component_index) AS (
           SELECT * FROM (VALUES (#{resultHashId}, #{compIndex})) AS t(component_hash_id, component_index)
@@ -850,7 +858,7 @@ saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash comp
             VALUES (#{resultHashId}, #{compIndex})
             ON CONFLICT DO NOTHING
             RETURNING component_hash_id, component_index, id
-        ) SELECT result.id IS NOT NULL, COALESCE(inserted.id, result.id)
+        ) SELECT COALESCE(inserted.id, result.id)
             FROM values val
               LEFT JOIN eval_results result
                 ON val.component_hash_id = result.component_hash_id AND val.component_index = result.component_index
