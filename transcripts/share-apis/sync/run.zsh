@@ -1,8 +1,10 @@
 #!/usr/bin/env zsh
 
 set -e
+source ../../transcript_helpers.sh
 
-source "../transcript_helpers.sh"
+# Reset DB to a known state
+login_user_for_ucm 'transcripts'
 
 for transcript in $(ls *.md | grep -v '^prelude.md$' | grep -v 'output.md$') ; do
    # Reset DB to a known state before each transcript
