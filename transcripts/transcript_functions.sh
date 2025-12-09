@@ -22,7 +22,7 @@ fi
 
 # UCM to use within transcripts
 transcript_ucm() {
-  XDG_DATA_HOME="${ucm_xdg_data_dir}" UNISON_SHARE_HOST="http://localhost:5424" "${UCM_PATH}" "$@"
+  UNISON_PAGER=cat XDG_DATA_HOME="${ucm_xdg_data_dir}" UNISON_SHARE_HOST="http://localhost:5424" "${UCM_PATH}" "$@"
 }
 
 cookie_jar_dir=$(mktemp -d)
