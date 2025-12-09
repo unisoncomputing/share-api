@@ -29,7 +29,7 @@ ambiguous/main> update
 
 Try to push, this should be rejected.
 
-``` ucm :error
+``` ucm
 ambiguous/main> push @transcripts/ambiguous/main
 ```
 
