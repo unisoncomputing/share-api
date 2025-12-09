@@ -26,10 +26,9 @@ endif
 $(target_dir):
 	mkdir $@
 
-$(exe): $(shell find . unison -type f -name '*.hs') $(shell find . unison -type f -name '*.yaml')
-	@echo $(exe)
-	@echo $@
-	stack build $(STACK_FLAGS)
+$(exe): $(shell fd '' . unison --type file -e hs 2>/dev/null || find . unison -type f -name '*.hs') $(shell fd '' . unison --type file -e yaml 2>/dev/null || find . unison -type f -name '*.yaml')
+	@echo Building $(exe_name)
+	stack build $(STACK_FLAGS) $(exe_name)
 
 $(installed_share): $(exe) $(target_dir)
 	cp $(exe) $(installed_share)
