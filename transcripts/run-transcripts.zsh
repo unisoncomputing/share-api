@@ -12,6 +12,8 @@ done;
 
 source "$(realpath "$(dirname "$0")")/transcript_helpers.sh"
 
+echo "UCM Version: $(transcript_ucm --version)"
+
 # Base directory containing share-api transcripts
 transcripts_location="transcripts/share-apis"
 
