@@ -43,6 +43,7 @@
                       {
                         "annotation": {
                           "contents": "#keu02n8is0irijd65cvuos41kukj3f4ni18mmnudrbll2epo6ftd03nt9l0vqc4fvg98198tefgoupco4o0d0gvnigqgr1bmo2neo88#d0",
+                          "fqn": "ATypeAlias.B",
                           "tag": "TermReference"
                         },
                         "segment": "B"
@@ -109,6 +110,7 @@
                       {
                         "annotation": {
                           "contents": "#u9m3jehjj8mtrhh4i4fuk545k3pdged9r0egph91irldf4lc0rsmtma9eoakvv9hoeesciebuqd7kfm0vdnk48gi7q3s7edn5omb65o#a0",
+                          "fqn": "AbilityAlias.abilityAliasMe",
                           "tag": "TermReference"
                         },
                         "segment": "abilityAliasMe"
@@ -132,6 +134,7 @@
                       {
                         "annotation": {
                           "contents": "#u9m3jehjj8mtrhh4i4fuk545k3pdged9r0egph91irldf4lc0rsmtma9eoakvv9hoeesciebuqd7kfm0vdnk48gi7q3s7edn5omb65o",
+                          "fqn": "AbilityAlias",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityAlias"
@@ -149,6 +152,7 @@
                       {
                         "annotation": {
                           "contents": "##Nat",
+                          "fqn": "builtin.Nat",
                           "tag": "TypeReference"
                         },
                         "segment": "Nat"
@@ -211,6 +215,7 @@
                       {
                         "annotation": {
                           "contents": "#i201btc2422jlmnric78btv3kl1palljsgc55mvm6rb9ofdos9u8mh2jd70uev381oiun4todb8vhkvvpteieshbfsot4slo9cgrjcg#a0",
+                          "fqn": "AbilityDeleteMe.abilityDeleteMe",
                           "tag": "TermReference"
                         },
                         "segment": "abilityDeleteMe"
@@ -234,6 +239,7 @@
                       {
                         "annotation": {
                           "contents": "#i201btc2422jlmnric78btv3kl1palljsgc55mvm6rb9ofdos9u8mh2jd70uev381oiun4todb8vhkvvpteieshbfsot4slo9cgrjcg",
+                          "fqn": "AbilityDeleteMe",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityDeleteMe"
@@ -251,6 +257,7 @@
                       {
                         "annotation": {
                           "contents": "##Nat",
+                          "fqn": "builtin.Nat",
                           "tag": "TypeReference"
                         },
                         "segment": "Nat"
@@ -313,6 +320,7 @@
                       {
                         "annotation": {
                           "contents": "#0jhggeqhm54kgt6fmcftpesmdac7a6d7cp3fko413innr5kc8q9jmn6fm1mj9gdtr0iqh75ior1sh6fl0h3h930kph4meeelndlreb8#a0",
+                          "fqn": "AbilityNew.abilityNew",
                           "tag": "TermReference"
                         },
                         "segment": "abilityNew"
@@ -336,6 +344,7 @@
                       {
                         "annotation": {
                           "contents": "#0jhggeqhm54kgt6fmcftpesmdac7a6d7cp3fko413innr5kc8q9jmn6fm1mj9gdtr0iqh75ior1sh6fl0h3h930kph4meeelndlreb8",
+                          "fqn": "AbilityNew",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityNew"
@@ -353,6 +362,7 @@
                       {
                         "annotation": {
                           "contents": "##Text",
+                          "fqn": "builtin.Text",
                           "tag": "TypeReference"
                         },
                         "segment": "Text"
@@ -419,6 +429,7 @@
                       {
                         "annotation": {
                           "contents": "#lh3ufh51cghv5sn14ckq9f2urei00i6adqj3d0vovc51c6f18bhauqfjhkm34227ediga6mc5dp58inn4j714rhenig2jsps9ima7do#a0",
+                          "fqn": "AbilityRenamed.abilityRenameMe",
                           "tag": "TermReference"
                         },
                         "segment": "abilityRenameMe"
@@ -442,6 +453,7 @@
                       {
                         "annotation": {
                           "contents": "#lh3ufh51cghv5sn14ckq9f2urei00i6adqj3d0vovc51c6f18bhauqfjhkm34227ediga6mc5dp58inn4j714rhenig2jsps9ima7do",
+                          "fqn": "AbilityRenamed",
                           "tag": "TypeReference"
                         },
                         "segment": "AbilityRenamed"
@@ -459,6 +471,7 @@
                       {
                         "annotation": {
                           "contents": "##Nat",
+                          "fqn": "builtin.Nat",
                           "tag": "TypeReference"
                         },
                         "segment": "Nat"
@@ -533,11 +546,13 @@
                                 "diffTag": "annotationChange",
                                 "fromAnnotation": {
                                   "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0#a0",
+                                  "fqn": "AbilityUpdateMe.abilityUpdateMe",
                                   "tag": "TermReference"
                                 },
                                 "segment": "abilityUpdateMe",
                                 "toAnnotation": {
                                   "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng#a0",
+                                  "fqn": "AbilityUpdateMe.abilityUpdateMe",
                                   "tag": "TermReference"
                                 }
                               },
@@ -566,11 +581,13 @@
                                 "diffTag": "annotationChange",
                                 "fromAnnotation": {
                                   "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0",
+                                  "fqn": "AbilityUpdateMe",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "AbilityUpdateMe",
                                 "toAnnotation": {
                                   "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng",
+                                  "fqn": "AbilityUpdateMe",
                                   "tag": "TypeReference"
                                 }
                               },
@@ -595,6 +612,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -654,11 +672,13 @@
                                 "diffTag": "annotationChange",
                                 "fromAnnotation": {
                                   "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng#a0",
+                                  "fqn": "AbilityUpdateMe.abilityUpdateMe",
                                   "tag": "TermReference"
                                 },
                                 "segment": "abilityUpdateMe",
                                 "toAnnotation": {
                                   "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0#a0",
+                                  "fqn": "AbilityUpdateMe.abilityUpdateMe",
                                   "tag": "TermReference"
                                 }
                               },
@@ -687,11 +707,13 @@
                                 "diffTag": "annotationChange",
                                 "fromAnnotation": {
                                   "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng",
+                                  "fqn": "AbilityUpdateMe",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "AbilityUpdateMe",
                                 "toAnnotation": {
                                   "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0",
+                                  "fqn": "AbilityUpdateMe",
                                   "tag": "TypeReference"
                                 }
                               },
@@ -716,6 +738,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -769,6 +792,7 @@
                         {
                           "annotation": {
                             "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0#a0",
+                            "fqn": "AbilityUpdateMe.abilityUpdateMe",
                             "tag": "TermReference"
                           },
                           "segment": "abilityUpdateMe"
@@ -792,6 +816,7 @@
                         {
                           "annotation": {
                             "contents": "#8u70g0vaddp9jm3egoq434qialp8hdnjfh8ah8mqjau0i5lmdikt9qbe491ss53i71976fftb2o90ii6gckvs0i2lhovs1n6h0huhb0",
+                            "fqn": "AbilityUpdateMe",
                             "tag": "TypeReference"
                           },
                           "segment": "AbilityUpdateMe"
@@ -809,6 +834,7 @@
                         {
                           "annotation": {
                             "contents": "##Nat",
+                            "fqn": "builtin.Nat",
                             "tag": "TypeReference"
                           },
                           "segment": "Nat"
@@ -860,6 +886,7 @@
                         {
                           "annotation": {
                             "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng#a0",
+                            "fqn": "AbilityUpdateMe.abilityUpdateMe",
                             "tag": "TermReference"
                           },
                           "segment": "abilityUpdateMe"
@@ -883,6 +910,7 @@
                         {
                           "annotation": {
                             "contents": "#nnulmopbjndcs4si1mop30dm01nlum2k7m6j4mmd1df2e63m09lchh2j1gkqd4gua3bl0g3j6hgn76rmc495au8cpr0t83oqoho0sng",
+                            "fqn": "AbilityUpdateMe",
                             "tag": "TypeReference"
                           },
                           "segment": "AbilityUpdateMe"
@@ -900,6 +928,7 @@
                         {
                           "annotation": {
                             "contents": "##Text",
+                            "fqn": "builtin.Text",
                             "tag": "TypeReference"
                           },
                           "segment": "Text"
@@ -960,6 +989,7 @@
                       {
                         "annotation": {
                           "contents": "#fhc8jn2bhvfdnfr89dv2jf7tekuesna7gvje4ck6lfheh9rb184q4ddd29vm9mvfm6u1a98kpgditn8vb09durtel67rpof1c62535o#d0",
+                          "fqn": "DataDeleteMe.C",
                           "tag": "TermReference"
                         },
                         "segment": "C"
@@ -1023,6 +1053,7 @@
                                   {
                                     "annotation": {
                                       "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
+                                      "fqn": "DataUpdateMe.D",
                                       "tag": "TermReference"
                                     },
                                     "segment": "D"
@@ -1070,6 +1101,7 @@
                                   {
                                     "annotation": {
                                       "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
+                                      "fqn": "DataUpdateMe.D2",
                                       "tag": "TermReference"
                                     },
                                     "segment": "D2"
@@ -1081,6 +1113,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -1126,6 +1159,7 @@
                         {
                           "annotation": {
                             "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
+                            "fqn": "DataUpdateMe.D",
                             "tag": "TermReference"
                           },
                           "segment": "D"
@@ -1169,6 +1203,7 @@
                         {
                           "annotation": {
                             "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
+                            "fqn": "DataUpdateMe.D2",
                             "tag": "TermReference"
                           },
                           "segment": "D2"
@@ -1180,6 +1215,7 @@
                         {
                           "annotation": {
                             "contents": "##Nat",
+                            "fqn": "builtin.Nat",
                             "tag": "TypeReference"
                           },
                           "segment": "Nat"
@@ -1262,12 +1298,14 @@
                               {
                                 "diffTag": "annotationChange",
                                 "fromAnnotation": {
-                                  "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                  "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                  "fqn": "MyType",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "x",
                                 "toAnnotation": {
-                                  "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                  "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                  "fqn": "MyType",
                                   "tag": "TypeReference"
                                 }
                               },
@@ -1287,6 +1325,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -1370,12 +1409,14 @@
                               {
                                 "diffTag": "annotationChange",
                                 "fromAnnotation": {
-                                  "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                  "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                  "fqn": "MyType",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "x",
                                 "toAnnotation": {
-                                  "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                  "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                  "fqn": "MyType",
                                   "tag": "TypeReference"
                                 }
                               },
@@ -1395,6 +1436,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -1426,7 +1468,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope"
@@ -1454,6 +1497,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -1480,7 +1524,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "y"
@@ -1498,6 +1543,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Boolean",
+                                      "fqn": "builtin.Boolean",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Boolean"
@@ -1559,7 +1605,8 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                            "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                            "fqn": "MyType",
                             "tag": "TypeReference"
                           },
                           "segment": "x"
@@ -1577,6 +1624,7 @@
                         {
                           "annotation": {
                             "contents": "##Nat",
+                            "fqn": "builtin.Nat",
                             "tag": "TypeReference"
                           },
                           "segment": "Nat"
@@ -1631,7 +1679,8 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                            "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                            "fqn": "MyType",
                             "tag": "TypeReference"
                           },
                           "segment": "x"
@@ -1649,6 +1698,7 @@
                         {
                           "annotation": {
                             "contents": "##Nat",
+                            "fqn": "builtin.Nat",
                             "tag": "TypeReference"
                           },
                           "segment": "Nat"
@@ -1665,7 +1715,8 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                            "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                            "fqn": "MyType",
                             "tag": "TypeReference"
                           },
                           "segment": "newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope"
@@ -1687,6 +1738,7 @@
                         {
                           "annotation": {
                             "contents": "##Text",
+                            "fqn": "builtin.Text",
                             "tag": "TypeReference"
                           },
                           "segment": "Text"
@@ -1703,7 +1755,8 @@
                         },
                         {
                           "annotation": {
-                            "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                            "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                            "fqn": "MyType",
                             "tag": "TypeReference"
                           },
                           "segment": "y"
@@ -1721,6 +1774,7 @@
                         {
                           "annotation": {
                             "contents": "##Boolean",
+                            "fqn": "builtin.Boolean",
                             "tag": "TypeReference"
                           },
                           "segment": "Boolean"
@@ -1741,9 +1795,9 @@
                   }
                 },
                 "fullName": "MyType",
-                "newHash": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                "newHash": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
                 "newTag": "Data",
-                "oldHash": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                "oldHash": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
                 "oldTag": "Data",
                 "shortName": "MyType"
               },
@@ -1787,6 +1841,7 @@
                       {
                         "annotation": {
                           "contents": "#kr4b5jvq4jd5ju6vajlgivsifbrmlbf300vqh4mokm6n56mm799i4c7jc748ih1m9cai72acf2jfhprranv7bsbgkv6ksg84n63dih0#d0",
+                          "fqn": "NewType.X",
                           "tag": "TermReference"
                         },
                         "segment": "X"
@@ -1845,6 +1900,7 @@
                       {
                         "annotation": {
                           "contents": "#hb2ubbk0c6347s5eqic78f26truhgro1ueh7r8invme3hnalmnv880tgpafpeo5kaaihonoph8o7pmhad8mr2e25m0hhor9lr34skhg#d0",
+                          "fqn": "RenamedType.E",
                           "tag": "TermReference"
                         },
                         "segment": "E"
@@ -1874,6 +1930,7 @@
                     {
                       "annotation": {
                         "contents": "#ej86si0ur1lsjade71dojr25phk9bbom9rdks6dltolos5tjivakujcriqe02npba53n9gd7tkh8bmv08ttjb9t35lq2ch5heshqcs0",
+                        "fqn": "builtin.Doc2",
                         "tag": "TypeReference"
                       },
                       "segment": "Doc2"
@@ -1901,6 +1958,7 @@
                       {
                         "annotation": {
                           "contents": "#ej86si0ur1lsjade71dojr25phk9bbom9rdks6dltolos5tjivakujcriqe02npba53n9gd7tkh8bmv08ttjb9t35lq2ch5heshqcs0",
+                          "fqn": "builtin.Doc2",
                           "tag": "TypeReference"
                         },
                         "segment": "Doc2"
@@ -1988,6 +2046,7 @@
                     {
                       "annotation": {
                         "contents": "##Nat",
+                        "fqn": "builtin.Nat",
                         "tag": "TypeReference"
                       },
                       "segment": "Nat"
@@ -2015,6 +2074,7 @@
                       {
                         "annotation": {
                           "contents": "##Nat",
+                          "fqn": "builtin.Nat",
                           "tag": "TypeReference"
                         },
                         "segment": "Nat"
@@ -2078,6 +2138,7 @@
                     {
                       "annotation": {
                         "contents": "#aql7qk3iud6vs4cvu43aimopoosgk0fnipibdkc3so13adencmibgfn0u5c01r0adei55nkl3ttsjhl8gbj7tr4gnpj63g64ftbq6s0",
+                        "fqn": "builtin.Test.Result",
                         "tag": "TypeReference"
                       },
                       "segment": "Result"
@@ -2117,6 +2178,7 @@
                       {
                         "annotation": {
                           "contents": "#aql7qk3iud6vs4cvu43aimopoosgk0fnipibdkc3so13adencmibgfn0u5c01r0adei55nkl3ttsjhl8gbj7tr4gnpj63g64ftbq6s0",
+                          "fqn": "builtin.Test.Result",
                           "tag": "TypeReference"
                         },
                         "segment": "Result"
@@ -2151,6 +2213,7 @@
                       {
                         "annotation": {
                           "contents": "##Sequence",
+                          "fqn": "builtin.List",
                           "tag": "TypeReference"
                         },
                         "segment": "["
@@ -2158,6 +2221,7 @@
                       {
                         "annotation": {
                           "contents": "#aql7qk3iud6vs4cvu43aimopoosgk0fnipibdkc3so13adencmibgfn0u5c01r0adei55nkl3ttsjhl8gbj7tr4gnpj63g64ftbq6s0#d1",
+                          "fqn": "builtin.Test.Result.Ok",
                           "tag": "TermReference"
                         },
                         "segment": "Ok"
@@ -2175,6 +2239,7 @@
                       {
                         "annotation": {
                           "contents": "##Sequence",
+                          "fqn": "builtin.List",
                           "tag": "TypeReference"
                         },
                         "segment": "]"
@@ -2205,6 +2270,7 @@
                     {
                       "annotation": {
                         "contents": "##Nat",
+                        "fqn": "builtin.Nat",
                         "tag": "TypeReference"
                       },
                       "segment": "Nat"
@@ -2232,6 +2298,7 @@
                       {
                         "annotation": {
                           "contents": "##Nat",
+                          "fqn": "builtin.Nat",
                           "tag": "TypeReference"
                         },
                         "segment": "Nat"
@@ -2293,6 +2360,7 @@
                     {
                       "annotation": {
                         "contents": "##Nat",
+                        "fqn": "builtin.Nat",
                         "tag": "TypeReference"
                       },
                       "segment": "Nat"
@@ -2320,6 +2388,7 @@
                       {
                         "annotation": {
                           "contents": "##Nat",
+                          "fqn": "builtin.Nat",
                           "tag": "TypeReference"
                         },
                         "segment": "Nat"
@@ -2376,6 +2445,7 @@
                     {
                       "annotation": {
                         "contents": "##Nat",
+                        "fqn": "builtin.Nat",
                         "tag": "TypeReference"
                       },
                       "segment": "Nat"
@@ -2403,6 +2473,7 @@
                       {
                         "annotation": {
                           "contents": "##Nat",
+                          "fqn": "builtin.Nat",
                           "tag": "TypeReference"
                         },
                         "segment": "Nat"
@@ -2482,6 +2553,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -2556,6 +2628,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -2615,6 +2688,7 @@
                       {
                         "annotation": {
                           "contents": "##Text",
+                          "fqn": "builtin.Text",
                           "tag": "TypeReference"
                         },
                         "segment": "Text"
@@ -2642,6 +2716,7 @@
                         {
                           "annotation": {
                             "contents": "##Text",
+                            "fqn": "builtin.Text",
                             "tag": "TypeReference"
                           },
                           "segment": "Text"
@@ -2688,6 +2763,7 @@
                       {
                         "annotation": {
                           "contents": "##Text",
+                          "fqn": "builtin.Text",
                           "tag": "TypeReference"
                         },
                         "segment": "Text"
@@ -2715,6 +2791,7 @@
                         {
                           "annotation": {
                             "contents": "##Text",
+                            "fqn": "builtin.Text",
                             "tag": "TypeReference"
                           },
                           "segment": "Text"
@@ -2775,14 +2852,15 @@
                   "contents": {
                     "contents": {
                       "fullName": "MyType.newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope",
-                      "hash": "#kdqeud3unjfahfo9ekf8aec1rbure56ud279ug6nfra5t9j31kb711gdj1hoai2rkgar6dpkokhjoija6a37bmkf73221vp65c78h08",
+                      "hash": "#d5kqoer0u0h6hvngbqeuim0e418pe3rgdvoduivree026ntkudkidhom7r4hu7d22painb424p65gt52di8vrn9tlvvig9kpempvv5g",
                       "rendered": {
                         "bestTermName": "newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope",
                         "defnTermTag": "Plain",
                         "signature": [
                           {
                             "annotation": {
-                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                              "fqn": "MyType",
                               "tag": "TypeReference"
                             },
                             "segment": "MyType"
@@ -2804,6 +2882,7 @@
                           {
                             "annotation": {
                               "contents": "##Text",
+                              "fqn": "builtin.Text",
                               "tag": "TypeReference"
                             },
                             "segment": "Text"
@@ -2834,7 +2913,8 @@
                             },
                             {
                               "annotation": {
-                                "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                "fqn": "MyType",
                                 "tag": "TypeReference"
                               },
                               "segment": "MyType"
@@ -2856,6 +2936,7 @@
                             {
                               "annotation": {
                                 "contents": "##Text",
+                                "fqn": "builtin.Text",
                                 "tag": "TypeReference"
                               },
                               "segment": "Text"
@@ -2897,7 +2978,8 @@
                             },
                             {
                               "annotation": {
-                                "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                "fqn": "MyType.MyType",
                                 "tag": "TermReference"
                               },
                               "segment": "MyType"
@@ -3034,12 +3116,14 @@
                                     {
                                       "diffTag": "annotationChange",
                                       "fromAnnotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType",
                                       "toAnnotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       }
                                     },
@@ -3063,6 +3147,7 @@
                                         {
                                           "annotation": {
                                             "contents": "##Nat",
+                                            "fqn": "builtin.Nat",
                                             "tag": "TypeReference"
                                           },
                                           "segment": "Nat"
@@ -3109,12 +3194,14 @@
                                     {
                                       "diffTag": "annotationChange",
                                       "fromAnnotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType",
                                       "toAnnotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       }
                                     },
@@ -3185,12 +3272,14 @@
                                     {
                                       "diffTag": "annotationChange",
                                       "fromAnnotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType",
                                       "toAnnotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       }
                                     },
@@ -3214,6 +3303,7 @@
                                         {
                                           "annotation": {
                                             "contents": "##Nat",
+                                            "fqn": "builtin.Nat",
                                             "tag": "TypeReference"
                                           },
                                           "segment": "Nat"
@@ -3260,12 +3350,14 @@
                                     {
                                       "diffTag": "annotationChange",
                                       "fromAnnotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType",
                                       "toAnnotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       }
                                     },
@@ -3348,7 +3440,8 @@
                           "signature": [
                             {
                               "annotation": {
-                                "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                "fqn": "MyType",
                                 "tag": "TypeReference"
                               },
                               "segment": "MyType"
@@ -3370,6 +3463,7 @@
                             {
                               "annotation": {
                                 "contents": "##Nat",
+                                "fqn": "builtin.Nat",
                                 "tag": "TypeReference"
                               },
                               "segment": "Nat"
@@ -3396,7 +3490,8 @@
                               },
                               {
                                 "annotation": {
-                                  "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                  "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                  "fqn": "MyType",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "MyType"
@@ -3418,6 +3513,7 @@
                               {
                                 "annotation": {
                                   "contents": "##Nat",
+                                  "fqn": "builtin.Nat",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "Nat"
@@ -3455,7 +3551,8 @@
                               },
                               {
                                 "annotation": {
-                                  "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                  "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                  "fqn": "MyType.MyType",
                                   "tag": "TermReference"
                                 },
                                 "segment": "MyType"
@@ -3504,7 +3601,8 @@
                           "signature": [
                             {
                               "annotation": {
-                                "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                "fqn": "MyType",
                                 "tag": "TypeReference"
                               },
                               "segment": "MyType"
@@ -3526,6 +3624,7 @@
                             {
                               "annotation": {
                                 "contents": "##Nat",
+                                "fqn": "builtin.Nat",
                                 "tag": "TypeReference"
                               },
                               "segment": "Nat"
@@ -3552,7 +3651,8 @@
                               },
                               {
                                 "annotation": {
-                                  "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                  "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                  "fqn": "MyType",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "MyType"
@@ -3574,6 +3674,7 @@
                               {
                                 "annotation": {
                                   "contents": "##Nat",
+                                  "fqn": "builtin.Nat",
                                   "tag": "TypeReference"
                                 },
                                 "segment": "Nat"
@@ -3611,7 +3712,8 @@
                               },
                               {
                                 "annotation": {
-                                  "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                  "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                  "fqn": "MyType.MyType",
                                   "tag": "TermReference"
                                 },
                                 "segment": "MyType"
@@ -3676,9 +3778,9 @@
                         }
                       },
                       "fullName": "MyType.x",
-                      "newHash": "#9036g0gfr80583q4hulfhhk44m90509j8tut6l7qo6ive28c1o433aj08c6s02pfnusqoe1das3akgnpve9o7cvoeq7crduapupbspg",
+                      "newHash": "#6m69tfu2qpu29q55k3dgofrmfdm40arru3h35i9sl2h0dqt4bln0n6ld0fgmqfiifn035iclucoioanu6kf9vgr4m01r574p1hg9lp0",
                       "newTag": "Plain",
-                      "oldHash": "#rc1o1cgmlkcl543nn2a3s22ben5a5h49v95ssm34gkdg2oeo3skqbjdfmldlpbo472fmhnbml28ltb5juas6dth9vgb4uqn2irccj8g",
+                      "oldHash": "#1b01pvs4keha7v7s2q0oa2nokvh22st8e6f6880htnh98vnjsufm0hbvmhfmji172t8qupgn8j4d0aq35htjd40lcqh3v58c2msavdo",
                       "oldTag": "Plain",
                       "shortName": "x"
                     },
@@ -3690,14 +3792,15 @@
                   "contents": {
                     "contents": {
                       "fullName": "MyType.y",
-                      "hash": "#qor46g9u2rh3mafcua7t1inoafubj0jfud442k525685a08ec1g77cgknjaakaf0vqcl3mh9u8vo1siqavufgvroepl4a9cdk4ls7c8",
+                      "hash": "#t5j5ac7adsmb132o40daa576517p32gaml4qb0ggs201t1kjvrpnaedodd3r0qn3rm9phb4lvm49as25vuimoakuvdmp4n6ev0geg7g",
                       "rendered": {
                         "bestTermName": "y",
                         "defnTermTag": "Plain",
                         "signature": [
                           {
                             "annotation": {
-                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                              "fqn": "MyType",
                               "tag": "TypeReference"
                             },
                             "segment": "MyType"
@@ -3719,6 +3822,7 @@
                           {
                             "annotation": {
                               "contents": "##Boolean",
+                              "fqn": "builtin.Boolean",
                               "tag": "TypeReference"
                             },
                             "segment": "Boolean"
@@ -3745,7 +3849,8 @@
                             },
                             {
                               "annotation": {
-                                "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                "fqn": "MyType",
                                 "tag": "TypeReference"
                               },
                               "segment": "MyType"
@@ -3767,6 +3872,7 @@
                             {
                               "annotation": {
                                 "contents": "##Boolean",
+                                "fqn": "builtin.Boolean",
                                 "tag": "TypeReference"
                               },
                               "segment": "Boolean"
@@ -3804,7 +3910,8 @@
                             },
                             {
                               "annotation": {
-                                "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                "fqn": "MyType.MyType",
                                 "tag": "TermReference"
                               },
                               "segment": "MyType"
@@ -3882,7 +3989,7 @@
                         "contents": {
                           "contents": {
                             "fullName": "MyType.newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope.modify",
-                            "hash": "#9c6indpuvklhvtplm0oq0v6kqktivqk8bc4k4fr43o5rn1ns16go7i65bbgik038v5qunmd8ceuoohf61rcmuc5phm5tq58l641bdlg",
+                            "hash": "#q7clb6aj3m5ovir9b6p5h3sa03ov90s455ne9qnsl3budnb39h08rfrlrkhe1p6rl0ospcpjg3qpqhqn2pp4gn98eed0cbj6epbc4j0",
                             "rendered": {
                               "bestTermName": "newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope.modify",
                               "defnTermTag": "Plain",
@@ -3894,6 +4001,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Text",
+                                    "fqn": "builtin.Text",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Text"
@@ -3933,6 +4041,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Text",
+                                    "fqn": "builtin.Text",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Text"
@@ -3957,7 +4066,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -3996,7 +4106,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -4032,6 +4143,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -4071,6 +4183,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -4095,7 +4208,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -4134,7 +4248,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -4190,7 +4305,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -4273,7 +4389,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -4400,7 +4517,7 @@
                         "contents": {
                           "contents": {
                             "fullName": "MyType.newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope.set",
-                            "hash": "#ljgu8un7rticqak1000jiflb1llcb5nb9cs6tdria4c26llree29u6gf0t3had9uv3rdj7gbkhaguc62uqsatpf1vd0oi5575rg6020",
+                            "hash": "#u8smr8ali0qv2d9t72lnfrf2fqcv6dvq059rqrvnitu3pil8e6rps05agjjs4eh1rrnfb89jtjpnvkuuvi0v5i52db8n70gpiprsig0",
                             "rendered": {
                               "bestTermName": "newFieldWithAReallyReallyReallyReallyReallyLongNameThatWillForceThePrettyPrinterToWrapItIHope.set",
                               "defnTermTag": "Plain",
@@ -4408,6 +4525,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Text",
+                                    "fqn": "builtin.Text",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Text"
@@ -4428,7 +4546,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -4449,7 +4568,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -4481,6 +4601,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -4501,7 +4622,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -4522,7 +4644,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -4578,7 +4701,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -4637,7 +4761,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -4768,6 +4893,7 @@
                                               {
                                                 "annotation": {
                                                   "contents": "##Nat",
+                                                  "fqn": "builtin.Nat",
                                                   "tag": "TypeReference"
                                                 },
                                                 "segment": "Nat"
@@ -4807,6 +4933,7 @@
                                               {
                                                 "annotation": {
                                                   "contents": "##Nat",
+                                                  "fqn": "builtin.Nat",
                                                   "tag": "TypeReference"
                                                 },
                                                 "segment": "Nat"
@@ -4834,12 +4961,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           },
@@ -4883,12 +5012,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           }
@@ -4947,12 +5078,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           },
@@ -4998,12 +5131,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           },
@@ -5107,6 +5242,7 @@
                                               {
                                                 "annotation": {
                                                   "contents": "##Nat",
+                                                  "fqn": "builtin.Nat",
                                                   "tag": "TypeReference"
                                                 },
                                                 "segment": "Nat"
@@ -5146,6 +5282,7 @@
                                               {
                                                 "annotation": {
                                                   "contents": "##Nat",
+                                                  "fqn": "builtin.Nat",
                                                   "tag": "TypeReference"
                                                 },
                                                 "segment": "Nat"
@@ -5173,12 +5310,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           },
@@ -5222,12 +5361,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           }
@@ -5291,12 +5432,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           }
@@ -5413,12 +5556,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           }
@@ -5552,6 +5697,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -5591,6 +5737,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -5615,7 +5762,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                      "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -5654,7 +5802,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                      "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -5686,6 +5835,7 @@
                                     {
                                       "annotation": {
                                         "contents": "##Nat",
+                                        "fqn": "builtin.Nat",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "Nat"
@@ -5725,6 +5875,7 @@
                                     {
                                       "annotation": {
                                         "contents": "##Nat",
+                                        "fqn": "builtin.Nat",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "Nat"
@@ -5749,7 +5900,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -5788,7 +5940,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -5836,7 +5989,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -5867,7 +6021,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -5923,6 +6078,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -5962,6 +6118,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -5986,7 +6143,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -6025,7 +6183,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -6057,6 +6216,7 @@
                                     {
                                       "annotation": {
                                         "contents": "##Nat",
+                                        "fqn": "builtin.Nat",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "Nat"
@@ -6096,6 +6256,7 @@
                                     {
                                       "annotation": {
                                         "contents": "##Nat",
+                                        "fqn": "builtin.Nat",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "Nat"
@@ -6120,7 +6281,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -6159,7 +6321,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -6211,7 +6374,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -6294,7 +6458,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -6397,9 +6562,9 @@
                               }
                             },
                             "fullName": "MyType.x.modify",
-                            "newHash": "#n3fkmakq0rue9fvi1k5q6j01i820n42mnbqav99uqirmsebcfcfmr7a920lulelbc6tp32sb0sg2pk8po1oo20fnes053shvfedl6i0",
+                            "newHash": "#2nfabc16om2um8ns86nepm11lted805ie55e8id6jmh6hl4oib0pf5dmlah9a7kq9p4i5oho7q9b29phmashihipu77rdjnbrs689og",
                             "newTag": "Plain",
-                            "oldHash": "#fikqb7eq4gjltgbu675ij2fjeh43avl42t5th1l6ak6r0le1mr258ubjv27op2hl7dp4tvqfe567eglbmrddj18dl0qtq9705iu9ob0",
+                            "oldHash": "#6tcb9qjrgn85nn254qcd8vbsvi8j3r665s013dqp5tn5agopkqhjv6viummocdj6628p6auhvit33f4d78kcrtbdn8uof8jv9f2r12o",
                             "oldTag": "Plain",
                             "shortName": "modify"
                           },
@@ -6441,6 +6606,7 @@
                                               {
                                                 "annotation": {
                                                   "contents": "##Nat",
+                                                  "fqn": "builtin.Nat",
                                                   "tag": "TypeReference"
                                                 },
                                                 "segment": "Nat"
@@ -6464,12 +6630,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           },
@@ -6495,12 +6663,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           }
@@ -6559,12 +6729,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           },
@@ -6610,12 +6782,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           },
@@ -6693,6 +6867,7 @@
                                               {
                                                 "annotation": {
                                                   "contents": "##Nat",
+                                                  "fqn": "builtin.Nat",
                                                   "tag": "TypeReference"
                                                 },
                                                 "segment": "Nat"
@@ -6716,12 +6891,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           },
@@ -6747,12 +6924,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                              "fqn": "MyType",
                                               "tag": "TypeReference"
                                             }
                                           }
@@ -6816,12 +6995,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           }
@@ -6938,12 +7119,14 @@
                                           {
                                             "diffTag": "annotationChange",
                                             "fromAnnotation": {
-                                              "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                              "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             },
                                             "segment": "MyType",
                                             "toAnnotation": {
-                                              "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                              "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                              "fqn": "MyType.MyType",
                                               "tag": "TermReference"
                                             }
                                           }
@@ -7051,6 +7234,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -7071,7 +7255,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                      "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -7092,7 +7277,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                      "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -7120,6 +7306,7 @@
                                     {
                                       "annotation": {
                                         "contents": "##Nat",
+                                        "fqn": "builtin.Nat",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "Nat"
@@ -7140,7 +7327,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -7161,7 +7349,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -7209,7 +7398,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -7240,7 +7430,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0tc9e438eurvtevfa6k9pg04qvv66is75hs8iqejkuoaef140g8vvu92hc1ks4gamgc3i1ukgdn0blchp3038l43vffijpsbjh14igo#d0",
+                                        "contents": "#a598urnrgl2u0vnlf616shqjl8j9q8o587oingb2dju205r12s1hjum8h4vfbe6r3o5jta90s4424346chgcjamv1gult06cqd6s8dg#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -7270,6 +7461,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Nat",
+                                      "fqn": "builtin.Nat",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Nat"
@@ -7290,7 +7482,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -7311,7 +7504,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -7339,6 +7533,7 @@
                                     {
                                       "annotation": {
                                         "contents": "##Nat",
+                                        "fqn": "builtin.Nat",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "Nat"
@@ -7359,7 +7554,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -7380,7 +7576,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                        "fqn": "MyType",
                                         "tag": "TypeReference"
                                       },
                                       "segment": "MyType"
@@ -7432,7 +7629,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -7515,7 +7713,8 @@
                                     },
                                     {
                                       "annotation": {
-                                        "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                        "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                        "fqn": "MyType.MyType",
                                         "tag": "TermReference"
                                       },
                                       "segment": "MyType"
@@ -7596,9 +7795,9 @@
                               }
                             },
                             "fullName": "MyType.x.set",
-                            "newHash": "#eupucl46999h691f4eni7vjj96pgrimgvb2blt43vjqcd71fif1k6a5mfqjls3mvdo759fjc0a4ve9vhi900ag6bjtkr7l3ulh71tg8",
+                            "newHash": "#7h31r6ruaasf4d44237a0qr09do46cmu3jpmggr81tchq4ckgoduk99floprd59jeuh2e7p6apijgper9dvr3jcn63uauf3qi162uk8",
                             "newTag": "Plain",
-                            "oldHash": "#in6l5tjdtjmgf4t7s7kqbch5sk8mbq2vho8obf450uql0jrukcrrfrt93vuit578vpb5t3pfk0v5ualkf3sv0qhgrsupnbdmmarsn8g",
+                            "oldHash": "#e6solai2ekb8eb9fgtubutlpn7ljpu6svu43at6du6nanqn7567gdd1vuunkn3p4tnvgc8f3pdc3jtq1o5tvn2q9nuu1v4ccim75hgg",
                             "oldTag": "Plain",
                             "shortName": "set"
                           },
@@ -7618,7 +7817,7 @@
                         "contents": {
                           "contents": {
                             "fullName": "MyType.y.modify",
-                            "hash": "#0bqkrjg60g6oa1g4g31cs6a9m3d0fnun22p6ll18avvhjqsc5tos1gtifrqhtejtb0t1uv39mfr96ghca2u7u3ip0lel1t8tg6g87ho",
+                            "hash": "#k9gkq832k9sv5d7mdri0uecrk2vt6hpnjgfqcnag703kifkato6qnqtt7jfj4l170dpp56sc6b5qs9rpu4u4d4rssku03v7c997g43o",
                             "rendered": {
                               "bestTermName": "y.modify",
                               "defnTermTag": "Plain",
@@ -7630,6 +7829,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Boolean",
+                                    "fqn": "builtin.Boolean",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Boolean"
@@ -7669,6 +7869,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Boolean",
+                                    "fqn": "builtin.Boolean",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Boolean"
@@ -7693,7 +7894,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -7732,7 +7934,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -7764,6 +7967,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Boolean",
+                                      "fqn": "builtin.Boolean",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Boolean"
@@ -7803,6 +8007,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Boolean",
+                                      "fqn": "builtin.Boolean",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Boolean"
@@ -7827,7 +8032,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -7866,7 +8072,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -7918,7 +8125,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -8001,7 +8209,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -8112,7 +8321,7 @@
                         "contents": {
                           "contents": {
                             "fullName": "MyType.y.set",
-                            "hash": "#2ufrude63hjuaj1uvdmicni8uja0kgchjp4cdkdt7pcd7bqlgp86n99cf40tpku2bi7c7re4cumpsisujogkv6cu3h27k1uuuras6c8",
+                            "hash": "#qosgajmnq7n98k1oqb772m7dnbeo8r33tcp5lfeibr3i3ie7d9dnsrnsidfjp5v18di4shu51sta3976l2ao1etpste7s2fl9mgj2t8",
                             "rendered": {
                               "bestTermName": "y.set",
                               "defnTermTag": "Plain",
@@ -8120,6 +8329,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Boolean",
+                                    "fqn": "builtin.Boolean",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Boolean"
@@ -8140,7 +8350,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -8161,7 +8372,8 @@
                                 },
                                 {
                                   "annotation": {
-                                    "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                    "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                    "fqn": "MyType",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "MyType"
@@ -8189,6 +8401,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Boolean",
+                                      "fqn": "builtin.Boolean",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Boolean"
@@ -8209,7 +8422,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -8230,7 +8444,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350",
+                                      "fqn": "MyType",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "MyType"
@@ -8282,7 +8497,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -8365,7 +8581,8 @@
                                   },
                                   {
                                     "annotation": {
-                                      "contents": "#0isu3aust47n76g5cev59evfim7tdq73pc6uuqf1lmg8f8hum3ltnb6s2ptpo5krv0k403bsjbjr6fmpcld3h1jckro47i0rjcjpo4g#d0",
+                                      "contents": "#57628ufvmdt0s85ff8tbk9tvlqj4uk8ld34mn15aqktjt46q7hg7fgqolhtg6j2rk9fmid16v1i5gcjqeti2d9djgsglrafdd3te350#d0",
+                                      "fqn": "MyType.MyType",
                                       "tag": "TermReference"
                                     },
                                     "segment": "MyType"
@@ -8478,6 +8695,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Text",
+                                    "fqn": "builtin.Text",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Text"
@@ -8505,6 +8723,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -8562,6 +8781,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Text",
+                                    "fqn": "builtin.Text",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Text"
@@ -8589,6 +8809,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -8654,6 +8875,7 @@
                                 {
                                   "annotation": {
                                     "contents": "##Text",
+                                    "fqn": "builtin.Text",
                                     "tag": "TypeReference"
                                   },
                                   "segment": "Text"
@@ -8681,6 +8903,7 @@
                                   {
                                     "annotation": {
                                       "contents": "##Text",
+                                      "fqn": "builtin.Text",
                                       "tag": "TypeReference"
                                     },
                                     "segment": "Text"
@@ -8741,9 +8964,9 @@
       "tag": "ok"
     },
     "newRef": "diff-end",
-    "newRefHash": "#dq03sc0bt10nmmrjv1ff16sbvldnlk22id878fbtvd122ep0gcb808f76q8japdj8h99tnc5m1ihhecpiap01hll1eanr8hc7bfrgpg",
+    "newRefHash": "#ftf626em106d5kc99j1g6r5u9kpo0d9mln7u1f968rv7t83p0fomoqb7a05ig2fdsehr8seejvpkdv7pjpva93cgq5tsnaaaube1fd0",
     "oldRef": "diff-start",
-    "oldRefHash": "#0ce6s0hcj5bijhdjr7v3s0pp1vt545bq6vmtl2mq9mi0r47fh17cce05bbcj5sgrt8di1oo4a0lvt57j7n9bug3iq4eh4bqn077ess8",
+    "oldRefHash": "#vkms68pgk50a0p5rmel9eq5euoi072a1qbbtf0oosd4kel0hgf7kivss3rh6v9e8b6g4kn8bhtl2tosch4g12kuhn2gq7d0o4lck258",
     "project": "@transcripts/contribution-diff",
     "tag": "done"
   },

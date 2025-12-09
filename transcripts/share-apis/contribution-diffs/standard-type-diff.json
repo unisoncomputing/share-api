@@ -40,6 +40,7 @@
                   {
                     "annotation": {
                       "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
+                      "fqn": "DataUpdateMe.D",
                       "tag": "TermReference"
                     },
                     "segment": "D"
@@ -87,6 +88,7 @@
                   {
                     "annotation": {
                       "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
+                      "fqn": "DataUpdateMe.D2",
                       "tag": "TermReference"
                     },
                     "segment": "D2"
@@ -98,6 +100,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -143,6 +146,7 @@
           {
             "annotation": {
               "contents": "#6t7t8lem3bmu3j7bsid4omn8gej2gl57ffmkp0ef6qndhndh2q3q6dd1j9akl653r3vtifsunovvbmbjh0iqc7n6rhp4imnsghhe6go#d0",
+              "fqn": "DataUpdateMe.D2",
               "tag": "TermReference"
             },
             "segment": "D2"
@@ -154,6 +158,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -198,6 +203,7 @@
           {
             "annotation": {
               "contents": "#a2bvb3g2l1mkijg24ogg0t23h51pnfepnngk6e3bqfijf4l9ms292t006e8faquo66ctn1ho35vtps13m6evbl6bos2guer5j6jcs1o#d0",
+              "fqn": "DataUpdateMe.D",
               "tag": "TermReference"
             },
             "segment": "D"

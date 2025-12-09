@@ -4,9 +4,8 @@ SHARE_PROJECT_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 export SHARE_PROJECT_ROOT
 UNAME := $(shell uname)
 STACK_FLAGS := "--fast"
-dist_dir := $(shell stack path | awk '/^dist-dir/{print $$2}')
 exe_name := share-api
-exe := $(dist_dir)/build/$(exe_name)/$(exe_name)
+exe := $(shell stack exec -- which $(exe_name))
 target_dir := docker/tmp
 installed_share := $(target_dir)/$(exe_name)
 unison := $(shell command -v unison)
@@ -27,10 +26,9 @@ endif
 $(target_dir):
 	mkdir $@
 
-$(exe): $(shell find . unison -type f -name '*.hs') $(shell find . unison -type f -name '*.yaml')
-	@echo $(exe)
-	@echo $@
-	stack build $(STACK_FLAGS)
+$(exe): $(shell fd '' . unison --type file -e hs 2>/dev/null || find . unison -type f -name '*.hs') $(shell fd '' . unison --type file -e yaml 2>/dev/null || find . unison -type f -name '*.yaml')
+	@echo Building $(exe_name)
+	stack build $(STACK_FLAGS) $(exe_name)
 
 $(installed_share): $(exe) $(target_dir)
 	cp $(exe) $(installed_share)

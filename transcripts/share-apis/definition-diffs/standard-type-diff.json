@@ -54,11 +54,13 @@
                 "diffTag": "annotationChange",
                 "fromAnnotation": {
                   "contents": "#jjpne828dfnvlhiij4i567rd9v2guhbu0qt1eanjrf5oon2djjhod5ej85lp14e3iu24db9kgp1rjqh94vtrei7p3k69b7scfoqlup8",
+                  "fqn": "BeforeType",
                   "tag": "TypeReference"
                 },
                 "segment": "fieldOne",
                 "toAnnotation": {
                   "contents": "#kumofu6ae22blpbip9rl33nvbkqfho86mohivuum8uabph37i4po78fi0120hmka4blrabancldnp93o75s35cc18vi8o9hdu3qrku8",
+                  "fqn": "AfterType",
                   "tag": "TypeReference"
                 }
               },
@@ -78,6 +80,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -145,11 +148,13 @@
                 "diffTag": "annotationChange",
                 "fromAnnotation": {
                   "contents": "#kumofu6ae22blpbip9rl33nvbkqfho86mohivuum8uabph37i4po78fi0120hmka4blrabancldnp93o75s35cc18vi8o9hdu3qrku8",
+                  "fqn": "AfterType",
                   "tag": "TypeReference"
                 },
                 "segment": "fieldOne",
                 "toAnnotation": {
                   "contents": "#jjpne828dfnvlhiij4i567rd9v2guhbu0qt1eanjrf5oon2djjhod5ej85lp14e3iu24db9kgp1rjqh94vtrei7p3k69b7scfoqlup8",
+                  "fqn": "BeforeType",
                   "tag": "TypeReference"
                 }
               },
@@ -169,6 +174,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -191,6 +197,7 @@
                   {
                     "annotation": {
                       "contents": "#kumofu6ae22blpbip9rl33nvbkqfho86mohivuum8uabph37i4po78fi0120hmka4blrabancldnp93o75s35cc18vi8o9hdu3qrku8",
+                      "fqn": "AfterType",
                       "tag": "TypeReference"
                     },
                     "segment": "fieldTwo"
@@ -208,6 +215,7 @@
                   {
                     "annotation": {
                       "contents": "##Text",
+                      "fqn": "builtin.Text",
                       "tag": "TypeReference"
                     },
                     "segment": "Text"
@@ -270,6 +278,7 @@
           {
             "annotation": {
               "contents": "#kumofu6ae22blpbip9rl33nvbkqfho86mohivuum8uabph37i4po78fi0120hmka4blrabancldnp93o75s35cc18vi8o9hdu3qrku8",
+              "fqn": "AfterType",
               "tag": "TypeReference"
             },
             "segment": "fieldOne"
@@ -287,6 +296,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -304,6 +314,7 @@
           {
             "annotation": {
               "contents": "#kumofu6ae22blpbip9rl33nvbkqfho86mohivuum8uabph37i4po78fi0120hmka4blrabancldnp93o75s35cc18vi8o9hdu3qrku8",
+              "fqn": "AfterType",
               "tag": "TypeReference"
             },
             "segment": "fieldTwo"
@@ -321,6 +332,7 @@
           {
             "annotation": {
               "contents": "##Text",
+              "fqn": "builtin.Text",
               "tag": "TypeReference"
             },
             "segment": "Text"
@@ -377,6 +389,7 @@
           {
             "annotation": {
               "contents": "#jjpne828dfnvlhiij4i567rd9v2guhbu0qt1eanjrf5oon2djjhod5ej85lp14e3iu24db9kgp1rjqh94vtrei7p3k69b7scfoqlup8",
+              "fqn": "BeforeType",
               "tag": "TypeReference"
             },
             "segment": "fieldOne"
@@ -394,6 +407,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"

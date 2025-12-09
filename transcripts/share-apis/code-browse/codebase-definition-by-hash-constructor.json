@@ -44,6 +44,7 @@
             {
               "annotation": {
                 "contents": "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0#d0",
+                "fqn": "names.Thing.This",
                 "tag": "TermReference"
               },
               "segment": "This"
@@ -57,6 +58,7 @@
             {
               "annotation": {
                 "contents": "#6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0#d1",
+                "fqn": "names.Thing.That",
                 "tag": "TermReference"
               },
               "segment": "That"

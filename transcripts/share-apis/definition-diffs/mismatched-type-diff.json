@@ -33,6 +33,7 @@
           {
             "annotation": {
               "contents": "#sa4ptibggqmbifhfj37gj2lq487q5ucfuojjcblfaas9bunlthhkvhstsrj20fvlpqakb8e9mqds4p32lnh8ohmf1s5omvdhc23jibg#d0",
+              "fqn": "NewIO.NewIO",
               "tag": "TermReference"
             },
             "segment": "NewIO"

@@ -31,6 +31,7 @@
               {
                 "annotation": {
                   "contents": "##Text",
+                  "fqn": "data.Text",
                   "tag": "TypeReference"
                 },
                 "segment": "Text"
@@ -52,6 +53,7 @@
               {
                 "annotation": {
                   "contents": "##Nat",
+                  "fqn": "data.Nat",
                   "tag": "TypeReference"
                 },
                 "segment": "Nat"
@@ -75,6 +77,7 @@
               {
                 "annotation": {
                   "contents": "##Nat",
+                  "fqn": "data.Nat",
                   "tag": "TypeReference"
                 },
                 "segment": "Nat"
@@ -96,6 +99,7 @@
               {
                 "annotation": {
                   "contents": "##Text",
+                  "fqn": "data.Text",
                   "tag": "TypeReference"
                 },
                 "segment": "Text"

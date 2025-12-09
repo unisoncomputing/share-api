@@ -139,6 +139,7 @@
               {
                 "annotation": {
                   "contents": "#22ffou62u91ks8av7bdmhq10jct5ulot40c84j0k3kfdrh5rj2o6a3ditsfpo6sv6mkde2p13um06mkrsdckudmeh6k4oa7v53887f8",
+                  "fqn": "data.List",
                   "tag": "TypeReference"
                 },
                 "segment": "List"
@@ -188,6 +189,7 @@
               {
                 "annotation": {
                   "contents": "#22ffou62u91ks8av7bdmhq10jct5ulot40c84j0k3kfdrh5rj2o6a3ditsfpo6sv6mkde2p13um06mkrsdckudmeh6k4oa7v53887f8",
+                  "fqn": "data.List",
                   "tag": "TypeReference"
                 },
                 "segment": "List"

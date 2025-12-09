@@ -9,6 +9,7 @@
           {
             "annotation": {
               "contents": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8",
+              "fqn": "lib.data.Tuple",
               "tag": "TypeReference"
             },
             "segment": "Tuple"
@@ -76,6 +77,7 @@
             {
               "annotation": {
                 "contents": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8",
+                "fqn": "lib.data.Tuple",
                 "tag": "TypeReference"
               },
               "segment": "Tuple"
@@ -154,6 +156,7 @@
             {
               "annotation": {
                 "contents": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8#d0",
+                "fqn": "lib.data.Tuple.Tuple",
                 "tag": "TermReference"
               },
               "segment": "Tuple"

@@ -59,11 +59,9 @@ contribution-diff/diff-end> delete.term termDeleteMe
 contribution-diff/diff-end> alias.type DataAliasMe ATypeAlias
 contribution-diff/diff-end> alias.term DataAliasMe.B ATypeAlias.B
 contribution-diff/diff-end> delete.type DataDeleteMe
-contribution-diff/diff-end> delete.namespace DataDeleteMe
 contribution-diff/diff-end> alias.type AbilityAliasMe AbilityAlias
 contribution-diff/diff-end> alias.term AbilityAliasMe.abilityAliasMe AbilityAlias.abilityAliasMe
 contribution-diff/diff-end> delete.type AbilityDeleteMe
-contribution-diff/diff-end> delete.namespace AbilityDeleteMe
 contribution-diff/diff-end> delete.term a.definition.at.path1
 contribution-diff/diff-end> delete.term a.definition.at.path2
 contribution-diff/diff-end> delete.term a.different.path

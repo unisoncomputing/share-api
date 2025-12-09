@@ -9,6 +9,7 @@
         {
           "annotation": {
             "contents": "##Text",
+            "fqn": "builtin.Text",
             "tag": "TypeReference"
           },
           "segment": "Text"
@@ -36,6 +37,7 @@
           {
             "annotation": {
               "contents": "##Text",
+              "fqn": "builtin.Text",
               "tag": "TypeReference"
             },
             "segment": "Text"

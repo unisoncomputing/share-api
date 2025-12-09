@@ -34,6 +34,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -55,6 +56,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -82,6 +84,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -214,6 +217,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": "["
@@ -227,6 +231,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": ", "
@@ -240,6 +245,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": ", "
@@ -250,11 +256,13 @@
                 "diffTag": "annotationChange",
                 "fromAnnotation": {
                   "contents": "#gmjjuqjosr81oqnm9ck6atmve2tnnuu4c5nk89apmg79nsu5djpl6av0os0ekqil0gekdjoianh1rrem7lddsq2i26itq40tbkfgon0",
+                  "fqn": "valueChangesButNameStaysSame",
                   "tag": "TermReference"
                 },
                 "segment": "valueChangesButNameStaysSame",
                 "toAnnotation": {
                   "contents": "#gjmq673r1vrurfotlnirv7vutdhm6sa3s02em5g22kk606mv6duvv8be402dv79312i4a0onepq5bo7citsodvq2g720nttj0ee9p0g",
+                  "fqn": "valueChangesButNameStaysSame",
                   "tag": "TermReference"
                 }
               },
@@ -264,6 +272,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": ", "
@@ -271,13 +280,17 @@
                 ]
               },
               {
-                "annotation": {
-                  "contents": "#pi25gcdv0oq0no6k2ahe6t849u7ht4lopeg5fve58ga5t17a49f1dkbmdm6dn063bn3tsd4adijr4ltf7ad6do8u71oa72i27oack2o",
-                  "tag": "TermReference"
-                },
-                "diffTag": "segmentChange",
-                "fromSegment": "nameChangesButValueStaysSame",
-                "toSegment": "changedNameWithSameValue"
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "#pi25gcdv0oq0no6k2ahe6t849u7ht4lopeg5fve58ga5t17a49f1dkbmdm6dn063bn3tsd4adijr4ltf7ad6do8u71oa72i27oack2o",
+                      "fqn": "nameChangesButValueStaysSame",
+                      "tag": "TermReference"
+                    },
+                    "segment": "nameChangesButValueStaysSame"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
@@ -285,6 +298,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": "]"
@@ -323,6 +337,7 @@
                   {
                     "annotation": {
                       "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
+                      "fqn": "builtin.List.map",
                       "tag": "TermReference"
                     },
                     "segment": "List.map"
@@ -364,6 +379,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat.+",
+                      "fqn": "builtin.Nat.+",
                       "tag": "TermReference"
                     },
                     "segment": "+"
@@ -421,6 +437,7 @@
                   {
                     "annotation": {
                       "contents": "##List.size",
+                      "fqn": "builtin.List.size",
                       "tag": "TermReference"
                     },
                     "segment": "List.size"
@@ -472,6 +489,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -493,6 +511,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -519,6 +538,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -551,6 +571,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat",
+                      "fqn": "builtin.Nat",
                       "tag": "TypeReference"
                     },
                     "segment": "Nat"
@@ -703,6 +724,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": "["
@@ -716,6 +738,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": ", "
@@ -729,6 +752,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": ", "
@@ -739,11 +763,13 @@
                 "diffTag": "annotationChange",
                 "fromAnnotation": {
                   "contents": "#gjmq673r1vrurfotlnirv7vutdhm6sa3s02em5g22kk606mv6duvv8be402dv79312i4a0onepq5bo7citsodvq2g720nttj0ee9p0g",
+                  "fqn": "valueChangesButNameStaysSame",
                   "tag": "TermReference"
                 },
                 "segment": "valueChangesButNameStaysSame",
                 "toAnnotation": {
                   "contents": "#gmjjuqjosr81oqnm9ck6atmve2tnnuu4c5nk89apmg79nsu5djpl6av0os0ekqil0gekdjoianh1rrem7lddsq2i26itq40tbkfgon0",
+                  "fqn": "valueChangesButNameStaysSame",
                   "tag": "TermReference"
                 }
               },
@@ -753,6 +779,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": ", "
@@ -760,13 +787,17 @@
                 ]
               },
               {
-                "annotation": {
-                  "contents": "#pi25gcdv0oq0no6k2ahe6t849u7ht4lopeg5fve58ga5t17a49f1dkbmdm6dn063bn3tsd4adijr4ltf7ad6do8u71oa72i27oack2o",
-                  "tag": "TermReference"
-                },
-                "diffTag": "segmentChange",
-                "fromSegment": "changedNameWithSameValue",
-                "toSegment": "nameChangesButValueStaysSame"
+                "diffTag": "oneSided",
+                "elements": [
+                  {
+                    "annotation": {
+                      "contents": "#pi25gcdv0oq0no6k2ahe6t849u7ht4lopeg5fve58ga5t17a49f1dkbmdm6dn063bn3tsd4adijr4ltf7ad6do8u71oa72i27oack2o",
+                      "fqn": "changedNameWithSameValue",
+                      "tag": "TermReference"
+                    },
+                    "segment": "changedNameWithSameValue"
+                  }
+                ]
               },
               {
                 "diffTag": "both",
@@ -774,6 +805,7 @@
                   {
                     "annotation": {
                       "contents": "##Sequence",
+                      "fqn": "builtin.List",
                       "tag": "TypeReference"
                     },
                     "segment": "]"
@@ -812,6 +844,7 @@
                   {
                     "annotation": {
                       "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
+                      "fqn": "builtin.List.map",
                       "tag": "TermReference"
                     },
                     "segment": "List.map"
@@ -853,6 +886,7 @@
                   {
                     "annotation": {
                       "contents": "##Nat.+",
+                      "fqn": "builtin.Nat.+",
                       "tag": "TermReference"
                     },
                     "segment": "+"
@@ -910,6 +944,7 @@
                   {
                     "annotation": {
                       "contents": "##List.size",
+                      "fqn": "builtin.List.size",
                       "tag": "TermReference"
                     },
                     "segment": "List.size"
@@ -941,6 +976,7 @@
         {
           "annotation": {
             "contents": "##Nat",
+            "fqn": "builtin.Nat",
             "tag": "TypeReference"
           },
           "segment": "Nat"
@@ -962,6 +998,7 @@
         {
           "annotation": {
             "contents": "##Nat",
+            "fqn": "builtin.Nat",
             "tag": "TypeReference"
           },
           "segment": "Nat"
@@ -983,6 +1020,7 @@
         {
           "annotation": {
             "contents": "##Nat",
+            "fqn": "builtin.Nat",
             "tag": "TypeReference"
           },
           "segment": "Nat"
@@ -1010,6 +1048,7 @@
         {
           "annotation": {
             "contents": "##Nat",
+            "fqn": "builtin.Nat",
             "tag": "TypeReference"
           },
           "segment": "Nat"
@@ -1037,6 +1076,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -1058,6 +1098,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -1079,6 +1120,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -1106,6 +1148,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -1225,6 +1268,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": "["
@@ -1238,6 +1282,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": ", "
@@ -1251,6 +1296,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": ", "
@@ -1258,6 +1304,7 @@
           {
             "annotation": {
               "contents": "#gjmq673r1vrurfotlnirv7vutdhm6sa3s02em5g22kk606mv6duvv8be402dv79312i4a0onepq5bo7citsodvq2g720nttj0ee9p0g",
+              "fqn": "valueChangesButNameStaysSame",
               "tag": "TermReference"
             },
             "segment": "valueChangesButNameStaysSame"
@@ -1265,6 +1312,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": ", "
@@ -1272,6 +1320,7 @@
           {
             "annotation": {
               "contents": "#pi25gcdv0oq0no6k2ahe6t849u7ht4lopeg5fve58ga5t17a49f1dkbmdm6dn063bn3tsd4adijr4ltf7ad6do8u71oa72i27oack2o",
+              "fqn": "changedNameWithSameValue",
               "tag": "TermReference"
             },
             "segment": "changedNameWithSameValue"
@@ -1279,6 +1328,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": "]"
@@ -1311,6 +1361,7 @@
           {
             "annotation": {
               "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
+              "fqn": "builtin.List.map",
               "tag": "TermReference"
             },
             "segment": "List.map"
@@ -1352,6 +1403,7 @@
           {
             "annotation": {
               "contents": "##Nat.+",
+              "fqn": "builtin.Nat.+",
               "tag": "TermReference"
             },
             "segment": "+"
@@ -1393,6 +1445,7 @@
           {
             "annotation": {
               "contents": "##List.size",
+              "fqn": "builtin.List.size",
               "tag": "TermReference"
             },
             "segment": "List.size"
@@ -1423,6 +1476,7 @@
         {
           "annotation": {
             "contents": "##Nat",
+            "fqn": "builtin.Nat",
             "tag": "TypeReference"
           },
           "segment": "Nat"
@@ -1444,6 +1498,7 @@
         {
           "annotation": {
             "contents": "##Nat",
+            "fqn": "builtin.Nat",
             "tag": "TypeReference"
           },
           "segment": "Nat"
@@ -1471,6 +1526,7 @@
         {
           "annotation": {
             "contents": "##Nat",
+            "fqn": "builtin.Nat",
             "tag": "TypeReference"
           },
           "segment": "Nat"
@@ -1498,6 +1554,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -1519,6 +1576,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -1546,6 +1604,7 @@
           {
             "annotation": {
               "contents": "##Nat",
+              "fqn": "builtin.Nat",
               "tag": "TypeReference"
             },
             "segment": "Nat"
@@ -1655,6 +1714,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": "["
@@ -1668,6 +1728,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": ", "
@@ -1681,6 +1742,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": ", "
@@ -1688,6 +1750,7 @@
           {
             "annotation": {
               "contents": "#gmjjuqjosr81oqnm9ck6atmve2tnnuu4c5nk89apmg79nsu5djpl6av0os0ekqil0gekdjoianh1rrem7lddsq2i26itq40tbkfgon0",
+              "fqn": "valueChangesButNameStaysSame",
               "tag": "TermReference"
             },
             "segment": "valueChangesButNameStaysSame"
@@ -1695,6 +1758,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": ", "
@@ -1702,6 +1766,7 @@
           {
             "annotation": {
               "contents": "#pi25gcdv0oq0no6k2ahe6t849u7ht4lopeg5fve58ga5t17a49f1dkbmdm6dn063bn3tsd4adijr4ltf7ad6do8u71oa72i27oack2o",
+              "fqn": "nameChangesButValueStaysSame",
               "tag": "TermReference"
             },
             "segment": "nameChangesButValueStaysSame"
@@ -1709,6 +1774,7 @@
           {
             "annotation": {
               "contents": "##Sequence",
+              "fqn": "builtin.List",
               "tag": "TypeReference"
             },
             "segment": "]"
@@ -1741,6 +1807,7 @@
           {
             "annotation": {
               "contents": "#6frvp5jfjtt7odi9769i0p5phuuuij1fi1d9l5ncpelh416ab3vceaphhaijh0ct0v9n793j7e4h78687oij6ai97085u63m264gj5o",
+              "fqn": "builtin.List.map",
               "tag": "TermReference"
             },
             "segment": "List.map"
@@ -1782,6 +1849,7 @@
           {
             "annotation": {
               "contents": "##Nat.+",
+              "fqn": "builtin.Nat.+",
               "tag": "TermReference"
             },
             "segment": "+"
@@ -1823,6 +1891,7 @@
           {
             "annotation": {
               "contents": "##List.size",
+              "fqn": "builtin.List.size",
               "tag": "TermReference"
             },
             "segment": "List.size"
