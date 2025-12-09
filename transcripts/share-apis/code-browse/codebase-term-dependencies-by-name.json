@@ -11,6 +11,7 @@
               {
                 "annotation": {
                   "contents": "##Nat",
+                  "fqn": "builtin.Nat",
                   "tag": "TypeReference"
                 },
                 "segment": "Nat"
@@ -32,6 +33,7 @@
               {
                 "annotation": {
                   "contents": "##Nat",
+                  "fqn": "builtin.Nat",
                   "tag": "TypeReference"
                 },
                 "segment": "Nat"
@@ -53,6 +55,7 @@
               {
                 "annotation": {
                   "contents": "##Nat",
+                  "fqn": "builtin.Nat",
                   "tag": "TypeReference"
                 },
                 "segment": "Nat"
@@ -76,6 +79,7 @@
               {
                 "annotation": {
                   "contents": "##Nat",
+                  "fqn": "builtin.Nat",
                   "tag": "TypeReference"
                 },
                 "segment": "Nat"

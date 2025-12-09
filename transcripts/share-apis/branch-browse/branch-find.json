@@ -136,6 +136,7 @@
               {
                 "annotation": {
                   "contents": "#r7hq9rqc3hebqailf77f656vbgice0716c6f0j7bj06muhj5ac1pq103gdh5974f14fcbmvp44fai5in1ajp5j3ejckfp6bffd3fpoo",
+                  "fqn": "Remote",
                   "tag": "TypeReference"
                 },
                 "segment": "Remote"
