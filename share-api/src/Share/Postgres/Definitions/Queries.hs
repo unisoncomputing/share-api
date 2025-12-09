@@ -800,29 +800,26 @@ _localizeTermAndType tm typ = do
 -- variable names.
 saveCachedEvalResult :: forall m. (QueryM m) => CodebaseEnv -> Reference.Id -> V2.Term Symbol -> m ()
 saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash compI) term = do
-  (mayEvalResultId, sandboxedAlreadySaved) <-
-    queryExpect1Row @(Maybe EvalResultId, Bool)
+  mayResult <-
+    query1Row @(EvalResultId, Bool)
       [sql|
-      SELECT er.id, ser.id IS NOT NULL AS already_saved
+      SELECT er.id, ser.result_bytes_id IS NOT NULL AS already_saved
         FROM component_hashes ch
         JOIN eval_results er ON er.component_hash_id = ch.id
                               AND er.component_index = #{pgComponentIndex compI}
         LEFT JOIN sandboxed_eval_result ser
-          ON ser.eval_result_id = er.id
+          ON ser.eval_result_id = er.id AND ser.user_id = #{codebaseOwner}
           WHERE ch.base32 = #{ComponentHash resultHash}
-           AND ser.user_id = #{codebaseOwner}
-      )
       |]
-  if sandboxedAlreadySaved
-    then pure ()
-    else do
+  case mayResult of
+    Just (_, True) -> pure ()
+    Nothing -> do
       (localIds, dbTerm) <- localizeTerm term
-      case (mayEvalResultId) of
-        Just existingId -> do
-          saveSandboxed dbTerm existingId
-        Nothing -> do
-          evalResultId <- ensureEvalResult localIds
-          saveSandboxed dbTerm evalResultId
+      evalResultId <- ensureEvalResult localIds
+      saveSandboxed dbTerm evalResultId
+    Just (existingId, _) -> do
+      (_localIds, dbTerm) <- localizeTerm term
+      saveSandboxed dbTerm existingId
   where
     saveSandboxed :: TermFormat.Term -> EvalResultId -> m ()
     saveSandboxed dbTerm evalResultId = do
@@ -845,7 +842,7 @@ saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash comp
           SELECT * FROM (VALUES (#{resultHashId}, #{compIndex})) AS t(component_hash_id, component_index)
         ) INSERT INTO eval_results (component_hash_id, component_index)
             VALUES (#{resultHashId}, #{compIndex})
-            RETURNING component_hash_id, component_index, id
+            RETURNING id
       |]
 
       let textLocals = zip [0 :: Int32 ..] (Vector.toList textLookup)
