@@ -800,27 +800,53 @@ _localizeTermAndType tm typ = do
 -- variable names.
 saveCachedEvalResult :: forall m. (QueryM m) => CodebaseEnv -> Reference.Id -> V2.Term Symbol -> m ()
 saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash compI) term = do
-  evalResultId <- ensureEvalResult
-  (alreadySaved :: Bool) <-
-    queryExpect1Col
+  (mayEvalResultId, sandboxedAlreadySaved) <-
+    queryExpect1Row @(Maybe EvalResultId, Bool)
       [sql|
-      SELECT EXISTS (
-        SELECT FROM sandboxed_eval_result
-          WHERE user_id = #{codebaseOwner}
-            AND eval_result_id = #{evalResultId}
+      SELECT er.id, ser.id IS NOT NULL AS already_saved
+        FROM component_hashes ch
+        JOIN eval_results er ON er.component_hash_id = ch.id
+                              AND er.component_index = #{pgComponentIndex compI}
+        LEFT JOIN sandboxed_eval_result ser
+          ON ser.eval_result_id = er.id
+          WHERE ch.base32 = #{ComponentHash resultHash}
+           AND ser.user_id = #{codebaseOwner}
       )
       |]
-  when (not alreadySaved) $ doSave evalResultId
+  if sandboxedAlreadySaved
+    then pure ()
+    else do
+      (localIds, dbTerm) <- localizeTerm term
+      case (mayEvalResultId) of
+        Just existingId -> do
+          saveSandboxed dbTerm existingId
+        Nothing -> do
+          evalResultId <- ensureEvalResult localIds
+          saveSandboxed dbTerm evalResultId
   where
-    doSave :: EvalResultId -> m ()
-    doSave evalResultId = do
-      (LocalIds.LocalIds {textLookup, defnLookup}, dbTerm) <- localizeTerm term
+    saveSandboxed :: TermFormat.Term -> EvalResultId -> m ()
+    saveSandboxed dbTerm evalResultId = do
       resultBytesId <- ensureBytesIdsOf id (evalResultTermToByteString $ EvalResultTerm dbTerm)
       execute_
         [sql|
           INSERT INTO sandboxed_eval_result (user_id, eval_result_id, result_bytes_id)
             VALUES (#{codebaseOwner}, #{evalResultId}, #{resultBytesId})
         |]
+
+    -- Ensure there's a row for this eval result, returning whether it already exists.
+    ensureEvalResult :: PgLocalIds -> m EvalResultId
+    ensureEvalResult LocalIds.LocalIds {textLookup, defnLookup} = do
+      resultHashId <- HashQ.ensureComponentHashIdsOf id (ComponentHash resultHash)
+      let compIndex = pgComponentIndex compI
+      evalResultId <-
+        queryExpect1Col @EvalResultId
+          [sql|
+        WITH values(component_hash_id, component_index) AS (
+          SELECT * FROM (VALUES (#{resultHashId}, #{compIndex})) AS t(component_hash_id, component_index)
+        ) INSERT INTO eval_results (component_hash_id, component_index)
+            VALUES (#{resultHashId}, #{compIndex})
+            RETURNING component_hash_id, component_index, id
+      |]
 
       let textLocals = zip [0 :: Int32 ..] (Vector.toList textLookup)
       whenNonEmpty textLocals $
@@ -844,27 +870,7 @@ saveCachedEvalResult (CodebaseEnv {codebaseOwner}) (Reference.Id resultHash comp
             SELECT #{evalResultId}, values.local_index, values.hash_id
               FROM values
         |]
-    -- Ensure there's a row for this eval result, returning whether it already exists.
-    ensureEvalResult :: m EvalResultId
-    ensureEvalResult = do
-      resultHashId <- HashQ.ensureComponentHashIdsOf id (ComponentHash resultHash)
-      let compIndex = pgComponentIndex compI
-      queryExpect1Col @EvalResultId
-        [sql|
-        WITH values(component_hash_id, component_index) AS (
-          SELECT * FROM (VALUES (#{resultHashId}, #{compIndex})) AS t(component_hash_id, component_index)
-        ), inserted(component_hash_id, component_index, id) AS (
-          INSERT INTO eval_results (component_hash_id, component_index)
-            VALUES (#{resultHashId}, #{compIndex})
-            ON CONFLICT DO NOTHING
-            RETURNING component_hash_id, component_index, id
-        ) SELECT COALESCE(inserted.id, result.id)
-            FROM values val
-              LEFT JOIN eval_results result
-                ON val.component_hash_id = result.component_hash_id AND val.component_index = result.component_index
-              LEFT JOIN inserted
-                ON inserted.component_hash_id = val.component_hash_id AND inserted.component_index = val.component_index
-      |]
+      pure evalResultId
 
 -- | Encode and save a term component to the database. See 'saveEncodedTermComponent' for a more
 -- efficient version if you've already got an encoded term component available.
