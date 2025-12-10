@@ -289,7 +289,7 @@ listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
 listProjectsFromCatalogWithMetadata ::
   Maybe UserId ->
   -- | (project, numFavs, isFavedByCaller)
-  PG.Transaction e (Map CategoryName [(Project, FavData, ProjectOwner)])
+  PG.Transaction e (Map CategoryName (NonEmpty (Project, FavData, ProjectOwner)))
 listProjectsFromCatalogWithMetadata callerUserId = do
   projects :: [(Project PG.:. PG.Only CategoryName PG.:. FavData PG.:. ProjectOwner)] <- PG.queryListRows sql
   projects
