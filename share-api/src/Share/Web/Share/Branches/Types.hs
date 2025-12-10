@@ -13,6 +13,8 @@ import Share.Branch (Branch (..))
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Postgres.IDs
+import Share.Prelude
+import Share.Utils.API (Cursor, (:++) (..))
 import Share.Web.Share.Contributions.Types (ShareContribution)
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 import Share.Web.Share.Projects.Types
@@ -75,3 +77,53 @@ instance ToHttpApiData BranchKindFilter where
   toQueryParam AllBranchKinds = "all"
   toQueryParam OnlyCoreBranches = "core"
   toQueryParam OnlyContributorBranches = "contributor"
+
+-- {
+--   "projectRef": "@unison/base",
+--   "branchRef": "main",
+--   "prevCursor": "c-asdf-1234",
+--   "nextCursor": "c-asdf-1234",
+--   "history": [
+--     {
+--       "tag": "Changeset",
+--       "causalHash": "#asdf-1234",
+--     }
+--   ]
+-- }
+
+data BranchHistoryResponse = BranchHistoryResponse
+  { projectRef :: ProjectShortHand,
+    branchRef :: BranchShortHand,
+    cursor :: Maybe (Cursor CausalHash),
+    history :: [BranchHistoryEntry]
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON BranchHistoryResponse where
+  toJSON BranchHistoryResponse {..} =
+    object
+      [ "projectRef" .= IDs.toText @ProjectShortHand projectRef,
+        "branchRef" .= IDs.toText @BranchShortHand branchRef,
+        "cursor" .= cursor,
+        "history" .= history
+      ]
+
+data BranchHistoryCausal = BranchHistoryCausal
+  { causalHash :: CausalHash
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON BranchHistoryCausal where
+  toJSON BranchHistoryCausal {..} =
+    object
+      [ "causalHash" .= causalHash
+      ]
+
+data BranchHistoryEntry
+  = BranchHistoryCausalEntry BranchHistoryCausal
+  deriving stock (Eq, Show)
+
+instance ToJSON BranchHistoryEntry where
+  toJSON = \case
+    (BranchHistoryCausalEntry causal) ->
+      toJSON (causal :++ (object ["tag" .= ("Changeset" :: Text)]))
