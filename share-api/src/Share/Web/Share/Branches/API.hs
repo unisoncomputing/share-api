@@ -4,13 +4,13 @@
 module Share.Web.Share.Branches.API where
 
 import Data.Time (UTCTime)
+import Servant
 import Share.IDs
 import Share.Utils.API
 import Share.Utils.Caching
-import Share.Web.Share.Branches.Types (BranchKindFilter, ShareBranch)
+import Share.Web.Share.Branches.Types (BranchHistoryResponse, BranchKindFilter, ShareBranch)
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Types
-import Servant
 import U.Codebase.HashTags (CausalHash)
 
 type ProjectBranchesAPI =
@@ -22,12 +22,18 @@ type ProjectBranchResourceAPI =
       :<|> ("releaseNotes" :> ProjectBranchReleaseNotesEndpoint)
       :<|> ProjectBranchDetailsEndpoint
       :<|> ProjectBranchDeleteEndpoint
+      :<|> ProjectBranchHistoryEndpoint
       :<|> CodeBrowseAPI
   )
 
 type ProjectBranchDetailsEndpoint = Get '[JSON] ShareBranch
 
 type ProjectBranchDeleteEndpoint = Delete '[JSON] ()
+
+type ProjectBranchHistoryEndpoint =
+  QueryParam "cursor" (Cursor CausalHash)
+    :> QueryParam "limit" Limit
+    :> Get '[JSON] BranchHistoryResponse
 
 type ProjectBranchReadmeEndpoint =
   QueryParam "rootHash" CausalHash

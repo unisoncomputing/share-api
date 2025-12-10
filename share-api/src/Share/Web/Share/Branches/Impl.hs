@@ -40,7 +40,7 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.Share.Branches.API (ListBranchesCursor)
 import Share.Web.Share.Branches.API qualified as API
-import Share.Web.Share.Branches.Types (BranchKindFilter (..), ShareBranch (..))
+import Share.Web.Share.Branches.Types (BranchHistoryCausal (..), BranchHistoryEntry (..), BranchHistoryResponse (..), BranchKindFilter (..), ShareBranch (..))
 import Share.Web.Share.Branches.Types qualified as API
 import Share.Web.Share.CodeBrowsing.API qualified as API
 import Share.Web.Share.Contributions.Types
@@ -89,6 +89,7 @@ branchesServer session userHandle projectSlug =
                    :<|> getProjectBranchReleaseNotesEndpoint session userHandle projectSlug branchShortHand
                    :<|> getProjectBranchDetailsEndpoint session userHandle projectSlug branchShortHand
                    :<|> deleteProjectBranchEndpoint session userHandle projectSlug branchShortHand
+                   :<|> branchHistoryEndpoint session userHandle projectSlug branchShortHand
                    :<|> branchCodeBrowsingServer session userHandle projectSlug branchShortHand
                )
          )
@@ -490,6 +491,38 @@ deleteProjectBranchEndpoint session userHandle projectSlug branchShortHand = do
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkBranchDelete callerUserId project projectBranch
   PG.runTransaction $ Q.softDeleteBranch branchId
   pure ()
+
+branchHistoryEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  BranchShortHand ->
+  Maybe (Cursor CausalHash) ->
+  Maybe Limit ->
+  WebApp BranchHistoryResponse
+branchHistoryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug branchRef@(BranchShortHand {contributorHandle, branchName}) mayCursor mayLimit = do
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
+  let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+  causalId <- resolveRootHash codebase branchHead Nothing
+  PG.runTransaction do
+    (causalHashesWithTimes, mayNextCursor) <- CausalQ.pagedCausalAncestors codebase causalId limit mayCursor
+    let history =
+          causalHashesWithTimes <&> \(causalHash) ->
+            BranchHistoryCausalEntry (BranchHistoryCausal {causalHash})
+    pure $
+      BranchHistoryResponse
+        { projectRef,
+          branchRef,
+          cursor = mayNextCursor,
+          history
+        }
+  where
+    projectRef = ProjectShortHand {userHandle, projectSlug}
+    limit = fromMaybe defaultLimit mayLimit
+    defaultLimit = Limit 20
+    projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
 
 getProjectBranchDocEndpoint ::
   Text ->
