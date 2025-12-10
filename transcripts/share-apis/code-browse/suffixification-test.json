@@ -1,0 +1,213 @@
+{
+  "body": {
+    "missingDefinitions": [],
+    "termDefinitions": {
+      "#gautmg9djqka7229ff9dcuers1ilg8tdleaivgeh3em11gdjdnr6jl98hag18htoqhiupmmvttq3knuuonibla25nuqdrjo9i8ic3g0": {
+        "bestTermName": "macroTerm",
+        "defnTermTag": "Plain",
+        "signature": [
+          {
+            "annotation": {
+              "tag": "DelayForceChar"
+            },
+            "segment": "'"
+          },
+          {
+            "annotation": {
+              "contents": "##Nat",
+              "fqn": "builtin.Nat",
+              "tag": "TypeReference"
+            },
+            "segment": "Nat"
+          }
+        ],
+        "termDefinition": {
+          "contents": [
+            {
+              "annotation": {
+                "contents": "macroTerm",
+                "tag": "HashQualifier"
+              },
+              "segment": "macroTerm"
+            },
+            {
+              "annotation": {
+                "tag": "TypeAscriptionColon"
+              },
+              "segment": " :"
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "DelayForceChar"
+              },
+              "segment": "'"
+            },
+            {
+              "annotation": {
+                "contents": "##Nat",
+                "fqn": "builtin.Nat",
+                "tag": "TypeReference"
+              },
+              "segment": "Nat"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": {
+                "contents": "macroTerm",
+                "tag": "HashQualifier"
+              },
+              "segment": "macroTerm"
+            },
+            {
+              "annotation": {
+                "tag": "BindingEquals"
+              },
+              "segment": " ="
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "tag": "ControlKeyword"
+              },
+              "segment": "do"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": null,
+              "segment": "  "
+            },
+            {
+              "annotation": {
+                "contents": "_",
+                "tag": "HashQualifier"
+              },
+              "segment": "_"
+            },
+            {
+              "annotation": {
+                "tag": "BindingEquals"
+              },
+              "segment": " ="
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "#g60c4so0q827jpdkpd3ll8kfst33s3fuh58akvb5r8fp4jimmgfq8is5ongh4bfo9m048nf9soa54fg271fgcqdlktl4pnf6l01s4ug",
+                "fqn": "ns.myName",
+                "tag": "TermReference"
+              },
+              "segment": "myName"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": null,
+              "segment": "  "
+            },
+            {
+              "annotation": {
+                "contents": "_",
+                "tag": "HashQualifier"
+              },
+              "segment": "_"
+            },
+            {
+              "annotation": {
+                "tag": "BindingEquals"
+              },
+              "segment": " ="
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "#9gk80dbuj7dm76vf8vfe49k265k0n6bcft5g7s3a6j0papkv7bd5n78735qs1s0ag3rcrm5pcip02e8b28qf9i1kpvvu1fdl8p4fkeg",
+                "fqn": "lib.data.myName",
+                "tag": "TermReference"
+              },
+              "segment": "data.myName"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": null,
+              "segment": "  "
+            },
+            {
+              "annotation": {
+                "contents": "_",
+                "tag": "HashQualifier"
+              },
+              "segment": "_"
+            },
+            {
+              "annotation": {
+                "tag": "BindingEquals"
+              },
+              "segment": " ="
+            },
+            {
+              "annotation": null,
+              "segment": " "
+            },
+            {
+              "annotation": {
+                "contents": "#5q9p802rfedn2kuvc3ohbjiqk7l6usu6gfv6et2l93e5s7q2vtoai3nup17a02djcsekjiq99unf62el8ilih4f1c0jqbgioup67da0",
+                "fqn": "lib.other.myOtherName",
+                "tag": "TermReference"
+              },
+              "segment": "other.myOtherName"
+            },
+            {
+              "annotation": null,
+              "segment": "\n"
+            },
+            {
+              "annotation": null,
+              "segment": "  "
+            },
+            {
+              "annotation": {
+                "tag": "NumericLiteral"
+              },
+              "segment": "1"
+            }
+          ],
+          "tag": "UserObject"
+        },
+        "termDocs": [],
+        "termNames": [
+          "macroTerm"
+        ]
+      }
+    },
+    "typeDefinitions": {}
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

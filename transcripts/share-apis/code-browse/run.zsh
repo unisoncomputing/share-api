@@ -28,6 +28,9 @@ fetch "$transcripts_user" GET codebase-type-dependents-by-name "/users/transcrip
 fetch "$transcripts_user" GET codebase-term-dependents-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependents/by-hash/@dcgdua2lj6upd1ah5v0qp09gjsej0d77d87fu6qn8e2qrssnlnmuinoio46hiu53magr7qn8vnqke8ndt0v76700o5u8gcvo7st28jg"
 fetch "$transcripts_user" GET codebase-type-dependents-by-hash "/users/transcripts/projects/code-browse/branches/main/definitions/dependents/by-hash/@6kbe32g06nqg93cqub6ohqc4ql4o49ntgnunifds0t75qre6lacnbsr3evn8bkivj68ecbvmhkbak4dbg4fqertcpgb396rmo34tnh0"
 
+# Test that suffixification works as expected.
+fetch "$transcripts_user" GET suffixification-test "/users/transcripts/projects/code-browse/branches/main/definitions/by-name/macroTerm"
+
 
 fetch "$transcripts_user" GET codebase-find "/users/transcripts/projects/code-browse/branches/main/find?query=oranges.tw"
 fetch "$transcripts_user" GET codebase-namespace-by-name "/users/transcripts/projects/code-browse/branches/main/namespaces/by-name/names"

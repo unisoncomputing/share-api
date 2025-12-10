@@ -29,6 +29,24 @@ external.externalName = 99
 -- Helpful for testing proper query encoding/decoding for a name that must be
 -- uri encoded
 a names./+% b = 10
+
+
+-- Test that suffixification works as expected
+
+-- We shouldn't qualify project names if the only conflict is in lib.
+ns.myName = "projectName"
+lib.data.myName = "libName"
+
+-- We _should_ still qualify names in lib if all conflicts are in libs.
+lib.other.myOtherName = "other.myOtherName"
+lib.data.myOtherName = "data.myOtherName"
+
+-- A term which references the names we defined above
+macroTerm = do
+  _ = ns.myName
+  _ = lib.data.myName
+  _ = lib.other.myOtherName
+  1
 ```
 
 ```ucm
