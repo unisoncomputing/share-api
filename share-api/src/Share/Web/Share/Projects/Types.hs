@@ -377,7 +377,7 @@ instance Aeson.FromJSON FavProjectRequest where
 
 data CatalogCategory = CatalogCategory
   { name :: CategoryName,
-    projects :: [APIProject :++ FavData]
+    projects :: NonEmpty (APIProject :++ FavData)
   }
   deriving (Show)
 
