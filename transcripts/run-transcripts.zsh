@@ -26,6 +26,6 @@ for dir in "$transcripts_location"/*(/); do
     if [ -z "${1:-}" ] || [[ "$transcript" == "$1"* ]]; then
         pg_reset_fixtures
         echo "Running transcript $transcript"
-        (cd "$dir" && {rm -f ./*.json(N) || true} && ./run.zsh)
+        (cd "$dir" && rm -rf ./out && ./run.zsh)
     fi
 done

@@ -112,9 +112,10 @@ fetch() {
     api_path="$4"
     echo "${testname}" "${api_path}"
     fetch_data "$@" 2> "${status_code_file}" | clean_for_transcript > "${result_file}"
+    mkdir -p ./out
     # Try embedding the json response as-is, but if it's not valid json (e.g. it's an error message instead), embed it as a string.
-    jq --sort-keys -n --slurpfile status "${status_code_file}" --slurpfile body "${result_file}" '{"status": $status, "body": ($body | .[0])}' > "./$testname.json" 2> /dev/null || {
-        jq --sort-keys -n --slurpfile status "${status_code_file}" --rawfile body "${result_file}" '{"status": $status, "body": $body}'  > "./$testname.json"
+    jq --sort-keys -n --slurpfile status "${status_code_file}" --slurpfile body "${result_file}" '{"status": $status, "body": ($body | .[0])}' > "./out/$testname.json" 2> /dev/null || {
+        jq --sort-keys -n --slurpfile status "${status_code_file}" --rawfile body "${result_file}" '{"status": $status, "body": $body}'  > "./out/$testname.json"
     }
     jq_exit=$?
     if [ $jq_exit -ne 0 ]; then
