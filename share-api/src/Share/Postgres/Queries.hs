@@ -159,7 +159,7 @@ searchProjects caller userIdFilter (Query query) psk limit = do
           FROM projects_by_user_permission(#{caller}, #{ProjectView}) p
             JOIN users owner ON p.owner_user_id = owner.id
           WHERE p.owner_user_id = #{userId}
-          ORDER BY p.created_at, p.slug DESC
+          ORDER BY p.created_at DESC, p.slug ASC
           LIMIT #{limit}
           |]
     _ -> do
@@ -276,7 +276,7 @@ listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
         FROM projects_by_user_permission(#{callerUserId}, #{ProjectView}) AS p
           JOIN users owner ON owner.id = p.owner_user_id
         WHERE p.owner_user_id = #{projectOwnerUserId}
-        ORDER BY p.created_at, p.slug DESC
+        ORDER BY p.created_at DESC, p.slug ASC
       |]
   where
     unpackRows :: [Project PG.:. FavData PG.:. ProjectOwner] -> [(Project, FavData, ProjectOwner)]
