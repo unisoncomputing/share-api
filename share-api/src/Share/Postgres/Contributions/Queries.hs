@@ -260,10 +260,10 @@ listContributionsByUserId callerUserId userId limit mayCursor mayStatusFilter ma
         contribution.author_id,
         (SELECT COUNT(*) FROM comments comment WHERE comment.contribution_id = contribution.id AND comment.deleted_at IS NULL) as num_comments
       FROM contributions AS contribution
-        JOIN projects AS project ON project.id = contribution.project_id
+        JOIN projects_by_user_permission(#{callerUserId}, #{ProjectView}) AS project
+          ON project.id = contribution.project_id
       WHERE
         contribution.author_id = #{userId}
-        AND user_has_project_permission(#{callerUserId}, project.id, #{ProjectView})
         AND (#{mayStatusFilter} IS NULL OR contribution.status = #{mayStatusFilter})
         AND ^{cursorFilter}
         AND ^{kindFilter}

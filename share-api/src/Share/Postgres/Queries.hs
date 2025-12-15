@@ -273,10 +273,9 @@ listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
           owner.handle,
           owner.name,
           EXISTS (SELECT FROM org_members WHERE org_members.organization_user_id = owner.id) AS is_org
-        FROM projects p
+        FROM projects_by_user_permission(#{callerUserId}, #{ProjectView}) AS project ON project.id = b.project_id
           JOIN users owner ON owner.id = p.owner_user_id
         WHERE p.owner_user_id = #{projectOwnerUserId}
-          AND user_has_project_permission(#{callerUserId}, p.id, #{ProjectView})
         ORDER BY p.created_at DESC
       |]
   where
@@ -876,12 +875,11 @@ listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserI
               project_owner.name,
               EXISTS (SELECT FROM org_members WHERE org_members.organization_user_id = project.owner_user_id)
             FROM project_branches b
-            JOIN projects project ON project.id = b.project_id
+            JOIN projects_by_user_permission(#{mayCallerUserId}, #{ProjectView}) AS project ON project.id = b.project_id
             JOIN users AS project_owner ON project_owner.id = project.owner_user_id
             WHERE
               b.deleted_at IS NULL
               AND b.contributor_id = #{contributorUserId}
-              AND user_has_project_permission(#{mayCallerUserId}, b.project_id, #{ProjectView})
               |],
                 branchNameFilter,
                 cursorFilter,
