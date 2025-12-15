@@ -156,22 +156,20 @@ searchProjects caller userIdFilter (Query query) psk limit = do
       PG.queryListRows @(Project PG.:. PG.Only UserHandle)
         [PG.sql|
         SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-          FROM projects p
+          FROM projects_by_user_permission(#{caller}, #{ProjectView}) p
             JOIN users owner ON p.owner_user_id = owner.id
           WHERE p.owner_user_id = #{userId}
-            AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
-          ORDER BY p.created_at DESC
+          ORDER BY p.created_at DESC, p.slug ASC
           LIMIT #{limit}
           |]
     _ -> do
       PG.queryListRows
         [PG.sql|
       SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-        FROM websearch_to_tsquery('english', #{query}) AS tokenquery, projects AS p
+        FROM websearch_to_tsquery('english', #{query}) AS tokenquery, projects_by_user_permission(#{caller}, #{ProjectView}) AS p
           JOIN users AS owner ON p.owner_user_id = owner.id
         WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
         AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
-        AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
         ^{pskFilter}
         ORDER BY
           p.slug = #{query} DESC,
@@ -275,11 +273,10 @@ listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
           owner.handle,
           owner.name,
           EXISTS (SELECT FROM org_members WHERE org_members.organization_user_id = owner.id) AS is_org
-        FROM projects p
+        FROM projects_by_user_permission(#{callerUserId}, #{ProjectView}) AS p
           JOIN users owner ON owner.id = p.owner_user_id
         WHERE p.owner_user_id = #{projectOwnerUserId}
-          AND user_has_project_permission(#{callerUserId}, p.id, #{ProjectView})
-        ORDER BY p.created_at DESC
+        ORDER BY p.created_at DESC, p.slug ASC
       |]
   where
     unpackRows :: [Project PG.:. FavData PG.:. ProjectOwner] -> [(Project, FavData, ProjectOwner)]
@@ -878,12 +875,11 @@ listContributorBranchesOfUserAccessibleToCaller contributorUserId mayCallerUserI
               project_owner.name,
               EXISTS (SELECT FROM org_members WHERE org_members.organization_user_id = project.owner_user_id)
             FROM project_branches b
-            JOIN projects project ON project.id = b.project_id
+            JOIN projects_by_user_permission(#{mayCallerUserId}, #{ProjectView}) AS project ON project.id = b.project_id
             JOIN users AS project_owner ON project_owner.id = project.owner_user_id
             WHERE
               b.deleted_at IS NULL
               AND b.contributor_id = #{contributorUserId}
-              AND user_has_project_permission(#{mayCallerUserId}, b.project_id, #{ProjectView})
               |],
                 branchNameFilter,
                 cursorFilter,

@@ -251,10 +251,9 @@ listTicketsByUserId callerUserId userId limit mayCursor mayStatusFilter = do
         ticket.author_id,
         (SELECT COUNT(*) FROM comments comment WHERE comment.ticket_id = ticket.id AND comment.deleted_at IS NULL) as num_comments
       FROM tickets AS ticket
-        JOIN projects AS project ON project.id = ticket.project_id
+        JOIN projects_by_user_permission(#{callerUserId}, #{ProjectView}) AS project ON project.id = ticket.project_id
       WHERE
         ticket.author_id = #{userId}
-        AND user_has_project_permission(#{callerUserId}, project.id, #{ProjectView})
         AND (#{mayStatusFilter} IS NULL OR ticket.status = #{mayStatusFilter}::ticket_status)
         AND ^{cursorFilter}
       ORDER BY ticket.updated_at DESC, ticket.id DESC

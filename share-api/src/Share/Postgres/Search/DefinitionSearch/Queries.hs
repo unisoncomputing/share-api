@@ -401,13 +401,13 @@ globalDefNameCompletionSearch mayCaller mayUserFilter (Query query) limit = do
     [sql|
     WITH results(name, tag) AS (
       SELECT DISTINCT doc.name, doc.tag FROM global_definition_search_docs doc
-        JOIN projects p ON p.id = doc.project_id
+        JOIN projects_by_user_permission(#{mayCaller}, #{ProjectView}) p
+          ON p.id = doc.project_id
         WHERE
           -- Find names which contain the query
           doc.name ILIKE ('%.' || like_escape(#{query}) || '%')
 
-        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
-          ^{filters}
+        ^{filters}
       ) SELECT r.name, r.tag FROM results r
         -- Docs and tests to the bottom, then
         -- prefer matches where the original query appears (case-matched),
@@ -501,11 +501,11 @@ globalDefinitionTokenSearch mayCaller mayUserFilter limit searchTokens preferred
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
       SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
-        JOIN projects p ON p.id = doc.project_id
+        JOIN projects_by_user_permission(#{mayCaller}, #{ProjectView}) p
+          ON p.id = doc.project_id
         WHERE
           -- match on search tokens using GIN index.
           tsquery(#{tsQueryText}) @@ doc.search_tokens
-        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
         AND (#{preferredArity} IS NULL OR doc.arity >= #{preferredArity})
           ^{filters}
           ^{namesFilter}
@@ -619,11 +619,10 @@ globalDefinitionNameSearch mayCaller mayUserFilter limit (Query query) = do
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
       SELECT doc.project_id, doc.release_id, doc.name, doc.metadata FROM global_definition_search_docs doc
-        JOIN projects p ON p.id = doc.project_id
+        JOIN projects_by_user_permission(#{mayCaller}, #{ProjectView}) p ON p.id = doc.project_id
         WHERE
           -- We may wish to adjust the similarity threshold before the query.
           #{query} <% doc.name
-        AND user_has_project_permission(#{mayCaller}, p.id, #{ProjectView})
           ^{filters}
         -- Score matches by:
         -- - projects in the catalog
