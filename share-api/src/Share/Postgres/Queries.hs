@@ -156,10 +156,9 @@ searchProjects caller userIdFilter (Query query) psk limit = do
       PG.queryListRows @(Project PG.:. PG.Only UserHandle)
         [PG.sql|
         SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-          FROM projects p
+          FROM projects_searchable_by_user(#{caller}) p
             JOIN users owner ON p.owner_user_id = owner.id
           WHERE p.owner_user_id = #{userId}
-            AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
           ORDER BY p.created_at DESC
           LIMIT #{limit}
           |]
@@ -167,11 +166,10 @@ searchProjects caller userIdFilter (Query query) psk limit = do
       PG.queryListRows
         [PG.sql|
       SELECT p.id, p.owner_user_id, p.slug, p.summary, p.tags, p.private, p.created_at, p.updated_at, owner.handle
-        FROM websearch_to_tsquery('english', #{query}) AS tokenquery, projects AS p
+        FROM websearch_to_tsquery('english', #{query}) AS tokenquery, projects_searchable_by_user(#{caller}) AS p
           JOIN users AS owner ON p.owner_user_id = owner.id
         WHERE (tokenquery @@ p.project_text_document OR p.slug ILIKE ('%' || like_escape(#{query}) || '%'))
         AND (#{userIdFilter} IS NULL OR p.owner_user_id = #{userIdFilter})
-        AND user_has_project_permission(#{caller}, p.id, #{ProjectView})
         ^{pskFilter}
         ORDER BY
           p.slug = #{query} DESC,
