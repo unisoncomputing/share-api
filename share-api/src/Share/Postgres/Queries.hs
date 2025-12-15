@@ -159,7 +159,7 @@ searchProjects caller userIdFilter (Query query) psk limit = do
           FROM projects_by_user_permission(#{caller}, #{ProjectView}) p
             JOIN users owner ON p.owner_user_id = owner.id
           WHERE p.owner_user_id = #{userId}
-          ORDER BY p.created_at DESC
+          ORDER BY p.created_at, p.slug DESC
           LIMIT #{limit}
           |]
     _ -> do

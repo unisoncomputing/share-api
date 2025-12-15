@@ -9,8 +9,8 @@
         "name": "The Transcript User",
         "type": "user"
       },
-      "slug": "containers",
-      "summary": "This is my project",
+      "slug": "transcriptproject",
+      "summary": null,
       "tags": [],
       "updatedAt": "<TIMESTAMP>",
       "visibility": "private"
@@ -24,8 +24,8 @@
         "name": "The Transcript User",
         "type": "user"
       },
-      "slug": "transcriptproject",
-      "summary": null,
+      "slug": "containers",
+      "summary": "This is my project",
       "tags": [],
       "updatedAt": "<TIMESTAMP>",
       "visibility": "private"
