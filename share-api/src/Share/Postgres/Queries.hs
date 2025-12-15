@@ -273,10 +273,10 @@ listProjectsByUserWithMetadata callerUserId projectOwnerUserId = do
           owner.handle,
           owner.name,
           EXISTS (SELECT FROM org_members WHERE org_members.organization_user_id = owner.id) AS is_org
-        FROM projects_by_user_permission(#{callerUserId}, #{ProjectView}) AS project ON project.id = b.project_id
+        FROM projects_by_user_permission(#{callerUserId}, #{ProjectView}) AS p
           JOIN users owner ON owner.id = p.owner_user_id
         WHERE p.owner_user_id = #{projectOwnerUserId}
-        ORDER BY p.created_at DESC
+        ORDER BY p.created_at, p.slug DESC
       |]
   where
     unpackRows :: [Project PG.:. FavData PG.:. ProjectOwner] -> [(Project, FavData, ProjectOwner)]
