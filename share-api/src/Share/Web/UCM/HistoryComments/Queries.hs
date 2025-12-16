@@ -14,6 +14,7 @@ import Data.Set.NonEmpty qualified as NESet
 import Data.Time (UTCTime)
 import Data.Time.Clock.POSIX qualified as POSIX
 import Share.IDs
+import Share.Postgres (whenNonEmpty)
 import Share.Postgres qualified as PG
 import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as PG
@@ -95,9 +96,9 @@ insertHistoryComments :: AuthZReceipt -> ProjectId -> [HistoryCommentChunk] -> P
 insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
   let thumbprints = NESet.nonEmptySet $ Set.fromList (comments <&> \HistoryComment {authorThumbprint} -> authorThumbprint)
   for thumbprints insertThumbprints
-  insertHistoryComments comments
-  insertRevisions revisions
-  insertDiscoveryInfo revisions
+  whenNonEmpty comments $ insertHistoryComments comments
+  whenNonEmpty revisions $ insertRevisions revisions
+  whenNonEmpty revisions $ insertDiscoveryInfo revisions
   pure ()
   where
     (comments, revisions) =
