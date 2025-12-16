@@ -17,6 +17,7 @@ import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (Unimplemented (Unimplemented), reportError, respondError)
 import Share.Web.UCM.HistoryComments.Queries qualified as Q
+import Unison.Debug qualified as Debug
 import Unison.Server.HistoryComments.API qualified as HistoryComments
 import Unison.Server.HistoryComments.Types (HistoryCommentChunk (..), UploadCommentsResponse (..))
 import Unison.Server.Types
@@ -58,6 +59,7 @@ fetchChunk size action = do
 
 uploadHistoryCommentsStreamImpl :: Maybe UserId -> BranchRef -> Connection -> WebApp ()
 uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = do
+  Debug.debugM Debug.Temp "uploadHistoryCommentsStreamImpl called with branchRef: " (IDs.toText branchRef, mayCallerUserId)
   callerUserId <- AuthN.requireAuthenticatedUser' mayCallerUserId
   result <- withQueues @(MsgOrError Void UploadCommentsResponse) @(MsgOrError Void HistoryCommentChunk) wsMessageBufferSize wsMessageBufferSize conn \q@(Queues {receive}) -> runExceptT $ do
     projectBranchSH@ProjectBranchShortHand {userHandle, projectSlug, contributorHandle} <- case IDs.fromText @ProjectBranchShortHand branchRef of
@@ -66,15 +68,17 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
     let projectSH = ProjectShortHand {userHandle, projectSlug}
     mayInfo <- lift . runMaybeT $ mapMaybeT PG.runTransaction $ do
       project <- MaybeT $ PGQ.projectByShortHand projectSH
+      Debug.debugM Debug.Temp "FOUND PROJECT" (project)
       branch <- MaybeT $ PGQ.branchByProjectBranchShortHand projectBranchSH
-      contributorUser <- MaybeT $ for contributorHandle UserQ.userByHandle
+      Debug.debugM Debug.Temp "FOUND BRANCH" (branch)
+      contributorUser <- for contributorHandle (MaybeT . UserQ.userByHandle)
+      Debug.debugM Debug.Temp "FOUND Contributor" (contributorUser)
       pure (project, branch, contributorUser)
     (project, _branch, contributorUser) <- maybe (handleErrInQueue q $ UploadCommentsProjectBranchNotFound br) pure $ mayInfo
     authZ <-
       lift (AuthZ.checkUploadToProjectBranchCodebase callerUserId project.projectId (user_id <$> contributorUser)) >>= \case
         Left _authErr -> handleErrInQueue q (UploadCommentsNotAuthorized br)
         Right authZ -> pure authZ
-    projectId <- error "Process Branch Ref"
     let loop :: ExceptT UploadCommentsResponse WebApp ()
         loop = do
           (chunk, closed) <- atomically $ fetchChunk insertCommentBatchSize do
@@ -85,7 +89,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
               UserErr err -> absurd err
 
           let (errs, chunks) = partitionEithers chunk
-          lift $ PG.runTransaction $ Q.insertHistoryComments authZ projectId chunks
+          lift $ PG.runTransaction $ Q.insertHistoryComments authZ project.projectId chunks
           for errs $ \err -> handleErrInQueue q err
           when (not closed) loop
     loop

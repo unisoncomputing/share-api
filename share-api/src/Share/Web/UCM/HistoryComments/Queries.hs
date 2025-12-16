@@ -8,7 +8,9 @@ module Share.Web.UCM.HistoryComments.Queries
 where
 
 import Control.Lens
-import Data.Containers.ListUtils (nubOrd)
+import Data.Set qualified as Set
+import Data.Set.NonEmpty (NESet)
+import Data.Set.NonEmpty qualified as NESet
 import Data.Time (UTCTime)
 import Data.Time.Clock.POSIX qualified as POSIX
 import Share.IDs
@@ -64,12 +66,12 @@ fetchProjectBranchCommentsSince !_authZ projectId causalId sinceTime = do
          in HistoryCommentRevisionChunk $ HistoryCommentRevision {..}
       row -> error $ "fetchProjectBranchCommentsSince: Unexpected row format: " <> show row
 
-insertThumbprints :: (PG.QueryA m) => [Text] -> m ()
+insertThumbprints :: (PG.QueryA m) => NESet Text -> m ()
 insertThumbprints thumbprints = do
   PG.execute_
     [PG.sql|
       INSERT INTO personal_keys (thumbprint)
-      SELECT * FROM ^{PG.singleColumnTable $ nubOrd thumbprints}
+      SELECT * FROM ^{PG.singleColumnTable $ toList thumbprints}
       ON CONFLICT (thumbprint) DO NOTHING
     |]
 
@@ -91,7 +93,8 @@ utcTimeToMillis utcTime =
 
 insertHistoryComments :: AuthZReceipt -> ProjectId -> [HistoryCommentChunk] -> PG.Transaction e ()
 insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
-  insertThumbprints $ (comments <&> \HistoryComment {authorThumbprint} -> authorThumbprint)
+  let thumbprints = NESet.nonEmptySet $ Set.fromList (comments <&> \HistoryComment {authorThumbprint} -> authorThumbprint)
+  for thumbprints insertThumbprints
   insertHistoryComments comments
   insertRevisions revisions
   insertDiscoveryInfo revisions
