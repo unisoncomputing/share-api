@@ -54,7 +54,7 @@ type API =
     -- This path is deprecated, but is still in use by existing clients.
     :<|> ("sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
     :<|> ("ucm" :> "v1" :> "sync" :> MaybeAuthenticatedSession :> Unison.Sync.API)
-    :<|> ("ucm" :> "v1" :> "history-comments" :> MaybeAuthenticatedSession :> Unison.HistoryComments.API)
+    :<|> ("ucm" :> "v1" :> "history-comments" :> MaybeAuthenticatedUserId :> Unison.HistoryComments.API)
     :<|> ("ucm" :> "v1" :> "projects" :> MaybeAuthenticatedSession :> UCMProjects.ProjectsAPI)
     :<|> ("ucm" :> "v2" :> "sync" :> MaybeAuthenticatedUserId :> SyncV2.API)
     :<|> ("admin" :> Admin.API)
