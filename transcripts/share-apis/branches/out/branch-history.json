@@ -1,0 +1,16 @@
+{
+  "body": {
+    "branchRef": "main",
+    "history": {
+      "items": [],
+      "nextCursor": null,
+      "prevCursor": null
+    },
+    "projectRef": "@transcripts/branch-with-history"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

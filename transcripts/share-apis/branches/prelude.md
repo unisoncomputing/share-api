@@ -1,7 +1,3 @@
-```ucm
-branch-with-history/main> builtins.merge builtins
-```
-
 ```unison
 x1 = 1
 ```
@@ -17,6 +13,7 @@ branch-with-history/main> alias.term x6 x7
 branch-with-history/main> alias.term x7 x8
 branch-with-history/main> alias.term x8 x9
 branch-with-history/main> alias.term x9 x10
+branch-with-history/main> history
 branch-with-history/main> push @transcripts/branch-with-history/main
 ```
 

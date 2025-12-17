@@ -1003,9 +1003,9 @@ pagedCausalAncestors ::
 pagedCausalAncestors rootCausalId limit mayCursor =
   do
     let (filter, ordering, maybeReverse) = case mayCursor of
-          Nothing -> mempty
-          Just (Cursor (hash, depth) Next) -> ([sql| WHERE (h.causal_depth, h.hash) > (#{depth}, #{hash}) |], [sql| ORDER BY h.causal_depth DESC, h.hash ASC |], id)
-          Just (Cursor (hash, depth) Previous) -> ([sql| WHERE (h.causal_depth, h.hash) < (#{depth}, #{hash}) |], [sql| ORDER BY h.causal_depth ASC, h.hash DESC |], reverse)
+          Nothing -> (mempty, [sql| ORDER BY (h.causal_depth, h.causal_hash) DESC |], id)
+          Just (Cursor (hash, depth) Next) -> ([sql| WHERE (h.causal_depth, h.causal_hash) < (#{depth}, #{hash}) |], [sql| ORDER BY (h.causal_depth, h.causal_hash) DESC  |], id)
+          Just (Cursor (hash, depth) Previous) -> ([sql| WHERE (h.causal_depth, h.causal_hash) > (#{depth}, #{hash}) |], [sql| ORDER BY (h.causal_depth , h.causal_hash) ASC |], reverse)
     rawResults <-
       queryListRows @(CausalHash, CausalDepth)
         [sql|
@@ -1022,8 +1022,8 @@ pagedCausalAncestors rootCausalId limit mayCursor =
           JOIN causal_depth cd ON c.id = cd.causal_id
   ) SELECT h.causal_hash, h.causal_depth
       FROM history h
-      ^{ordering}
       ^{filter}
+      ^{ordering}
       LIMIT #{limit + 1}
     |]
     let hasPrevPage = case mayCursor of
@@ -1036,6 +1036,7 @@ pagedCausalAncestors rootCausalId limit mayCursor =
           Just (Cursor _ Previous) -> True
     pure rawResults
       <&> maybeReverse
+      <&> take (fromIntegral (getLimit limit))
       <&> pagedOn id
       <&> guardPaged hasPrevPage hasNextPage
       <&> fmap fst

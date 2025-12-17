@@ -59,4 +59,4 @@ fetch "$test_user" GET branch-details-deleted '/users/test/projects/publictestpr
 # Add some history to a branch.
 transcript_ucm transcript prelude.md
 
-fetch "$transcripts_user" GET branch-history '/users/transcripts/projects/branch-browse/branches/main/history?limit=3'
+fetch "$transcripts_user" GET branch-history '/users/transcripts/projects/branch-with-history/branches/main/history?limit=3'
