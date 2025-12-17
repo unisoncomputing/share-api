@@ -20,6 +20,7 @@ import Share.IDs (BranchId, BranchShortHand (..), ProjectBranchShortHand (..), P
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
+import Share.Postgres.Causal.Queries (CausalHistoryCursor)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (CausalId)
@@ -497,7 +498,7 @@ branchHistoryEndpoint ::
   UserHandle ->
   ProjectSlug ->
   BranchShortHand ->
-  Maybe (Cursor CausalHash) ->
+  Maybe (Cursor CausalHistoryCursor) ->
   Maybe Limit ->
   WebApp BranchHistoryResponse
 branchHistoryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug branchRef@(BranchShortHand {contributorHandle, branchName}) mayCursor mayLimit = do
@@ -507,15 +508,14 @@ branchHistoryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectS
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead Nothing
   PG.runTransaction do
-    (causalHashesWithTimes, mayNextCursor) <- CausalQ.pagedCausalAncestors codebase causalId limit mayCursor
-    let history =
-          causalHashesWithTimes <&> \(causalHash) ->
-            BranchHistoryCausalEntry (BranchHistoryCausal {causalHash})
+    history <-
+      CausalQ.pagedCausalAncestors causalId limit mayCursor
+        <&> fmap \(causalHash) ->
+          BranchHistoryCausalEntry (BranchHistoryCausal {causalHash})
     pure $
       BranchHistoryResponse
         { projectRef,
           branchRef,
-          cursor = mayNextCursor,
           history
         }
   where

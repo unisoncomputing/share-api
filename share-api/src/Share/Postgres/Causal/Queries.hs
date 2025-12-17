@@ -25,6 +25,9 @@ module Share.Postgres.Causal.Queries
     hashCausal,
     bestCommonAncestor,
     isFastForward,
+    pagedCausalAncestors,
+    CausalDepth,
+    CausalHistoryCursor,
 
     -- * Sync
     expectCausalEntity,
@@ -54,6 +57,7 @@ import Share.Postgres.Patches.Queries qualified as PatchQ
 import Share.Postgres.Serialization qualified as S
 import Share.Postgres.Sync.Conversions qualified as Cv
 import Share.Prelude
+import Share.Utils.API (Cursor (..), CursorDirection (..), Limit (..), Paged, guardPaged, pagedOn)
 import Share.Utils.Postgres (OrdBy, ordered)
 import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors (MissingExpectedEntity (MissingExpectedEntity))
@@ -985,3 +989,53 @@ isFastForward fromCausalId toCausalId = do
         WHERE history.causal_id = #{fromCausalId}
   );
   |]
+
+type CausalHistoryCursor = (CausalHash, CausalDepth)
+
+type CausalDepth = Int64
+
+pagedCausalAncestors ::
+  (QueryM m) =>
+  CausalId ->
+  Limit ->
+  Maybe (Cursor CausalHistoryCursor) ->
+  m (Paged CausalHistoryCursor CausalHash)
+pagedCausalAncestors rootCausalId limit mayCursor =
+  do
+    let (filter, ordering, maybeReverse) = case mayCursor of
+          Nothing -> mempty
+          Just (Cursor (hash, depth) Next) -> ([sql| WHERE (h.causal_depth, h.hash) > (#{depth}, #{hash}) |], [sql| ORDER BY h.causal_depth DESC, h.hash ASC |], id)
+          Just (Cursor (hash, depth) Previous) -> ([sql| WHERE (h.causal_depth, h.hash) < (#{depth}, #{hash}) |], [sql| ORDER BY h.causal_depth ASC, h.hash DESC |], reverse)
+    rawResults <-
+      queryListRows @(CausalHash, CausalDepth)
+        [sql|
+  WITH RECURSIVE history(causal_id, causal_hash, causal_depth) AS (
+      SELECT causal.id, causal.hash, cd.depth
+      FROM causals causal
+        JOIN causal_depth cd ON causal.id = cd.causal_id
+          WHERE causal.id = #{rootCausalId}
+      UNION
+      SELECT c.id, c.hash, cd.depth
+      FROM history h
+          JOIN causal_ancestors ca ON h.causal_id = ca.causal_id
+          JOIN causals c ON ca.ancestor_id = c.id
+          JOIN causal_depth cd ON c.id = cd.causal_id
+  ) SELECT h.causal_hash, h.causal_depth
+      FROM history h
+      ^{ordering}
+      ^{filter}
+      LIMIT #{limit + 1}
+    |]
+    let hasPrevPage = case mayCursor of
+          Just (Cursor _ Previous) -> length rawResults > fromIntegral (getLimit limit)
+          Just (Cursor _ Next) -> True
+          Nothing -> False
+    let hasNextPage = case mayCursor of
+          Just (Cursor _ Next) -> length rawResults > fromIntegral (getLimit limit)
+          Nothing -> length rawResults > fromIntegral (getLimit limit)
+          Just (Cursor _ Previous) -> True
+    pure rawResults
+      <&> maybeReverse
+      <&> pagedOn id
+      <&> guardPaged hasPrevPage hasNextPage
+      <&> fmap fst

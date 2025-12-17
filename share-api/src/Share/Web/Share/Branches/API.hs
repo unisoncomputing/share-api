@@ -6,6 +6,7 @@ module Share.Web.Share.Branches.API where
 import Data.Time (UTCTime)
 import Servant
 import Share.IDs
+import Share.Postgres.Causal.Queries (CausalHistoryCursor)
 import Share.Utils.API
 import Share.Utils.Caching
 import Share.Web.Share.Branches.Types (BranchHistoryResponse, BranchKindFilter, ShareBranch)
@@ -31,7 +32,7 @@ type ProjectBranchDetailsEndpoint = Get '[JSON] ShareBranch
 type ProjectBranchDeleteEndpoint = Delete '[JSON] ()
 
 type ProjectBranchHistoryEndpoint =
-  QueryParam "cursor" (Cursor CausalHash)
+  QueryParam "cursor" (Cursor CausalHistoryCursor)
     :> QueryParam "limit" Limit
     :> Get '[JSON] BranchHistoryResponse
 

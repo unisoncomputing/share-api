@@ -12,9 +12,10 @@ import Servant.API (FromHttpApiData (..), ToHttpApiData (..))
 import Share.Branch (Branch (..))
 import Share.IDs
 import Share.IDs qualified as IDs
+import Share.Postgres.Causal.Queries (CausalHistoryCursor)
 import Share.Postgres.IDs
 import Share.Prelude
-import Share.Utils.API (Cursor, (:++) (..))
+import Share.Utils.API (Paged, (:++) (..))
 import Share.Web.Share.Contributions.Types (ShareContribution)
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 import Share.Web.Share.Projects.Types
@@ -94,8 +95,7 @@ instance ToHttpApiData BranchKindFilter where
 data BranchHistoryResponse = BranchHistoryResponse
   { projectRef :: ProjectShortHand,
     branchRef :: BranchShortHand,
-    cursor :: Maybe (Cursor CausalHash),
-    history :: [BranchHistoryEntry]
+    history :: Paged CausalHistoryCursor BranchHistoryEntry
   }
   deriving stock (Eq, Show)
 
@@ -104,7 +104,6 @@ instance ToJSON BranchHistoryResponse where
     object
       [ "projectRef" .= IDs.toText @ProjectShortHand projectRef,
         "branchRef" .= IDs.toText @BranchShortHand branchRef,
-        "cursor" .= cursor,
         "history" .= history
       ]
 
