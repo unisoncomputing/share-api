@@ -41,7 +41,7 @@ downloadHistoryCommentsStreamImpl _mayUserId _conn = do
 
 -- Re-run the given STM action at most n times, collecting the results into a list.
 -- If the action returns Nothing, stop early and return what has been collected so far, along with a Bool indicating whether the action was exhausted.
-fetchChunk :: Int -> STM (Maybe a) -> STM ([a], Bool)
+fetchChunk :: (Show a) => Int -> STM (Maybe a) -> STM ([a], Bool)
 fetchChunk size action = do
   let go 0 = pure ([], False)
       go n = do
@@ -53,6 +53,7 @@ fetchChunk size action = do
             -- Queue is closed
             pure ([], True)
           Just (Just val) -> do
+            Debug.debugM Debug.Temp "Fetched value from queue" val
             (rest, exhausted) <- go (n - 1)
             pure (val : rest, exhausted)
   go size
@@ -96,8 +97,8 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
     loop
   case result of
     Left err -> reportError err
-    Right (Left err) -> reportError err
-    Right (Right ()) -> pure ()
+    Right (Left err, _leftovers) -> reportError err
+    Right (Right (), _leftovers) -> pure ()
   where
     insertCommentBatchSize = 100
     handleErrInQueue :: forall o x e. Queues (MsgOrError e UploadCommentsResponse) o -> UploadCommentsResponse -> ExceptT UploadCommentsResponse WebApp x
