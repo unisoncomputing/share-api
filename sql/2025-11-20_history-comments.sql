@@ -7,11 +7,11 @@ CREATE TABLE personal_keys (
   -- The user registered to this key, which is proven by providing a signed 
   -- assertion using the key. 
   -- It may be null if the key is not yet registered to a user.
-  user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL,
+  user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
   -- Ensure that public_jwk and user_id are either both null or both non-null.
-  CHECK (public_jwk IS NULL = user_id IS NULL)
+  CHECK ((public_jwk IS NULL) = (user_id IS NULL))
 );
 
 CREATE INDEX idx_personal_keys_user_id ON personal_keys(user_id, created_at)
@@ -59,7 +59,7 @@ CREATE TABLE history_comment_revisions (
   revision_hash TEXT UNIQUE NOT NULL,
 
   --  The signature of the comment's author on the revision hash.
-  author_signature BLOB NOT NULL
+  author_signature BYTEA NOT NULL
 );
 
 CREATE INDEX idx_history_comment_revisions_comment_id ON history_comment_revisions(comment_id, created_at_ms DESC);
@@ -69,7 +69,7 @@ CREATE INDEX idx_history_comment_revisions_comment_id ON history_comment_revisio
 -- on a given project.
 CREATE TABLE history_comment_revisions_project_discovery (
   comment_revision_id INTEGER NOT NULL REFERENCES history_comment_revisions(id),
-  project_id INTEGER NOT NULL REFERENCES projects(id),
+  project_id UUID NOT NULL REFERENCES projects(id),
   discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (project_id, comment_revision_id)
 );
