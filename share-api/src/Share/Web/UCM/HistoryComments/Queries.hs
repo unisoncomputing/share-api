@@ -8,6 +8,7 @@ module Share.Web.UCM.HistoryComments.Queries
 where
 
 import Control.Lens
+import Data.Foldable qualified as Foldable
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
 import Data.Set.NonEmpty qualified as NESet
@@ -71,9 +72,12 @@ insertThumbprints :: (PG.QueryA m) => NESet Text -> m ()
 insertThumbprints thumbprints = do
   PG.execute_
     [PG.sql|
+      WITH thumbprints(thumbprint) AS (
+        SELECT * FROM ^{PG.singleColumnTable $ Foldable.toList thumbprints}
+      )
       INSERT INTO personal_keys (thumbprint)
-      SELECT * FROM ^{PG.singleColumnTable $ toList thumbprints}
-      ON CONFLICT (thumbprint) DO NOTHING
+      SELECT thumbprint FROM thumbprints
+      ON CONFLICT DO NOTHING
     |]
 
 -- Convert milliseconds since epoch to UTCTime _exactly_.
@@ -111,18 +115,19 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
       PG.execute_
         [PG.sql|
           WITH new_comments(author, created_at_ms, author_thumbprint, causal_hash, comment_hash) AS (
-            VALUES ^{PG.toTable commentsTable}
+            SELECT * FROM ^{PG.toTable commentsTable}
           )
           INSERT INTO history_comments(causal_id, author, created_at_ms, comment_hash, author_key_id)
             SELECT causal.id, nc.author, nc.created_at_ms, nc.comment_hash, pk.id
             FROM new_comments nc
-            JOIN causal causal
+            JOIN causals causal
               ON causal.hash = nc.causal_hash
             JOIN personal_keys pk
               ON pk.thumbprint = nc.author_thumbprint
-          ON CONFLICT DO NOTHING
+          ON CONFLICT (comment_hash) DO NOTHING
         |]
       where
+        commentsTable :: [(Text, Int64, Text, Hash32, Hash32)]
         commentsTable =
           comments <&> \HistoryComment {..} ->
             ( author,
