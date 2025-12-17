@@ -88,9 +88,9 @@ branchesServer session userHandle projectSlug =
              hoistServer (Proxy @API.ProjectBranchResourceAPI) (addTags branchShortHand) $
                ( getProjectBranchReadmeEndpoint session userHandle projectSlug branchShortHand
                    :<|> getProjectBranchReleaseNotesEndpoint session userHandle projectSlug branchShortHand
+                   :<|> branchHistoryEndpoint session userHandle projectSlug branchShortHand
                    :<|> getProjectBranchDetailsEndpoint session userHandle projectSlug branchShortHand
                    :<|> deleteProjectBranchEndpoint session userHandle projectSlug branchShortHand
-                   :<|> branchHistoryEndpoint session userHandle projectSlug branchShortHand
                    :<|> branchCodeBrowsingServer session userHandle projectSlug branchShortHand
                )
          )

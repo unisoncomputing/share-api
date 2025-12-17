@@ -21,9 +21,9 @@ type ProjectBranchesAPI =
 type ProjectBranchResourceAPI =
   ( ("readme" :> ProjectBranchReadmeEndpoint)
       :<|> ("releaseNotes" :> ProjectBranchReleaseNotesEndpoint)
+      :<|> ("history" :> ProjectBranchHistoryEndpoint)
       :<|> ProjectBranchDetailsEndpoint
       :<|> ProjectBranchDeleteEndpoint
-      :<|> ProjectBranchHistoryEndpoint
       :<|> CodeBrowseAPI
   )
 
