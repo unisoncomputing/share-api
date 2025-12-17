@@ -55,3 +55,8 @@ fetch "$test_user" DELETE branch-delete '/users/test/projects/publictestproject/
 # Branch should no longer exist
 fetch "$test_user" GET branch-details-deleted '/users/test/projects/publictestproject/branches/main'
 
+
+# Add some history to a branch.
+transcript_ucm transcript prelude.md
+
+fetch "$transcripts_user" GET branch-history '/users/transcripts/projects/branch-browse/branches/main/history?limit=3'
