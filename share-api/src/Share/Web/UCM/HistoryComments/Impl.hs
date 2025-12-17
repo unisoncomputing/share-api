@@ -87,8 +87,9 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
               Msg chunk -> (Right chunk)
               DeserialiseFailure msg -> (Left $ UploadCommentsGenericFailure msg)
               UserErr err -> absurd err
-
+          Debug.debugM Debug.Temp "Processing chunk of size" (length chunk)
           let (errs, chunks) = partitionEithers chunk
+          when (not $ null errs) $ Debug.debugM Debug.Temp "Got errors in chunk" (errs)
           lift $ PG.runTransaction $ Q.insertHistoryComments authZ project.projectId chunks
           for errs $ \err -> handleErrInQueue q err
           when (not closed) loop
