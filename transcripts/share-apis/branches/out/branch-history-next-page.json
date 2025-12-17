@@ -1,0 +1,29 @@
+{
+  "body": {
+    "branchRef": "main",
+    "history": {
+      "items": [
+        {
+          "causalHash": "qt7njnf877g2q9g1f44eaigmcrgsdphc74jkdoos0i1pq6hguo03697adec2cb8lvgp71d4st3ss59g0haut5pfs5rpd4dru6pidt0g",
+          "tag": "Changeset"
+        },
+        {
+          "causalHash": "2k8f975ovhkm64bvog66rr8i7e4dripu8nkl7u62oif96if23lh5fh73n8p9qg21or98n4aljunidn6avonqpt1eu971h74iqlmgk5g",
+          "tag": "Changeset"
+        },
+        {
+          "causalHash": "n8b2r8o7u4f8ct0u79rhamnb16l3jhhr8986nudm6cgvg2j1fetouu0ojuiums5vtt8imsnsa7ek6lt18tcq3pf9knsinpsiqrq1r5o",
+          "tag": "Changeset"
+        }
+      ],
+      "nextCursor": "<CURSOR>",
+      "prevCursor": "<CURSOR>"
+    },
+    "projectRef": "@transcripts/branch-with-history"
+  },
+  "status": [
+    {
+      "status_code": 200
+    }
+  ]
+}

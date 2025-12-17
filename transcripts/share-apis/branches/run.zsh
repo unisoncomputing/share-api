@@ -60,3 +60,10 @@ fetch "$test_user" GET branch-details-deleted '/users/test/projects/publictestpr
 transcript_ucm transcript prelude.md
 
 fetch "$transcripts_user" GET branch-history '/users/transcripts/projects/branch-with-history/branches/main/history?limit=3'
+
+next_cursor=$(fetch_data_jq "$transcripts_user" GET branch-history-next-cursor '/users/transcripts/projects/branch-with-history/branches/main/history?limit=3' '.history.nextCursor')
+
+fetch "$transcripts_user" GET branch-history-next-page "/users/transcripts/projects/branch-with-history/branches/main/history?limit=3&cursor=$next_cursor" '.history.prevCursor'
+prev_cursor=$(fetch_data_jq "$transcripts_user" GET branch-history-prev-cursor "/users/transcripts/projects/branch-with-history/branches/main/history?limit=3&cursor=$next_cursor" '.history.prevCursor')
+
+fetch "$transcripts_user" GET branch-history-prev-page "/users/transcripts/projects/branch-with-history/branches/main/history?limit=3&cursor=$prev_cursor"
