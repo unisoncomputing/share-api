@@ -4,6 +4,7 @@
 module Share.Web.UCM.HistoryComments.Queries
   ( fetchProjectBranchCommentsSince,
     insertHistoryComments,
+    filterForUnknownHistoryCommentHashes,
   )
 where
 
@@ -25,7 +26,7 @@ import Share.Web.Authorization (AuthZReceipt)
 import Unison.Hash32 (Hash32)
 import Unison.Server.HistoryComments.Types
 
-fetchProjectBranchCommentsSince :: AuthZReceipt -> ProjectId -> CausalId -> UTCTime -> PG.Transaction e (PGCursor HistoryCommentChunk)
+fetchProjectBranchCommentsSince :: AuthZReceipt -> ProjectId -> CausalId -> UTCTime -> PG.Transaction e (PGCursor HistoryCommentUploaderChunk)
 fetchProjectBranchCommentsSince !_authZ projectId causalId sinceTime = do
   PG.newRowCursor @(Bool, Maybe Text, Maybe Text, Maybe Int64, Maybe Bool, Maybe ByteString, Maybe Hash32, Maybe Hash32, Maybe Text, Maybe Int64, Maybe Text, Maybe Hash32, Maybe Hash32)
     "fetchProjectBranchCommentsSince"
@@ -96,7 +97,7 @@ utcTimeToMillis utcTime =
     & (* (1_000 :: Rational))
     & round
 
-insertHistoryComments :: AuthZReceipt -> ProjectId -> [HistoryCommentChunk] -> PG.Transaction e ()
+insertHistoryComments :: AuthZReceipt -> ProjectId -> [Either HistoryComment HistoryCommentRevision] -> PG.Transaction e ()
 insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
   let thumbprints = NESet.nonEmptySet $ Set.fromList (comments <&> \HistoryComment {authorThumbprint} -> authorThumbprint)
   for thumbprints insertThumbprints
@@ -107,9 +108,8 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
   where
     (comments, revisions) =
       chunks & foldMap \case
-        HistoryCommentChunk comment -> ([comment], [])
-        HistoryCommentRevisionChunk revision -> ([], [revision])
-        HistoryCommentErrorChunk err -> error $ "HistoryCommentErrorChunk: " <> show err -- TODO Handle this
+        Left comment -> ([comment], [])
+        Right revision -> ([], [revision])
     insertHistoryComments :: [HistoryComment] -> PG.Pipeline e ()
     insertHistoryComments comments = do
       PG.execute_
@@ -201,3 +201,12 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
               commentHash,
               utcTimeToMillis createdAt
             )
+
+filterForUnknownHistoryCommentHashes :: (PG.QueryA m) => [Hash32] -> m [Hash32]
+filterForUnknownHistoryCommentHashes hashes = do
+  -- error "TODO: Check whether they're in the project as well."
+  PG.queryListCol
+    [PG.sql|
+      SELECT hash FROM ^{PG.singleColumnTable hashes} AS t(hash)
+        WHERE hash NOT IN (SELECT comment_hash FROM history_comments)
+    |]
