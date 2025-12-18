@@ -50,7 +50,6 @@ import Share.Web.Share.Projects.Types (projectToAPI)
 import Share.Web.Share.Types
 import U.Codebase.HashTags (CausalHash)
 import Unison.Codebase.Path qualified as Path
-import Unison.Debug qualified as Debug
 import Unison.HashQualified qualified as HQ
 import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
@@ -508,13 +507,11 @@ branchHistoryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectS
   let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
   let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
   causalId <- resolveRootHash codebase branchHead Nothing
-  Debug.debugM Debug.Temp "branchHistoryEndpoint Resolved causalId: " causalId
   PG.runTransaction do
     history <-
       CausalQ.pagedCausalAncestors causalId limit mayCursor
         <&> fmap \(causalHash) ->
           BranchHistoryCausalEntry (BranchHistoryCausal {causalHash})
-    Debug.debugM Debug.Temp "branchHistoryEndpoint Retrieved history entries: " (history)
     pure $
       BranchHistoryResponse
         { projectRef,

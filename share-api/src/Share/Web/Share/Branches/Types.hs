@@ -107,6 +107,13 @@ instance ToJSON BranchHistoryResponse where
         "history" .= history
       ]
 
+instance FromJSON BranchHistoryResponse where
+  parseJSON = withObject "BranchHistoryResponse" $ \o ->
+    BranchHistoryResponse
+      <$> (o .: "projectRef")
+      <*> (o .: "branchRef")
+      <*> o .: "history"
+
 data BranchHistoryCausal = BranchHistoryCausal
   { causalHash :: CausalHash
   }
@@ -118,6 +125,11 @@ instance ToJSON BranchHistoryCausal where
       [ "causalHash" .= causalHash
       ]
 
+instance FromJSON BranchHistoryCausal where
+  parseJSON = withObject "BranchHistoryCausal" $ \o ->
+    BranchHistoryCausal
+      <$> o .: "causalHash"
+
 data BranchHistoryEntry
   = BranchHistoryCausalEntry BranchHistoryCausal
   deriving stock (Eq, Show)
@@ -126,3 +138,8 @@ instance ToJSON BranchHistoryEntry where
   toJSON = \case
     (BranchHistoryCausalEntry causal) ->
       toJSON (causal :++ (object ["tag" .= ("Changeset" :: Text)]))
+
+instance FromJSON BranchHistoryEntry where
+  parseJSON v = do
+    causal <- parseJSON v
+    return $ BranchHistoryCausalEntry causal
