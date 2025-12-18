@@ -20,6 +20,7 @@ import Share.IDs (BranchId, BranchShortHand (..), ProjectBranchShortHand (..), P
 import Share.IDs qualified as IDs
 import Share.OAuth.Session
 import Share.Postgres qualified as PG
+import Share.Postgres.Causal.Queries (CausalHistoryCursor)
 import Share.Postgres.Causal.Queries qualified as CausalQ
 import Share.Postgres.Contributions.Queries qualified as ContributionsQ
 import Share.Postgres.IDs (CausalId)
@@ -40,7 +41,7 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors
 import Share.Web.Share.Branches.API (ListBranchesCursor)
 import Share.Web.Share.Branches.API qualified as API
-import Share.Web.Share.Branches.Types (BranchKindFilter (..), ShareBranch (..))
+import Share.Web.Share.Branches.Types (BranchHistoryCausal (..), BranchHistoryEntry (..), BranchHistoryResponse (..), BranchKindFilter (..), ShareBranch (..))
 import Share.Web.Share.Branches.Types qualified as API
 import Share.Web.Share.CodeBrowsing.API qualified as API
 import Share.Web.Share.Contributions.Types
@@ -87,6 +88,7 @@ branchesServer session userHandle projectSlug =
              hoistServer (Proxy @API.ProjectBranchResourceAPI) (addTags branchShortHand) $
                ( getProjectBranchReadmeEndpoint session userHandle projectSlug branchShortHand
                    :<|> getProjectBranchReleaseNotesEndpoint session userHandle projectSlug branchShortHand
+                   :<|> branchHistoryEndpoint session userHandle projectSlug branchShortHand
                    :<|> getProjectBranchDetailsEndpoint session userHandle projectSlug branchShortHand
                    :<|> deleteProjectBranchEndpoint session userHandle projectSlug branchShortHand
                    :<|> branchCodeBrowsingServer session userHandle projectSlug branchShortHand
@@ -490,6 +492,37 @@ deleteProjectBranchEndpoint session userHandle projectSlug branchShortHand = do
   _authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkBranchDelete callerUserId project projectBranch
   PG.runTransaction $ Q.softDeleteBranch branchId
   pure ()
+
+branchHistoryEndpoint ::
+  Maybe Session ->
+  UserHandle ->
+  ProjectSlug ->
+  BranchShortHand ->
+  Maybe (Cursor CausalHistoryCursor) ->
+  Maybe Limit ->
+  WebApp BranchHistoryResponse
+branchHistoryEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle projectSlug branchRef@(BranchShortHand {contributorHandle, branchName}) mayCursor mayLimit = do
+  (Project {ownerUserId = projectOwnerUserId, projectId}, Branch {causal = branchHead, contributorId}) <- getProjectBranch projectBranchShortHand
+  authZReceipt <- AuthZ.permissionGuard $ AuthZ.checkProjectBranchRead callerUserId projectId
+  let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
+  let codebase = Codebase.codebaseEnv authZReceipt codebaseLoc
+  causalId <- resolveRootHash codebase branchHead Nothing
+  PG.runTransaction do
+    history <-
+      CausalQ.pagedCausalAncestors causalId limit mayCursor
+        <&> fmap \(causalHash) ->
+          BranchHistoryCausalEntry (BranchHistoryCausal {causalHash})
+    pure $
+      BranchHistoryResponse
+        { projectRef,
+          branchRef,
+          history
+        }
+  where
+    projectRef = ProjectShortHand {userHandle, projectSlug}
+    limit = fromMaybe defaultLimit mayLimit
+    defaultLimit = Limit 20
+    projectBranchShortHand = ProjectBranchShortHand {userHandle, projectSlug, contributorHandle, branchName}
 
 getProjectBranchDocEndpoint ::
   Text ->

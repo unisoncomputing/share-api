@@ -12,7 +12,10 @@ import Servant.API (FromHttpApiData (..), ToHttpApiData (..))
 import Share.Branch (Branch (..))
 import Share.IDs
 import Share.IDs qualified as IDs
+import Share.Postgres.Causal.Queries (CausalHistoryCursor)
 import Share.Postgres.IDs
+import Share.Prelude
+import Share.Utils.API (Paged, (:++) (..))
 import Share.Web.Share.Contributions.Types (ShareContribution)
 import Share.Web.Share.DisplayInfo.Types (UserDisplayInfo)
 import Share.Web.Share.Projects.Types
@@ -75,3 +78,68 @@ instance ToHttpApiData BranchKindFilter where
   toQueryParam AllBranchKinds = "all"
   toQueryParam OnlyCoreBranches = "core"
   toQueryParam OnlyContributorBranches = "contributor"
+
+-- {
+--   "projectRef": "@unison/base",
+--   "branchRef": "main",
+--   "prevCursor": "c-asdf-1234",
+--   "nextCursor": "c-asdf-1234",
+--   "history": [
+--     {
+--       "tag": "Changeset",
+--       "causalHash": "#asdf-1234",
+--     }
+--   ]
+-- }
+
+data BranchHistoryResponse = BranchHistoryResponse
+  { projectRef :: ProjectShortHand,
+    branchRef :: BranchShortHand,
+    history :: Paged CausalHistoryCursor BranchHistoryEntry
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON BranchHistoryResponse where
+  toJSON BranchHistoryResponse {..} =
+    object
+      [ "projectRef" .= IDs.toText @ProjectShortHand projectRef,
+        "branchRef" .= IDs.toText @BranchShortHand branchRef,
+        "history" .= history
+      ]
+
+instance FromJSON BranchHistoryResponse where
+  parseJSON = withObject "BranchHistoryResponse" $ \o ->
+    BranchHistoryResponse
+      <$> (o .: "projectRef")
+      <*> (o .: "branchRef")
+      <*> o .: "history"
+
+data BranchHistoryCausal = BranchHistoryCausal
+  { causalHash :: CausalHash
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON BranchHistoryCausal where
+  toJSON BranchHistoryCausal {..} =
+    object
+      [ "causalHash" .= causalHash
+      ]
+
+instance FromJSON BranchHistoryCausal where
+  parseJSON = withObject "BranchHistoryCausal" $ \o ->
+    BranchHistoryCausal
+      <$> o .: "causalHash"
+
+data BranchHistoryEntry
+  = BranchHistoryCausalEntry BranchHistoryCausal
+  deriving stock (Eq, Show)
+
+instance ToJSON BranchHistoryEntry where
+  toJSON = \case
+    (BranchHistoryCausalEntry causal) ->
+      toJSON (causal :++ (object ["tag" .= ("Changeset" :: Text)]))
+
+instance FromJSON BranchHistoryEntry where
+  parseJSON v = do
+    causal <- parseJSON v
+    return $ BranchHistoryCausalEntry causal
