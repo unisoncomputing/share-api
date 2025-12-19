@@ -6,6 +6,7 @@
 module Share.Prelude.Orphans () where
 
 import Control.Comonad.Cofree (Cofree (..))
+import Control.Monad.Except
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT)
 import Data.Align (Semialign (..))
@@ -46,4 +47,7 @@ instance From ShortHash Text where
   from = SH.toText
 
 instance (MonadTracer m) => MonadTracer (MaybeT m) where
+  getTracer = lift getTracer
+
+instance (MonadTracer m) => MonadTracer (ExceptT e m) where
   getTracer = lift getTracer

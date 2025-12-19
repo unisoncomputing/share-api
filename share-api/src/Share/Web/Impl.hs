@@ -27,6 +27,7 @@ import Share.Web.Share.Projects.Impl qualified as Projects
 import Share.Web.Share.Webhooks.Impl qualified as Webhooks
 import Share.Web.Support.Impl qualified as Support
 import Share.Web.Types
+import Share.Web.UCM.HistoryComments.Impl qualified as HistoryComments
 import Share.Web.UCM.Projects.Impl qualified as UCMProjects
 import Share.Web.UCM.Sync.Impl qualified as Sync
 import Share.Web.UCM.SyncV2.Impl qualified as SyncV2
@@ -89,6 +90,7 @@ server =
     :<|> healthEndpoint
     :<|> Sync.server -- Deprecated path
     :<|> Sync.server
+    :<|> HistoryComments.server
     :<|> UCMProjects.server
     :<|> SyncV2.server
     :<|> Admin.server
