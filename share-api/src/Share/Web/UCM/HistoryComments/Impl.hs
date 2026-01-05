@@ -87,6 +87,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
     _receiverThread <- lift $ Ki.fork scope $ receiverWorker receive errMVar hashesToCheckQ commentsQ
     inserterThread <- lift $ Ki.fork scope $ inserterWorker authZ commentsQ project.projectId
     _hashCheckingThread <- lift $ Ki.fork scope $ hashCheckingWorker send hashesToCheckQ
+    Debug.debugLogM Debug.Temp "Upload history comments: waiting for inserter thread to finish"
     -- The inserter thread will finish when the client closes the connection.
     atomically $ Ki.await inserterThread
   case result of
@@ -102,9 +103,12 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
     inserterWorker authZ commentsQ projectId = do
       let loop = do
             (chunk, closed) <- atomically (fetchChunk insertCommentBatchSize (readTBMQueue commentsQ))
-            PG.runTransaction $ Q.insertHistoryComments authZ projectId chunk
+            PG.whenNonEmpty chunk do
+              Debug.debugM Debug.Temp "Inserting comments chunk of size" (length chunk)
+              PG.runTransaction $ Q.insertHistoryComments authZ projectId chunk
             when (not closed) loop
       loop
+      Debug.debugLogM Debug.Temp "Inserter worker finished"
 
     hashCheckingWorker ::
       (MsgOrError err HistoryCommentDownloaderChunk -> STM Bool) ->
@@ -114,13 +118,16 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
       let loop = do
             (hashes, closed) <- atomically (fetchChunk insertCommentBatchSize (readTBMQueue hashesToCheckQ))
             Debug.debugM Debug.Temp "Checking hashes chunk of size" (length hashes)
-            unknownHashes <- PG.runTransaction $ do Q.filterForUnknownHistoryCommentHashes hashes
-            case NESet.nonEmptySet (Set.fromList unknownHashes) of
-              Nothing -> pure ()
-              Just unknownHashesSet -> do
-                void . atomically $ send $ Msg $ RequestCommentsChunk unknownHashesSet
+            PG.whenNonEmpty hashes $ do
+              unknownHashes <- PG.runTransaction $ do Q.filterForUnknownHistoryCommentHashes hashes
+              case NESet.nonEmptySet (Set.fromList unknownHashes) of
+                Nothing -> pure ()
+                Just unknownHashesSet -> do
+                  void . atomically $ send $ Msg $ RequestCommentsChunk unknownHashesSet
             when (not closed) loop
       loop
+      void . atomically $ send $ Msg $ DoneCheckingHashesChunk
+      Debug.debugLogM Debug.Temp "Hash checking worker finished"
     receiverWorker :: STM (Maybe (MsgOrError Void HistoryCommentUploaderChunk)) -> TMVar Text -> TBMQueue Hash32 -> TBMQueue (Either Sync.HistoryComment Sync.HistoryCommentRevision) -> WebApp ()
     receiverWorker recv errMVar hashesToCheckQ commentsQ = do
       let loop = do
@@ -146,6 +153,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
                   pure loop
             next
       loop
+      Debug.debugLogM Debug.Temp "Receiver worker finished"
     insertCommentBatchSize = 100
     handleErrInQueue :: forall o x e a. Queues (MsgOrError e a) o -> e -> ExceptT e WebApp x
     handleErrInQueue Queues {send} e = do
