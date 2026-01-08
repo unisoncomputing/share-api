@@ -21,7 +21,6 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (Unimplemented (Unimplemented), reportError, respondError)
 import Share.Web.UCM.HistoryComments.Queries qualified as Q
 import Unison.Debug qualified as Debug
-import Unison.Hash32 (Hash32)
 import Unison.Server.HistoryComments.API qualified as HistoryComments
 import Unison.Server.HistoryComments.Types (HistoryCommentDownloaderChunk (..), HistoryCommentUploaderChunk (..), UploadCommentsResponse (..))
 import Unison.Server.HistoryComments.Types qualified as Sync
@@ -39,8 +38,8 @@ server mayCaller =
 wsMessageBufferSize :: Int
 wsMessageBufferSize = 100
 
-downloadHistoryCommentsStreamImpl :: Maybe UserId -> Connection -> WebApp ()
-downloadHistoryCommentsStreamImpl _mayUserId _conn = do
+downloadHistoryCommentsStreamImpl :: Maybe UserId -> BranchRef -> Connection -> WebApp ()
+downloadHistoryCommentsStreamImpl _mayUserId _branchRef _conn = do
   _ <- error "AUTH CHECK HERE"
   respondError Unimplemented
 
@@ -81,12 +80,12 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
       lift (AuthZ.checkUploadToProjectBranchCodebase callerUserId project.projectId (user_id <$> contributorUser)) >>= \case
         Left _authErr -> handleErrInQueue q (UploadCommentsNotAuthorized br)
         Right authZ -> pure authZ
-    hashesToCheckQ <- liftIO $ newTBMQueueIO 100
+    hashesToCheckQ <- liftIO $ newTBMQueueIO @(Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32]) 100
     commentsQ <- liftIO $ newTBMQueueIO 100
     errMVar <- liftIO newEmptyTMVarIO
     _receiverThread <- lift $ Ki.fork scope $ receiverWorker receive errMVar hashesToCheckQ commentsQ
     inserterThread <- lift $ Ki.fork scope $ inserterWorker authZ commentsQ project.projectId
-    _hashCheckingThread <- lift $ Ki.fork scope $ hashCheckingWorker send hashesToCheckQ
+    _hashCheckingThread <- lift $ Ki.fork scope $ hashCheckingWorker project.projectId send hashesToCheckQ
     Debug.debugLogM Debug.Temp "Upload history comments: waiting for inserter thread to finish"
     -- The inserter thread will finish when the client closes the connection.
     atomically $ Ki.await inserterThread
@@ -111,16 +110,33 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
       Debug.debugLogM Debug.Temp "Inserter worker finished"
 
     hashCheckingWorker ::
+      ProjectId ->
       (MsgOrError err HistoryCommentDownloaderChunk -> STM Bool) ->
-      TBMQueue Hash32 ->
+      TBMQueue (Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32]) ->
       WebApp ()
-    hashCheckingWorker send hashesToCheckQ = do
+    hashCheckingWorker projectId send hashesToCheckQ = do
       let loop = do
             (hashes, closed) <- atomically (fetchChunk insertCommentBatchSize (readTBMQueue hashesToCheckQ))
             Debug.debugM Debug.Temp "Checking hashes chunk of size" (length hashes)
             PG.whenNonEmpty hashes $ do
-              unknownHashes <- PG.runTransaction $ do Q.filterForUnknownHistoryCommentHashes hashes
-              case NESet.nonEmptySet (Set.fromList unknownHashes) of
+              unknownCommentHashes <- fmap Set.fromList $ PG.runTransaction $ do
+                Q.filterForUnknownHistoryCommentHashes (Sync.unHistoryCommentHash32 . fst <$> hashes)
+              let (revisionHashesWeDefinitelyNeed, revisionHashesToCheck) =
+                    hashes
+                      -- Only check revisions for comments that are unknown
+                      & foldMap \case
+                        (commentHash, revisionHashes)
+                          -- If the comment hash is unknown, we need _all_ its revisions, we
+                          -- don't need to check them.
+                          -- Otherwise, we need to check which revisions are unknown.
+                          | Set.member (Sync.unHistoryCommentHash32 commentHash) unknownCommentHashes -> (revisionHashes, [])
+                          | otherwise -> ([], revisionHashes)
+              unknownRevsFiltered <- PG.runTransaction $ Q.filterForUnknownHistoryCommentRevisionHashes projectId (Sync.unHistoryCommentRevisionHash32 <$> revisionHashesToCheck)
+              let allNeededHashes =
+                    (Set.map (Left . Sync.HistoryCommentHash32) unknownCommentHashes)
+                      <> (Set.fromList . fmap Right $ revisionHashesWeDefinitelyNeed)
+                      <> (Set.fromList (Right . Sync.HistoryCommentRevisionHash32 <$> unknownRevsFiltered))
+              case NESet.nonEmptySet allNeededHashes of
                 Nothing -> pure ()
                 Just unknownHashesSet -> do
                   void . atomically $ send $ Msg $ RequestCommentsChunk unknownHashesSet
@@ -128,7 +144,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
       loop
       void . atomically $ send $ Msg $ DoneCheckingHashesChunk
       Debug.debugLogM Debug.Temp "Hash checking worker finished"
-    receiverWorker :: STM (Maybe (MsgOrError Void HistoryCommentUploaderChunk)) -> TMVar Text -> TBMQueue Hash32 -> TBMQueue (Either Sync.HistoryComment Sync.HistoryCommentRevision) -> WebApp ()
+    receiverWorker :: STM (Maybe (MsgOrError Void HistoryCommentUploaderChunk)) -> TMVar Text -> TBMQueue (Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32]) -> TBMQueue (Either Sync.HistoryComment Sync.HistoryCommentRevision) -> WebApp ()
     receiverWorker recv errMVar hashesToCheckQ commentsQ = do
       let loop = do
             next <- atomically do

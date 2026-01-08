@@ -5,6 +5,7 @@ module Share.Web.UCM.HistoryComments.Queries
   ( fetchProjectBranchCommentsSince,
     insertHistoryComments,
     filterForUnknownHistoryCommentHashes,
+    filterForUnknownHistoryCommentRevisionHashes,
   )
 where
 
@@ -203,10 +204,26 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
             )
 
 filterForUnknownHistoryCommentHashes :: (PG.QueryA m) => [Hash32] -> m [Hash32]
-filterForUnknownHistoryCommentHashes hashes = do
-  -- error "TODO: Check whether they're in the project as well."
+filterForUnknownHistoryCommentHashes commentHashes = do
   PG.queryListCol
     [PG.sql|
-      SELECT hash FROM ^{PG.singleColumnTable hashes} AS t(hash)
-        WHERE hash NOT IN (SELECT comment_hash FROM history_comments)
+      SELECT hash FROM ^{PG.singleColumnTable commentHashes} AS t(hash)
+        WHERE NOT EXISTS (
+          SELECT FROM history_comments hc
+           WHERE hc.comment_hash = t.hash
+        )
+    |]
+
+filterForUnknownHistoryCommentRevisionHashes :: (PG.QueryA m) => ProjectId -> [Hash32] -> m [Hash32]
+filterForUnknownHistoryCommentRevisionHashes projectId revisionHashes = do
+  PG.queryListCol
+    [PG.sql|
+      SELECT hash FROM ^{PG.singleColumnTable revisionHashes} AS t(hash)
+        WHERE NOT EXISTS (
+          SELECT FROM history_comment_revisions_project_discovery hcrpd
+            JOIN history_comment_revisions hcr
+              ON hcrpd.history_comment_revision_id = hcr.id
+          WHERE hcrpd.project_id = #{projectId}
+            AND hcr.revision_hash = t.hash
+        )
     |]
