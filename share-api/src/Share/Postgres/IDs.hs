@@ -23,6 +23,7 @@ module Share.Postgres.IDs
     NamespaceTermMappingId (..),
     NamespaceTypeMappingId (..),
     ComponentSummaryDigest (..),
+    PersonalKeyId (..),
 
     -- * Conversions
     hash32AsComponentHash_,
@@ -103,6 +104,10 @@ newtype NamespaceTypeMappingId = NamespaceTypeMappingId Int32
 newtype ComponentSummaryDigest = ComponentSummaryDigest {unComponentSummaryDigest :: ByteString}
   deriving stock (Show, Eq, Ord)
   deriving (PG.EncodeValue, PG.DecodeValue) via ByteString
+
+newtype PersonalKeyId = PersonalKeyId {unPersonalKeyId :: Int32}
+  deriving stock (Eq, Ord, Show)
+  deriving (PG.DecodeValue, PG.EncodeValue) via Int32
 
 toHash32 :: (Coercible h Hash) => h -> Hash32
 toHash32 = Hash32.fromHash . coerce

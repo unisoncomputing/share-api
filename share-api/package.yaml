@@ -154,6 +154,7 @@ dependencies:
 - wai-extra
 - wai-middleware-prometheus
 - warp
+- websockets
 - witch
 - witherable
 - x509
