@@ -1,7 +1,7 @@
 module Share.BackgroundJobs (startWorkers) where
 
 import Ki.Unlifted qualified as Ki
-import Share.BackgroundJobs.Diffs.CausalDiffs qualified as ContributionDiffs
+-- import Share.BackgroundJobs.Diffs.CausalDiffs qualified as ContributionDiffs
 import Share.BackgroundJobs.Monad (Background)
 import Share.BackgroundJobs.Search.DefinitionSync qualified as DefnSearch
 import Share.BackgroundJobs.Webhooks.Worker qualified as Webhooks
@@ -10,5 +10,5 @@ import Share.BackgroundJobs.Webhooks.Worker qualified as Webhooks
 startWorkers :: Ki.Scope -> Background ()
 startWorkers scope = do
   DefnSearch.worker scope
-  ContributionDiffs.worker scope
+  -- ContributionDiffs.worker scope
   Webhooks.worker scope
