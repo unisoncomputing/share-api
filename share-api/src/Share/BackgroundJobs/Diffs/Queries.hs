@@ -3,6 +3,7 @@ module Share.BackgroundJobs.Diffs.Queries
     submitCausalsToBeDiffed,
     claimCausalDiff,
     deleteClaimedCausalDiff,
+    markCausalDiffInvalid,
   )
 where
 
@@ -84,10 +85,23 @@ claimCausalDiff = do
     [sql|
       SELECT from_causal_id, to_causal_id, from_codebase_owner, to_codebase_owner
       FROM causal_diff_queue
+        WHERE error IS NULL
       ORDER BY created_at ASC
       LIMIT 1
       -- Skip any that are being synced by other workers.
       FOR UPDATE SKIP LOCKED
+    |]
+
+markCausalDiffInvalid :: Text -> CausalDiffInfo -> Transaction e ()
+markCausalDiffInvalid err CausalDiffInfo {fromCausalId, toCausalId, fromCodebaseOwner, toCodebaseOwner} =
+  execute_
+    [sql|
+      UPDATE causal_diff_queue
+      SET error = #{err}
+      WHERE causal_diff_queue.from_causal_id = #{fromCausalId}
+        AND causal_diff_queue.to_causal_id = #{toCausalId}
+        AND causal_diff_queue.from_codebase_owner = #{fromCodebaseOwner}
+        AND causal_diff_queue.to_codebase_owner = #{toCodebaseOwner}
     |]
 
 deleteClaimedCausalDiff :: CausalDiffInfo -> Transaction e ()

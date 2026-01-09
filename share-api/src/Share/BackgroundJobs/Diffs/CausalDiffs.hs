@@ -25,6 +25,7 @@ import Share.Web.Authorization qualified as AuthZ
 import Share.Web.Errors (EntityMissing (..))
 import Share.Web.Share.Diffs.Impl qualified as Diffs
 import System.Clock qualified as Clock
+import UnliftIO qualified
 
 -- | Check every 10 minutes if we haven't heard on the notifications channel.
 -- Just in case we missed a notification.
@@ -50,19 +51,32 @@ processDiffs authZReceipt unisonRuntime = do
 
 -- | Process a diff, then return whether or not we did any work.
 processDiff :: AuthZ.AuthZReceipt -> CR.UnisonRuntime -> Background Bool
-processDiff authZReceipt unisonRuntime = do
-  result <- Trace.withSpan "background:causal-diffs:process-diff" mempty $
-    PG.runTransactionMode PG.RepeatableRead PG.ReadWrite do
-      DQ.claimCausalDiff >>= \case
-        Nothing -> pure Nothing
-        Just causalDiffInfo -> withTags (causalDiffTags causalDiffInfo) do
-          startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
-          result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime causalDiffInfo)
-          DQ.deleteClaimedCausalDiff causalDiffInfo
-          pure (Just (causalDiffInfo, startTime, result))
+processDiff authZReceipt unisonRuntime = Trace.withSpan "background:causal-diffs:process-diff" mempty $ do
+  pendingCausalDiffVar <- liftIO $ UnliftIO.newEmptyMVar
+  result <- UnliftIO.tryAny $ PG.runTransactionMode PG.RepeatableRead PG.ReadWrite do
+    DQ.claimCausalDiff >>= \case
+      Nothing -> pure Nothing
+      Just causalDiffInfo -> withTags (causalDiffTags causalDiffInfo) do
+        PG.transactionUnsafeIO $ UnliftIO.tryPutMVar pendingCausalDiffVar causalDiffInfo
+        startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
+        result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime causalDiffInfo)
+        DQ.deleteClaimedCausalDiff causalDiffInfo
+        pure (Just (causalDiffInfo, startTime, result))
   case result of
-    Nothing -> pure False
-    Just (cdi, startTime, result) -> do
+    -- The transaction failed with an exception.
+    -- One possible cause is an unknown builtin.
+    -- We should report it and mark it as invalid so we don't keep retrying it.
+    Left err -> do
+      mCausalDiffInfo <- liftIO $ UnliftIO.tryTakeMVar pendingCausalDiffVar
+      case mCausalDiffInfo of
+        Nothing -> pure ()
+        Just cdi -> withTags (causalDiffTags cdi) do
+          reportError err
+          PG.runTransaction $ DQ.markCausalDiffInvalid (tShow err) cdi
+      -- Continue processing other diffs.
+      pure True
+    Right Nothing -> pure False
+    Right (Just (cdi, startTime, result)) -> do
       let tags = causalDiffTags cdi
       withTags tags do
         case result of
