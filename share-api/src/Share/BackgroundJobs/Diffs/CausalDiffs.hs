@@ -57,9 +57,15 @@ processDiff authZReceipt unisonRuntime = Trace.withSpan "background:causal-diffs
     DQ.claimCausalDiff >>= \case
       Nothing -> pure Nothing
       Just causalDiffInfo -> withTags (causalDiffTags causalDiffInfo) do
+        Logging.textLog ("Computing causal diff: " <> tShow causalDiffInfo)
+          & Logging.withSeverity Logging.Info
+          & Logging.logMsg
         PG.transactionUnsafeIO $ UnliftIO.tryPutMVar pendingCausalDiffVar causalDiffInfo
         startTime <- PG.transactionUnsafeIO (Clock.getTime Clock.Monotonic)
         result <- PG.catchTransaction (maybeComputeAndStoreCausalDiff authZReceipt unisonRuntime causalDiffInfo)
+        Logging.textLog ("Finished causal diff: " <> tShow causalDiffInfo)
+          & Logging.withSeverity Logging.Info
+          & Logging.logMsg
         DQ.deleteClaimedCausalDiff causalDiffInfo
         pure (Just (causalDiffInfo, startTime, result))
   case result of

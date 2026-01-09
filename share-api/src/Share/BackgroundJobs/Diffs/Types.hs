@@ -9,7 +9,7 @@ data CausalDiffInfo = CausalDiffInfo
     toCausalId :: CausalId,
     fromCodebaseOwner :: UserId,
     toCodebaseOwner :: UserId
-  }
+  } deriving (Eq, Show)
 
 instance PG.DecodeRow CausalDiffInfo where
   decodeRow =
