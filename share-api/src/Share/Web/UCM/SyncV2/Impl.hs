@@ -146,7 +146,7 @@ codebaseForBranchRef branchRef = do
       (Project {ownerUserId = projectOwnerUserId}, contributorId) <- ExceptT . PG.tryRunTransaction $ do
         project <- PGQ.projectByShortHand projectShortHand `whenNothingM` throwError (CodebaseLoadingErrorProjectNotFound $ projectShortHand)
         pure (project, Nothing)
-      authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (CodebaseLoadingErrorNoReadPermission branchRef)
+      authZToken <- lift AuthZ.hashJWTAuthOverride `whenLeftM` \_err -> throwError (CodebaseLoadingErrorNoReadPermission branchRef)
       let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
       pure $ Codebase.codebaseEnv authZToken codebaseLoc
     Right (Right (ProjectBranchShortHand {userHandle, projectSlug, contributorHandle})) -> do
@@ -155,6 +155,6 @@ codebaseForBranchRef branchRef = do
         project <- (PGQ.projectByShortHand projectShortHand) `whenNothingM` throwError (CodebaseLoadingErrorProjectNotFound projectShortHand)
         mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (UserQ.userByHandle ch) `whenNothingM` throwError (CodebaseLoadingErrorUserNotFound ch)
         pure (project, mayContributorUserId)
-      authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (CodebaseLoadingErrorNoReadPermission branchRef)
+      authZToken <- lift AuthZ.hashJWTAuthOverride `whenLeftM` \_err -> throwError (CodebaseLoadingErrorNoReadPermission branchRef)
       let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
       pure $ Codebase.codebaseEnv authZToken codebaseLoc

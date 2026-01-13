@@ -149,7 +149,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
         Left err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesInvalidRepoInfo err repoInfo)
         Right (RepoInfoUser userHandle) -> do
           User {user_id = repoOwnerUserId} <- lift (PG.runTransaction (UserQ.userByHandle userHandle)) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesUserNotFound $ IDs.toText @UserHandle userHandle)
-          authZToken <- lift AuthZ.checkDownloadFromUserCodebase `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
+          authZToken <- lift AuthZ.hashJWTAuthOverride `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
           let codebaseLoc = Codebase.codebaseLocationForUserCodebase repoOwnerUserId
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
         Right (RepoInfoProjectBranch ProjectBranchShortHand {userHandle, projectSlug, contributorHandle}) -> do
@@ -158,7 +158,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
             project <- (PGQ.projectByShortHand projectShortHand) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesProjectNotFound $ IDs.toText @ProjectShortHand projectShortHand)
             mayContributorUserId <- for contributorHandle \ch -> fmap user_id $ (UserQ.userByHandle ch) `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesUserNotFound $ IDs.toText @UserHandle ch)
             pure (project, mayContributorUserId)
-          authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
+          authZToken <- lift AuthZ.hashJWTAuthOverride `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
           let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
         Right (RepoInfoProjectRelease ProjectReleaseShortHand {userHandle, projectSlug}) -> do
@@ -166,7 +166,7 @@ downloadEntitiesEndpoint mayUserId DownloadEntitiesRequest {repoInfo, hashes = h
           (Project {ownerUserId = projectOwnerUserId}, contributorId) <- ExceptT . PG.tryRunTransaction $ do
             project <- PGQ.projectByShortHand projectShortHand `whenNothingM` throwError (DownloadEntitiesFailure . DownloadEntitiesProjectNotFound $ IDs.toText @ProjectShortHand projectShortHand)
             pure (project, Nothing)
-          authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
+          authZToken <- lift AuthZ.hashJWTAuthOverride `whenLeftM` \_err -> throwError (DownloadEntitiesFailure $ DownloadEntitiesNoReadPermission repoInfo)
           let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
           pure $ Codebase.codebaseEnv authZToken codebaseLoc
     Env.Env {maxParallelismPerDownloadRequest} <- ask
