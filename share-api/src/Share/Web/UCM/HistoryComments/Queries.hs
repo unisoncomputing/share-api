@@ -36,9 +36,9 @@ fetchProjectBranchCommentsSince !_authZ projectId causalId sinceTime = do
       SELECT hcr.id, hc.id, hcr.subject, hcr.content, hcr.created_at_ms, hcr.is_hidden, hcr.revision_hash, hc.comment_hash, hcr.author_signature
             history_comment_revisions_project_discovery pd
             JOIN history_comment_revisions hcr
-              ON pd.history_comment_revision_id = hcr.id
+              ON pd.comment_revision_id = hcr.id
             JOIN history_comments hc
-              ON hcr.history_comment_id = hc.id
+              ON hcr.comment_id = hc.id
             WHERE
               pd.project_id = #{projectId}
               AND pd.discovered_at > #{sinceTime}
@@ -99,7 +99,7 @@ utcTimeToMillis utcTime =
     & round
 
 insertHistoryComments :: AuthZReceipt -> ProjectId -> [Either HistoryComment HistoryCommentRevision] -> PG.Transaction e ()
-insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
+insertHistoryComments !_authZ projectId chunks = do
   let thumbprints = NESet.nonEmptySet $ Set.fromList (comments <&> \HistoryComment {authorThumbprint} -> authorThumbprint)
   for thumbprints insertThumbprints
   whenNonEmpty comments $ insertHistoryComments comments
@@ -111,7 +111,7 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
       chunks & foldMap \case
         Left comment -> ([comment], [])
         Right revision -> ([], [revision])
-    insertHistoryComments :: [HistoryComment] -> PG.Pipeline e ()
+    insertHistoryComments :: (PG.QueryA m) => [HistoryComment] -> m ()
     insertHistoryComments comments = do
       PG.execute_
         [PG.sql|
@@ -138,13 +138,13 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
               commentHash
             )
 
-    insertRevisions :: [HistoryCommentRevision] -> PG.Pipeline e ()
+    insertRevisions :: (PG.QueryA m) => [HistoryCommentRevision] -> m ()
     insertRevisions revs = do
       let doRevs =
             PG.execute_
               [PG.sql|
-                WITH new_revisions(subject, content, created_at_ms, hidden, author_signature, revision_hash, comment_hash) AS (
-                  VALUES ^{PG.toTable revsTable}
+                WITH new_revisions(subject, contents, created_at_ms, hidden, author_signature, revision_hash, comment_hash) AS (
+                  SELECT * FROM ^{PG.toTable revsTable}
                 )
                 INSERT INTO history_comment_revisions(comment_id, subject, contents, created_at_ms, hidden, author_signature, revision_hash)
                   SELECT hc.id, nr.subject, nr.contents, nr.created_at_ms, nr.hidden, nr.author_signature, nr.revision_hash
@@ -157,12 +157,12 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
             PG.execute_
               [PG.sql|
                   WITH new_discoveries(revision_hash) AS (
-                    VALUES ^{PG.singleColumnTable revHashTable}
+                    SELECT * FROM ^{PG.singleColumnTable revHashTable}
                   )
-                  INSERT INTO history_comment_revisions_project_discovery(project_id, history_comment_revision_id)
+                  INSERT INTO history_comment_revisions_project_discovery(project_id, comment_revision_id)
                     SELECT #{projectId}, hcr.id
                     FROM new_discoveries nd
-                    JOIN history_comments hcr
+                    JOIN history_comment_revisions hcr
                       ON hcr.revision_hash = nd.revision_hash
                   ON CONFLICT DO NOTHING
                 |]
@@ -179,28 +179,28 @@ insertHistoryComments !_authZ projectId chunks = PG.pipelined $ do
               commentHash
             )
         revHashTable = revs <&> \HistoryCommentRevision {..} -> (revisionHash)
-    insertDiscoveryInfo :: [HistoryCommentRevision] -> PG.Pipeline e ()
+    insertDiscoveryInfo :: (PG.QueryA m) => [HistoryCommentRevision] -> m ()
     insertDiscoveryInfo revs = do
       PG.execute_
         [PG.sql|
-          WITH new_discoveries(project_id, history_comment_hash, discovered_at) AS (
-            VALUES ^{PG.toTable discoveryTable}
+          WITH new_discoveries(project_id, history_comment_hash) AS (
+            SELECT * FROM ^{PG.toTable discoveryTable}
           )
-          INSERT INTO history_comment_revisions_project_discovery(project_id, history_comment_revision_id, discovered_at)
-            SELECT #{projectId}, hcr.id, nd.discovered_at
+          INSERT INTO history_comment_revisions_project_discovery(project_id, comment_revision_id)
+            SELECT #{projectId}, hcr.id
             FROM new_discoveries nd
             JOIN history_comments hc
               ON hc.comment_hash = nd.history_comment_hash
             JOIN history_comment_revisions hcr
-              ON hcr.history_comment_id = hc.id
+              ON hcr.comment_id = hc.id
           ON CONFLICT DO NOTHING
         |]
       where
+        discoveryTable :: [(ProjectId, Hash32)]
         discoveryTable =
           revs <&> \HistoryCommentRevision {..} ->
             ( projectId,
-              commentHash,
-              utcTimeToMillis createdAt
+              commentHash
             )
 
 filterForUnknownHistoryCommentHashes :: (PG.QueryA m) => [Hash32] -> m [Hash32]
@@ -222,7 +222,7 @@ filterForUnknownHistoryCommentRevisionHashes projectId revisionHashes = do
         WHERE NOT EXISTS (
           SELECT FROM history_comment_revisions_project_discovery hcrpd
             JOIN history_comment_revisions hcr
-              ON hcrpd.history_comment_revision_id = hcr.id
+              ON hcrpd.comment_revision_id = hcr.id
           WHERE hcrpd.project_id = #{projectId}
             AND hcr.revision_hash = t.hash
         )

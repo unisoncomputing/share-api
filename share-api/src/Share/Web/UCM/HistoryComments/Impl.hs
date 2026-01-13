@@ -89,6 +89,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
     Debug.debugLogM Debug.Temp "Upload history comments: waiting for inserter thread to finish"
     -- The inserter thread will finish when the client closes the connection.
     atomically $ Ki.await inserterThread
+    Debug.debugLogM Debug.Temp "Done. Closing connection."
   case result of
     Left err -> reportError err
     Right (Left err, _leftovers) -> reportError err
