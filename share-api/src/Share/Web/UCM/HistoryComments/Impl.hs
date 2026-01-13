@@ -1,8 +1,11 @@
 module Share.Web.UCM.HistoryComments.Impl (server) where
 
 import Control.Concurrent.STM.TBMQueue (TBMQueue, closeTBMQueue, newTBMQueueIO, readTBMQueue, writeTBMQueue)
+import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
+import Data.List.NonEmpty qualified as NEL
+import Data.Monoid (Any (..))
 import Data.Set qualified as Set
 import Data.Set.NonEmpty qualified as NESet
 import Ki.Unlifted qualified as Ki
@@ -10,6 +13,7 @@ import Network.WebSockets.Connection
 import Share.IDs
 import Share.IDs qualified as IDs
 import Share.Postgres qualified as PG
+import Share.Postgres.Cursors qualified as Cursor
 import Share.Postgres.Queries qualified as PGQ
 import Share.Postgres.Users.Queries qualified as UserQ
 import Share.Prelude
@@ -18,7 +22,7 @@ import Share.User
 import Share.Web.App (WebApp, WebAppServer)
 import Share.Web.Authentication qualified as AuthN
 import Share.Web.Authorization qualified as AuthZ
-import Share.Web.Errors (Unimplemented (Unimplemented), reportError, respondError)
+import Share.Web.Errors (reportError)
 import Share.Web.UCM.HistoryComments.Queries qualified as Q
 import Unison.Debug qualified as Debug
 import Unison.Server.HistoryComments.API qualified as HistoryComments
@@ -39,9 +43,131 @@ wsMessageBufferSize :: Int
 wsMessageBufferSize = 100
 
 downloadHistoryCommentsStreamImpl :: Maybe UserId -> BranchRef -> Connection -> WebApp ()
-downloadHistoryCommentsStreamImpl _mayUserId _branchRef _conn = do
-  _ <- error "AUTH CHECK HERE"
-  respondError Unimplemented
+downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = do
+  result <- withQueues @(MsgOrError Sync.DownloadCommentsResponse HistoryCommentUploaderChunk) @(MsgOrError Void HistoryCommentDownloaderChunk) wsMessageBufferSize wsMessageBufferSize conn \q@(Queues {receive, send}) -> Ki.scoped \scope -> runExceptT $ do
+    projectBranchSH@ProjectBranchShortHand {userHandle, projectSlug, contributorHandle} <- case IDs.fromText @ProjectBranchShortHand branchRef of
+      Left err -> handleErrInQueue q (Sync.DownloadCommentsGenericFailure $ IDs.toText err)
+      Right pbsh -> pure pbsh
+    let projectSH = ProjectShortHand {userHandle, projectSlug}
+    mayInfo <- lift . runMaybeT $ mapMaybeT PG.runTransaction $ do
+      project <- MaybeT $ PGQ.projectByShortHand projectSH
+      branch <- MaybeT $ PGQ.branchByProjectBranchShortHand projectBranchSH
+      contributorUser <- for contributorHandle (MaybeT . UserQ.userByHandle)
+      pure (project, branch, contributorUser)
+    (project, branch, _contributorUser) <- maybe (handleErrInQueue q $ Sync.DownloadCommentsProjectBranchNotFound br) pure $ mayInfo
+    !authZ <-
+      lift (AuthZ.checkDownloadFromProjectBranchCodebase mayCallerUserId project.projectId) >>= \case
+        Left _authErr -> handleErrInQueue q (Sync.DownloadCommentsNotAuthorized br)
+        Right authZ -> pure authZ
+    commentHashesToSendQ <- liftIO $ newTBMQueueIO @(Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32]) 100
+    commentsToSendQ <- liftIO $ newTBMQueueIO @(Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32) 100
+    -- Is filled when the server notifies us it's done requesting comments
+    doneRequestingCommentsMVar <- newEmptyTMVarIO
+    errMVar <- newEmptyTMVarIO
+    _ <- liftIO $ Ki.fork scope (hashNotifyWorker send commentHashesToSendQ)
+    senderThread <- liftIO $ Ki.fork scope (senderWorker send commentsToSendQ)
+    _ <- liftIO $ Ki.fork scope (receiverWorker receive commentsToSendQ errMVar doneRequestingCommentsMVar downloadableCommentsVar)
+    downloadableCommentsVar <-
+      liftIO $ newTVarIO @_ @(Set (Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32)) Set.empty
+    PG.runTransaction $ do
+      cursor <- Q.projectBranchCommentsCursor authZ branch.causal
+      Cursor.foldBatched cursor 100 \hashes -> do
+        let (newHashes, chunks) =
+              hashes
+                & foldMap
+                  ( \(commentHash, revisionHash) ->
+                      ([Left commentHash, Right revisionHash], [(commentHash, [revisionHash])])
+                  )
+                & first Set.fromList
+        atomically $ do
+          modifyTVar downloadableCommentsVar (Set.union newHashes)
+          for chunks \chunk -> writeTBMQueue commentHashesToSendQ (chunk)
+    -- Close the hashes queue to signal we don't have any more, then wait for the notifier to finish
+    atomically $ closeTBMQueue commentHashesToSendQ
+    -- Once the comment Hash queue is closed, eventually we'll send a DoneSendingHashesChunk message,
+    -- the server will respond with a DoneCheckingHashesChunk message after it's made all necessary
+    -- requests.
+    --
+    -- Then we can close the comment upload hash queue to signal we won't get any more upload requests.
+    atomically $ readTMVar doneRequestingCommentsMVar >> closeTBMQueue commentHashesToSendQ
+    -- Now we just have to wait for the sender to finish sending all the comments we have queued up.
+    -- Once we've uploaded everything we can safely exit and the connection will be closed.
+    atomically $ Ki.await senderThread
+  case result of
+    Left err -> do
+      reportError err
+    Right (Left err, _leftovers {- Messages sent by server after we finished. -}) -> do
+      reportError err
+    Right (Right (), _leftovers {- Messages sent by server after we finished. -}) -> do
+      pure ()
+  where
+    senderWorker ::
+      ( MsgOrError err HistoryCommentUploaderChunk ->
+        STM Bool
+      ) ->
+      TBMQueue (Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32) ->
+      IO ()
+    senderWorker send commentsToSendQ = do
+      let loop = do
+            (hashesToSend, isClosed) <- atomically $ flushTBMQueue commentsToSendQ
+            -- Send comments first, then revisions
+            withComments <- Q.historyCommentsByHashOf (traversed . _Left) hashesToSend
+            withCommentsAndRevisions <- Q.historyCommentRevisionsByHashOf (traversed . _Right) withComments
+            for withCommentsAndRevisions \commentOrRevision -> atomically . send . Msg $ intoChunk commentOrRevision
+            guard (not isClosed)
+            loop
+      void . runMaybeT $ loop
+
+    receiverWorker ::
+      STM (Maybe (MsgOrError err HistoryCommentDownloaderChunk)) ->
+      TBMQueue
+        ( Either
+            Sync.HistoryCommentHash32
+            Sync.HistoryCommentRevisionHash32
+        ) ->
+      TMVar Text ->
+      TMVar () ->
+      (TVar (Set (Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32))) ->
+      IO ()
+    receiverWorker receive toUploadQ errMVar doneRequestingCommentsMVar downloadableCommentsVar = do
+      let loop = do
+            msgOrError <- atomically receive
+            case msgOrError of
+              -- Channel closed, shut down
+              Nothing -> pure ()
+              Just (Msg msg) -> case msg of
+                DoneCheckingHashesChunk -> do
+                  -- Notify that the server is done requesting comments
+                  atomically $ putTMVar doneRequestingCommentsMVar ()
+                  loop
+                RequestCommentsChunk comments -> do
+                  atomically $ do
+                    downloadableComments <- readTVar downloadableCommentsVar
+                    let validComments = Set.intersection (NESet.toSet comments) downloadableComments
+                    for_ validComments $ writeTBMQueue toUploadQ
+                  loop
+              Just (DeserialiseFailure msg) -> do
+                atomically $ putTMVar errMVar $ "uploadHistoryComments: deserialisation failure: " <> msg
+              Just (UserErr err) -> do
+                atomically $ putTMVar errMVar $ "uploadHistoryComments: server error: " <> tShow err
+      loop
+
+    hashNotifyWorker :: (MsgOrError Sync.DownloadCommentsResponse HistoryCommentUploaderChunk -> STM Bool) -> TBMQueue (Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32]) -> IO ()
+    hashNotifyWorker send q = do
+      let loop = do
+            isClosed <- atomically $ do
+              (hashesToCheck, isClosed) <- flushTBMQueue q
+              Any serverClosed <-
+                NEL.nonEmpty hashesToCheck & foldMapM \possiblyNewHashes -> do
+                  Any <$> (send $ Msg $ PossiblyNewHashesChunk possiblyNewHashes)
+              pure (isClosed || serverClosed)
+            if isClosed
+              then do
+                -- If the queue is closed, send a DoneCheckingHashesChunk to notify the server we're done.
+                void . atomically $ send (Msg DoneSendingHashesChunk)
+              else loop
+      loop
+    intoChunk = either HistoryCommentChunk HistoryCommentRevisionChunk
 
 -- Re-run the given STM action at most n times, collecting the results into a list.
 -- If the action returns Nothing, stop and return what has been collected so far, along with a Bool indicating whether the action was exhausted.
@@ -106,6 +232,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
             PG.whenNonEmpty chunk do
               Debug.debugM Debug.Temp "Inserting comments chunk of size" (length chunk)
               PG.runTransaction $ Q.insertHistoryComments authZ projectId chunk
+            when closed $ Debug.debugLogM Debug.Temp "Inserter worker: comments queue closed"
             when (not closed) loop
       loop
       Debug.debugLogM Debug.Temp "Inserter worker finished"
@@ -140,7 +267,9 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
               case NESet.nonEmptySet allNeededHashes of
                 Nothing -> pure ()
                 Just unknownHashesSet -> do
+                  Debug.debugM Debug.Temp "Requesting unknown hashes" unknownHashesSet
                   void . atomically $ send $ Msg $ RequestCommentsChunk unknownHashesSet
+            when closed $ Debug.debugLogM Debug.Temp "Hash checking worker: hashes queue closed"
             when (not closed) loop
       loop
       void . atomically $ send $ Msg $ DoneCheckingHashesChunk
@@ -151,10 +280,12 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
             next <- atomically do
               recv >>= \case
                 Nothing -> do
+                  Debug.debugLogM Debug.Temp "Receiver worker: connection closed"
                   closeTBMQueue hashesToCheckQ
                   closeTBMQueue commentsQ
                   pure (pure ())
                 Just (DeserialiseFailure err) -> do
+                  Debug.debugM Debug.Temp "Receiver worker: deserialisation failure" err
                   putTMVar errMVar err
                   pure (pure ())
                 Just (Msg msg) -> do
@@ -172,7 +303,21 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
       loop
       Debug.debugLogM Debug.Temp "Receiver worker finished"
     insertCommentBatchSize = 100
-    handleErrInQueue :: forall o x e a. Queues (MsgOrError e a) o -> e -> ExceptT e WebApp x
-    handleErrInQueue Queues {send} e = do
-      _ <- atomically $ send $ UserErr e
-      throwError e
+
+handleErrInQueue :: forall o x e a. Queues (MsgOrError e a) o -> e -> ExceptT e WebApp x
+handleErrInQueue Queues {send} e = do
+  _ <- atomically $ send $ UserErr e
+  throwError e
+
+-- Read all available values from a TBMQueue, returning them and whether the queue is closed.
+flushTBMQueue :: TBMQueue a -> STM ([a], Bool)
+flushTBMQueue q = do
+  optional (readTBMQueue q) >>= \case
+    -- No values available
+    Nothing -> empty
+    Just Nothing -> do
+      -- Queue closed
+      pure ([], True)
+    Just (Just v) -> do
+      (vs, closed) <- flushTBMQueue q <|> pure ([], False)
+      pure (v : vs, closed)
