@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Share.Web.UCM.HistoryComments.Queries
-  ( fetchProjectBranchCommentsSince,
+  ( projectBranchCommentsCursor,
     insertHistoryComments,
     filterForUnknownHistoryCommentHashes,
     filterForUnknownHistoryCommentRevisionHashes,
@@ -27,48 +27,37 @@ import Share.Web.Authorization (AuthZReceipt)
 import Unison.Hash32 (Hash32)
 import Unison.Server.HistoryComments.Types
 
-fetchProjectBranchCommentsSince :: AuthZReceipt -> ProjectId -> CausalId -> UTCTime -> PG.Transaction e (PGCursor HistoryCommentUploaderChunk)
-fetchProjectBranchCommentsSince !_authZ projectId causalId sinceTime = do
-  PG.newRowCursor @(Bool, Maybe Text, Maybe Text, Maybe Int64, Maybe Bool, Maybe ByteString, Maybe Hash32, Maybe Hash32, Maybe Text, Maybe Int64, Maybe Text, Maybe Hash32, Maybe Hash32)
-    "fetchProjectBranchCommentsSince"
+projectBranchCommentsCursor :: AuthZReceipt -> CausalId -> PG.Transaction e (PGCursor (HistoryCommentHash32, HistoryCommentRevisionHash32))
+projectBranchCommentsCursor !_authZ causalId = do
+  PG.newRowCursor @(HistoryCommentHash32, HistoryCommentRevisionHash32)
+    "projectBranchCommentsCursor"
     [PG.sql|
-    WITH revisions(id, comment_id, subject, contents, created_at_ms, hidden, revision_hash, comment_hash, author_signature) AS (
+    WITH history(causal_Id) AS (
+      SELECT causal_id FROM causal_history(#{causalId})
+    ), revisions(id, comment_id, subject, contents, created_at_ms, hidden, revision_hash, comment_hash, author_signature) AS (
       SELECT hcr.id, hc.id, hcr.subject, hcr.content, hcr.created_at_ms, hcr.is_hidden, hcr.revision_hash, hc.comment_hash, hcr.author_signature
-            history_comment_revisions_project_discovery pd
-            JOIN history_comment_revisions hcr
-              ON pd.comment_revision_id = hcr.id
+            FROM history
             JOIN history_comments hc
+              ON hc.causal_id = history.causal_id
+            JOIN history_comment_revisions hcr
               ON hcr.comment_id = hc.id
             WHERE
-              pd.project_id = #{projectId}
-              AND pd.discovered_at > #{sinceTime}
-              AND hc.causal_id IN (SELECT causal_id FROM causal_history(#{causalId}))
-    ) (SELECT true, NULL, NULL, NULL, NULL, NULL, NULL, NULL, hc.author, hc.created_at_ms, key.thumbprint, causal.hash, hc.comment_hash
-      FROM revisions rev
+              hc.causal_id IN ()
+    ) SELECT hc.comment_hash, hcr.revision_hash
+      FROM history
       JOIN history_comments hc
-        ON revisions.comment_id = hc.id
+        ON hc.causal_id = history.causal_id
       JOIN causals causal
         ON hc.causal_id = causal.id
       JOIN personal_keys key
         ON hc.author_key_id = key.id
-      )
-      UNION ALL
-      -- Include ALL the base comments regardless of time,
-      -- the vast majority of the time we'll need them, it simplifies logic,
-      -- and the client can just ignore them if they already have them.
-      (SELECT DISTINCT ON (rev.comment_id)
-        false, rev.subject, rev.content, rev.created_at_ms, rev.is_hidden, rev.author_signature, rev.revision_hash, rev.comment_hash, NULL, NULL, NULL, NULL, NULL
-      FROM revisions rev
+      JOIN LATERAL (
+        SELECT * FROM revisions rev
+        WHERE rev.comment_id = hc.id
+        ORDER BY rev.created_at_ms DESC
+        LIMIT 1
       )
     |]
-    <&> fmap \case
-      (True, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Just author, Just createdAtMs, Just authorThumbprint, Just causalHash, Just commentHash) ->
-        let createdAt = millisToUTCTime createdAtMs
-         in HistoryCommentChunk $ HistoryComment {..}
-      (False, Just subject, Just content, Just createdAtMs, Just isHidden, Just authorSignature, Just revisionHash, Just commentHash, Nothing, Nothing, Nothing, Nothing, Nothing) ->
-        let createdAt = millisToUTCTime createdAtMs
-         in HistoryCommentRevisionChunk $ HistoryCommentRevision {..}
-      row -> error $ "fetchProjectBranchCommentsSince: Unexpected row format: " <> show row
 
 insertThumbprints :: (PG.QueryA m) => NESet Text -> m ()
 insertThumbprints thumbprints = do
@@ -84,8 +73,8 @@ insertThumbprints thumbprints = do
 
 -- Convert milliseconds since epoch to UTCTime _exactly_.
 -- UTCTime has picosecond precision so this is lossless.
-millisToUTCTime :: Int64 -> UTCTime
-millisToUTCTime ms =
+_millisToUTCTime :: Int64 -> UTCTime
+_millisToUTCTime ms =
   toRational ms
     & (/ (1_000 :: Rational))
     & fromRational

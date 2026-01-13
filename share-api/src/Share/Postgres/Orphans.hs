@@ -33,10 +33,11 @@ import U.Codebase.TermEdit qualified as TermEdit
 import U.Util.Base32Hex qualified as Base32Hex
 import Unison.Hash (Hash)
 import Unison.Hash qualified as Hash
-import Unison.Hash32 (Hash32)
+import Unison.Hash32 (Hash32 (..))
 import Unison.Hash32 qualified as Hash32
 import Unison.Name (Name)
 import Unison.NameSegment.Internal (NameSegment (..))
+import Unison.Server.HistoryComments.Types
 import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
 import UnliftIO (MonadUnliftIO (..))
@@ -102,6 +103,10 @@ deriving via Hash instance Hasql.EncodeValue ComponentHash
 deriving via Hash instance FromHttpApiData ComponentHash
 
 deriving via Hash instance ToHttpApiData ComponentHash
+
+deriving via Hash32 instance Hasql.DecodeValue HistoryCommentHash32
+
+deriving via Hash32 instance Hasql.DecodeValue HistoryCommentRevisionHash32
 
 deriving via Text instance Hasql.DecodeValue NameSegment
 
