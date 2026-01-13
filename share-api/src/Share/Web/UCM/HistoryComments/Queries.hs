@@ -4,6 +4,8 @@
 module Share.Web.UCM.HistoryComments.Queries
   ( projectBranchCommentsCursor,
     insertHistoryComments,
+    historyCommentsByHashOf,
+    historyCommentRevisionsByHashOf,
     filterForUnknownHistoryCommentHashes,
     filterForUnknownHistoryCommentRevisionHashes,
   )
@@ -23,6 +25,7 @@ import Share.Postgres.Cursors (PGCursor)
 import Share.Postgres.Cursors qualified as PG
 import Share.Postgres.IDs
 import Share.Prelude
+import Share.Utils.Postgres (ordered)
 import Share.Web.Authorization (AuthZReceipt)
 import Unison.Hash32 (Hash32)
 import Unison.Server.HistoryComments.Types
@@ -58,6 +61,74 @@ projectBranchCommentsCursor !_authZ causalId = do
         LIMIT 1
       )
     |]
+
+historyCommentsByHashOf :: (PG.QueryA m) => Traversal s t HistoryCommentHash32 HistoryComment -> s -> m t
+historyCommentsByHashOf trav s = do
+  s
+    & asListOf trav %%~ \hashes ->
+      PG.queryListRows
+        [PG.sql|
+        WITH hashes (hash, ord) AS (
+          SELECT * FROM ^{PG.toTable $ ordered hashes}
+        ) SELECT hc.author, hc.created_at_ms, key.thumbprint, causal.hash AS causal_hash, hc.comment_hash
+          FROM hashes
+          JOIN history_comments hc
+            ON hc.comment_hash = hashes.hash
+          JOIN causals causal
+            ON hc.causal_id = causal.id
+          JOIN personal_keys key
+            ON hc.author_key_id = key.id
+          ORDER BY hashes.ord ASC
+      |]
+        <&> fmap
+          \( author,
+             createdAt,
+             authorThumbprint,
+             causalHash,
+             commentHash
+             ) ->
+              HistoryComment
+                { author,
+                  createdAt,
+                  authorThumbprint,
+                  causalHash,
+                  commentHash
+                }
+
+historyCommentRevisionsByHashOf :: (PG.QueryA m) => Traversal s t HistoryCommentRevisionHash32 HistoryCommentRevision -> s -> m t
+historyCommentRevisionsByHashOf trav s = do
+  s
+    & asListOf trav %%~ \hashes -> do
+      PG.queryListRows
+        [PG.sql|
+      WITH hashes (hash, ord) AS (
+        SELECT * FROM ^{PG.toTable $ ordered hashes}
+      ) SELECT hcr.subject, hcr.content, hcr.created_at_ms, hcr.is_hidden, hcr.author_signature, hcr.revision_hash, hc.comment_hash
+        FROM hashes
+        JOIN history_comment_revisions hcr
+          ON hcr.revision_hash = hashes.hash
+        JOIN history_comments hc
+          ON hcr.comment_id = hc.id
+        ORDER BY hashes.ord ASC
+    |]
+        <&> fmap
+          \( subject,
+             content,
+             createdAt,
+             isHidden,
+             authorSignature,
+             revisionHash,
+             commentHash
+             ) ->
+              HistoryCommentRevision
+                { subject,
+                  content,
+                  createdAt,
+                  isHidden,
+                  authorSignature,
+                  revisionHash,
+                  commentHash
+                }
 
 insertThumbprints :: (PG.QueryA m) => NESet Text -> m ()
 insertThumbprints thumbprints = do

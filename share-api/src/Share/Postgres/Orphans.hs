@@ -106,7 +106,11 @@ deriving via Hash instance ToHttpApiData ComponentHash
 
 deriving via Hash32 instance Hasql.DecodeValue HistoryCommentHash32
 
+deriving via Hash32 instance Hasql.EncodeValue HistoryCommentHash32
+
 deriving via Hash32 instance Hasql.DecodeValue HistoryCommentRevisionHash32
+
+deriving via Hash32 instance Hasql.EncodeValue HistoryCommentRevisionHash32
 
 deriving via Text instance Hasql.DecodeValue NameSegment
 
