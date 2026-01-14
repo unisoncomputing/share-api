@@ -35,17 +35,8 @@ projectBranchCommentsCursor !_authZ causalId = do
   PG.newRowCursor @(HistoryCommentHash32, HistoryCommentRevisionHash32)
     "projectBranchCommentsCursor"
     [PG.sql|
-    WITH history(causal_Id) AS (
-      SELECT causal_id FROM causal_history(#{causalId})
-    ), revisions(id, comment_id, subject, contents, created_at_ms, hidden, revision_hash, comment_hash, author_signature) AS (
-      SELECT hcr.id, hc.id, hcr.subject, hcr.content, hcr.created_at_ms, hcr.is_hidden, hcr.revision_hash, hc.comment_hash, hcr.author_signature
-            FROM history
-            JOIN history_comments hc
-              ON hc.causal_id = history.causal_id
-            JOIN history_comment_revisions hcr
-              ON hcr.comment_id = hc.id
-            WHERE
-              hc.causal_id IN ()
+    WITH history(causal_id) AS (
+      SELECT ch.causal_id FROM causal_history(#{causalId}) AS ch(causal_id)
     ) SELECT hc.comment_hash, hcr.revision_hash
       FROM history
       JOIN history_comments hc
@@ -55,11 +46,13 @@ projectBranchCommentsCursor !_authZ causalId = do
       JOIN personal_keys key
         ON hc.author_key_id = key.id
       JOIN LATERAL (
-        SELECT * FROM revisions rev
-        WHERE rev.comment_id = hc.id
-        ORDER BY rev.created_at_ms DESC
-        LIMIT 1
-      )
+        SELECT rev.revision_hash
+          FROM history_comment_revisions rev
+          WHERE rev.comment_id = hc.id
+          ORDER BY rev.created_at_ms DESC
+          LIMIT 1
+      ) hcr
+        ON TRUE
     |]
 
 historyCommentsByHashOf :: (PG.QueryA m) => Traversal s t HistoryCommentHash32 HistoryComment -> s -> m t
@@ -68,7 +61,7 @@ historyCommentsByHashOf trav s = do
     & asListOf trav %%~ \hashes ->
       PG.queryListRows
         [PG.sql|
-        WITH hashes (hash, ord) AS (
+        WITH hashes (ord, hash) AS (
           SELECT * FROM ^{PG.toTable $ ordered hashes}
         ) SELECT hc.author, hc.created_at_ms, key.thumbprint, causal.hash AS causal_hash, hc.comment_hash
           FROM hashes
