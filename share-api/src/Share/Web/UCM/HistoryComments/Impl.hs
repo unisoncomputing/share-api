@@ -180,7 +180,6 @@ fetchChunk size action = do
             -- Queue is closed
             pure ([], True)
           Just (Just val) -> do
-            Debug.debugM Debug.Temp "Fetched value from queue" val
             (rest, exhausted) <- go (n - 1) <|> pure ([], False)
             pure (val : rest, exhausted)
   go size
@@ -209,10 +208,10 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
     _receiverThread <- lift $ Ki.fork scope $ receiverWorker receive errMVar hashesToCheckQ commentsQ
     inserterThread <- lift $ Ki.fork scope $ inserterWorker authZ commentsQ project.projectId
     _hashCheckingThread <- lift $ Ki.fork scope $ hashCheckingWorker project.projectId send hashesToCheckQ
-    Debug.debugLogM Debug.Temp "Upload history comments: waiting for inserter thread to finish"
+    Debug.debugLogM Debug.HistoryComments "Upload history comments: waiting for inserter thread to finish"
     -- The inserter thread will finish when the client closes the connection.
     atomically $ Ki.await inserterThread
-    Debug.debugLogM Debug.Temp "Done. Closing connection."
+    Debug.debugLogM Debug.HistoryComments "Done. Closing connection."
   case result of
     Left err -> reportError err
     Right (Left err, _leftovers) -> reportError err
@@ -227,12 +226,12 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
       let loop = do
             (chunk, closed) <- atomically (fetchChunk insertCommentBatchSize (readTBMQueue commentsQ))
             PG.whenNonEmpty chunk do
-              Debug.debugM Debug.Temp "Inserting comments chunk of size" (length chunk)
+              Debug.debugM Debug.HistoryComments "Inserting comments chunk of size" (length chunk)
               PG.runTransaction $ Q.insertHistoryComments authZ projectId chunk
-            when closed $ Debug.debugLogM Debug.Temp "Inserter worker: comments queue closed"
+            when closed $ Debug.debugLogM Debug.HistoryComments "Inserter worker: comments queue closed"
             when (not closed) loop
       loop
-      Debug.debugLogM Debug.Temp "Inserter worker finished"
+      Debug.debugLogM Debug.HistoryComments "Inserter worker finished"
 
     hashCheckingWorker ::
       ProjectId ->
@@ -242,7 +241,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
     hashCheckingWorker projectId send hashesToCheckQ = do
       let loop = do
             (hashes, closed) <- atomically (fetchChunk insertCommentBatchSize (readTBMQueue hashesToCheckQ))
-            Debug.debugM Debug.Temp "Checking hashes chunk of size" (length hashes)
+            Debug.debugM Debug.HistoryComments "Checking hashes chunk of size" (length hashes)
             PG.whenNonEmpty hashes $ do
               unknownCommentHashes <- fmap Set.fromList $ PG.runTransaction $ do
                 Q.filterForUnknownHistoryCommentHashes (Sync.unHistoryCommentHash32 . fst <$> hashes)
@@ -264,25 +263,25 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
               case NESet.nonEmptySet allNeededHashes of
                 Nothing -> pure ()
                 Just unknownHashesSet -> do
-                  Debug.debugM Debug.Temp "Requesting unknown hashes" unknownHashesSet
+                  Debug.debugM Debug.HistoryComments "Requesting unknown hashes" unknownHashesSet
                   void . atomically $ send $ Msg $ RequestCommentsChunk unknownHashesSet
-            when closed $ Debug.debugLogM Debug.Temp "Hash checking worker: hashes queue closed"
+            when closed $ Debug.debugLogM Debug.HistoryComments "Hash checking worker: hashes queue closed"
             when (not closed) loop
       loop
       void . atomically $ send $ Msg $ DoneCheckingHashesChunk
-      Debug.debugLogM Debug.Temp "Hash checking worker finished"
+      Debug.debugLogM Debug.HistoryComments "Hash checking worker finished"
     receiverWorker :: STM (Maybe (MsgOrError Void HistoryCommentUploaderChunk)) -> TMVar Text -> TBMQueue (Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32]) -> TBMQueue (Either Sync.HistoryComment Sync.HistoryCommentRevision) -> WebApp ()
     receiverWorker recv errMVar hashesToCheckQ commentsQ = do
       let loop = do
             next <- atomically do
               recv >>= \case
                 Nothing -> do
-                  Debug.debugLogM Debug.Temp "Receiver worker: connection closed"
+                  Debug.debugLogM Debug.HistoryComments "Receiver worker: connection closed"
                   closeTBMQueue hashesToCheckQ
                   closeTBMQueue commentsQ
                   pure (pure ())
                 Just (DeserialiseFailure err) -> do
-                  Debug.debugM Debug.Temp "Receiver worker: deserialisation failure" err
+                  Debug.debugM Debug.HistoryComments "Receiver worker: deserialisation failure" err
                   putTMVar errMVar err
                   pure (pure ())
                 Just (Msg msg) -> do
@@ -298,7 +297,7 @@ uploadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn = 
                   pure loop
             next
       loop
-      Debug.debugLogM Debug.Temp "Receiver worker finished"
+      Debug.debugLogM Debug.HistoryComments "Receiver worker finished"
     insertCommentBatchSize = 100
 
 handleErrInQueue :: forall o x e a. Queues (MsgOrError e a) o -> e -> ExceptT e WebApp x
