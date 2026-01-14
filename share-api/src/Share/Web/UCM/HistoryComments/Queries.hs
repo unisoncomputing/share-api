@@ -94,9 +94,9 @@ historyCommentRevisionsByHashOf trav s = do
     & asListOf trav %%~ \hashes -> do
       PG.queryListRows
         [PG.sql|
-      WITH hashes (hash, ord) AS (
+      WITH hashes (ord, hash) AS (
         SELECT * FROM ^{PG.toTable $ ordered hashes}
-      ) SELECT hcr.subject, hcr.content, hcr.created_at_ms, hcr.is_hidden, hcr.author_signature, hcr.revision_hash, hc.comment_hash
+      ) SELECT hcr.subject, hcr.contents, hcr.created_at_ms, hcr.hidden, hcr.author_signature, hcr.revision_hash, hc.comment_hash
         FROM hashes
         JOIN history_comment_revisions hcr
           ON hcr.revision_hash = hashes.hash
