@@ -70,7 +70,7 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
     errMVar <- newEmptyTMVarIO
     _ <- lift $ Ki.fork scope (hashNotifyWorker send commentHashesToSendQ)
     senderThread <- lift $ Ki.fork scope (senderWorker send commentsToSendQ)
-    _ <- lift $ Ki.fork scope (receiverWorker receive commentsToSendQ errMVar doneRequestingCommentsMVar downloadableCommentsVar)
+    _ <- lift $ Ki.fork scope (receiverWorker receive commentsToSendQ commentHashesToSendQ errMVar downloadableCommentsVar)
     lift $ PG.runTransaction $ do
       cursor <- Q.projectBranchCommentsCursor authZ branch.causal
       Cursor.foldBatched cursor 100 \hashes -> do
@@ -86,12 +86,6 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
           for chunks \chunk -> writeTBMQueue commentHashesToSendQ (chunk)
     -- Close the hashes queue to signal we don't have any more, then wait for the notifier to finish
     atomically $ closeTBMQueue commentHashesToSendQ
-    -- Once the comment Hash queue is closed, eventually we'll send a DoneSendingHashesChunk message,
-    -- the server will respond with a DoneCheckingHashesChunk message after it's made all necessary
-    -- requests.
-    --
-    -- Then we can close the comment upload hash queue to signal we won't get any more upload requests.
-    atomically $ readTMVar doneRequestingCommentsMVar >> closeTBMQueue commentHashesToSendQ
     -- Now we just have to wait for the sender to finish sending all the comments we have queued up.
     -- Once we've uploaded everything we can safely exit and the connection will be closed.
     atomically $ Ki.await senderThread
@@ -128,11 +122,11 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
             Sync.HistoryCommentHash32
             Sync.HistoryCommentRevisionHash32
         ) ->
+      (TBMQueue (Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32])) ->
       TMVar Text ->
-      TMVar () ->
       (TVar (Set (Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32))) ->
       WebApp ()
-    receiverWorker receive toUploadQ errMVar doneRequestingCommentsMVar downloadableCommentsVar = do
+    receiverWorker receive commentsToSendQ commentHashesToSendQ errMVar downloadableCommentsVar = do
       let loop = do
             msgOrError <- atomically receive
             case msgOrError of
@@ -141,13 +135,13 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
               Just (Msg msg) -> case msg of
                 DoneCheckingHashesChunk -> do
                   -- Notify that the server is done requesting comments
-                  atomically $ putTMVar doneRequestingCommentsMVar ()
+                  atomically $ closeTBMQueue commentHashesToSendQ
                   loop
                 RequestCommentsChunk comments -> do
                   atomically $ do
                     downloadableComments <- readTVar downloadableCommentsVar
                     let validComments = Set.intersection (NESet.toSet comments) downloadableComments
-                    for_ validComments $ writeTBMQueue toUploadQ
+                    for_ validComments $ writeTBMQueue commentsToSendQ
                   loop
               Just (DeserialiseFailure msg) -> do
                 atomically $ putTMVar errMVar $ "uploadHistoryComments: deserialisation failure: " <> msg
