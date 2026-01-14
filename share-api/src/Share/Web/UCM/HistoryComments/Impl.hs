@@ -5,7 +5,7 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
 import Data.List.NonEmpty qualified as NEL
-import Data.Monoid (Any (..))
+import Data.Monoid (All (..))
 import Data.Set qualified as Set
 import Data.Set.NonEmpty qualified as NESet
 import Ki.Unlifted qualified as Ki
@@ -65,12 +65,10 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
       liftIO $ newTVarIO @_ @(Set (Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32)) Set.empty
     commentHashesToSendQ <- liftIO $ newTBMQueueIO @(Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32]) 100
     commentsToSendQ <- liftIO $ newTBMQueueIO @(Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32) 100
-    -- Is filled when the server notifies us it's done requesting comments
-    doneRequestingCommentsMVar <- newEmptyTMVarIO
     errMVar <- newEmptyTMVarIO
     _ <- lift $ Ki.fork scope (hashNotifyWorker send commentHashesToSendQ)
     senderThread <- lift $ Ki.fork scope (senderWorker send commentsToSendQ)
-    _ <- lift $ Ki.fork scope (receiverWorker receive commentsToSendQ commentHashesToSendQ errMVar downloadableCommentsVar)
+    _ <- lift $ Ki.fork scope (receiverWorker receive commentsToSendQ errMVar downloadableCommentsVar)
     lift $ PG.runTransaction $ do
       cursor <- Q.projectBranchCommentsCursor authZ branch.causal
       Cursor.foldBatched cursor 100 \hashes -> do
@@ -110,7 +108,7 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
               -- Send comments first, then revisions
               withComments <- Q.historyCommentsByHashOf (traversed . _Left) hashesToSend
               Q.historyCommentRevisionsByHashOf (traversed . _Right) withComments
-            for withCommentsAndRevisions \commentOrRevision -> atomically . send . Msg $ intoChunk commentOrRevision
+            for_ withCommentsAndRevisions \commentOrRevision -> atomically . send . Msg $ intoChunk commentOrRevision
             guard (not isClosed)
             loop
       void . runMaybeT $ loop
@@ -122,11 +120,10 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
             Sync.HistoryCommentHash32
             Sync.HistoryCommentRevisionHash32
         ) ->
-      (TBMQueue (Sync.HistoryCommentHash32, [Sync.HistoryCommentRevisionHash32])) ->
       TMVar Text ->
       (TVar (Set (Either Sync.HistoryCommentHash32 Sync.HistoryCommentRevisionHash32))) ->
       WebApp ()
-    receiverWorker receive commentsToSendQ commentHashesToSendQ errMVar downloadableCommentsVar = do
+    receiverWorker receive commentsToSendQ errMVar downloadableCommentsVar = do
       let loop = do
             msgOrError <- atomically receive
             case msgOrError of
@@ -134,8 +131,10 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
               Nothing -> pure ()
               Just (Msg msg) -> case msg of
                 DoneCheckingHashesChunk -> do
-                  -- Notify that the server is done requesting comments
-                  atomically $ closeTBMQueue commentHashesToSendQ
+                  -- The downloader is done checking hashes, and has issued all requests for
+                  -- comments.
+                  -- We can close the relevant queues now, we won't get any more requests.
+                  atomically $ closeTBMQueue commentsToSendQ
                   loop
                 RequestCommentsChunk comments -> do
                   atomically $ do
@@ -155,10 +154,10 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
       let loop = do
             isClosed <- atomically $ do
               (hashesToCheck, isClosed) <- flushTBMQueue q
-              Any serverClosed <-
+              All sendSuccess <-
                 NEL.nonEmpty hashesToCheck & foldMapM \possiblyNewHashes -> do
-                  Any <$> (send $ Msg $ PossiblyNewHashesChunk possiblyNewHashes)
-              pure (isClosed || serverClosed)
+                  All <$> (send $ Msg $ PossiblyNewHashesChunk possiblyNewHashes)
+              pure (isClosed || not sendSuccess)
             if isClosed
               then do
                 -- If the queue is closed, send a DoneCheckingHashesChunk to notify the server we're done.
