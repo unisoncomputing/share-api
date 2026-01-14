@@ -68,7 +68,7 @@ import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
 import Unison.Server.Backend qualified as Backend
 import Unison.Server.Errors qualified as Backend
-import Unison.Server.HistoryComments.Types (UploadCommentsResponse (..))
+import Unison.Server.HistoryComments.Types (DownloadCommentsResponse (..), UploadCommentsResponse (..))
 import Unison.Server.Types (BranchRef (..))
 import Unison.Sync.Types qualified as Sync
 import UnliftIO qualified
@@ -446,3 +446,12 @@ instance ToServerError WS.ConnectionException where
       (ErrorID "websocket:unicode-exception", err400 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Unicode decoding exception: " <> Text.pack msg})
     WS.ConnectionClosed ->
       (ErrorID "websocket:connection-closed", err400 {errBody = "WebSocket connection closed"})
+
+instance ToServerError DownloadCommentsResponse where
+  toServerError = \case
+    DownloadCommentsProjectBranchNotFound (BranchRef branchRef) ->
+      (ErrorID "download-comments:project-branch-not-found", err404 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Project branch not found: " <> branchRef})
+    DownloadCommentsNotAuthorized (BranchRef branchRef) ->
+      (ErrorID "download-comments:not-authorized", err403 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Not authorized to download comments from branch: " <> branchRef})
+    DownloadCommentsGenericFailure errMsg ->
+      (ErrorID "download-comments:generic-failure", err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Download comments failure: " <> errMsg})

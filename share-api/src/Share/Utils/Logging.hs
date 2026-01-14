@@ -57,7 +57,7 @@ import Share.Utils.Logging.Types as X
 import Share.Utils.Tags (MonadTags)
 import System.Log.FastLogger qualified as FL
 import Unison.Server.Backend qualified as Backend
-import Unison.Server.HistoryComments.Types (UploadCommentsResponse (..))
+import Unison.Server.HistoryComments.Types (DownloadCommentsResponse (..), UploadCommentsResponse (..))
 import Unison.Server.Types (BranchRef (..))
 import Unison.Sync.Types qualified as Sync
 import Unison.Util.Monoid (intercalateMap)
@@ -285,3 +285,15 @@ instance Loggable UploadCommentsResponse where
 
 instance Loggable WS.ConnectionException where
   toLog = withSeverity Error . showLog
+
+instance Loggable DownloadCommentsResponse where
+  toLog = \case
+    DownloadCommentsProjectBranchNotFound (BranchRef branchRef) ->
+      textLog ("Project branch not found: " <> branchRef)
+        & withSeverity UserFault
+    DownloadCommentsNotAuthorized (BranchRef branchRef) ->
+      textLog ("Not authorized to download comments from branch: " <> branchRef)
+        & withSeverity UserFault
+    DownloadCommentsGenericFailure errMsg ->
+      textLog ("Download comments generic failure: " <> errMsg)
+        & withSeverity Error
