@@ -168,7 +168,7 @@ downloadHistoryCommentsStreamImpl mayCallerUserId br@(BranchRef branchRef) conn 
 
 -- Re-run the given STM action at most n times, collecting the results into a list.
 -- If the action returns Nothing, stop and return what has been collected so far, along with a Bool indicating whether the action was exhausted.
-fetchChunk :: (Show a) => Int -> STM (Maybe a) -> STM ([a], Bool)
+fetchChunk :: Int -> STM (Maybe a) -> STM ([a], Bool)
 fetchChunk size action = do
   let go 0 = pure ([], False)
       go n = do
