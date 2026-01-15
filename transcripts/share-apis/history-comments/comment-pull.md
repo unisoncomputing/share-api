@@ -1,4 +1,4 @@
-```ucm:hide
-scratch/main> pull @test/history-comments/main
+```ucm
+scratch/main> pull @transcripts/history-comments/main
 scratch/main> history
 ```
