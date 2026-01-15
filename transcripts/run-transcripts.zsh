@@ -21,7 +21,7 @@ transcripts_location="transcripts/share-apis"
 for dir in "$transcripts_location"/*(/); do
     # Extract the directory name (transcript name)
     transcript="${dir:t}"
-    
+
     # If the first argument is missing, run all transcripts, otherwise run only transcripts which match a prefix of the argument
     if [ -z "${1:-}" ] || [[ "$transcript" == "$1"* ]]; then
         pg_reset_fixtures

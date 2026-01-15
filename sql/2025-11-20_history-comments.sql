@@ -40,7 +40,7 @@ CREATE TABLE history_comments (
 CREATE INDEX idx_history_comments_causal_id ON history_comments(causal_id);
 
 CREATE TABLE history_comment_revisions (
-  id INTEGER PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   comment_id INTEGER NOT NULL REFERENCES history_comments(id),
   subject TEXT NOT NULL,
   contents TEXT NOT NULL,
