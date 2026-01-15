@@ -9,10 +9,11 @@ x = 1
 ```
 
 ```ucm
+scratch/main> update
 scratch/main> config.set author.name Unison 
 scratch/main> history.comment /main: "Initial commit with variable x set to 1"
 scratch/main> alias.term x y
 scratch/main> history.comment /main: "Renamed x to y"
 scratch/main> history
-scratch/main> push @test/history-comments/main
+scratch/main> push @transcripts/history-comments/main
 ```
