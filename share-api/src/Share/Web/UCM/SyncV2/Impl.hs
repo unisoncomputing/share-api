@@ -4,19 +4,15 @@
 module Share.Web.UCM.SyncV2.Impl (server) where
 
 import Codec.Serialise qualified as CBOR
-import Conduit qualified as C
 import Control.Concurrent.STM qualified as STM
 import Control.Concurrent.STM.TBMQueue qualified as STM
 import Control.Monad.Except (ExceptT (ExceptT), withExceptT)
 import Control.Monad.Trans.Except (runExceptT)
-import Data.Binary.Builder qualified as Builder
 import Data.Set qualified as Set
 import Data.Text.Encoding qualified as Text
 import Data.Vector qualified as Vector
-import Ki.Unlifted qualified as Ki
 import Servant
 import Servant.Conduit (ConduitToSourceIO (..))
-import Servant.Types.SourceT (SourceT (..))
 import Servant.Types.SourceT qualified as SourceT
 import Share.Codebase qualified as Codebase
 import Share.IDs (ProjectBranchShortHand (..), ProjectReleaseShortHand (..), ProjectShortHand (..), UserHandle, UserId)
@@ -30,6 +26,7 @@ import Share.Prelude
 import Share.Project (Project (..))
 import Share.User (User (..))
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Servant.Streaming
 import Share.Utils.Unison (hash32ToCausalHash)
 import Share.Web.App
 import Share.Web.Authorization qualified as AuthZ
@@ -95,7 +92,7 @@ downloadEntitiesStreamImpl mayCallerUserId (SyncV2.DownloadEntitiesRequest {caus
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q entityChunkBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
     pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
-      queueToStream q
+      queueToCBORStream q
   where
     emitErr :: SyncV2.DownloadEntitiesError -> SourceIO (SyncV2.CBORStream SyncV2.DownloadEntitiesChunk)
     emitErr err = SourceT.source [SyncV2.CBORStream . CBOR.serialise $ ErrorC (ErrorChunk err)]
@@ -123,24 +120,7 @@ causalDependenciesStreamImpl mayCallerUserId (SyncV2.CausalDependenciesRequest {
                    in CausalHashDepC {causalHash, dependencyType}
           PG.transactionUnsafeIO $ STM.atomically $ STM.writeTBMQueue q depBatch
         PG.transactionUnsafeIO $ STM.atomically $ STM.closeTBMQueue q
-    pure $ sourceIOWithAsync streamResults $ conduitToSourceIO do
-      queueToStream q
-
-queueToStream :: forall a f. (CBOR.Serialise a, Foldable f) => STM.TBMQueue (f a) -> C.ConduitT () (SyncV2.CBORStream a) IO ()
-queueToStream q = do
-  let loop :: C.ConduitT () (SyncV2.CBORStream a) IO ()
-      loop = do
-        liftIO (STM.atomically (STM.readTBMQueue q)) >>= \case
-          -- The queue is closed.
-          Nothing -> do
-            pure ()
-          Just batches -> do
-            batches
-              & foldMap (CBOR.serialiseIncremental)
-              & (SyncV2.CBORStream . Builder.toLazyByteString)
-              & C.yield
-            loop
-  loop
+    pure $ sourceIOWithAsync streamResults $ queueToSourceIO q
 
 data CodebaseLoadingError
   = CodebaseLoadingErrorProjectNotFound ProjectShortHand
@@ -178,14 +158,3 @@ codebaseForBranchRef branchRef = do
       authZToken <- lift AuthZ.checkDownloadFromProjectBranchCodebase `whenLeftM` \_err -> throwError (CodebaseLoadingErrorNoReadPermission branchRef)
       let codebaseLoc = Codebase.codebaseLocationForProjectBranchCodebase projectOwnerUserId contributorId
       pure $ Codebase.codebaseEnv authZToken codebaseLoc
-
--- | Run an IO action in the background while streaming the results.
---
--- Servant doesn't provide any easier way to do bracketing like this, all the IO must be
--- inside the SourceIO somehow.
-sourceIOWithAsync :: IO a -> SourceIO r -> SourceIO r
-sourceIOWithAsync action (SourceT k) =
-  SourceT \k' ->
-    Ki.scoped \scope -> do
-      _ <- Ki.fork scope action
-      k k'
