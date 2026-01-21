@@ -5,7 +5,7 @@ set -e
 source "../../transcript_helpers.sh"
 
 # Currently this must be manually enabled
-export UNISON_SYNC_HISTORY_COMMENTS=true
+# export UNISON_SYNC_HISTORY_COMMENTS=true
 
 # Create some history
 transcript_ucm transcript comment-push.md
