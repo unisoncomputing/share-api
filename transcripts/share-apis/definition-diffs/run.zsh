@@ -3,9 +3,6 @@
 set -e
 source ../../transcript_helpers.sh
 
-# Reset DB to a known state
-pg_reset_fixtures
-
 transcript_ucm transcript prelude.md
 
 # Diffing a user-defined term against a user-defined term.
