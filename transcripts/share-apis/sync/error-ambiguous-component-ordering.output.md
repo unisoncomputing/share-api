@@ -1,49 +1,26 @@
-``` ucm :hide
-scratch/main> project.create-empty ambiguous
+🐞
 
-ambiguous/main> builtins.merge
-```
+🐞
 
-Create a flawed component which should be rejected with an ambiguous element ordering error.
+Sorry, you've encountered a weird situation that we are aware of and are currently working on a fix for.
+I'll explain what happened and how you can work around it.
 
-``` unison
-ping = do
-  pong()
+The following cyclic definition sets could not be completely ordered:
+  * User "ping", User "pong"
 
-pong = do
-  ping()
-```
 
-``` ucm :added-by-ucm
-  Loading changes detected in scratch.u.
+This happens when multiple definitions in a mutually recursive cycle have a very similar structure.
 
-  + ping : 'r
-  + pong : 'r
+You can work around this by restructuring them to be less similar, e.g. by adding a pure expression to distinguish them, like:
+_ = "this is the foo definition"
 
-  Run `update` to apply these changes to your codebase.
-```
 
-``` ucm :hide
-ambiguous/main> update
-```
+This is a Unison bug and you can report it here:
 
-Try to push, this should be rejected.
+https://github.com/unisonweb/unison/issues?utf8=%E2%9C%93&q=is%3Aissue+is%3Aopen+E253299+
 
-``` ucm
-ambiguous/main> push @transcripts/ambiguous/main
-```
+Bug reference: E253299
 
-🛑
-
-The transcript failed due to an error in the stanza above. The error is:
-
-``` 
-❗️
-
-Failed to decode a term component entity with the hash
-#6nhsou2jbd9o95ftlp83v1dhqo7cmk0jb4tgkecmurku9en8qqnr205arlacgj3tumu6sfudhi100lqcvu2sbf4t412nngvbeuboeig
-.
-Please create an issue and report this to the Unison team
-
-The error was: Incomplete element ordering in term components
-```
+If there's already an issue with this reference, you can give a 👍
+on the issue to let the team know you encountered it, and you can add
+any additional details you know of to the issue.
