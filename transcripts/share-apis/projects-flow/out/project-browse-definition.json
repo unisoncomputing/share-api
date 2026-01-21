@@ -9,9 +9,10 @@
           {
             "annotation": {
               "contents": "##Nat",
-              "tag": "HashQualifier"
+              "fqn": "builtin.Nat",
+              "tag": "TypeReference"
             },
-            "segment": "##Nat"
+            "segment": "Nat"
           }
         ],
         "termDefinition": {
@@ -36,9 +37,10 @@
             {
               "annotation": {
                 "contents": "##Nat",
-                "tag": "HashQualifier"
+                "fqn": "builtin.Nat",
+                "tag": "TypeReference"
               },
-              "segment": "##Nat"
+              "segment": "Nat"
             },
             {
               "annotation": null,
@@ -64,7 +66,7 @@
             {
               "annotation": {
                 "contents": "#1apeg4vfn6t5jm65ldj9h8j4340u2uvqq62ih99fi80nqrrqj76vgb694fpcaci2c2t95bcupljq8b04m4vu70qq85mhr777i39i3jg",
-                "fqn": "lib.someLib.depNum",
+                "fqn": "lib.dep.depNum",
                 "tag": "TermReference"
               },
               "segment": "depNum"

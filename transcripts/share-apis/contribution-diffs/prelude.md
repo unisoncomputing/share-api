@@ -57,10 +57,8 @@ contribution-diff/diff-start> branch /diff-end
 contribution-diff/diff-end> alias.term termAliasMe aTermAlias
 contribution-diff/diff-end> delete.term termDeleteMe
 contribution-diff/diff-end> alias.type DataAliasMe ATypeAlias
-contribution-diff/diff-end> alias.term DataAliasMe.B ATypeAlias.B
 contribution-diff/diff-end> delete.type DataDeleteMe
 contribution-diff/diff-end> alias.type AbilityAliasMe AbilityAlias
-contribution-diff/diff-end> alias.term AbilityAliasMe.abilityAliasMe AbilityAlias.abilityAliasMe
 contribution-diff/diff-end> delete.type AbilityDeleteMe
 contribution-diff/diff-end> delete.term a.definition.at.path1
 contribution-diff/diff-end> delete.term a.definition.at.path2

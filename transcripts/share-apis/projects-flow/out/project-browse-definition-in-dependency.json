@@ -9,19 +9,20 @@
           {
             "annotation": {
               "contents": "##Nat",
-              "tag": "HashQualifier"
+              "fqn": "lib.dep.builtin.Nat",
+              "tag": "TypeReference"
             },
-            "segment": "##Nat"
+            "segment": "Nat"
           }
         ],
         "termDefinition": {
           "contents": [
             {
               "annotation": {
-                "contents": "lib.someLib.depNum",
+                "contents": "lib.dep.depNum",
                 "tag": "HashQualifier"
               },
-              "segment": "lib.someLib.depNum"
+              "segment": "lib.dep.depNum"
             },
             {
               "annotation": {
@@ -36,9 +37,10 @@
             {
               "annotation": {
                 "contents": "##Nat",
-                "tag": "HashQualifier"
+                "fqn": "lib.dep.builtin.Nat",
+                "tag": "TypeReference"
               },
-              "segment": "##Nat"
+              "segment": "Nat"
             },
             {
               "annotation": null,
@@ -46,10 +48,10 @@
             },
             {
               "annotation": {
-                "contents": "lib.someLib.depNum",
+                "contents": "lib.dep.depNum",
                 "tag": "HashQualifier"
               },
-              "segment": "lib.someLib.depNum"
+              "segment": "lib.dep.depNum"
             },
             {
               "annotation": {
@@ -63,17 +65,18 @@
             },
             {
               "annotation": {
-                "contents": "#gjmq673r1v",
-                "tag": "HashQualifier"
+                "contents": "#gjmq673r1vrurfotlnirv7vutdhm6sa3s02em5g22kk606mv6duvv8be402dv79312i4a0onepq5bo7citsodvq2g720nttj0ee9p0g",
+                "fqn": "lib.dep.lib.transitiveDep.transitiveDepNum",
+                "tag": "TermReference"
               },
-              "segment": "#gjmq673r1v"
+              "segment": "transitiveDepNum"
             }
           ],
           "tag": "UserObject"
         },
         "termDocs": [],
         "termNames": [
-          "lib.someLib.depNum"
+          "lib.dep.depNum"
         ]
       }
     },
