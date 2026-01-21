@@ -43,6 +43,10 @@ TRUNCATE TABLE subjects CASCADE;
 TRUNCATE TABLE resources CASCADE;
 TRUNCATE TABLE causal_diff_queue CASCADE;
 TRUNCATE TABLE namespace_diffs CASCADE;
+TRUNCATE TABLE personal_keys CASCADE;
+TRUNCATE TABLE history_comments CASCADE;
+TRUNCATE TABLE history_comment_revisions CASCADE;
+TRUNCATE TABLE history_comment_revisions_project_discovery CASCADE;
 
 TRUNCATE TABLE namespace_ownership CASCADE;
 TRUNCATE TABLE causal_ownership CASCADE;
