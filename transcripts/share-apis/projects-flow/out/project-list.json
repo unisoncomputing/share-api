@@ -24,7 +24,7 @@
         "name": "The Transcript User",
         "type": "user"
       },
-      "slug": "transcriptproject",
+      "slug": "app",
       "summary": null,
       "tags": [],
       "updatedAt": "<TIMESTAMP>",

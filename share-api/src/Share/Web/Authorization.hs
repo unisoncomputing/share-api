@@ -43,7 +43,7 @@ module Share.Web.Authorization
     checkUploadToUserCodebase,
     checkUploadToProjectBranchCodebase,
     checkUserUpdate,
-    checkDownloadFromUserCodebase,
+    hashJWTAuthOverride,
     checkDownloadFromProjectBranchCodebase,
     checkCreateOrg,
     checkReadOrgRolesList,
@@ -389,17 +389,20 @@ checkUploadToUserCodebase reqUserId codebaseOwnerUserId = maybePermissionFailure
   assertUsersEqual reqUserId codebaseOwnerUserId
   pure $ AuthZ.UnsafeAuthZReceipt Nothing
 
--- | The download endpoint currently does all of its own auth using HashJWTs,
+-- | The download endpoints currently do all of its own auth using HashJWTs,
 -- So we don't add any other authz checks here, the HashJWT check is sufficient.
-checkDownloadFromUserCodebase :: WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
-checkDownloadFromUserCodebase =
+hashJWTAuthOverride :: WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+hashJWTAuthOverride =
   pure . Right $ AuthZ.UnsafeAuthZReceipt Nothing
 
 -- | The download endpoint currently does all of its own auth using HashJWTs,
 -- So we don't add any other authz checks here, the HashJWT check is sufficient.
-checkDownloadFromProjectBranchCodebase :: WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
-checkDownloadFromProjectBranchCodebase =
-  pure . Right $ AuthZ.UnsafeAuthZReceipt Nothing
+checkDownloadFromProjectBranchCodebase :: Maybe UserId -> ProjectId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
+checkDownloadFromProjectBranchCodebase reqUserId projectId =
+  mapLeft (const authzError) <$> do
+    checkProjectGet reqUserId projectId
+  where
+    authzError = AuthZFailure $ (ProjectPermission (ProjectBranchBrowse projectId))
 
 checkProjectCreate :: UserId -> UserId -> WebApp (Either AuthZFailure AuthZ.AuthZReceipt)
 checkProjectCreate reqUserId targetUserId = maybePermissionFailure (ProjectPermission (ProjectCreate targetUserId)) $ do

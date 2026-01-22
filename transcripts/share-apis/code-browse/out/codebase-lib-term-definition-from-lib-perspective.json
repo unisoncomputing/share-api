@@ -9,7 +9,7 @@
           {
             "annotation": {
               "contents": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8",
-              "fqn": "lib.data.Tuple",
+              "fqn": "lib.mylib.data.Tuple",
               "tag": "TypeReference"
             },
             "segment": "Tuple"
@@ -59,10 +59,10 @@
           "contents": [
             {
               "annotation": {
-                "contents": "lib.data.Tuple.fst",
+                "contents": "lib.mylib.data.Tuple.fst",
                 "tag": "HashQualifier"
               },
-              "segment": "lib.data.Tuple.fst"
+              "segment": "lib.mylib.data.Tuple.fst"
             },
             {
               "annotation": {
@@ -77,7 +77,7 @@
             {
               "annotation": {
                 "contents": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8",
-                "fqn": "lib.data.Tuple",
+                "fqn": "lib.mylib.data.Tuple",
                 "tag": "TypeReference"
               },
               "segment": "Tuple"
@@ -128,10 +128,10 @@
             },
             {
               "annotation": {
-                "contents": "lib.data.Tuple.fst",
+                "contents": "lib.mylib.data.Tuple.fst",
                 "tag": "HashQualifier"
               },
-              "segment": "lib.data.Tuple.fst"
+              "segment": "lib.mylib.data.Tuple.fst"
             },
             {
               "annotation": {
@@ -156,7 +156,7 @@
             {
               "annotation": {
                 "contents": "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8#d0",
-                "fqn": "lib.data.Tuple.Tuple",
+                "fqn": "lib.mylib.data.Tuple.Tuple",
                 "tag": "TermReference"
               },
               "segment": "Tuple"
@@ -206,7 +206,7 @@
         },
         "termDocs": [],
         "termNames": [
-          "lib.data.Tuple.fst"
+          "lib.mylib.data.Tuple.fst"
         ]
       }
     },

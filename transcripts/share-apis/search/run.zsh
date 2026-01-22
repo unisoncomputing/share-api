@@ -3,9 +3,6 @@
 set -e
 source ../../transcript_helpers.sh
 
-# Reset DB to a known state
-pg_reset_fixtures
-
 login_user_for_ucm 'transcripts'
 transcript_ucm transcript prelude.md
 

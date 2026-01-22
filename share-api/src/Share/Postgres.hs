@@ -685,7 +685,7 @@ cachedFor = cachedForOf traversed
 --      ) SELECT * FROM something JOIN users on something.user_id = users.id
 --     |]
 -- @@
-whenNonEmpty :: forall m f a x. (Monad m, Foldable f, Monoid a) => f x -> m a -> m a
+whenNonEmpty :: forall m f a x. (Foldable f, Monoid a, Applicative m) => f x -> m a -> m a
 whenNonEmpty f m = if null f then pure mempty else m
 
 timeTransaction :: (QueryM m) => String -> m a -> m a

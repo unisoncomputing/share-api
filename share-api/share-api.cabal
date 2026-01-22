@@ -130,6 +130,7 @@ library
       Share.Utils.Servant.Client
       Share.Utils.Servant.PathInfo
       Share.Utils.Servant.RawRequest
+      Share.Utils.Servant.Streaming
       Share.Utils.Tags
       Share.Utils.Unison
       Share.Web.Admin.API
@@ -194,6 +195,9 @@ library
       Share.Web.Support.Impl
       Share.Web.Support.Types
       Share.Web.Types
+      Share.Web.UCM.HistoryComments.API
+      Share.Web.UCM.HistoryComments.Impl
+      Share.Web.UCM.HistoryComments.Queries
       Share.Web.UCM.Projects.Impl
       Share.Web.UCM.Sync.HashJWT
       Share.Web.UCM.Sync.Impl
@@ -356,6 +360,7 @@ library
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509
@@ -513,6 +518,7 @@ executable share-api
     , wai-extra
     , wai-middleware-prometheus
     , warp
+    , websockets
     , witch
     , witherable
     , x509

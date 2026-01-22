@@ -1,5 +1,7 @@
 \set ON_ERROR_STOP true
 
+BEGIN ;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -9,6 +11,43 @@ BEGIN
     RAISE EXCEPTION 'Refusing to clean non-transcript database.';
   END IF;
 END $$;
+
+-- Pre-lock all tables so that share background jobs can't sneak in and lock things mid transaction.
+-- Lock all tables in a single statement to prevent deadlocks
+LOCK TABLE 
+  users,
+  superadmins,
+  role_memberships,
+  loose_code_roots,
+  org_members,
+  tours,
+  projects,
+  project_branches,
+  project_releases,
+  project_favorites,
+  catalog_categories,
+  project_categories,
+  oauth_clients,
+  contributions,
+  contribution_status_events,
+  comments,
+  comment_revisions,
+  tickets,
+  teams,
+  team_members,
+  orgs,
+  subjects,
+  resources,
+  causal_diff_queue,
+  namespace_diffs,
+  personal_keys,
+  history_comments,
+  history_comment_revisions,
+  history_comment_revisions_project_discovery,
+  namespace_ownership,
+  causal_ownership,
+  public.cloud_subscribers
+IN ACCESS EXCLUSIVE MODE;
 
 -- Resets most relevant tables, useful to run between tests.
 -- Doesn't clean codebase tables since that just slows things down, but does clean out codebase ownership.
@@ -26,11 +65,6 @@ TRUNCATE TABLE project_favorites CASCADE;
 TRUNCATE TABLE catalog_categories CASCADE;
 TRUNCATE TABLE project_categories CASCADE;
 TRUNCATE TABLE oauth_clients CASCADE;
-TRUNCATE TABLE oauth_clients CASCADE;
-TRUNCATE TABLE contributions CASCADE;
-TRUNCATE TABLE contribution_status_events CASCADE;
-TRUNCATE TABLE comments CASCADE;
-TRUNCATE TABLE comment_revisions CASCADE;
 TRUNCATE TABLE contributions CASCADE;
 TRUNCATE TABLE contribution_status_events CASCADE;
 TRUNCATE TABLE tickets CASCADE;
@@ -43,6 +77,10 @@ TRUNCATE TABLE subjects CASCADE;
 TRUNCATE TABLE resources CASCADE;
 TRUNCATE TABLE causal_diff_queue CASCADE;
 TRUNCATE TABLE namespace_diffs CASCADE;
+TRUNCATE TABLE personal_keys CASCADE;
+TRUNCATE TABLE history_comments CASCADE;
+TRUNCATE TABLE history_comment_revisions CASCADE;
+TRUNCATE TABLE history_comment_revisions_project_discovery CASCADE;
 
 TRUNCATE TABLE namespace_ownership CASCADE;
 TRUNCATE TABLE causal_ownership CASCADE;
@@ -53,3 +91,5 @@ TRUNCATE TABLE causal_ownership CASCADE;
 -- TRUNCATE TABLE causals CASCADE;
 
 TRUNCATE TABLE public.cloud_subscribers CASCADE;
+
+COMMIT;

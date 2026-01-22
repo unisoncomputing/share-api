@@ -55,8 +55,13 @@ pg_init_fixtures() {
 
 # Reset all the fixtures to the state in `inserts.sql`
 pg_reset_fixtures () {
-        pg_file "${transcripts_dir}/sql/clean.sql" > /dev/null
-        pg_init_fixtures
+      local max_retries=10
+      local retry_count=0
+      while [ $retry_count -lt $max_retries ] && ! pg_file "${transcripts_dir}/sql/clean.sql" > /dev/null; do
+              sleep 1
+              retry_count=$((retry_count + 1))
+      done
+      pg_init_fixtures
 }
 
 user_id_from_handle () {

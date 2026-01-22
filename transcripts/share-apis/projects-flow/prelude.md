@@ -1,14 +1,30 @@
 ```ucm
-scratch/main> builtins.mergeio
+transitiveDep/main> builtins.mergeio
+dep/main> builtins.mergeio
+app/main> builtins.mergeio
 ```
 
 ```unison
--- Dependencies depend on transitive dependencies
-lib.someLib.depNum = lib.dep.lib.transitiveDep.transitiveDepNum
-lib.dep.lib.transitiveDep.transitiveDepNum = 1
+transitiveDepNum = 1
+```
 
+```ucm
+transitiveDep/main> update
+dep/main> lib.install.local transitiveDep/main transitiveDep
+```
+
+```unison
+depNum = lib.transitiveDep.transitiveDepNum
+```
+
+```ucm
+dep/main> update
+app/main> lib.install.local dep/main dep
+```
+
+```unison
 -- Definitions can depend on dependencies
-someTerm = lib.someLib.depNum
+someTerm = lib.dep.depNum
 
 README = {{
 ## Title
@@ -18,7 +34,6 @@ References {someTerm}
 ```
 
 ```ucm
-scratch/main> project.create-empty transcriptproject
-transcriptproject/main> update
-transcriptproject/main> push
+app/main> update
+app/main> push
 ```

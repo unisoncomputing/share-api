@@ -142,7 +142,7 @@
             {
               "annotation": {
                 "contents": "#9gk80dbuj7dm76vf8vfe49k265k0n6bcft5g7s3a6j0papkv7bd5n78735qs1s0ag3rcrm5pcip02e8b28qf9i1kpvvu1fdl8p4fkeg",
-                "fqn": "lib.data.myName",
+                "fqn": "lib.mylib.data.myName",
                 "tag": "TermReference"
               },
               "segment": "data.myName"
@@ -175,7 +175,7 @@
             {
               "annotation": {
                 "contents": "#5q9p802rfedn2kuvc3ohbjiqk7l6usu6gfv6et2l93e5s7q2vtoai3nup17a02djcsekjiq99unf62el8ilih4f1c0jqbgioup67da0",
-                "fqn": "lib.other.myOtherName",
+                "fqn": "lib.mylib.other.myOtherName",
                 "tag": "TermReference"
               },
               "segment": "other.myOtherName"

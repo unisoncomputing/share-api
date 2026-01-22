@@ -53,6 +53,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import GHC.Stack qualified as GHC
 import GHC.TypeLits qualified as TL
+import Network.WebSockets qualified as WS
 import Servant
 import Servant.Client
 import Share.Env.Types qualified as Env
@@ -67,6 +68,8 @@ import Share.Utils.URI (URIParam (..), addQueryParam)
 import Share.Web.App
 import Unison.Server.Backend qualified as Backend
 import Unison.Server.Errors qualified as Backend
+import Unison.Server.HistoryComments.Types (DownloadCommentsResponse (..), UploadCommentsResponse (..))
+import Unison.Server.Types (BranchRef (..))
 import Unison.Sync.Types qualified as Sync
 import UnliftIO qualified
 
@@ -423,3 +426,32 @@ instance ToServerError Sync.UploadEntitiesError where
     Sync.UploadEntitiesError'NoWritePermission _ -> ("no-write-permission", err403 {errBody = "No Write Permission"})
     Sync.UploadEntitiesError'ProjectNotFound _ -> ("project-not-found", err404 {errBody = "Project Not Found"})
     Sync.UploadEntitiesError'UserNotFound _ -> ("user-not-found", err404 {errBody = "User Not Found"})
+
+instance ToServerError UploadCommentsResponse where
+  toServerError = \case
+    UploadCommentsProjectBranchNotFound (BranchRef branchRef) ->
+      (ErrorID "upload-comments:project-branch-not-found", err404 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Project branch not found: " <> branchRef})
+    UploadCommentsNotAuthorized (BranchRef branchRef) ->
+      (ErrorID "upload-comments:not-authorized", err403 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Not authorized to upload comments to branch: " <> branchRef})
+    UploadCommentsGenericFailure errMsg ->
+      (ErrorID "upload-comments:generic-failure", err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Upload comments failure: " <> errMsg})
+
+instance ToServerError WS.ConnectionException where
+  toServerError = \case
+    WS.CloseRequest _ _ ->
+      (ErrorID "websocket:close-request", err400 {errBody = "WebSocket closed by client"})
+    WS.ParseException msg ->
+      (ErrorID "websocket:parse-exception", err400 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Invalid message: parse exception: " <> Text.pack msg})
+    WS.UnicodeException msg ->
+      (ErrorID "websocket:unicode-exception", err400 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Unicode decoding exception: " <> Text.pack msg})
+    WS.ConnectionClosed ->
+      (ErrorID "websocket:connection-closed", err400 {errBody = "WebSocket connection closed"})
+
+instance ToServerError DownloadCommentsResponse where
+  toServerError = \case
+    DownloadCommentsProjectBranchNotFound (BranchRef branchRef) ->
+      (ErrorID "download-comments:project-branch-not-found", err404 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Project branch not found: " <> branchRef})
+    DownloadCommentsNotAuthorized (BranchRef branchRef) ->
+      (ErrorID "download-comments:not-authorized", err403 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Not authorized to download comments from branch: " <> branchRef})
+    DownloadCommentsGenericFailure errMsg ->
+      (ErrorID "download-comments:generic-failure", err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Download comments failure: " <> errMsg})
