@@ -81,6 +81,8 @@ addRequestTag k v = do
   RequestCtx {reqTagsVar} <- asks ctx
   atomically $ modifyTVar' reqTagsVar (Map.insert k v)
 
+-- | Add a tag to all handlers in the given Servant API. This tag will be used in logging
+-- and error reports
 addServerTag :: (HasServer api '[]) => Proxy api -> Text -> Text -> ServerT api WebApp -> ServerT api WebApp
 addServerTag proxy label value api = hoistServer proxy go api
   where

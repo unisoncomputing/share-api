@@ -415,6 +415,11 @@ getUserReadmeEndpoint (AuthN.MaybeAuthedUserID callerUserId) userHandle = do
 searchEndpoint :: Maybe Session -> Query -> Maybe SearchKinds -> Maybe ProjectSearchKind -> Maybe UserSearchKind -> Maybe Limit -> WebApp [SearchResult]
 searchEndpoint _caller (Query "") _searchKinds _mayPsk _mayUsk _limit = pure []
 searchEndpoint (MaybeAuthedUserID callerUserId) (Query query) (fromMaybe allSearchKinds -> SearchKinds searchKinds) (fromMaybe ProjectSearchKindWebSearch -> psk) (fromMaybe UserSearchKindDefault -> usk) (fromMaybe (Limit 20) -> limit) = do
+  addRequestTag "query" query
+  addRequestTag "search-kinds" (tShow (fmap toQueryParam . toList $ searchKinds))
+  addRequestTag "project-search-kind" (toQueryParam psk)
+  addRequestTag "user-search-kind" (toQueryParam usk)
+
   (userQuery :: Query, (projectUserFilter :: Maybe UserId, projectQuery :: Query)) <-
     fromMaybe query (Text.stripPrefix "@" query)
       & Text.splitOn "/"
@@ -460,6 +465,10 @@ searchDefinitionNamesEndpoint ::
   Maybe BranchOrReleaseShortHand ->
   WebApp [DefinitionNameSearchResult]
 searchDefinitionNamesEndpoint callerUserId query@(Query queryText) mayLimit userFilter projectFilter releaseFilter = do
+  addRequestTag "query" queryText
+  for userFilter (addRequestTag "user-filter" . IDs.toText)
+  for projectFilter (addRequestTag "project-filter" . IDs.toText)
+  for releaseFilter (addRequestTag "release-filter" . IDs.toText)
   filter <- runMaybeT $ resolveProjectAndBranchFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <-
     (PG.runTransaction $ DDQ.defNameCompletionSearch callerUserId filter query limit)
@@ -533,6 +542,10 @@ searchDefinitionsEndpoint ::
   Maybe BranchOrReleaseShortHand ->
   WebApp DefinitionSearchResults
 searchDefinitionsEndpoint callerUserId (Query query) mayLimit userFilter projectFilter releaseFilter = do
+  addRequestTag "query" query
+  for userFilter (addRequestTag "user-filter" . IDs.toText)
+  for projectFilter (addRequestTag "project-filter" . IDs.toText)
+  for releaseFilter (addRequestTag "release-filter" . IDs.toText)
   filter <- runMaybeT $ resolveProjectAndBranchFilter projectFilter releaseFilter <|> resolveUserFilter (IDs.unPrefix <$> userFilter)
   matches <- case Text.words query of
     [] -> pure $ []
