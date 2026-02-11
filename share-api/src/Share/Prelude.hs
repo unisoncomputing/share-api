@@ -73,7 +73,7 @@ import Data.Coerce (coerce)
 import Data.Either.Combinators (mapLeft, mapRight)
 import Data.Foldable as X
 import Data.Function as X
-import Data.Functor as X
+import Data.Functor as X hiding (unzip)
 import Data.Functor.Compose (Compose (..))
 import Data.Functor.Identity as X
 import Data.Int as X
