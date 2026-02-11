@@ -145,13 +145,6 @@ packages:
   original:
     hackage: hasql-pool-1.4.1
 - completed:
-    hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
-    pantry-tree:
-      sha256: f7d9f29c576c4d36cb2f44d2f9a672e08e84d79060928aa9ed005e9e30c35202
-      size: 1276
-  original:
-    hackage: hasql-interpolate-1.0.1.0
-- completed:
     hackage: postgresql-connection-string-0.1.0.5@sha256:75a679ef877121482615849517b1545535467456852c8690fdbfd715e512563b,3420
     pantry-tree:
       sha256: 2919bf03542cd417645957ef87bf990dc8da37ebf4a82c381e564c8e1bf82b25
@@ -190,6 +183,28 @@ packages:
     version: 0.1.1.0
   original:
     url: https://github.com/ChrisPenner/hs-mcp/archive/d8564c70ca09e333b7ce1717d1ac97a62d62966c.tar.gz
+- completed:
+    name: hasql-interpolate
+    pantry-tree:
+      sha256: 6c4d833d89003b1f6c52c367d275715417b83c2e59d3f43019d5249ec140530d
+      size: 1637
+    sha256: 4dd9ac01bd9295f0035318c02e874eb221fcd894bd677287c5bdd41b2ba05b79
+    size: 16922
+    url: https://github.com/ChrisPenner/hasql-interpolate/archive/bb4666fdb7e0fef9f67702cb198e45d0a1de0ab9.tar.gz
+    version: 1.0.1.0
+  original:
+    url: https://github.com/ChrisPenner/hasql-interpolate/archive/bb4666fdb7e0fef9f67702cb198e45d0a1de0ab9.tar.gz
+- completed:
+    name: hasql-listen-notify
+    pantry-tree:
+      sha256: 4b1f48dc8015debc556f6fc77d903891905f5b56f855c7d26d11a55444147cc3
+      size: 610
+    sha256: 9e1128de5650d45a126b45d63a6dc27c23b53782d33283c5304eea094e4ec68c
+    size: 8687
+    url: https://github.com/ChrisPenner/hasql-listen-notify/archive/d75951239f1b8f2d87425769bc1aa29dc17b5ce8.tar.gz
+    version: 0.1.0.1
+  original:
+    url: https://github.com/ChrisPenner/hasql-listen-notify/archive/d75951239f1b8f2d87425769bc1aa29dc17b5ce8.tar.gz
 snapshots:
 - completed:
     sha256: 4b787f53036611a03edbf438dd5412daa03fb3da5d938ae8865ec471fe3f9632

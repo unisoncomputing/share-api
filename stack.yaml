@@ -69,7 +69,6 @@ extra-deps:
 # Bumping hasql up to get Pipelining mode
 - hasql-1.10.2.1
 - hasql-pool-1.4.1
-- hasql-interpolate-1.0.1.0
 - postgresql-connection-string-0.1.0.5@sha256:75a679ef877121482615849517b1545535467456852c8690fdbfd715e512563b,3420
 - postgresql-binary-0.15.0.1
 
@@ -80,6 +79,15 @@ extra-deps:
 
 - github: ChrisPenner/hs-mcp
   commit: d8564c70ca09e333b7ce1717d1ac97a62d62966c
+
+# Updated to work against hasql-1.10
+- github: ChrisPenner/hasql-interpolate
+  commit: bb4666fdb7e0fef9f67702cb198e45d0a1de0ab9
+
+# Updated to work against hasql-1.10
+# Unfortunately hasql-1.10 makes its libpq dependencies more private
+- github: ChrisPenner/hasql-listen-notify
+  commit: d75951239f1b8f2d87425769bc1aa29dc17b5ce8
 
 ghc-options:
  # All packages
