@@ -195,10 +195,20 @@ newtype OAuthClientId = OAuthClientId Text
   deriving stock (Eq, Ord, Show)
   deriving newtype (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, Hasql.EncodeValue)
 
+instance Hasql.DecodeValue OAuthClientId where
+  decodeValue =
+    Hasql.decodeValue
+      <&> OAuthClientId
+
 newtype OAuthClientSecret = OAuthClientSecret Text
   deriving stock (Eq, Ord)
   deriving (Show) via Censored OAuthClientSecret
-  deriving newtype (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, Hasql.DecodeValue, Hasql.EncodeValue)
+  deriving newtype (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, Hasql.EncodeValue)
+
+instance Hasql.DecodeValue OAuthClientSecret where
+  decodeValue =
+    Hasql.decodeValue
+      <&> OAuthClientSecret
 
 -- | A code received at an OAuth2 client's redirect_uri upon a successful authentication
 -- with the oauth2 server. Should be exchanged with the server's Token endpoint to receive
