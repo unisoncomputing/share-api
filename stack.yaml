@@ -67,11 +67,13 @@ extra-deps:
 - thread-utils-finalizers-0.1.1.0@sha256:24944b71d9f1d01695a5908b4a3b44838fab870883114a323336d537995e0a5b,1381
 
 # Bumping hasql up to get Pipelining mode
-- hasql-1.8.1.1
-- hasql-pool-1.2.0.2
+- hasql-1.10.2.1
+- hasql-pool-1.4.1
 - hasql-interpolate-1.0.1.0
-- postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
-- postgresql-libpq-0.10.1.0@sha256:6a45edff0a9e30b32cda6e443107950492322622c4fbefc8fb4dcf6452dcf0b4,3203
+- postgresql-connection-string-0.1.0.5@sha256:75a679ef877121482615849517b1545535467456852c8690fdbfd715e512563b,3420
+- postgresql-binary-0.15.0.1
+
+
 # Not in snapshot
 - x509-1.7.7@sha256:90eef2d745a654146fc1c325e035eaddac531e4d2145d4bc1dcf4b8fad439d34,2276
 - x509-store-1.6.9@sha256:1f1abeab5bacf1407b920d0f34f4c35a5ad450ff0d8121cd3dc76460f81e711d,1716
@@ -89,6 +91,7 @@ allow-newer-deps:
   - hasql-listen-notify
   # hasql-listen-notify wants an older version of hasql than we're using.
   - hasql
+  - hasql-interpolate
   - fuzzyfind
   - lock-file
   - numerals
