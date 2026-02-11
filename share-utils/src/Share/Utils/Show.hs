@@ -3,7 +3,7 @@
 
 module Share.Utils.Show (Censored (..), tShow) where
 
-import Data.Text
+import Data.Text qualified as Text
 
 -- | For deriving a Show instance which won't leak sensitive data.
 --
@@ -18,5 +18,5 @@ newtype Censored a = Censored a
 instance Show (Censored a) where
   show _ = "<censored>"
 
-tShow :: Show a => a -> Text
-tShow = pack . show
+tShow :: (Show a) => a -> Text.Text
+tShow = Text.pack . show
