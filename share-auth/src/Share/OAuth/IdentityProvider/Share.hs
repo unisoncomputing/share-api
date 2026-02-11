@@ -24,7 +24,8 @@ import Share.OAuth.Scopes
 import Share.OAuth.Session
 import Share.OAuth.Types
 import Share.Utils.Deployment (Deployment (..))
-import Share.Utils.URI (URIParam (..), addQueryParam)
+import Share.Utils.URI (URIParam (..))
+import Share.Utils.URI qualified as Utils
 import UnliftIO
 import Web.Cookie (SetCookie)
 
@@ -74,13 +75,13 @@ mkShareIdentityProvider baseShareURL baseAuthorizationURI =
     authorizationURI :: URI -> OAuthClientId -> PendingSessionId -> PKCEChallenge -> PKCEChallengeMethod -> Scopes -> URI
     authorizationURI redirectURI clientId psid challenge pkceChallengeMethod scopes =
       baseAuthorizationURI
-        & addQueryParam "state" psid
-        & addQueryParam "redirect_uri" (URIParam redirectURI)
-        & addQueryParam "response_type" ResponseTypeCode
-        & addQueryParam "scope" scopes
-        & addQueryParam "client_id" clientId
-        & addQueryParam "code_challenge" challenge
-        & addQueryParam "code_challenge_method" pkceChallengeMethod
+        & Utils.addQueryParam "state" psid
+        & Utils.addQueryParam "redirect_uri" (URIParam redirectURI)
+        & Utils.addQueryParam "response_type" ResponseTypeCode
+        & Utils.addQueryParam "scope" scopes
+        & Utils.addQueryParam "client_id" clientId
+        & Utils.addQueryParam "code_challenge" challenge
+        & Utils.addQueryParam "code_challenge_method" pkceChallengeMethod
 
     identityProviderAPI :: Proxy IdentityProviderAPI
     identityProviderAPI = Proxy

@@ -30,6 +30,7 @@ module Share.Postgres
     QueryA (..),
     QueryM (..),
     TransactionError (..),
+    Coerced(..),
     decodeField,
     (:.) (..),
 
@@ -761,3 +762,10 @@ instance (Interp.DecodeField a, Interp.DecodeField b) => Hasql.DecodeValue (Tupl
         a <- Decoders.field $ Interp.decodeField
         b <- Decoders.field $ Interp.decodeField
         pure (a, b)
+
+-- Hasql no longer allows DecodeValue instances to be derived via newtypes, so we work around
+-- it.
+newtype Coerced a b = Coerced {fromCoerced :: b}
+
+instance Hasql.DecodeValue b => Hasql.DecodeValue (Coerced a b) where
+  decodeValue = decodeValue <&> (Coerced . coerce @b @a)
