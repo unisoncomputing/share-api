@@ -67,7 +67,7 @@ extra-deps:
 - thread-utils-finalizers-0.1.1.0@sha256:24944b71d9f1d01695a5908b4a3b44838fab870883114a323336d537995e0a5b,1381
 
 # Bumping hasql up to get Pipelining mode
-- hasql-1.10.2.1
+- hasql-1.10.2.2
 - hasql-pool-1.4.1
 - postgresql-connection-string-0.1.0.5@sha256:75a679ef877121482615849517b1545535467456852c8690fdbfd715e512563b,3420
 - postgresql-binary-0.15.0.1

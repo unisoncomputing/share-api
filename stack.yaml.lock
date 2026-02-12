@@ -131,12 +131,12 @@ packages:
   original:
     hackage: thread-utils-finalizers-0.1.1.0@sha256:24944b71d9f1d01695a5908b4a3b44838fab870883114a323336d537995e0a5b,1381
 - completed:
-    hackage: hasql-1.10.2.1@sha256:0b64585b88f8bee6d6857e4fc04bebfcf381c94dbf7e1543e8b469b8f01de8a2,8858
+    hackage: hasql-1.10.2.2@sha256:9746bfeb3a787ed2d88e59c337ff707503ecb1dd99ddb8423ad0ab6dcaf2e5c6,8858
     pantry-tree:
-      sha256: 7560430a2a4668ddf821254f9f6378cbb643de89f72de961fa7cd7018a1ae7c6
+      sha256: 410973d8d9500f3dc8fdd9e57df93bfe8e92493f3819caabba5b6277283b72ac
       size: 9340
   original:
-    hackage: hasql-1.10.2.1
+    hackage: hasql-1.10.2.2
 - completed:
     hackage: hasql-pool-1.4.1@sha256:0e46d1be1baf86388ccd3d601580f7119f941f2e60c66c120e016ba0d6ca2d2b,3110
     pantry-tree:
