@@ -8,12 +8,12 @@ module Share.Postgres.Orphans () where
 import Data.Aeson qualified as Aeson
 import Data.Bytes.Put (runPutS)
 import Data.Either.Extra qualified as Either
+import Data.HashSet qualified as HS
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
+import Hasql.Errors qualified as Hasql
 import Hasql.Interpolate qualified as Hasql
-import Hasql.Session qualified as Hasql
 import Servant (err500)
 import Servant.API
 import Share.Postgres.Composites (DecodeComposite (..))
@@ -40,7 +40,6 @@ import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Server.HistoryComments.Types
 import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
-import UnliftIO (MonadUnliftIO (..))
 
 -- Orphans for 'Hash'
 instance Hasql.EncodeValue Hash where
@@ -265,33 +264,41 @@ instance ToServerError Hasql.SessionError where
 
 instance Logging.Loggable Hasql.SessionError where
   toLog = \case
-    (Hasql.QueryError template params err) ->
+    Hasql.StatementSessionError _total _idx sql params _prepared stmtErr ->
       Logging.withSeverity Logging.Error . Logging.textLog $
-        Text.unlines
-          [ "QueryError:",
-            indent (tShow err),
-            "TEMPLATE:",
-            indent (Text.decodeUtf8 template),
-            "PARAMS:",
-            indent (tShow params)
-          ]
-    (Hasql.PipelineError cmdErr) ->
+        "StatementSessionError: statement failed with error: "
+          <> tShow stmtErr
+          <> "\nSQL:\n"
+          <> indent sql
+          <> "\nParameters:\n"
+          <> indent (Text.unlines params)
+    Hasql.ScriptSessionError sql serverErr ->
       Logging.withSeverity Logging.Error . Logging.textLog $
-        Text.unlines
-          [ "PipelineError:",
-            indent (tShow cmdErr)
-          ]
+        "ScriptSessionError: script execution failed with error: "
+          <> tShow serverErr
+          <> "\nSQL:\n"
+          <> indent sql
+    Hasql.ConnectionSessionError details ->
+      Logging.withSeverity Logging.Error . Logging.textLog $
+        "ConnectionSessionError: connection error occurred: " <> details
+    Hasql.MissingTypesSessionError missing ->
+      Logging.withSeverity Logging.Error . Logging.textLog $
+        "MissingTypesSessionError: the following types could not be found in the database:\n"
+          <> indent (Text.unlines [maybe "" id schema <> "." <> typeName | (schema, typeName) <- HS.toList missing])
+    Hasql.DriverSessionError details ->
+      Logging.withSeverity Logging.Error . Logging.textLog $
+        "DriverSessionError: an internal driver error occurred: " <> details
     where
       indent :: Text -> Text
       indent = Text.unlines . fmap ("    " <>) . Text.lines
 
 -- | See https://github.com/nikita-volkov/hasql/issues/144
 -- This instance won't be added upstream.
-instance MonadUnliftIO Hasql.Session where
-  withRunInIO inner = do
-    conn <- ask
-    res <- liftIO $ try $ inner $ \sess -> do
-      Hasql.run sess conn >>= either throwIO pure
-    case res of
-      Left e -> throwError e
-      Right a -> pure a
+-- instance MonadUnliftIO Hasql.Session where
+--   withRunInIO inner = do
+--     conn <- ask
+--     res <- liftIO $ try $ inner $ \sess -> do
+--       Hasql.use conn sess >>= either throwIO pure
+--     case res of
+--       Left e -> throwError e
+--       Right a -> pure a

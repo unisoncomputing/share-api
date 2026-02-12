@@ -64,7 +64,7 @@ import Share.Prelude
 import Share.Utils.Logging
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.Tags (askTags)
-import Share.Utils.URI (URIParam (..), addQueryParam)
+import Share.Utils.URI (URIParam (..), addURIQueryParam)
 import Share.Web.App
 import Unison.Server.Backend qualified as Backend
 import Unison.Server.Errors qualified as Backend
@@ -166,9 +166,9 @@ instance ToServerError OAuth2ErrorRedirect where
       Just (URIParam redirectURI) ->
         let errURI =
               redirectURI
-                & addQueryParam "error" errCode
-                & addQueryParam "error_description" errDescription
-                & maybe id (addQueryParam "state") mayState
+                & addURIQueryParam "error" errCode
+                & addURIQueryParam "error_description" errDescription
+                & maybe id (addURIQueryParam "state") mayState
          in (ErrorID $ "oauth:" <> tShow errCode, err302 {errHeaders = [("Location", BSC.pack $ show errURI)]})
 
 -- | Logs the error with a call stack then aborts the request and renders the corresponding ServerError to the client.

@@ -2,7 +2,7 @@
 
 module Share.Utils.URI
   ( URIParam (..),
-    addQueryParam,
+    addURIQueryParam,
     setPathAndQueryParams,
     uriToString,
     uriToText,
@@ -26,7 +26,7 @@ import Hasql.Decoders qualified as Decoders
 import Hasql.Interpolate qualified as Hasql
 import Network.HTTP.Types (parseQuery, renderQuery)
 import Network.URI qualified as URI
-import Servant hiding (addQueryParam)
+import Servant 
 import Share.Utils.Show (tShow)
 
 -- | Helper type to provide additional instances for URIs.
@@ -77,8 +77,8 @@ instance FromHttpApiData URIParam where
       Just uri -> Right (URIParam uri)
 
 -- | Helper to add a query param to a URI
-addQueryParam :: (ToHttpApiData v) => Text -> v -> URI -> URI
-addQueryParam key val uri =
+addURIQueryParam :: (ToHttpApiData v) => Text -> v -> URI -> URI
+addURIQueryParam key val uri =
   let existingQuery = parseQuery $ BSC.pack (URI.uriQuery uri)
       newParam = (Text.encodeUtf8 key, Just . Text.encodeUtf8 . toQueryParam $ val)
    in uri {URI.uriQuery = BSC.unpack $ renderQuery True (existingQuery <> [newParam])}
@@ -90,7 +90,7 @@ setPathAndQueryParams pathSegments queryParams uri =
     }
     & addAllQueryParams
   where
-    addAllQueryParams baseURI = List.foldl' (\uri (k, v) -> addQueryParam k v uri) baseURI (Map.toList queryParams)
+    addAllQueryParams baseURI = List.foldl' (\uri (k, v) -> addURIQueryParam k v uri) baseURI (Map.toList queryParams)
     path = case pathSegments of
       [] -> ""
       xs -> "/" <> Text.intercalate "/" xs
