@@ -75,13 +75,13 @@ mkShareIdentityProvider baseShareURL baseAuthorizationURI =
     authorizationURI :: URI -> OAuthClientId -> PendingSessionId -> PKCEChallenge -> PKCEChallengeMethod -> Scopes -> URI
     authorizationURI redirectURI clientId psid challenge pkceChallengeMethod scopes =
       baseAuthorizationURI
-        & Utils.addQueryParam "state" psid
-        & Utils.addQueryParam "redirect_uri" (URIParam redirectURI)
-        & Utils.addQueryParam "response_type" ResponseTypeCode
-        & Utils.addQueryParam "scope" scopes
-        & Utils.addQueryParam "client_id" clientId
-        & Utils.addQueryParam "code_challenge" challenge
-        & Utils.addQueryParam "code_challenge_method" pkceChallengeMethod
+        & Utils.addURIQueryParam "state" psid
+        & Utils.addURIQueryParam "redirect_uri" (URIParam redirectURI)
+        & Utils.addURIQueryParam "response_type" ResponseTypeCode
+        & Utils.addURIQueryParam "scope" scopes
+        & Utils.addURIQueryParam "client_id" clientId
+        & Utils.addURIQueryParam "code_challenge" challenge
+        & Utils.addURIQueryParam "code_challenge_method" pkceChallengeMethod
 
     identityProviderAPI :: Proxy IdentityProviderAPI
     identityProviderAPI = Proxy
