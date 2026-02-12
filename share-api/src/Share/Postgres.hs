@@ -100,6 +100,7 @@ import GHC.Exception (SrcLoc (srcLocModule))
 import GHC.Stack qualified as Stack
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
+import Hasql.Errors qualified as HasqlErr
 import Hasql.Interpolate qualified as Hasql
 import Hasql.Interpolate qualified as Interp
 import Hasql.Pipeline qualified as Hasql.Pipeline
@@ -295,12 +296,13 @@ transaction isoLevel mode (Transaction t) = Session do
       loop = do
         lift . lift $ beginTransaction isoLevel mode
         res <- catchError (Just <$> mayCommit t) \case
-          Session.QueryError
-            _
-            _
-            ( Session.ResultError
-                (Session.ServerError errCode _ _ _ _)
-              )
+          HasqlErr.StatementSessionError
+            _numStatements
+            _currentStatementIdx
+            _failedStatementSql
+            _params
+            _prepared
+            (HasqlErr.ServerStatementError (HasqlErr.ServerError errCode _msg _errInfo _hint _idx))
               -- retry on serialization failure or deadlock
               -- https://www.postgresql.org/docs/current/errcodes-appendix.html
               | errCode == "40001" || errCode == "40P01" -> pure Nothing
@@ -343,10 +345,10 @@ beginTransaction hiso hmode =
         Read -> [Interp.sql| READ ONLY |]
 
 commit :: Hasql.Session ()
-commit = Session.statement () (Hasql.Statement "commit" Encoders.noParams Decoders.noResult True)
+commit = Session.statement () (Hasql.preparable "commit" Encoders.noParams Decoders.noResult)
 
 rollbackSession :: Hasql.Session ()
-rollbackSession = Session.statement () (Hasql.Statement "rollback" Encoders.noParams Decoders.noResult True)
+rollbackSession = Session.statement () (Hasql.preparable "rollback" Encoders.noParams Decoders.noResult)
 
 -- | Rollback the current transaction
 rollback :: e -> Transaction e x

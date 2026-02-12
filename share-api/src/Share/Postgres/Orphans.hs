@@ -132,13 +132,14 @@ instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.Dec
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => DecodeComposite (Reference' t h) where
   decodeComposite = decodeReference (Decoders.field (Hasql.decodeField @(Maybe t))) (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int64))
 
-decodeReference :: forall t h m. (HasCallStack, Monad m, Show t, Show h) => m (Maybe t) -> m (Maybe h) -> m (Maybe Int64) -> m (Reference' t h)
+decodeReference :: forall t h m. (HasCallStack, Show t, Show h, Applicative m) => m (Maybe t) -> m (Maybe h) -> m (Maybe Int64) -> m (Reference' t h)
 decodeReference getT getH getI = do
   t <- getT
   h <- getH
   i <- getI
-  let wordI = either (error . show) id . tryInto @Word64 <$> i
-  pure $ mkRef t h wordI
+  pure $
+    let wordI = either (error . show) id . tryInto @Word64 <$> i
+     in mkRef t h wordI
   where
     mkRef (Just t) Nothing Nothing =
       ReferenceBuiltin t
@@ -156,14 +157,15 @@ instance (Hasql.DecodeValue h, Show h) => Hasql.DecodeRow (Reference.Id' h) wher
 instance (Hasql.DecodeValue h, Show h) => DecodeComposite (Reference.Id' h) where
   decodeComposite = decodeReferenceId (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int64))
 
-decodeReferenceId :: (HasCallStack, Monad m, Show h) => m (Maybe h) -> m (Maybe Int64) -> m (Id' h)
+decodeReferenceId :: (HasCallStack, Applicative m, Show h) => m (Maybe h) -> m (Maybe Int64) -> m (Id' h)
 decodeReferenceId getH getI = do
   h <- getH
   i <- getI
-  let wordI = either (error . show) id . tryInto @Word64 <$> i
-  case (h, wordI) of
-    (Just h', Just i') -> pure $ Id h' i'
-    _ -> error $ "decodeReferenceId: invalid id: " <> "(" <> show h <> ", " <> show i <> ")"
+  pure $
+    let wordI = either (error . show) id . tryInto @Word64 <$> i
+     in case (h, wordI) of
+          (Just h', Just i') -> Id h' i'
+          _ -> error $ "decodeReferenceId: invalid id: " <> "(" <> show h <> ", " <> show i <> ")"
 
 instance (Hasql.DecodeRow (Reference' t h)) => Hasql.DecodeRow (Referent' (Reference' t h) (Reference' t h)) where
   decodeRow = decodeReferent Hasql.decodeRow (decodeField @(Maybe Int64))
@@ -171,14 +173,13 @@ instance (Hasql.DecodeRow (Reference' t h)) => Hasql.DecodeRow (Referent' (Refer
 instance (DecodeComposite (Reference' t h)) => DecodeComposite (Referent' (Reference' t h) (Reference' t h)) where
   decodeComposite = decodeReferent decodeComposite (Decoders.field $ Hasql.decodeField @(Maybe Int64))
 
-decodeReferent :: (Monad m) => m (Reference' t h) -> m (Maybe Int64) -> m (Referent' (Reference' t h) (Reference' t h))
+decodeReferent :: (Applicative m) => m (Reference' t h) -> m (Maybe Int64) -> m (Referent' (Reference' t h) (Reference' t h))
 decodeReferent getRef getCid = do
-  ref <- getRef
-  mayCid <- getCid
-  let wordCid = either (error . show) id . tryInto @Word64 <$> mayCid
-  case wordCid of
-    Nothing -> pure $ Ref ref
-    Just cid -> pure $ Con ref cid
+  liftA2 (,) getRef getCid <&> \(ref, mayCid) -> do
+    let wordCid = either (error . show) id . tryInto @Word64 <$> mayCid
+     in case wordCid of
+          Nothing -> Ref ref
+          Just cid -> Con ref cid
 
 instance Hasql.DecodeValue ConstructorType where
   decodeValue =
@@ -205,7 +206,7 @@ instance Hasql.EncodeValue TempEntity where
 
 instance Hasql.EncodeValue TempEntityType where
   encodeValue =
-    Encoders.enum \case
+    Encoders.enum Nothing "entity_kind" \case
       TermComponentType -> "term_component"
       DeclComponentType -> "decl_component"
       NamespaceType -> "namespace"
@@ -215,6 +216,8 @@ instance Hasql.EncodeValue TempEntityType where
 instance Hasql.DecodeValue TempEntityType where
   decodeValue =
     Decoders.enum
+      Nothing
+      "entity_kind"
       \case
         "term_component" -> Just TermComponentType
         "decl_component" -> Just DeclComponentType
@@ -225,7 +228,7 @@ instance Hasql.DecodeValue TempEntityType where
 
 instance Hasql.EncodeValue TermEdit.Typing where
   encodeValue =
-    Encoders.enum \case
+    Encoders.enum Nothing "patch_term_typing" \case
       TermEdit.Same -> "same"
       TermEdit.Subtype -> "subtype"
       TermEdit.Different -> "different"
@@ -233,6 +236,8 @@ instance Hasql.EncodeValue TermEdit.Typing where
 instance Hasql.DecodeValue TermEdit.Typing where
   decodeValue =
     Decoders.enum
+      Nothing
+      "patch_term_typing"
       ( \case
           "same" -> Just TermEdit.Same
           "subtype" -> Just TermEdit.Subtype
@@ -242,7 +247,7 @@ instance Hasql.DecodeValue TermEdit.Typing where
 
 instance Hasql.EncodeValue SqliteTermEdit.Typing where
   encodeValue =
-    Encoders.enum \case
+    Encoders.enum Nothing "patch_term_typing" \case
       SqliteTermEdit.Same -> "same"
       SqliteTermEdit.Subtype -> "subtype"
       SqliteTermEdit.Different -> "different"
@@ -250,6 +255,8 @@ instance Hasql.EncodeValue SqliteTermEdit.Typing where
 instance Hasql.DecodeValue SqliteTermEdit.Typing where
   decodeValue =
     Decoders.enum
+      Nothing
+      "patch_term_typing"
       ( \case
           "same" -> Just SqliteTermEdit.Same
           "subtype" -> Just SqliteTermEdit.Subtype
