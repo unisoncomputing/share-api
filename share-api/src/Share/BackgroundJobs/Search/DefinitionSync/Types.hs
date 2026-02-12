@@ -96,6 +96,8 @@ instance FromJSON TermOrTypeTag where
 instance Hasql.EncodeValue TermOrTypeTag where
   encodeValue =
     Encoders.enum
+      Nothing
+      "definition_tag"
       ( \case
           ToTTermTag tt -> encodeTermTag tt
           ToTTypeTag tt -> encodeTypeTag tt
@@ -112,7 +114,7 @@ instance Hasql.EncodeValue TermOrTypeTag where
         Ability -> "ability"
 
 instance Hasql.DecodeValue TermOrTypeTag where
-  decodeValue = Decoders.enum $ \case
+  decodeValue = Decoders.enum Nothing "definition_tag" $ \case
     "doc" -> pure $ ToTTermTag Doc
     "test" -> pure $ ToTTermTag Test
     "plain" -> pure $ ToTTermTag Plain

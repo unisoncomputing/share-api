@@ -32,6 +32,7 @@ library
       Share.Utils.Deployment
       Share.Utils.IDs
       Share.Utils.SecureTokens
+      Share.Utils.Servant
       Share.Utils.Servant.Cookies
       Share.Utils.Show
       Share.Utils.URI

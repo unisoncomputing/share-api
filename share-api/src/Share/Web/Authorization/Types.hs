@@ -61,6 +61,8 @@ data SubjectKind = UserSubjectKind | OrgSubjectKind | TeamSubjectKind
 instance Hasql.EncodeValue SubjectKind where
   encodeValue =
     HasqlEncode.enum
+      Nothing
+      "subject_kind"
       \case
         UserSubjectKind -> "user"
         OrgSubjectKind -> "org"
@@ -69,6 +71,8 @@ instance Hasql.EncodeValue SubjectKind where
 instance Hasql.DecodeValue SubjectKind where
   decodeValue =
     HasqlDecode.enum
+      Nothing
+      "subject_kind"
       \case
         "user" -> Just UserSubjectKind
         "org" -> Just OrgSubjectKind
@@ -135,19 +139,22 @@ instance FromJSON DisplayAuthSubject where
 --  Decoder for (subject.kind, id :: UUID)
 instance Hasql.DecodeRow ResolvedAuthSubject where
   decodeRow = do
-    PG.decodeField @SubjectKind >>= \case
-      UserSubjectKind -> UserSubject <$> PG.decodeField @UserId
-      OrgSubjectKind -> OrgSubject <$> PG.decodeField @OrgId
-      TeamSubjectKind -> TeamSubject <$> PG.decodeField @TeamId
+    kind <- PG.decodeField @SubjectKind
+    id' <- PG.decodeField @UUID
+    pure $ case kind of
+      UserSubjectKind -> UserSubject (UserId id')
+      OrgSubjectKind -> OrgSubject (OrgId id')
+      TeamSubjectKind -> TeamSubject (TeamId id')
 
 -- Decoder for (subject.id, subject.kind)
 instance Hasql.DecodeRow GenericAuthSubject where
   decodeRow = do
     subjectId <- PG.decodeField @SubjectId
-    PG.decodeField @SubjectKind >>= \case
-      UserSubjectKind -> UserSubject <$> pure subjectId
-      OrgSubjectKind -> OrgSubject <$> pure subjectId
-      TeamSubjectKind -> TeamSubject <$> pure subjectId
+    kind <- PG.decodeField @SubjectKind
+    pure $ case kind of
+      UserSubjectKind -> UserSubject subjectId
+      OrgSubjectKind -> OrgSubject subjectId
+      TeamSubjectKind -> TeamSubject subjectId
 
 -- | Permissions which are actually tracked on Roles, as opposed to permissions which exist at
 -- the application level, which may be mapped onto these.
@@ -306,7 +313,7 @@ instance FromJSON RoleRef where
 
 instance Hasql.DecodeValue RoleRef where
   decodeValue =
-    HasqlDecode.enum $
+    HasqlDecode.enum Nothing "role_ref" $
       \case
         "org_viewer" -> Just RoleOrgViewer
         "org_contributor" -> Just RoleOrgContributor
@@ -325,7 +332,7 @@ instance Hasql.DecodeValue RoleRef where
 
 instance Hasql.EncodeValue RoleRef where
   encodeValue =
-    HasqlEncode.enum $
+    HasqlEncode.enum Nothing "role_ref" $
       \case
         RoleOrgViewer -> "org_viewer"
         RoleOrgContributor -> "org_contributor"
@@ -367,7 +374,7 @@ instance {-# OVERLAPPABLE #-} (ToJSON user, ToJSON (f RoleRef)) => ToJSON (RoleA
         "roles" Aeson..= roles
       ]
 
-instance {-# OVERLAPPING #-}  (FromJSON user) => FromJSON (RoleAssignment Identity user) where
+instance {-# OVERLAPPING #-} (FromJSON user) => FromJSON (RoleAssignment Identity user) where
   parseJSON = Aeson.withObject "RoleAssignment" $ \o -> do
     subject <- o Aeson..: "subject"
     roles <- o Aeson..: "role"
@@ -378,7 +385,6 @@ instance {-# OVERLAPPABLE #-} (FromJSON user, FromJSON (f RoleRef)) => FromJSON 
     subject <- o Aeson..: "subject"
     roles <- o Aeson..: "roles"
     pure RoleAssignment {..}
-
 
 -- | A type for mixing in permissions info on a response for a resource.
 newtype PermissionsInfo = PermissionsInfo (Set RolePermission)

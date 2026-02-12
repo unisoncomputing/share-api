@@ -30,7 +30,6 @@ module Share.Postgres
     QueryA (..),
     QueryM (..),
     TransactionError (..),
-    Coerced (..),
     decodeField,
     (:.) (..),
 
@@ -125,7 +124,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
 import Share.Utils.Tags (HasTags (..), MonadTags (..))
 import Share.Web.App
-import Share.Web.Errors (ErrorID (..), SomeServerError (SomeServerError), ToServerError (..), internalServerError, respondError, someServerError)
+import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
 import UnliftIO qualified
 
@@ -211,19 +210,19 @@ newtype UnliftIOTransaction e a = UnliftIOTransaction {asUnliftIOTransaction :: 
 instance MonadIO (UnliftIOTransaction e) where
   liftIO io = UnliftIOTransaction . Transaction $ Right <$> liftIO io
 
-instance (Exception e) => MonadUnliftIO (UnliftIOTransaction e) where
-  withRunInIO f = UnliftIOTransaction $ Transaction $ do
-    unliftIO <- UnliftIO.askUnliftIO
-    r <- UnliftIO.try $ liftIO $ f \(UnliftIOTransaction (Transaction m)) -> do
-      case unliftIO of
-        UnliftIO.UnliftIO toIO -> do
-          toIO m >>= \case
-            Left (Unrecoverable err) -> throwIO err
-            Left (Err e) -> throwIO e
-            Right a -> pure a
-    case r of
-      Left err@(SomeServerError {}) -> pure (Left (Unrecoverable err))
-      Right b -> pure $ Right b
+-- instance (Exception e) => MonadUnliftIO (UnliftIOTransaction e) where
+--   withRunInIO f = UnliftIOTransaction $ Transaction $ do
+--     unliftIO <- UnliftIO.askUnliftIO
+--     r <- UnliftIO.try $ liftIO $ f \(UnliftIOTransaction (Transaction m)) -> do
+--       case unliftIO of
+--         UnliftIO.UnliftIO toIO -> do
+--           toIO m >>= \case
+--             Left (Unrecoverable err) -> throwIO err
+--             Left (Err e) -> throwIO e
+--             Right a -> pure a
+--     case r of
+--       Left err@(SomeServerError {}) -> pure (Left (Unrecoverable err))
+--       Right b -> pure $ Right b
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err
@@ -754,20 +753,13 @@ transactionSpan name spanTags action = do
 --
 -- This is a bit annoying, can probably add a better version to hasql-interpolate somehow.
 newtype TupleVal a b = TupleVal (a, b)
-  deriving (Show, Eq, Ord)
+  deriving (Eq, Ord)
 
 instance (Interp.DecodeField a, Interp.DecodeField b) => Hasql.DecodeValue (TupleVal a b) where
-  decodeValue = TupleVal <$> (Decoders.composite decoder)
+  decodeValue = TupleVal <$> (Decoders.record decoder)
     where
       decoder :: Decoders.Composite (a, b)
       decoder = do
         a <- Decoders.field $ Interp.decodeField
         b <- Decoders.field $ Interp.decodeField
         pure (a, b)
-
--- Hasql no longer allows DecodeValue instances to be derived via newtypes, so we work around
--- it.
-newtype Coerced a b = Coerced {fromCoerced :: b}
-
-instance (Hasql.DecodeValue b) => Hasql.DecodeValue (Coerced a b) where
-  decodeValue = decodeValue <&> (Coerced . coerce @b @a)

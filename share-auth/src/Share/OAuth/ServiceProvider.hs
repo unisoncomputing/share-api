@@ -43,12 +43,11 @@ import Share.OAuth.Session
 import Share.OAuth.Session qualified as Session
 import Share.OAuth.Types
 import Share.Utils.IDs
+import Share.Utils.Servant
 import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Utils.URI (URIParam, setPathAndQueryParams, unpackURI)
 import UnliftIO
 import Web.Cookie (SetCookie (..))
-
-type AddHeader' = AddHeader '[Optional, Strict]
 
 data ServiceProviderConfig = ServiceProviderConfig
   { -- | The settings used to sign and verify cookies. See 'defaultCookieSettings'
