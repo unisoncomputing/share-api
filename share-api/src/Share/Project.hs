@@ -13,6 +13,7 @@ import Data.Time (UTCTime)
 import Share.IDs (ProjectId, ProjectSlug (..), UserId)
 import Share.Postgres qualified as PG
 import Share.Prelude
+import Share.Utils.IDs (CaseInsensitiveID)
 
 data ProjectVisibility = ProjectPrivate | ProjectPublic
   deriving (Show, Eq, Ord)
@@ -80,10 +81,10 @@ instance ToJSON ProjectTag where
 
 instance PG.EncodeValue ProjectTag where
   encodeValue =
-    PG.encodeValue @Text
+    PG.encodeValue @CaseInsensitiveID
       & contramap \case {}
 
 instance PG.DecodeValue ProjectTag where
   decodeValue =
-    PG.decodeValue @Text <&> \case
+    PG.decodeValue @CaseInsensitiveID <&> \case
       _ -> error "Invalid ProjectTag"
