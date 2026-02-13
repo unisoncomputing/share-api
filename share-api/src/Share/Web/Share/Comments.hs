@@ -15,7 +15,7 @@ import Share.IDs
 import Share.Postgres qualified as PG
 import Share.Prelude
 
-newtype RevisionNumber = RevisionNumber Int64
+newtype RevisionNumber = RevisionNumber Int32
   deriving newtype (Show, Eq, Ord, Num, Enum, Real, Integral, PG.DecodeValue, PG.EncodeValue, Aeson.ToJSON, Aeson.FromJSON)
 
 data Comment user = Comment

@@ -219,7 +219,7 @@ allSerializedDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid except
 
 spineAndLibDependenciesOfCausalCursor :: (QueryM m) => CodebaseEnv -> CausalId -> m (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
 spineAndLibDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid = do
-  libSegmentTextId <- query1Col @Int64 [sql| SELECT text.id FROM text WHERE content_hash = text_hash('lib') |]
+  libSegmentTextId <- query1Col @Int32 [sql| SELECT text.id FROM text WHERE content_hash = text_hash('lib') |]
   PGCursor.newRowCursor
     "causal_dependencies"
     [sql|

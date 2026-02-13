@@ -67,7 +67,7 @@ termNamesForRefsWithinNamespaceOf ::
   (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> NameSearchScope -> Traversal s t PGReferent [NameWithSuffix] -> s -> m t
 termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify nameScope trav s = do
   s & asListOf trav \refs -> do
-    let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64)]
+    let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int32, Maybe Int32)]
         refsTable =
           zip [0 :: Int32 ..] refs <&> \(ord, ref) ->
             let (refBuiltin, refComponentHash, refComponentIndex, refConstructorIndex) = referentFields ref
@@ -120,7 +120,7 @@ termNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify nameScope trav s 
 typeNamesForRefsWithinNamespaceOf :: (PG.QueryM m) => NamesPerspective m -> Maybe ReversedName -> ShouldSuffixify -> NameSearchScope -> Traversal s t PGReference [NameWithSuffix] -> s -> m t
 typeNamesForRefsWithinNamespaceOf np maySuffix shouldSuffixify nameScope trav s = do
   s & asListOf trav \refs -> do
-    let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int64)]
+    let refsTable :: [(Int32, Maybe Text, Maybe ComponentHashId, Maybe Int32)]
         refsTable =
           zip [0 :: Int32 ..] refs <&> \(ord, ref) ->
             let (refBuiltin, refComponentHash, refComponentIndex) = referenceFields ref
@@ -521,7 +521,7 @@ projectTypesWithinRoot !_nlReceipt bhId = do
     <&> fmap (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, ref))
 
 -- | Get a cursor over all non-lib, non-builtin types and their corresponding constructor counts, within the given root branch.
-projectConstructorCountsWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (TypeReferenceId :. Only Int64))
+projectConstructorCountsWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (TypeReferenceId :. Only Int32))
 projectConstructorCountsWithinRoot !_ bhId =
   Cursors.newRowCursor
     "constructorCountsCursor"

@@ -127,12 +127,12 @@ instance Hasql.EncodeValue Name where
 
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => Hasql.DecodeRow (Reference' t h) where
   decodeRow = do
-    decodeReference (decodeField @(Maybe t)) (decodeField @(Maybe h)) (decodeField @(Maybe Int64))
+    decodeReference (decodeField @(Maybe t)) (decodeField @(Maybe h)) (decodeField @(Maybe Int32))
 
 instance (Hasql.DecodeValue t, Hasql.DecodeValue h, Show t, Show h) => DecodeComposite (Reference' t h) where
-  decodeComposite = decodeReference (Decoders.field (Hasql.decodeField @(Maybe t))) (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int64))
+  decodeComposite = decodeReference (Decoders.field (Hasql.decodeField @(Maybe t))) (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int32))
 
-decodeReference :: forall t h m. (HasCallStack, Show t, Show h, Applicative m) => m (Maybe t) -> m (Maybe h) -> m (Maybe Int64) -> m (Reference' t h)
+decodeReference :: forall t h m. (HasCallStack, Show t, Show h, Applicative m) => m (Maybe t) -> m (Maybe h) -> m (Maybe Int32) -> m (Reference' t h)
 decodeReference getT getH getI = do
   t <- getT
   h <- getH
@@ -152,12 +152,12 @@ decodeReference getT getH getI = do
 
 instance (Hasql.DecodeValue h, Show h) => Hasql.DecodeRow (Reference.Id' h) where
   decodeRow = do
-    decodeReferenceId (decodeField @(Maybe h)) (decodeField @(Maybe Int64))
+    decodeReferenceId (decodeField @(Maybe h)) (decodeField @(Maybe Int32))
 
 instance (Hasql.DecodeValue h, Show h) => DecodeComposite (Reference.Id' h) where
-  decodeComposite = decodeReferenceId (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int64))
+  decodeComposite = decodeReferenceId (Decoders.field $ Hasql.decodeField @(Maybe h)) (Decoders.field $ Hasql.decodeField @(Maybe Int32))
 
-decodeReferenceId :: (HasCallStack, Applicative m, Show h) => m (Maybe h) -> m (Maybe Int64) -> m (Id' h)
+decodeReferenceId :: (HasCallStack, Applicative m, Show h) => m (Maybe h) -> m (Maybe Int32) -> m (Id' h)
 decodeReferenceId getH getI = do
   h <- getH
   i <- getI
@@ -168,12 +168,12 @@ decodeReferenceId getH getI = do
           _ -> error $ "decodeReferenceId: invalid id: " <> "(" <> show h <> ", " <> show i <> ")"
 
 instance (Hasql.DecodeRow (Reference' t h)) => Hasql.DecodeRow (Referent' (Reference' t h) (Reference' t h)) where
-  decodeRow = decodeReferent Hasql.decodeRow (decodeField @(Maybe Int64))
+  decodeRow = decodeReferent Hasql.decodeRow (decodeField @(Maybe Int32))
 
 instance (DecodeComposite (Reference' t h)) => DecodeComposite (Referent' (Reference' t h) (Reference' t h)) where
-  decodeComposite = decodeReferent decodeComposite (Decoders.field $ Hasql.decodeField @(Maybe Int64))
+  decodeComposite = decodeReferent decodeComposite (Decoders.field $ Hasql.decodeField @(Maybe Int32))
 
-decodeReferent :: (Applicative m) => m (Reference' t h) -> m (Maybe Int64) -> m (Referent' (Reference' t h) (Reference' t h))
+decodeReferent :: (Applicative m) => m (Reference' t h) -> m (Maybe Int32) -> m (Referent' (Reference' t h) (Reference' t h))
 decodeReferent getRef getCid = do
   liftA2 (,) getRef getCid <&> \(ref, mayCid) -> do
     let wordCid = either (error . show) id . tryInto @Word64 <$> mayCid
@@ -183,14 +183,14 @@ decodeReferent getRef getCid = do
 
 instance Hasql.DecodeValue ConstructorType where
   decodeValue =
-    Hasql.decodeValue @Int64 & Decoders.refine \case
+    Hasql.decodeValue @Int32 & Decoders.refine \case
       0 -> Right DataConstructor
       1 -> Right EffectConstructor
       n -> Left $ "Invalid ConstructorType: " <> tShow n
 
 instance Hasql.EncodeValue ConstructorType where
   encodeValue =
-    Hasql.encodeValue @Int64
+    Hasql.encodeValue @Int32
       & contramap \case
         DataConstructor -> 0
         EffectConstructor -> 1
