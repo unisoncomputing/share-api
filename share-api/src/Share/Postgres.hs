@@ -97,10 +97,12 @@ import Data.Time.Clock.System (getSystemTime, systemToTAITime)
 import Data.Time.Clock.TAI (diffAbsoluteTime)
 import Data.Vector (Vector)
 import Data.Void
+import Data.Word (Word32)
 import GHC.Exception (SrcLoc (srcLocModule))
 import GHC.Stack qualified as Stack
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
+import Hasql.Errors (SessionError (..))
 import Hasql.Errors qualified as HasqlErr
 import Hasql.Interpolate qualified as Hasql
 import Hasql.Interpolate qualified as Interp
@@ -291,21 +293,32 @@ newtype Session e a = Session {_unSession :: Logging.LoggerT (ReaderT (Env.Env T
 
 data PostgresError
   = PostgresError (Pool.UsageError)
+  | -- Some errors we process to get better logging
+    ColumnTypeMismatch (Text {- sql template -}) ([Text {- params -}]) (Int {- 0-indexed column number -}) (Word32 {- expected OID -}) (Word32 {- actual OID -})
   deriving stock (Show)
   deriving anyclass (Exception)
 
 instance ToServerError PostgresError where
-  toServerError (PostgresError err) =
-    let errId = case err of
-          Pool.ConnectionUsageError {} -> "connection-usage-error"
-          Pool.SessionUsageError {} -> "session-usage-error"
-          Pool.AcquisitionTimeoutUsageError {} -> "acquisition-timeout-usage-error"
-     in (ErrorID $ "postgres:pool:" <> errId, internalServerError)
+  toServerError = \case
+    (PostgresError err) ->
+      let errId = case err of
+            Pool.ConnectionUsageError {} -> "connection-usage-error"
+            Pool.SessionUsageError {} -> "session-usage-error"
+            Pool.AcquisitionTimeoutUsageError {} -> "acquisition-timeout-usage-error"
+       in (ErrorID $ "postgres:pool:" <> errId, internalServerError)
+    ColumnTypeMismatch {} ->
+      ( ErrorID "postgres:column-type-mismatch",
+        internalServerError
+      )
 
 instance Logging.Loggable PostgresError where
-  toLog (PostgresError err) =
-    Logging.showLog err
-      & Logging.withSeverity Logging.Error
+  toLog = \case
+    (PostgresError err) ->
+      Logging.showLog err
+        & Logging.withSeverity Logging.Error
+    (ColumnTypeMismatch sqlTemplate params colNum expectedOID actualOID) ->
+      Logging.textLog ("Column type mismatch: expected OID " <> tShow expectedOID <> " but got OID " <> tShow actualOID <> " for zero-indexed column " <> tShow colNum <> " in query: " <> sqlTemplate <> " with params: [" <> Text.intercalate ", " params <> "]")
+        & Logging.withSeverity Logging.Error
 
 -- TODO: I think we want to vary this per transaction.
 defaultIsolationLevel :: IsolationLevel
@@ -489,11 +502,15 @@ tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logg
   nq <- UnliftIO.readTVarIO $ numQueriesVar
   Trace.addAttribute span "numQueries" (Trace.toAttribute nq)
   case result of
-    Left err -> throwIO . someServerError $ PostgresError err
+    Left err -> do
+      throwIO . someServerError $ cleanErr err
     Right (Left (Unrecoverable e)) -> throwIO e
     Right (Left (Err e)) -> pure (Left e)
     Right (Right a) -> pure (Right a)
   where
+    cleanErr = \case
+      Pool.SessionUsageError (StatementSessionError _ _ sqlTemplate params _ (HasqlErr.UnexpectedColumnTypeStatementError colNum expectedOID actualOID)) -> ColumnTypeMismatch sqlTemplate params colNum expectedOID actualOID
+      err -> PostgresError err
     (entryPointName, spanAttrs) = spanInfo
 
 -- | Run a session in the App monad, responding to the request with an error if it fails.
