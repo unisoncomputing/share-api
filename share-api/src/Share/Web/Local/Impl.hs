@@ -25,8 +25,8 @@ import Share.Prelude
 import Share.User
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging qualified as Logging
-import Share.Utils.Servant (AddHeader')
 import Share.Utils.Servant.Cookies (SetCookie)
+import Share.Utils.ServantUtils (AddHeader')
 import Share.Web.App
 import Share.Web.Authentication.AccessToken qualified as AccessToken
 import Share.Web.Errors

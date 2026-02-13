@@ -59,13 +59,14 @@ instance PG.DecodeRow (ShareContribution UserId) where
     updatedAt <- PG.decodeField
     author <- PG.decodeField
     numComments <- PG.decodeField @Int32
-    let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
-    -- NOTE: Right now every contribution's branches are restricted to being in the same
-    -- project, but if that ever changes we'll need to fetch the proper project short
-    -- hands for these branches here:
-    let sourceBranchShortHand = BranchShortHand {branchName = sourceBranchName, contributorHandle = sourceBranchContributorHandle}
-    let targetBranchShortHand = BranchShortHand {branchName = targetBranchName, contributorHandle = targetBranchContributorHandle}
-    pure ShareContribution {..}
+    pure $
+      let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
+          -- NOTE: Right now every contribution's branches are restricted to being in the same
+          -- project, but if that ever changes we'll need to fetch the proper project short
+          -- hands for these branches here:
+          sourceBranchShortHand = BranchShortHand {branchName = sourceBranchName, contributorHandle = sourceBranchContributorHandle}
+          targetBranchShortHand = BranchShortHand {branchName = targetBranchName, contributorHandle = targetBranchContributorHandle}
+       in ShareContribution {..}
 
 instance ToJSON (ShareContribution UserDisplayInfo) where
   toJSON ShareContribution {..} =

@@ -43,9 +43,10 @@ instance PG.DecodeRow (ShareTicket UserId) where
     createdAt <- PG.decodeField
     updatedAt <- PG.decodeField
     author <- PG.decodeField
-    let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
     numComments <- PG.decodeField @Int32
-    pure ShareTicket {..}
+    pure $
+      let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
+       in ShareTicket {..}
 
 instance ToJSON (ShareTicket UserDisplayInfo) where
   toJSON ShareTicket {..} =
