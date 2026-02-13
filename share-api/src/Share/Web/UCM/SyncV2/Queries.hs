@@ -220,7 +220,7 @@ allSerializedDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid except
 spineAndLibDependenciesOfCausalCursor :: (QueryM m) => CodebaseEnv -> CausalId -> m (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
 spineAndLibDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid = do
   libSegmentTextId <- query1Col @Int32 [sql| SELECT text.id FROM text WHERE content_hash = text_hash('lib') |]
-  PGCursor.newRowCursor
+  PGCursor.newRowCursor @(Hash32, Bool, Bool, Int64)
     "causal_dependencies"
     [sql|
     WITH causal_spine(causal_id, ord) AS (
@@ -241,13 +241,13 @@ spineAndLibDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid = do
         JOIN namespace_children lib_dep ON lib_root_causal.namespace_hash_id = lib_dep.parent_namespace_hash_id
         WHERE lib_root_ns.name_segment_id = #{libSegmentTextId}
         ORDER BY lib_dep.child_causal_id, cs.ord ASC
-    )   SELECT c.hash AS hash, true AS is_spine, false AS is_lib
+    )   SELECT c.hash AS hash, true AS is_spine, false AS is_lib, cs.ord AS ord
           FROM causal_spine cs
           JOIN causals c ON cs.causal_id = c.id
         UNION
-        SELECT c.hash AS hash, false AS is_spine, true AS is_lib
+        SELECT c.hash AS hash, false AS is_spine, true AS is_lib, ld.ord AS ord
           FROM lib_deps ld
           JOIN causals c ON ld.causal_id = c.id
       ORDER BY ord ASC, is_lib ASC, is_spine ASC
   |]
-    <&> fmap (\(hash, isSpine, isLibRoot) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))
+    <&> fmap (\(hash, isSpine, isLibRoot, _ord) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))
