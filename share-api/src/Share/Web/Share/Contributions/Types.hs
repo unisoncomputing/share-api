@@ -38,7 +38,7 @@ data ShareContribution user = ShareContribution
     updatedAt :: UTCTime,
     -- This is optional so we can delete users without deleting ALL their contributions.
     author :: Maybe user,
-    numComments :: Int32
+    numComments :: Int64
   }
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
@@ -58,7 +58,7 @@ instance PG.DecodeRow (ShareContribution UserId) where
     createdAt <- PG.decodeField
     updatedAt <- PG.decodeField
     author <- PG.decodeField
-    numComments <- PG.decodeField @Int32
+    numComments <- PG.decodeField @Int64
     pure $
       let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
           -- NOTE: Right now every contribution's branches are restricted to being in the same
