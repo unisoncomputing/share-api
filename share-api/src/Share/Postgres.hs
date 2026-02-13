@@ -295,6 +295,7 @@ data PostgresError
   = PostgresError (Pool.UsageError)
   | -- Some errors we process to get better logging
     ColumnTypeMismatch (Text {- sql template -}) ([Text {- params -}]) (Int {- 0-indexed column number -}) (Word32 {- expected OID -}) (Word32 {- actual OID -})
+  | ColumnCountMismatch (Text {- sql template -}) ([Text {- params -}]) (Int {- expected column count -}) (Int {- actual column count -})
   deriving stock (Show)
   deriving anyclass (Exception)
 
@@ -310,6 +311,10 @@ instance ToServerError PostgresError where
       ( ErrorID "postgres:column-type-mismatch",
         internalServerError
       )
+    ColumnCountMismatch {} ->
+      ( ErrorID "postgres:column-count-mismatch",
+        internalServerError
+      )
 
 instance Logging.Loggable PostgresError where
   toLog = \case
@@ -318,6 +323,9 @@ instance Logging.Loggable PostgresError where
         & Logging.withSeverity Logging.Error
     (ColumnTypeMismatch sqlTemplate params colNum expectedOID actualOID) ->
       Logging.textLog ("Column type mismatch: expected OID " <> tShow expectedOID <> " but got OID " <> tShow actualOID <> " for zero-indexed column " <> tShow colNum <> " in query: " <> sqlTemplate <> " with params: [" <> Text.intercalate ", " params <> "]")
+        & Logging.withSeverity Logging.Error
+    (ColumnCountMismatch sqlTemplate params expectedCount actualCount) ->
+      Logging.textLog ("Column count mismatch: expected " <> tShow expectedCount <> " but got " <> tShow actualCount <> " columns in query: " <> sqlTemplate <> " with params: [" <> Text.intercalate ", " params <> "]")
         & Logging.withSeverity Logging.Error
 
 -- TODO: I think we want to vary this per transaction.
@@ -510,6 +518,7 @@ tryRunSessionWithEnv env@(Env.Env {pgConnectionPool = pool, minLogSeverity, logg
   where
     cleanErr = \case
       Pool.SessionUsageError (StatementSessionError _ _ sqlTemplate params _ (HasqlErr.UnexpectedColumnTypeStatementError colNum expectedOID actualOID)) -> ColumnTypeMismatch sqlTemplate params colNum expectedOID actualOID
+      Pool.SessionUsageError (StatementSessionError _ _ sqlTemplate params _ (HasqlErr.UnexpectedColumnCountStatementError expectedColCount actualColCount)) -> ColumnCountMismatch sqlTemplate params expectedColCount actualColCount
       err -> PostgresError err
     (entryPointName, spanAttrs) = spanInfo
 

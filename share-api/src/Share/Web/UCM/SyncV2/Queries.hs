@@ -241,11 +241,11 @@ spineAndLibDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid = do
         JOIN namespace_children lib_dep ON lib_root_causal.namespace_hash_id = lib_dep.parent_namespace_hash_id
         WHERE lib_root_ns.name_segment_id = #{libSegmentTextId}
         ORDER BY lib_dep.child_causal_id, cs.ord ASC
-    )   SELECT c.hash AS hash, true AS is_spine, false AS is_lib, cs.ord AS ord
+    )   SELECT c.hash AS hash, true AS is_spine, false AS is_lib
           FROM causal_spine cs
           JOIN causals c ON cs.causal_id = c.id
         UNION
-        SELECT c.hash AS hash, false AS is_spine, true AS is_lib, ld.ord AS ord
+        SELECT c.hash AS hash, false AS is_spine, true AS is_lib
           FROM lib_deps ld
           JOIN causals c ON ld.causal_id = c.id
       ORDER BY ord ASC, is_lib ASC, is_spine ASC
