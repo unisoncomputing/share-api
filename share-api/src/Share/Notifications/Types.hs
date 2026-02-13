@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -74,7 +75,7 @@ data NotificationTopic
   deriving (Eq, Show, Ord, Enum, Bounded)
 
 instance PG.EncodeValue NotificationTopic where
-  encodeValue = HasqlEncoders.enum \case
+  encodeValue = HasqlEncoders.enum Nothing "notification_topic" \case
     ProjectBranchUpdated -> "project:branch:updated"
     ProjectContributionCreated -> "project:contribution:created"
     ProjectContributionStatusUpdated -> "project:contribution:updated"
@@ -85,7 +86,7 @@ instance PG.EncodeValue NotificationTopic where
     ProjectReleaseCreated -> "project:release:created"
 
 instance PG.DecodeValue NotificationTopic where
-  decodeValue = HasqlDecoders.enum \case
+  decodeValue = HasqlDecoders.enum Nothing "notification_topic" \case
     "project:branch:updated" -> Just ProjectBranchUpdated
     "project:contribution:created" -> Just ProjectContributionCreated
     "project:contribution:updated" -> Just ProjectContributionStatusUpdated
@@ -125,12 +126,12 @@ data NotificationTopicGroup
   deriving (Eq, Show, Ord)
 
 instance PG.EncodeValue NotificationTopicGroup where
-  encodeValue = HasqlEncoders.enum \case
+  encodeValue = HasqlEncoders.enum Nothing "notification_topic_group" \case
     WatchProject -> "watch_project"
     AllProjectTopics -> "all_project_topics"
 
 instance PG.DecodeValue NotificationTopicGroup where
-  decodeValue = HasqlDecoders.enum \case
+  decodeValue = HasqlDecoders.enum Nothing "notification_topic_group" \case
     "watch_project" -> Just WatchProject
     "all_project_topics" -> Just AllProjectTopics
     _ -> Nothing
@@ -179,13 +180,13 @@ instance Aeson.FromJSON NotificationStatus where
     s -> fail $ "Invalid notification status: " <> Text.unpack s
 
 instance PG.EncodeValue NotificationStatus where
-  encodeValue = HasqlEncoders.enum \case
+  encodeValue = HasqlEncoders.enum Nothing "notification_status" \case
     Unread -> "unread"
     Read -> "read"
     Archived -> "archived"
 
 instance PG.DecodeValue NotificationStatus where
-  decodeValue = HasqlDecoders.enum \case
+  decodeValue = HasqlDecoders.enum Nothing "notification_status" \case
     "unread" -> Just Unread
     "read" -> Just Read
     "archived" -> Just Archived
@@ -395,36 +396,39 @@ instance PG.EncodeValue NotificationEventData where
 instance Hasql.DecodeRow NotificationEventData where
   decodeRow = do
     topic <- PG.decodeField
-    Hasql.Jsonb jsonData <- PG.decodeField
-    case topic of
-      ProjectBranchUpdated -> do
-        (project :++ branch) <- parseJsonData jsonData
-        pure $ ProjectBranchUpdatedData project branch
-      ProjectContributionCreated -> do
-        (project :++ contr) <- parseJsonData jsonData
-        pure $ ProjectContributionCreatedData project contr
-      ProjectContributionStatusUpdated -> do
-        (project :++ contr :++ status) <- parseJsonData jsonData
-        pure $ ProjectContributionStatusUpdatedData project contr status
-      ProjectContributionComment -> do
-        (project :++ contr :++ comm) <- parseJsonData jsonData
-        pure $ ProjectContributionCommentData project contr comm
-      ProjectTicketCreated -> do
-        (project :++ ticket) <- parseJsonData jsonData
-        pure $ ProjectTicketCreatedData project ticket
-      ProjectTicketStatusUpdated -> do
-        (project :++ ticket :++ status) <- parseJsonData jsonData
-        pure $ ProjectTicketStatusUpdatedData project ticket status
-      ProjectTicketComment -> do
-        (project :++ ticket :++ comm) <- parseJsonData jsonData
-        pure $ ProjectTicketCommentData project ticket comm
-      ProjectReleaseCreated -> do
-        (project :++ release) <- parseJsonData jsonData
-        pure $ ProjectReleaseCreatedData project release
+    jsonb <- PG.decodeField
+    pure $
+      -- ApplicativeDo isn't very smart, therefore, nested lets.
+      let Hasql.Jsonb jsonData = jsonb
+       in case topic of
+            ProjectBranchUpdated ->
+              let (project :++ branch) = parseJsonData jsonData
+               in ProjectBranchUpdatedData project branch
+            ProjectContributionCreated -> do
+              let (project :++ contr) = parseJsonData jsonData
+               in ProjectContributionCreatedData project contr
+            ProjectContributionStatusUpdated -> do
+              let (project :++ contr :++ status) = parseJsonData jsonData
+               in ProjectContributionStatusUpdatedData project contr status
+            ProjectContributionComment -> do
+              let (project :++ contr :++ comm) = parseJsonData jsonData
+               in ProjectContributionCommentData project contr comm
+            ProjectTicketCreated -> do
+              let (project :++ ticket) = parseJsonData jsonData
+               in ProjectTicketCreatedData project ticket
+            ProjectTicketStatusUpdated -> do
+              let (project :++ ticket :++ status) = parseJsonData jsonData
+               in ProjectTicketStatusUpdatedData project ticket status
+            ProjectTicketComment -> do
+              let (project :++ ticket :++ comm) = parseJsonData jsonData
+               in ProjectTicketCommentData project ticket comm
+            ProjectReleaseCreated -> do
+              let (project :++ release) = parseJsonData jsonData
+               in ProjectReleaseCreatedData project release
     where
       parseJsonData v = case Aeson.fromJSON v of
-        Aeson.Error e -> fail e
-        Aeson.Success a -> pure a
+        Aeson.Error e -> error e
+        Aeson.Success a -> a
 
 eventTopic :: NotificationEventData -> NotificationTopic
 eventTopic = \case
@@ -530,8 +534,10 @@ data NotificationWebhookConfig = NotificationWebhookConfig
 instance PG.DecodeRow NotificationWebhookConfig where
   decodeRow = do
     webhookDeliveryId <- PG.decodeField
-    URIParam webhookDeliveryUrl <- PG.decodeField
-    pure $ NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl}
+    url <- PG.decodeField
+    pure $
+      let URIParam webhookDeliveryUrl = url
+       in NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl}
 
 instance Aeson.ToJSON NotificationWebhookConfig where
   toJSON NotificationWebhookConfig {webhookDeliveryId, webhookDeliveryUrl} =
@@ -602,16 +608,17 @@ instance PG.DecodeRow (NotificationSubscription NotificationSubscriptionId) wher
     subscriptionScopeProject <- PG.decodeField
     subscriberUser <- PG.decodeField
     subscriberProject <- PG.decodeField
-    let subscriptionOwner = case (subscriberUser, subscriberProject) of
-          (Just uid, Nothing) -> UserSubscriptionOwner uid
-          (Nothing, Just pid) -> ProjectSubscriptionOwner pid
-          _ -> error "Invalid subscription owner in database"
     subscriptionTopics <- Set.fromList <$> PG.decodeField
     subscriptionTopicGroups <- Set.fromList <$> PG.decodeField
     subscriptionFilter <- PG.decodeField
     subscriptionCreatedAt <- PG.decodeField
     subscriptionUpdatedAt <- PG.decodeField
-    pure $ NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
+    pure $
+      let subscriptionOwner = case (subscriberUser, subscriberProject) of
+            (Just uid, Nothing) -> UserSubscriptionOwner uid
+            (Nothing, Just pid) -> ProjectSubscriptionOwner pid
+            _ -> error "Invalid subscription owner in database"
+       in NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt}
 
 instance Aeson.ToJSON (NotificationSubscription NotificationSubscriptionId) where
   toJSON NotificationSubscription {subscriptionId, subscriptionScopeUser, subscriptionScopeProject, subscriptionOwner, subscriptionTopics, subscriptionTopicGroups, subscriptionFilter, subscriptionCreatedAt, subscriptionUpdatedAt} =

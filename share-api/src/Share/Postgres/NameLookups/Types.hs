@@ -57,7 +57,7 @@ data NameWithSuffix = NameWithSuffix
   deriving stock (Eq, Ord, Show, Generic)
 
 instance PG.DecodeValue NameWithSuffix where
-  decodeValue = Decoders.composite nameWithSuffixComposite
+  decodeValue = Decoders.record nameWithSuffixComposite
 
 nameWithSuffixComposite :: Decoders.Composite NameWithSuffix
 nameWithSuffixComposite = do

@@ -239,7 +239,7 @@ expectShareTermComponent (CodebaseEnv {codebaseOwner}) componentHashId = do
         -- Ensure we get at least one index, and that we have bytes saved for each part of the
         -- component.
         <&> checkElements
-      )
+    )
       `whenNothingM` do
         unrecoverableError $ InternalServerError "expected-term-component" (ExpectedTermComponentNotFound componentHashId)
   second (Hash32.fromHash . unComponentHash) . Share.TermComponent . toList <$> for componentElements \(termId, LocalTermBytes bytes) ->
@@ -1076,7 +1076,7 @@ saveTypeComponent (codebase@CodebaseEnv {codebaseOwner}) componentHash maySerial
       constructorsTableWithIds <-
         ( HashQ.ensureComponentHashIdsOf (traversed . _4 . _Just) constructorsTable
             >>= ensureTextIdsOf (traversed . _3 . _Just)
-          )
+        )
 
       whenNonEmpty constructorsTableWithIds $
         execute_
@@ -1372,7 +1372,7 @@ data ReferenceIdTuple = ReferenceIdTuple
   deriving (Eq, Show)
 
 instance Hasql.DecodeValue ReferenceIdTuple where
-  decodeValue = Decoders.composite $ do
+  decodeValue = Decoders.record $ do
     tupleComponentHash <- Decoders.field $ Hasql.decodeField
     tupleComponentIndex <- Decoders.field $ Hasql.decodeField
     pure ReferenceIdTuple {tupleComponentHash, tupleComponentIndex}

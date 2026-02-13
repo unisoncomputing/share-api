@@ -87,7 +87,7 @@ extra-deps:
 # Updated to work against hasql-1.10
 # Unfortunately hasql-1.10 makes its libpq dependencies more private
 - github: ChrisPenner/hasql-listen-notify
-  commit: d75951239f1b8f2d87425769bc1aa29dc17b5ce8
+  commit: 9bd6fcf058faf36d3bf9aea2a09acdd112490106
 
 ghc-options:
  # All packages

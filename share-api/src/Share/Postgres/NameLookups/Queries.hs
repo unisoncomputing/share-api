@@ -168,7 +168,7 @@ newtype NamedReferentResult = NamedReferentResult (NamedRef (PGReferent, (Maybe 
   deriving (Show)
 
 instance Hasql.DecodeValue NamedReferentResult where
-  decodeValue = Decoders.composite $ do
+  decodeValue = Decoders.record $ do
     name <- Decoders.field $ Hasql.decodeField @ReversedName
     ref <- decodeComposite
     ct <- (Decoders.field $ Hasql.decodeField @(Maybe ConstructorType))
@@ -177,7 +177,7 @@ instance Hasql.DecodeValue NamedReferentResult where
 newtype NamedReferenceResult = NamedReferenceResult (NamedRef PGReference)
 
 instance Hasql.DecodeValue NamedReferenceResult where
-  decodeValue = Decoders.composite $ do
+  decodeValue = Decoders.record $ do
     name <- Decoders.field $ Hasql.decodeField @ReversedName
     ref <- decodeComposite
     pure $ NamedReferenceResult (NamedRef name ref)
@@ -498,8 +498,7 @@ projectTermsWithinRootV1 !_nlReceipt bhId = do
         WHERE root_branch_hash_id = #{bhId}
     |]
     <&> fmap
-      ( \NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, referent2to1 ref)
-      )
+      (\NamedRef {reversedSegments, ref} -> (reversedNameToName reversedSegments, referent2to1 ref))
 
 -- | Get a cursor over all non-lib terms within the given root branch.
 projectTermsWithinRoot :: (QueryM m) => NameLookupReceipt -> BranchHashId -> m (PGCursor (Name, V2.Referent))

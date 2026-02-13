@@ -45,7 +45,7 @@ initialize scope = Ki.fork_ scope $ forever do
   result <- UnliftIO.try $ do
     PG.runSession $ do
       for_ allChannels \kind -> do
-        PG.statement () $ Hasql.listen (Hasql.Identifier . Text.encodeUtf8 $ toChannelText kind)
+        PG.statement () $ Hasql.listen (Hasql.Identifier $ toChannelText kind)
       -- Wait for notifications
       let loop = do
             Hasql.Notification {channel} <- PG.Session . lift . lift . lift $ Hasql.await

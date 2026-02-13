@@ -197,14 +197,14 @@ packages:
 - completed:
     name: hasql-listen-notify
     pantry-tree:
-      sha256: 4b1f48dc8015debc556f6fc77d903891905f5b56f855c7d26d11a55444147cc3
+      sha256: fc73475fc9fcae1102afbd981927bc66a4499ffe57bf432b952a16b9bb06e917
       size: 610
-    sha256: 9e1128de5650d45a126b45d63a6dc27c23b53782d33283c5304eea094e4ec68c
-    size: 8687
-    url: https://github.com/ChrisPenner/hasql-listen-notify/archive/d75951239f1b8f2d87425769bc1aa29dc17b5ce8.tar.gz
+    sha256: d040a58f9cec7ca260e5bd8c37cce2879b02476d28e7f276f81d44e0fe20d68a
+    size: 8838
+    url: https://github.com/ChrisPenner/hasql-listen-notify/archive/9bd6fcf058faf36d3bf9aea2a09acdd112490106.tar.gz
     version: 0.1.0.1
   original:
-    url: https://github.com/ChrisPenner/hasql-listen-notify/archive/d75951239f1b8f2d87425769bc1aa29dc17b5ce8.tar.gz
+    url: https://github.com/ChrisPenner/hasql-listen-notify/archive/9bd6fcf058faf36d3bf9aea2a09acdd112490106.tar.gz
 snapshots:
 - completed:
     sha256: 4b787f53036611a03edbf438dd5412daa03fb3da5d938ae8865ec471fe3f9632
