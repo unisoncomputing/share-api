@@ -138,6 +138,6 @@ projectConstructorCountsWithoutLib !nlr rootBranchHashId = do
   cursor <- Q.projectConstructorCountsWithinRoot nlr rootBranchHashId
   Cursor.foldBatched cursor 1000 (pure . Vector.foldl' f Map.empty)
   where
-    f :: Map TypeReferenceId Int -> TypeReferenceId :. Only Int64 -> Map TypeReferenceId Int
+    f :: Map TypeReferenceId Int -> TypeReferenceId :. Only Int32 -> Map TypeReferenceId Int
     f acc (ref :. Only count) =
-      Map.insert ref (fromIntegral @Int64 @Int count) acc
+      Map.insert ref (fromIntegral @Int32 @Int count) acc

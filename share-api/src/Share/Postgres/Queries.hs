@@ -36,6 +36,7 @@ import Share.Web.Authorization.Types (RolePermission (..))
 import Share.Web.Errors (EntityMissing (EntityMissing), ErrorID (..))
 import Share.Web.Share.Branches.Types (BranchKindFilter (..))
 import Share.Web.Share.Projects.Types (ContributionStats (..), DownloadStats (..), FavData, ProjectOwner, TicketStats (..))
+import Share.Web.Share.Releases.API (ListReleasesCursor)
 import Share.Web.Share.Releases.Types (ReleaseStatusFilter (..))
 import Share.Web.Share.Types
 import Unison.Util.List qualified as Utils
@@ -60,7 +61,7 @@ projectByIdWithMetadata :: Maybe UserId -> ProjectId -> PG.Transaction e (Maybe 
 projectByIdWithMetadata caller projectId = do
   PG.query1Row sql <&> fmap \(p PG.:. favData PG.:. projectOwner PG.:. (branchName, major, minor, patch)) -> (p, favData, projectOwner, branchName, releaseVersionFromInts major minor patch)
   where
-    releaseVersionFromInts :: Maybe Int64 -> Maybe Int64 -> Maybe Int64 -> Maybe ReleaseVersion
+    releaseVersionFromInts :: Maybe Int32 -> Maybe Int32 -> Maybe Int32 -> Maybe ReleaseVersion
     releaseVersionFromInts major minor patch =
       ReleaseVersion <$> major <*> minor <*> patch
     -- Select the project, also include the number of favs on the project and whether the
@@ -1037,7 +1038,7 @@ releaseByProjectIdAndReleaseShortHand projectId ReleaseShortHand {releaseVersion
 
 listReleasesByProject ::
   Limit ->
-  Maybe (Cursor (Int64, Int64, Int64, ReleaseId)) ->
+  Maybe (Cursor ListReleasesCursor) ->
   Maybe Query ->
   ReleaseStatusFilter ->
   ProjectId ->
@@ -1055,7 +1056,7 @@ listReleasesByProject limit mayCursor mayVersionPrefix status projectId = do
             let numericalPrefix =
                   versionPrefix
                     & Text.splitOn "."
-                    & fmap (readMaybe @Int64 . Text.unpack)
+                    & fmap (readMaybe @Int32 . Text.unpack)
                     & List.takeWhile isJust
                     & catMaybes
                 numericalFilters = case numericalPrefix of

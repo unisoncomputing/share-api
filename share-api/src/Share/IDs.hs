@@ -520,9 +520,9 @@ newtype ReleaseId = ReleaseId UUID
 -- | Version for a release, e.g. "1.2.3". See also ReleaseShortHand which includes the
 -- 'releases/' prefix.
 data ReleaseVersion = ReleaseVersion
-  { major :: !Int64,
-    minor :: !Int64,
-    patch :: !Int64
+  { major :: !Int32,
+    minor :: !Int32,
+    patch :: !Int32
   }
   deriving stock (Eq, Ord, Show, Generic)
   deriving (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via UsingID ReleaseVersion

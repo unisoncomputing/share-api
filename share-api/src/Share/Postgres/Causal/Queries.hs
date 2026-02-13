@@ -904,12 +904,12 @@ expectNamespaceStatsOf trav s =
         |]
             <&> fmap \(containedTerms, deepContainedTerms, containedTypes, deepContainedTypes, containedConstructors, deepContainedConstructors) ->
               NamespaceStats
-                { containedTerms = fromIntegral @Int64 @Int containedTerms,
-                  deepContainedTerms = fromIntegral @Int64 @Int deepContainedTerms,
-                  containedTypes = fromIntegral @Int64 @Int containedTypes,
-                  deepContainedTypes = fromIntegral @Int64 @Int deepContainedTypes,
-                  containedConstructors = fromIntegral @Int64 @Int containedConstructors,
-                  deepContainedConstructors = fromIntegral @Int64 @Int deepContainedConstructors
+                { containedTerms = fromIntegral @Int32 @Int containedTerms,
+                  deepContainedTerms = fromIntegral @Int32 @Int deepContainedTerms,
+                  containedTypes = fromIntegral @Int32 @Int containedTypes,
+                  deepContainedTypes = fromIntegral @Int32 @Int deepContainedTypes,
+                  containedConstructors = fromIntegral @Int32 @Int containedConstructors,
+                  deepContainedConstructors = fromIntegral @Int32 @Int deepContainedConstructors
                 }
       if length results /= length branchHashes
         then unrecoverableError $ MissingExpectedEntity ("namespaceStatsOf: Expected namespace stats for all hashes: " <> tShow branchHashes)
@@ -992,7 +992,7 @@ isFastForward fromCausalId toCausalId = do
 
 type CausalHistoryCursor = (CausalHash, CausalDepth)
 
-type CausalDepth = Int64
+type CausalDepth = Int32
 
 pagedCausalAncestors ::
   (QueryM m) =>

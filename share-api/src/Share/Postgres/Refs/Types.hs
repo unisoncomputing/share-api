@@ -21,13 +21,13 @@ type PGReference = Reference' Text ComponentHashId
 type PGReferent = Referent' PGReference PGReference
 
 -- | Useful for deconstructing a Reference into its fields for query interpolation.
-referenceFields :: Reference' text hash -> (Maybe text, Maybe hash, Maybe Int64)
+referenceFields :: Reference' text hash -> (Maybe text, Maybe hash, Maybe Int32)
 referenceFields = \case
   Reference.ReferenceBuiltin txt -> (Just txt, Nothing, Nothing)
-  Reference.ReferenceDerived (Id h p) -> (Nothing, Just h, Just (either (error . show) id $ tryInto @Int64 p))
+  Reference.ReferenceDerived (Id h p) -> (Nothing, Just h, Just (either (error . show) id $ tryInto @Int32 p))
 
 -- | Useful for deconstructing a Referent into its fields for query interpolation.
-referentFields :: Referent' (Reference' text hash) (Reference' text hash) -> (Maybe text, Maybe hash, Maybe Int64, Maybe Int64)
+referentFields :: Referent' (Reference' text hash) (Reference' text hash) -> (Maybe text, Maybe hash, Maybe Int32, Maybe Int32)
 referentFields ref = case (bimap referenceFields referenceFields ref) of
   Referent.Ref (t, h, i) -> (t, h, i, Nothing)
-  Referent.Con (t, h, i) conId -> (t, h, i, Just (either (error . show) id $ tryInto @Int64 conId))
+  Referent.Con (t, h, i) conId -> (t, h, i, Just (either (error . show) id $ tryInto @Int32 conId))
