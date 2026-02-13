@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -124,7 +125,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Utils.Postgres (likeEscape)
 import Share.Utils.Tags (HasTags (..), MonadTags (..))
 import Share.Web.App
-import Share.Web.Errors (ErrorID (..), SomeServerError, ToServerError (..), internalServerError, respondError, someServerError)
+import Share.Web.Errors (ErrorID (..), SomeServerError (..), ToServerError (..), internalServerError, respondError, someServerError)
 import System.CPUTime (getCPUTime)
 import UnliftIO qualified
 
@@ -201,7 +202,10 @@ instance MonadTags (Transaction e) where
 instance MonadTracer (Transaction e) where
   getTracer = asks Env.tracer
 
--- | A very annoying type we must define so that we can embed transactions in IO for the
+-- | Warning, this type and its UnliftIO instance is really shady,
+-- it will interleave Transaction blocks executed
+-- within it. Think carefully before using it.
+-- We must define so that we can embed transactions in IO for the
 -- Unison Runtime. You really shouldn't use this unless you absolutely need the MonadUnliftIO
 -- class for a PG transaction.
 newtype UnliftIOTransaction e a = UnliftIOTransaction {asUnliftIOTransaction :: Transaction e a}
@@ -210,19 +214,45 @@ newtype UnliftIOTransaction e a = UnliftIOTransaction {asUnliftIOTransaction :: 
 instance MonadIO (UnliftIOTransaction e) where
   liftIO io = UnliftIOTransaction . Transaction $ Right <$> liftIO io
 
--- instance (Exception e) => MonadUnliftIO (UnliftIOTransaction e) where
---   withRunInIO f = UnliftIOTransaction $ Transaction $ do
---     unliftIO <- UnliftIO.askUnliftIO
---     r <- UnliftIO.try $ liftIO $ f \(UnliftIOTransaction (Transaction m)) -> do
---       case unliftIO of
---         UnliftIO.UnliftIO toIO -> do
---           toIO m >>= \case
---             Left (Unrecoverable err) -> throwIO err
---             Left (Err e) -> throwIO e
---             Right a -> pure a
---     case r of
---       Left err@(SomeServerError {}) -> pure (Left (Unrecoverable err))
---       Right b -> pure $ Right b
+data BundledTransaction e where
+  BundledTransaction :: forall a e. Transaction e a -> UnliftIO.TMVar a -> BundledTransaction e
+
+instance (Exception e) => MonadUnliftIO (UnliftIOTransaction e) where
+  withRunInIO f = UnliftIOTransaction $ do
+    tQueue <- transactionUnsafeIO $ UnliftIO.newTBQueueIO 20
+    let awaitTransaction :: forall a. Transaction e a -> IO a
+        awaitTransaction t = do
+          result <- UnliftIO.newEmptyTMVarIO
+          UnliftIO.atomically $ UnliftIO.writeTBQueue tQueue $ BundledTransaction t result
+          UnliftIO.atomically $ UnliftIO.takeTMVar result
+    worker <- transactionUnsafeIO $ UnliftIO.async (f (awaitTransaction . asUnliftIOTransaction))
+    let loop = do
+          r <- transactionUnsafeIO $ do
+            UnliftIO.atomically $ do
+              UnliftIO.pollSTM worker >>= \case
+                Just (Left e) -> pure $ Right (Left e)
+                Just (Right a) -> pure $ Right (Right a)
+                Nothing -> do
+                  Left <$> UnliftIO.readTBQueue tQueue
+          case r of
+            Left (BundledTransaction t resultVar) -> do
+              res <- t
+              transactionUnsafeIO $ UnliftIO.atomically $ UnliftIO.putTMVar resultVar res
+              loop
+            Right (Left e) -> transactionUnsafeIO $ throwIO e
+            Right (Right a) -> pure a
+    loop
+
+-- r <- UnliftIO.try $ liftIO $ f \(UnliftIOTransaction (Transaction m)) -> do
+--   case unliftIO of
+--     UnliftIO.UnliftIO toIO -> do
+--       toIO m >>= \case
+--         Left (Unrecoverable err) -> throwIO err
+--         Left (Err e) -> throwIO e
+--         Right a -> pure a
+-- case r of
+--   Left err@(SomeServerError {}) -> pure (Left (Unrecoverable err))
+--   Right b -> pure $ Right b
 
 instance MonadError e (Transaction e) where
   throwError = Transaction . pure . Left . Err

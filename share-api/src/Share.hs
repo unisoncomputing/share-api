@@ -136,7 +136,7 @@ mkShareServer env = do
   pure waiApp
   where
     gzipSettings =
-      Gzip.def
+      Gzip.defaultGzipSettings
         { Gzip.gzipFiles = Gzip.GzipCompress,
           Gzip.gzipCheckMime = \mime -> Gzip.defaultCheckMime mime || mime == "application/cbor"
         }
