@@ -265,17 +265,19 @@ data PostgresError
   deriving anyclass (Exception)
 
 instance ToServerError PostgresError where
-  toServerError (PostgresError err) =
-    let errId = case err of
-          Pool.ConnectionUsageError {} -> "connection-usage-error"
-          Pool.SessionUsageError {} -> "session-usage-error"
-          Pool.AcquisitionTimeoutUsageError {} -> "acquisition-timeout-usage-error"
-     in (ErrorID $ "postgres:pool:" <> errId, internalServerError)
+   toServerError = \case
+     (PostgresError err) ->
+       let errId = case err of
+             Pool.ConnectionUsageError {} -> "connection-usage-error"
+             Pool.SessionUsageError {} -> "session-usage-error"
+             Pool.AcquisitionTimeoutUsageError {} -> "acquisition-timeout-usage-error"
+        in (ErrorID $ "postgres:pool:" <> errId, internalServerError)
 
 instance Logging.Loggable PostgresError where
-  toLog (PostgresError err) =
-    Logging.showLog err
-      & Logging.withSeverity Logging.Error
+   toLog = \case
+     (PostgresError err) ->
+       Logging.showLog err
+         & Logging.withSeverity Logging.Error
 
 -- TODO: I think we want to vary this per transaction.
 defaultIsolationLevel :: IsolationLevel
