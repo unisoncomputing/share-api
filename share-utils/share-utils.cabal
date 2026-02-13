@@ -78,6 +78,7 @@ library
     , base64-bytestring
     , binary
     , binary-instances
+    , binary-parser
     , bytestring
     , case-insensitive
     , containers
@@ -92,6 +93,7 @@ library
     , lens
     , memory
     , network-uri
+    , postgresql-binary
     , pretty-simple
     , random
     , safe

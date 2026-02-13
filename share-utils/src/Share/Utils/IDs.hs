@@ -20,6 +20,7 @@ module Share.Utils.IDs
   )
 where
 
+import BinaryParser qualified
 import Control.Exception
 import Data.Aeson (FromJSON (..), ToJSON (..))
 import Data.Aeson qualified as Aeson
@@ -39,7 +40,10 @@ import Data.UUID qualified as UUID
 import GHC.Generics (Generic)
 import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
 import Hasql.Decoders qualified as Decoder
+import Hasql.Encoders qualified as Encoder
 import Hasql.Interpolate qualified as Hasql
+import PostgreSQL.Binary.Decoding qualified as BinaryDecode
+import PostgreSQL.Binary.Encoding qualified as BinaryEncode
 import Servant (FromHttpApiData (..), ToHttpApiData (..))
 import Text.Read (readMaybe)
 import Witch (From (..))
@@ -135,11 +139,15 @@ instance IsID CaseInsensitiveID where
 
 instance Hasql.EncodeValue CaseInsensitiveID where
   encodeValue =
-    Hasql.encodeValue
-      & contramap \(CaseInsensitiveID ci) -> CI.original ci
+    let encode _lookupTyp (CaseInsensitiveID ci) =
+          BinaryEncode.encodingBytes $ BinaryEncode.text_strict (CI.original ci)
+        render (CaseInsensitiveID ci) = CI.original ci
+     in Encoder.custom Nothing "citext" Nothing [] encode render
 
 instance Hasql.DecodeValue CaseInsensitiveID where
-  decodeValue = CaseInsensitiveID . CI.mk <$> Hasql.decodeValue
+  decodeValue =
+    Decoder.custom Nothing "citext" Nothing [] \_lookupTyp bytes -> do
+      CaseInsensitiveID . CI.mk <$> BinaryParser.run BinaryDecode.text_strict bytes
 
 -- | Generic class for anything that's an ID.
 class IsID t where

@@ -87,6 +87,8 @@ dependencies:
 - lens
 - binary-instances
 - case-insensitive
+- postgresql-binary
+- binary-parser
 - hasql
 - hasql-interpolate
 - unliftio
