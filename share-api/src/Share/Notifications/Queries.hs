@@ -33,6 +33,7 @@ import Data.Foldable qualified as Foldable
 import Data.Ord (clamp)
 import Data.Set qualified as Set
 import Data.Set.NonEmpty (NESet)
+import Data.Time (UTCTime)
 import Share.Contribution
 import Share.IDs
 import Share.Notifications.API (GetHubEntriesCursor)
@@ -466,9 +467,9 @@ hydrateEventPayload = \case
                 commentAuthor
               }
       construct
-        <$> ( queryExpect1Row
+        <$> ( queryExpect1Row @(CommentId, Text, UTCTime)
                 [sql|
-                SELECT cc.comment_id, cc.content, cc.created_at, cc.updated_at
+                SELECT cc.comment_id, cc.content, cc.created_at
                 FROM comment_content cc
                 JOIN users author ON cc.author_id = author.id
                 WHERE cc.comment_id = #{commentId}
