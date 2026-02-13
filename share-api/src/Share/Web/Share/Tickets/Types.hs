@@ -27,7 +27,7 @@ data ShareTicket user = ShareTicket
     updatedAt :: UTCTime,
     -- This is optional so we can delete users without deleting ALL their tickets.
     author :: Maybe user,
-    numComments :: Int32
+    numComments :: Int64
   }
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
@@ -44,7 +44,7 @@ instance PG.DecodeRow (ShareTicket UserId) where
     updatedAt <- PG.decodeField
     author <- PG.decodeField
     let projectShortHand = ProjectShortHand {userHandle = projectOwnerHandle, projectSlug}
-    numComments <- PG.decodeField @Int32
+    numComments <- PG.decodeField @Int64
     pure ShareTicket {..}
 
 instance ToJSON (ShareTicket UserDisplayInfo) where
