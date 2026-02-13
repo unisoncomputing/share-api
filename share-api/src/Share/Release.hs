@@ -16,15 +16,15 @@ data ReleaseStatus userId
   | DeprecatedRelease UTCTime (Maybe userId)
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-instance PG.DecodeValue userId => PG.DecodeRow (ReleaseStatus userId) where
+instance (PG.DecodeValue userId) => PG.DecodeRow (ReleaseStatus userId) where
   decodeRow = do
     publishedAt <- PG.decodeField
     publishedBy <- PG.decodeField
     mdeprecatedAt <- PG.decodeField
     deprecatedBy <- PG.decodeField
-    case mdeprecatedAt of
-      Nothing -> pure (PublishedRelease publishedAt publishedBy)
-      Just deprecatedAt -> pure (DeprecatedRelease deprecatedAt deprecatedBy)
+    pure $ case mdeprecatedAt of
+      Nothing -> PublishedRelease publishedAt publishedBy
+      Just deprecatedAt -> DeprecatedRelease deprecatedAt deprecatedBy
 
 data InvalidReleaseStatus = InvalidReleaseStatus Text
   deriving stock (Show, Eq, Ord)

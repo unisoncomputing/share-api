@@ -25,6 +25,7 @@ import Share.Prelude
 import Share.User
 import Share.Utils.Deployment qualified as Deployment
 import Share.Utils.Logging qualified as Logging
+import Share.Utils.Servant (AddHeader')
 import Share.Utils.Servant.Cookies (SetCookie)
 import Share.Web.App
 import Share.Web.Authentication.AccessToken qualified as AccessToken
@@ -50,7 +51,7 @@ localLoginEndpoint userHandle = do
     Just setAuthHeaders -> do
       pure $ setAuthHeaders "Logged in to the test account."
   where
-    setSessionCookie :: (AddHeader "Set-Cookie" SetCookie resp resp') => Session -> WebApp (Maybe (resp -> resp'))
+    setSessionCookie :: (AddHeader' "Set-Cookie" SetCookie resp resp') => Session -> WebApp (Maybe (resp -> resp'))
     setSessionCookie sess = do
       Env.Env {cookieSettings, jwtSettings, sessionCookieKey} <- ask
       liftIO (JWT.createSignedCookie jwtSettings cookieSettings sessionCookieKey sess) >>= \case
@@ -83,8 +84,7 @@ server = do
   hoistServer
     (Proxy @API)
     guardLocal
-    ( userRoutes
-    )
+    (userRoutes)
   where
     -- Local endpoints should just 404 on any other deployment.
     guardLocal :: forall x. WebApp x -> WebApp x

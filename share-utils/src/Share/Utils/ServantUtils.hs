@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 
-module Share.Utils.Servant
+module Share.Utils.ServantUtils
   ( AddHeader',
     module Cookies,
   )

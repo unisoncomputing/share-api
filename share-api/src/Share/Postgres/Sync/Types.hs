@@ -14,7 +14,9 @@ newtype TypedTempEntity = TypedTempEntity {unTypedTempEntity :: TempEntity}
 instance Hasql.DecodeRow TypedTempEntity where
   decodeRow = do
     entityType <- decodeField
-    RawBytes entityBytes <- decodeField
-    case S.decodeTypedTempEntity entityType entityBytes of
-      Left err -> fail (show err)
-      Right tempEntity -> pure (TypedTempEntity tempEntity)
+    rawBytes <- decodeField
+    pure $
+      let RawBytes entityBytes = rawBytes
+       in case S.decodeTypedTempEntity entityType entityBytes of
+            Left err -> error (show err)
+            Right tempEntity -> TypedTempEntity tempEntity

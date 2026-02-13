@@ -33,6 +33,8 @@ instance Aeson.FromJSON TicketStatus where
 instance Hasql.EncodeValue TicketStatus where
   encodeValue =
     Encoders.enum
+      Nothing
+      "ticket_status"
       ( \case
           Open -> "open"
           Closed -> "closed"
@@ -52,6 +54,8 @@ instance ToHttpApiData TicketStatus where
 instance Hasql.DecodeValue TicketStatus where
   decodeValue = do
     Decoders.enum
+      Nothing
+      "ticket_status"
       ( \case
           "open" -> Just Open
           "closed" -> Just Closed
