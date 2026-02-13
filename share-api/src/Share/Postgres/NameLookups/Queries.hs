@@ -302,8 +302,8 @@ listNameLookupMounts !_nameLookupReceipt rootBranchHashId =
 data FuzzySearchScore = FuzzySearchScore
   { exactLastSegmentMatch :: Bool,
     lastSegmentInfixMatch :: Bool,
-    lastSegmentMatchPos :: Int64,
-    inverseNameLength :: Int64
+    lastSegmentMatchPos :: Int32,
+    inverseNameLength :: Int32
   }
   deriving (Show, Eq)
 
