@@ -131,19 +131,12 @@ packages:
   original:
     hackage: thread-utils-finalizers-0.1.1.0@sha256:24944b71d9f1d01695a5908b4a3b44838fab870883114a323336d537995e0a5b,1381
 - completed:
-    hackage: hasql-1.10.2.1@sha256:0b64585b88f8bee6d6857e4fc04bebfcf381c94dbf7e1543e8b469b8f01de8a2,8858
+    hackage: hasql-pool-1.2.0.2@sha256:621e3997d701b424a777fc6cd0218e385c89dff9417a933305d19b03820deb3f,2389
     pantry-tree:
-      sha256: 7560430a2a4668ddf821254f9f6378cbb643de89f72de961fa7cd7018a1ae7c6
-      size: 9340
+      sha256: 8dd1ee8e3a41894266708e28076a902c8d51b275af22c3f182d6bfe219ea7fa7
+      size: 982
   original:
-    hackage: hasql-1.10.2.1
-- completed:
-    hackage: hasql-pool-1.4.1@sha256:0e46d1be1baf86388ccd3d601580f7119f941f2e60c66c120e016ba0d6ca2d2b,3110
-    pantry-tree:
-      sha256: d09700bc29e1217bb0f17e100e33435c553d77e4e3e801a26bcb0c40d3442fef
-      size: 2269
-  original:
-    hackage: hasql-pool-1.4.1
+    hackage: hasql-pool-1.2.0.2
 - completed:
     hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
     pantry-tree:
@@ -152,19 +145,19 @@ packages:
   original:
     hackage: hasql-interpolate-1.0.1.0
 - completed:
-    hackage: postgresql-connection-string-0.1.0.5@sha256:75a679ef877121482615849517b1545535467456852c8690fdbfd715e512563b,3420
+    hackage: postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
     pantry-tree:
-      sha256: 2919bf03542cd417645957ef87bf990dc8da37ebf4a82c381e564c8e1bf82b25
-      size: 1287
+      sha256: 29cfa313f2642c8b1d3ca15afbd2911ab842ae130e65d99fb5f18e8a24df8c88
+      size: 1661
   original:
-    hackage: postgresql-connection-string-0.1.0.5@sha256:75a679ef877121482615849517b1545535467456852c8690fdbfd715e512563b,3420
+    hackage: postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
 - completed:
-    hackage: postgresql-binary-0.15.0.1@sha256:87408d09f3a0328067c698041ddcc6e1376cacbad3ed5b5337720ace019cd41b,3889
+    hackage: postgresql-libpq-0.10.1.0@sha256:6a45edff0a9e30b32cda6e443107950492322622c4fbefc8fb4dcf6452dcf0b4,3203
     pantry-tree:
-      sha256: 8d35dcbb15b0e4f1dfa2b933a5ff7f7a5f76c75b68f45f119fd5cfe92ee711e0
-      size: 1805
+      sha256: 1c0120f2cd6d15bfdf64060ebde4b037f01381a8d04d188d753b43e1c978d164
+      size: 1096
   original:
-    hackage: postgresql-binary-0.15.0.1
+    hackage: postgresql-libpq-0.10.1.0@sha256:6a45edff0a9e30b32cda6e443107950492322622c4fbefc8fb4dcf6452dcf0b4,3203
 - completed:
     hackage: x509-1.7.7@sha256:90eef2d745a654146fc1c325e035eaddac531e4d2145d4bc1dcf4b8fad439d34,2276
     pantry-tree:
@@ -190,6 +183,17 @@ packages:
     version: 0.1.1.0
   original:
     url: https://github.com/ChrisPenner/hs-mcp/archive/d8564c70ca09e333b7ce1717d1ac97a62d62966c.tar.gz
+- completed:
+    name: hasql
+    pantry-tree:
+      sha256: c995b0e6d072a3cd71017bb3da4bb5fcf2593a3025908705ceb788d281ed8d1a
+      size: 4126
+    sha256: f74c8f3df3a0e30d5f750d461da41284aa0e6dec410d49440422b2d9c1d8c22f
+    size: 39911
+    url: https://github.com/ChrisPenner/hasql/archive/bfdd3dd437d2dd7d3766faa6ebe059232081f90e.tar.gz
+    version: 1.8.1.1
+  original:
+    url: https://github.com/ChrisPenner/hasql/archive/bfdd3dd437d2dd7d3766faa6ebe059232081f90e.tar.gz
 snapshots:
 - completed:
     sha256: 4b787f53036611a03edbf438dd5412daa03fb3da5d938ae8865ec471fe3f9632

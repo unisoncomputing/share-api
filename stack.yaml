@@ -67,7 +67,7 @@ extra-deps:
 - thread-utils-finalizers-0.1.1.0@sha256:24944b71d9f1d01695a5908b4a3b44838fab870883114a323336d537995e0a5b,1381
 
 # Bumping hasql up to get Pipelining mode
-- hasql-1.8.1.1
+# - hasql-1.8.1.1
 - hasql-pool-1.2.0.2
 - hasql-interpolate-1.0.1.0
 - postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
@@ -79,6 +79,13 @@ extra-deps:
 - github: ChrisPenner/hs-mcp
   commit: d8564c70ca09e333b7ce1717d1ac97a62d62966c
 
+  
+# This is a fork of hasql-1.8.1.1 which just upgrades the text-builder so it's compatible 
+# with the newer version of text-builder which exists in resolver lts-24.21. 
+- github: ChrisPenner/hasql
+  # branch: hasql-1.8.1.1-new-text-builder
+  commit: bfdd3dd437d2dd7d3766faa6ebe059232081f90e
+
 ghc-options:
  # All packages
  "$locals": -Wall -Wno-name-shadowing -Wno-missing-pattern-synonym-signatures -fprint-expanded-synonyms -fwrite-ide-info
@@ -87,6 +94,7 @@ ghc-options:
 allow-newer: true
 allow-newer-deps:
   - hasql-listen-notify
+  - hasql-interpolate
   # hasql-listen-notify wants an older version of hasql than we're using.
   - hasql
   - fuzzyfind
