@@ -40,6 +40,7 @@ import Unison.NameSegment.Internal (NameSegment (..))
 import Unison.Server.HistoryComments.Types
 import Unison.SyncV2.Types (CBORBytes (..))
 import Unison.Syntax.Name qualified as Name
+import UnliftIO (MonadUnliftIO (..))
 
 -- Orphans for 'Hash'
 instance Hasql.EncodeValue Hash where
@@ -287,11 +288,11 @@ instance Logging.Loggable Hasql.SessionError where
 
 -- | See https://github.com/nikita-volkov/hasql/issues/144
 -- This instance won't be added upstream.
--- instance MonadUnliftIO Hasql.Session where
---   withRunInIO inner = do
---     conn <- ask
---     res <- liftIO $ try $ inner $ \sess -> do
---       Hasql.use conn sess >>= either throwIO pure
---     case res of
---       Left e -> throwError e
---       Right a -> pure a
+instance MonadUnliftIO Hasql.Session where
+  withRunInIO inner = do
+    conn <- ask
+    res <- liftIO $ try $ inner $ \sess -> do
+      Hasql.run sess conn >>= either throwIO pure
+    case res of
+      Left e -> throwError e
+      Right a -> pure a
