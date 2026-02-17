@@ -18,7 +18,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time.Clock qualified as Time
 import Database.Redis qualified as Redis
-import Hasql.Connection.Settings qualified as Pool
+import Hasql.Connection qualified as Hasql
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool
 import Network.HTTP.Client qualified as HTTPClient
@@ -54,7 +54,7 @@ withEnv action = do
         '0' : _ -> False
         [] -> False
         _ -> True
-  postgresConfig <- fromEnv "SHARE_POSTGRES" (pure . Right . String.fromString @Pool.Settings)
+  postgresConfig <- fromEnv "SHARE_POSTGRES" (pure . Right . String.fromString @Hasql.Settings)
   postgresConnMax <- fromEnv "SHARE_POSTGRES_CONN_MAX" (pure . maybeToEither "Invalid SHARE_POSTGRES_CONN_MAX" . readMaybe)
   githubClientID <- fromEnv "SHARE_GITHUB_CLIENTID" (pure . Right . Text.pack)
   githubClientSecret <- fromEnv "SHARE_GITHUB_CLIENT_SECRET" (pure . Right . Text.pack)

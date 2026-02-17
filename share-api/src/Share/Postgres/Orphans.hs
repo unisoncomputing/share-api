@@ -8,12 +8,12 @@ module Share.Postgres.Orphans () where
 import Data.Aeson qualified as Aeson
 import Data.Bytes.Put (runPutS)
 import Data.Either.Extra qualified as Either
-import Data.HashSet qualified as HS
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
-import Hasql.Errors qualified as Hasql
 import Hasql.Interpolate qualified as Hasql
+import Hasql.Session qualified as Hasql
 import Servant (err500)
 import Servant.API
 import Share.Postgres.Composites (DecodeComposite (..))
@@ -206,7 +206,7 @@ instance Hasql.EncodeValue TempEntity where
 
 instance Hasql.EncodeValue TempEntityType where
   encodeValue =
-    Encoders.enum Nothing "entity_kind" \case
+    Encoders.enum \case
       TermComponentType -> "term_component"
       DeclComponentType -> "decl_component"
       NamespaceType -> "namespace"
@@ -216,8 +216,6 @@ instance Hasql.EncodeValue TempEntityType where
 instance Hasql.DecodeValue TempEntityType where
   decodeValue =
     Decoders.enum
-      Nothing
-      "entity_kind"
       \case
         "term_component" -> Just TermComponentType
         "decl_component" -> Just DeclComponentType
@@ -228,7 +226,7 @@ instance Hasql.DecodeValue TempEntityType where
 
 instance Hasql.EncodeValue TermEdit.Typing where
   encodeValue =
-    Encoders.enum Nothing "patch_term_typing" \case
+    Encoders.enum \case
       TermEdit.Same -> "same"
       TermEdit.Subtype -> "subtype"
       TermEdit.Different -> "different"
@@ -236,8 +234,6 @@ instance Hasql.EncodeValue TermEdit.Typing where
 instance Hasql.DecodeValue TermEdit.Typing where
   decodeValue =
     Decoders.enum
-      Nothing
-      "patch_term_typing"
       ( \case
           "same" -> Just TermEdit.Same
           "subtype" -> Just TermEdit.Subtype
@@ -247,7 +243,7 @@ instance Hasql.DecodeValue TermEdit.Typing where
 
 instance Hasql.EncodeValue SqliteTermEdit.Typing where
   encodeValue =
-    Encoders.enum Nothing "patch_term_typing" \case
+    Encoders.enum \case
       SqliteTermEdit.Same -> "same"
       SqliteTermEdit.Subtype -> "subtype"
       SqliteTermEdit.Different -> "different"
@@ -255,8 +251,6 @@ instance Hasql.EncodeValue SqliteTermEdit.Typing where
 instance Hasql.DecodeValue SqliteTermEdit.Typing where
   decodeValue =
     Decoders.enum
-      Nothing
-      "patch_term_typing"
       ( \case
           "same" -> Just SqliteTermEdit.Same
           "subtype" -> Just SqliteTermEdit.Subtype
@@ -271,30 +265,22 @@ instance ToServerError Hasql.SessionError where
 
 instance Logging.Loggable Hasql.SessionError where
   toLog = \case
-    Hasql.StatementSessionError _total _idx sql params _prepared stmtErr ->
+    (Hasql.QueryError template params err) ->
       Logging.withSeverity Logging.Error . Logging.textLog $
-        "StatementSessionError: statement failed with error: "
-          <> tShow stmtErr
-          <> "\nSQL:\n"
-          <> indent sql
-          <> "\nParameters:\n"
-          <> indent (Text.unlines params)
-    Hasql.ScriptSessionError sql serverErr ->
+        Text.unlines
+          [ "QueryError:",
+            indent (tShow err),
+            "TEMPLATE:",
+            indent (Text.decodeUtf8 template),
+            "PARAMS:",
+            indent (tShow params)
+          ]
+    (Hasql.PipelineError cmdErr) ->
       Logging.withSeverity Logging.Error . Logging.textLog $
-        "ScriptSessionError: script execution failed with error: "
-          <> tShow serverErr
-          <> "\nSQL:\n"
-          <> indent sql
-    Hasql.ConnectionSessionError details ->
-      Logging.withSeverity Logging.Error . Logging.textLog $
-        "ConnectionSessionError: connection error occurred: " <> details
-    Hasql.MissingTypesSessionError missing ->
-      Logging.withSeverity Logging.Error . Logging.textLog $
-        "MissingTypesSessionError: the following types could not be found in the database:\n"
-          <> indent (Text.unlines [maybe "" id schema <> "." <> typeName | (schema, typeName) <- HS.toList missing])
-    Hasql.DriverSessionError details ->
-      Logging.withSeverity Logging.Error . Logging.textLog $
-        "DriverSessionError: an internal driver error occurred: " <> details
+        Text.unlines
+          [ "PipelineError:",
+            indent (tShow cmdErr)
+          ]
     where
       indent :: Text -> Text
       indent = Text.unlines . fmap ("    " <>) . Text.lines

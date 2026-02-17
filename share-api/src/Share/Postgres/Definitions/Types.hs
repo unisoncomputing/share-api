@@ -155,8 +155,6 @@ data DeclKindEnum = Ability | Data
 instance EncodeValue DeclKindEnum where
   encodeValue =
     Encoders.enum
-      Nothing
-      "decl_kind"
       ( \case
           Ability -> "ability"
           Data -> "data"
@@ -165,8 +163,6 @@ instance EncodeValue DeclKindEnum where
 instance DecodeValue DeclKindEnum where
   decodeValue =
     Decoders.enum
-      Nothing
-      "decl_kind"
       ( \case
           "ability" -> Just Ability
           "data" -> Just Data
@@ -195,8 +191,6 @@ data ModifierEnum = Structural | Unique
 instance EncodeValue ModifierEnum where
   encodeValue =
     Encoders.enum
-      Nothing
-      "modifier_kind"
       ( \case
           Structural -> "structural"
           Unique -> "unique"
@@ -205,8 +199,6 @@ instance EncodeValue ModifierEnum where
 instance DecodeValue ModifierEnum where
   decodeValue =
     Decoders.enum
-      Nothing
-      "modifier_kind"
       ( \case
           "structural" -> Just Structural
           "unique" -> Just Unique

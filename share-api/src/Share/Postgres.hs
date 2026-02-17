@@ -100,7 +100,6 @@ import GHC.Exception (SrcLoc (srcLocModule))
 import GHC.Stack qualified as Stack
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
-import Hasql.Errors qualified as HasqlErr
 import Hasql.Interpolate qualified as Hasql
 import Hasql.Interpolate qualified as Interp
 import Hasql.Pipeline qualified as Hasql.Pipeline
@@ -265,19 +264,19 @@ data PostgresError
   deriving anyclass (Exception)
 
 instance ToServerError PostgresError where
-   toServerError = \case
-     (PostgresError err) ->
-       let errId = case err of
-             Pool.ConnectionUsageError {} -> "connection-usage-error"
-             Pool.SessionUsageError {} -> "session-usage-error"
-             Pool.AcquisitionTimeoutUsageError {} -> "acquisition-timeout-usage-error"
-        in (ErrorID $ "postgres:pool:" <> errId, internalServerError)
+  toServerError = \case
+    (PostgresError err) ->
+      let errId = case err of
+            Pool.ConnectionUsageError {} -> "connection-usage-error"
+            Pool.SessionUsageError {} -> "session-usage-error"
+            Pool.AcquisitionTimeoutUsageError {} -> "acquisition-timeout-usage-error"
+       in (ErrorID $ "postgres:pool:" <> errId, internalServerError)
 
 instance Logging.Loggable PostgresError where
-   toLog = \case
-     (PostgresError err) ->
-       Logging.showLog err
-         & Logging.withSeverity Logging.Error
+  toLog = \case
+    (PostgresError err) ->
+      Logging.showLog err
+        & Logging.withSeverity Logging.Error
 
 -- TODO: I think we want to vary this per transaction.
 defaultIsolationLevel :: IsolationLevel
@@ -298,13 +297,12 @@ transaction isoLevel mode (Transaction t) = Session do
       loop = do
         lift . lift $ beginTransaction isoLevel mode
         res <- catchError (Just <$> mayCommit t) \case
-          HasqlErr.StatementSessionError
-            _numStatements
-            _currentStatementIdx
-            _failedStatementSql
-            _params
-            _prepared
-            (HasqlErr.ServerStatementError (HasqlErr.ServerError errCode _msg _errInfo _hint _idx))
+          Session.QueryError
+            _
+            _
+            ( Session.ResultError
+                (Session.ServerError errCode _ _ _ _)
+              )
               -- retry on serialization failure or deadlock
               -- https://www.postgresql.org/docs/current/errcodes-appendix.html
               | errCode == "40001" || errCode == "40P01" -> pure Nothing
@@ -347,10 +345,10 @@ beginTransaction hiso hmode =
         Read -> [Interp.sql| READ ONLY |]
 
 commit :: Hasql.Session ()
-commit = Session.statement () (Hasql.preparable "commit" Encoders.noParams Decoders.noResult)
+commit = Session.statement () (Hasql.Statement "commit" Encoders.noParams Decoders.noResult True)
 
 rollbackSession :: Hasql.Session ()
-rollbackSession = Session.statement () (Hasql.preparable "rollback" Encoders.noParams Decoders.noResult)
+rollbackSession = Session.statement () (Hasql.Statement "rollback" Encoders.noParams Decoders.noResult True)
 
 -- | Rollback the current transaction
 rollback :: e -> Transaction e x
