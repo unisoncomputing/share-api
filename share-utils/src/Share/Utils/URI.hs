@@ -26,7 +26,7 @@ import Hasql.Decoders qualified as Decoders
 import Hasql.Interpolate qualified as Hasql
 import Network.HTTP.Types (parseQuery, renderQuery)
 import Network.URI qualified as URI
-import Servant 
+import Servant
 import Share.Utils.Show (tShow)
 
 -- | Helper type to provide additional instances for URIs.
