@@ -61,6 +61,13 @@ packages:
   original:
     hackage: network-udp-0.0.0@sha256:408d2d4fa1a25e49e95752ee124cca641993404bb133ae10fb81daef22d876ae,1075
 - completed:
+    hackage: tls-2.1.14@sha256:b69381df716498c01bcee5db40c3c9fa14eb1c498043cb993a745b7e5d6701a9,7252
+    pantry-tree:
+      sha256: 9a0bfbb4ae7df2a56ab9dc65f3a8066f7363486e0d9a336100de0d465b413d2e
+      size: 7056
+  original:
+    hackage: tls-2.1.14
+- completed:
     hackage: hs-opentelemetry-api-0.3.0.0@sha256:d864e4e1758bdeb8310d99e18084b77cff875a7b56589db55dfaf1dd17864dd3,4162
     pantry-tree:
       sha256: 6b4a51fda23eccb2ff6903e166328bb5c85012bd24cf24d10778ee964d80b542

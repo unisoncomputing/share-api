@@ -54,6 +54,10 @@ extra-deps:
 - strings-1.1@sha256:0285dec4c8ab262359342b3e5ef1eb567074669461b9b38404f1cb870c881c5c,1617
 - network-udp-0.0.0@sha256:408d2d4fa1a25e49e95752ee124cca641993404bb133ae10fb81daef22d876ae,1075
 
+# Weirdly 2.1.8 (which is the default) defines an overlapping instance on `Show (a, b)` which is annoying, so we
+# upgrade it to when they've got that fixed.
+- tls-2.1.14@sha256:b69381df716498c01bcee5db40c3c9fa14eb1c498043cb993a745b7e5d6701a9,7252
+
 # Open telemetry stuff
 - hs-opentelemetry-api-0.3.0.0@sha256:d864e4e1758bdeb8310d99e18084b77cff875a7b56589db55dfaf1dd17864dd3,4162
 - hs-opentelemetry-instrumentation-wai-0.1.1.0@sha256:d97b4cb3870217e64e95da3f51db814eca62eb57484ee0a6f747366da5940bc2,1371
@@ -68,8 +72,8 @@ extra-deps:
 
 # Bumping hasql up to get Pipelining mode
 # - hasql-1.8.1.1
-- hasql-pool-1.2.0.2
-- hasql-interpolate-1.0.1.0
+- hasql-pool-1.2.0.2@sha256:621e3997d701b424a777fc6cd0218e385c89dff9417a933305d19b03820deb3f,2389
+- hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
 - postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
 - postgresql-libpq-0.10.1.0@sha256:6a45edff0a9e30b32cda6e443107950492322622c4fbefc8fb4dcf6452dcf0b4,3203
 # Not in snapshot
