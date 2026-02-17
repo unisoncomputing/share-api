@@ -13,6 +13,7 @@ where
 import Control.Concurrent.STM (TVar)
 import Control.Concurrent.STM qualified as STM
 import Data.Set qualified as Set
+import Data.Text.Encoding qualified as Text
 import Hasql.ListenNotify qualified as Hasql
 import Ki.Unlifted qualified as Ki
 import Share.BackgroundJobs.Errors qualified as Background
