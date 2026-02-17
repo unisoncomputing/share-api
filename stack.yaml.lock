@@ -66,7 +66,7 @@ packages:
       sha256: 9a0bfbb4ae7df2a56ab9dc65f3a8066f7363486e0d9a336100de0d465b413d2e
       size: 7056
   original:
-    hackage: tls-2.1.14
+    hackage: tls-2.1.14@sha256:b69381df716498c01bcee5db40c3c9fa14eb1c498043cb993a745b7e5d6701a9,7252
 - completed:
     hackage: hs-opentelemetry-api-0.3.0.0@sha256:d864e4e1758bdeb8310d99e18084b77cff875a7b56589db55dfaf1dd17864dd3,4162
     pantry-tree:
@@ -143,14 +143,14 @@ packages:
       sha256: 8dd1ee8e3a41894266708e28076a902c8d51b275af22c3f182d6bfe219ea7fa7
       size: 982
   original:
-    hackage: hasql-pool-1.2.0.2
+    hackage: hasql-pool-1.2.0.2@sha256:621e3997d701b424a777fc6cd0218e385c89dff9417a933305d19b03820deb3f,2389
 - completed:
     hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
     pantry-tree:
       sha256: f7d9f29c576c4d36cb2f44d2f9a672e08e84d79060928aa9ed005e9e30c35202
       size: 1276
   original:
-    hackage: hasql-interpolate-1.0.1.0
+    hackage: hasql-interpolate-1.0.1.0@sha256:07980986467ed196e812a54c2762a42ceca56ca899cb4ef3cdb4f4191b07d338,3298
 - completed:
     hackage: postgresql-binary-0.14@sha256:3f3518f841cf80b107862800715bc64f43c2c71696c4129f63404c1ff61cc919,4025
     pantry-tree:
