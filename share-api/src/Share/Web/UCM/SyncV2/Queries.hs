@@ -219,8 +219,8 @@ allSerializedDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid except
 
 spineAndLibDependenciesOfCausalCursor :: (QueryM m) => CodebaseEnv -> CausalId -> m (PGCursor (Hash32, IsCausalSpine, IsLibRoot))
 spineAndLibDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid = do
-  libSegmentTextId <- query1Col @Int64 [sql| SELECT text.id FROM text WHERE content_hash = text_hash('lib') |]
-  PGCursor.newRowCursor
+  libSegmentTextId <- query1Col @Int32 [sql| SELECT text.id FROM text WHERE content_hash = text_hash('lib') |]
+  PGCursor.newRowCursor @(Hash32, Bool, Bool, Int64)
     "causal_dependencies"
     [sql|
     WITH causal_spine(causal_id, ord) AS (
@@ -250,4 +250,4 @@ spineAndLibDependenciesOfCausalCursor (CodebaseEnv {codebaseOwner}) cid = do
           JOIN causals c ON ld.causal_id = c.id
       ORDER BY ord ASC, is_lib ASC, is_spine ASC
   |]
-    <&> fmap (\(hash, isSpine, isLibRoot) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))
+    <&> fmap (\(hash, isSpine, isLibRoot, _ord) -> (hash, if isSpine then IsCausalSpine else NotCausalSpine, if isLibRoot then IsLibRoot else NotLibRoot))

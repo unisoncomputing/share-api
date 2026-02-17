@@ -13,10 +13,12 @@ import Data.Functor
 import Data.HashMap.Strict qualified as HM
 import Data.Map qualified as Map
 import Data.Set qualified as Set
+import Data.String qualified as String
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time.Clock qualified as Time
 import Database.Redis qualified as Redis
+import Hasql.Connection qualified as Hasql
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool
 import Network.HTTP.Client qualified as HTTPClient
@@ -52,7 +54,7 @@ withEnv action = do
         '0' : _ -> False
         [] -> False
         _ -> True
-  postgresConfig <- fromEnv "SHARE_POSTGRES" (pure . Right . Text.pack)
+  postgresConfig <- fromEnv "SHARE_POSTGRES" (pure . Right . String.fromString @Hasql.Settings)
   postgresConnMax <- fromEnv "SHARE_POSTGRES_CONN_MAX" (pure . maybeToEither "Invalid SHARE_POSTGRES_CONN_MAX" . readMaybe)
   githubClientID <- fromEnv "SHARE_GITHUB_CLIENTID" (pure . Right . Text.pack)
   githubClientSecret <- fromEnv "SHARE_GITHUB_CLIENT_SECRET" (pure . Right . Text.pack)
@@ -124,7 +126,7 @@ withEnv action = do
   let pgConnectionMaxIdleTime = Time.secondsToDiffTime (60 * 5) -- 5 minutes
   -- Limiting max lifetime helps cycle connections which may have accumulated memory cruft.
   let pgConnectionMaxLifetime = Time.secondsToDiffTime (60 * 60) -- 1 hour
-  let pgSettings = Pool.settings [Pool.staticConnectionSettings (Text.encodeUtf8 postgresConfig), Pool.size postgresConnMax, Pool.acquisitionTimeout pgConnectionAcquisitionTimeout, Pool.idlenessTimeout pgConnectionMaxIdleTime, Pool.agingTimeout pgConnectionMaxLifetime]
+  let pgSettings = Pool.settings [Pool.staticConnectionSettings postgresConfig, Pool.size postgresConnMax, Pool.acquisitionTimeout pgConnectionAcquisitionTimeout, Pool.idlenessTimeout pgConnectionMaxIdleTime, Pool.agingTimeout pgConnectionMaxLifetime]
   pgConnectionPool <- Pool.acquire pgSettings
   timeCache <- FL.newTimeCache FL.simpleTimeFormat -- E.g. 05/Sep/2023:13:23:56 -0700
   sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"

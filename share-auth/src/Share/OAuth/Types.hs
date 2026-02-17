@@ -56,13 +56,18 @@ import Web.FormUrlEncoded qualified as Form
 
 newtype SessionId = SessionId UUID
   deriving stock (Eq, Ord)
-  deriving newtype (Binary, Random, Hasql.EncodeValue, Hasql.DecodeValue)
+  deriving newtype (Binary, Random, Hasql.EncodeValue)
   deriving (IsID, Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via (PrefixedID "S-" UUID)
 
 newtype UserId = UserId UUID
   deriving stock (Eq, Ord)
-  deriving newtype (Binary, Random, Hasql.EncodeValue, Hasql.DecodeValue)
+  deriving newtype (Binary, Random, Hasql.EncodeValue)
   deriving (IsID, Show, FromHttpApiData, ToHttpApiData, ToJSON, FromJSON) via (PrefixedID "U-" UUID)
+
+instance Hasql.DecodeValue UserId where
+  decodeValue =
+    Hasql.decodeValue
+      <&> UserId
 
 -- | A JWT token ID.
 newtype JTI = JTI UUID
@@ -188,12 +193,22 @@ instance Hasql.DecodeRow OAuthClientConfig where
 
 newtype OAuthClientId = OAuthClientId Text
   deriving stock (Eq, Ord, Show)
-  deriving newtype (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, Hasql.DecodeValue, Hasql.EncodeValue)
+  deriving newtype (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, Hasql.EncodeValue)
+
+instance Hasql.DecodeValue OAuthClientId where
+  decodeValue =
+    Hasql.decodeValue
+      <&> OAuthClientId
 
 newtype OAuthClientSecret = OAuthClientSecret Text
   deriving stock (Eq, Ord)
   deriving (Show) via Censored OAuthClientSecret
-  deriving newtype (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, Hasql.DecodeValue, Hasql.EncodeValue)
+  deriving newtype (FromHttpApiData, ToHttpApiData, ToJSON, FromJSON, Hasql.EncodeValue)
+
+instance Hasql.DecodeValue OAuthClientSecret where
+  decodeValue =
+    Hasql.decodeValue
+      <&> OAuthClientSecret
 
 -- | A code received at an OAuth2 client's redirect_uri upon a successful authentication
 -- with the oauth2 server. Should be exchanged with the server's Token endpoint to receive

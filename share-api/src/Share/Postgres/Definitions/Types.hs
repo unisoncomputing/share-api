@@ -40,7 +40,7 @@ import U.Codebase.Sqlite.Term.Format qualified as TermFormat
 import Unison.ConstructorType qualified as CT
 
 -- | Type wrappers for keeping indexes straight
-newtype PgComponentIndex = PgComponentIndex Int64
+newtype PgComponentIndex = PgComponentIndex Int32
   deriving newtype (Show, Eq, Ord, EncodeValue, DecodeValue)
 
 pgComponentIndex :: Reference.Pos -> PgComponentIndex
@@ -49,7 +49,7 @@ pgComponentIndex = PgComponentIndex . fromIntegral
 unPgComponentIndex :: PgComponentIndex -> Reference.Pos
 unPgComponentIndex (PgComponentIndex i) = fromIntegral i
 
-newtype PgConstructorIndex = PgConstructorIndex Int64
+newtype PgConstructorIndex = PgConstructorIndex Int32
   deriving newtype (Show, Eq, Ord, EncodeValue, DecodeValue)
 
 pgConstructorIndex :: DD.ConstructorId -> PgConstructorIndex

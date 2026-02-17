@@ -6,6 +6,7 @@ where
 
 import Crypto.JOSE.JWK qualified as JWK
 import Database.Redis qualified as R
+import Hasql.Connection qualified as Hasql
 import Hasql.Pool qualified as Hasql
 import Network.HTTP.Client qualified as HTTPClient
 import Network.URI (URI)
@@ -43,7 +44,7 @@ data Env ctx = Env
     proxiedHttpClient :: HTTPClient.Manager,
     serverPort :: Int,
     redisConfig :: R.ConnectInfo,
-    postgresConfig :: Text,
+    postgresConfig :: Hasql.Settings,
     githubClientID :: Text,
     githubClientSecret :: Text,
     jwtSettings :: JWT.JWTSettings,

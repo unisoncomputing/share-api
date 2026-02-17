@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -42,6 +43,7 @@ import Share.OAuth.Session
 import Share.OAuth.Session qualified as Session
 import Share.OAuth.Types
 import Share.Utils.IDs
+import Share.Utils.ServantUtils
 import Share.Utils.Servant.Cookies qualified as Cookies
 import Share.Utils.URI (URIParam, setPathAndQueryParams, unpackURI)
 import UnliftIO
@@ -219,8 +221,7 @@ redirectReceiverEndpoint ::
   Maybe (Cookies.CookieVal PendingSessionCookieKey PendingSessionId) ->
   Maybe Session ->
   m
-    ( Headers '[Header "Set-Cookie" SetCookie, Header "Set-Cookie" SetCookie, Header "Location" String] NoContent
-    )
+    (Headers '[Header "Set-Cookie" SetCookie, Header "Set-Cookie" SetCookie, Header "Location" String] NoContent)
 redirectReceiverEndpoint IdentityProviderConfig {exchangeCodeForToken} serviceProviderConfig@(ServiceProviderConfig {cookieSettings, sessionCookieKey, jwtSettings, oauthClientID, oauthClientSecret}) callback mayCode mayStatePSID mayErrorType mayErrorDescription mayCookiePSID _authSession = handleErrs $ do
   case mayErrorType of
     Just errorType ->
@@ -251,7 +252,7 @@ redirectReceiverEndpoint IdentityProviderConfig {exchangeCodeForToken} servicePr
           redirectURI <- lift (callback (Right sessionCallbackData))
           pure . clearPendingSessionCookie . setAuthHeaders . redirectTo $ redirectURI
   where
-    setSessionCookie :: (MonadIO n, AddHeader "Set-Cookie" SetCookie resp resp') => Session -> n (Maybe (resp -> resp'))
+    setSessionCookie :: (MonadIO n, AddHeader' "Set-Cookie" SetCookie resp resp') => Session -> n (Maybe (resp -> resp'))
     setSessionCookie sess = do
       liftIO (JWT.createSignedCookie jwtSettings cookieSettings sessionCookieKey sess) >>= \case
         Left _err -> pure Nothing
@@ -288,11 +289,11 @@ redirectReceiverEndpoint IdentityProviderConfig {exchangeCodeForToken} servicePr
         Just pSession -> pure $ pSession
 
     -- Clear the pending session
-    clearPendingSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => orig -> new
+    clearPendingSessionCookie :: (AddHeader' "Set-Cookie" SetCookie orig new) => orig -> new
     clearPendingSessionCookie =
       addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings pendingSessionCookieKey)
 
-    clearSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => orig -> new
+    clearSessionCookie :: (AddHeader' "Set-Cookie" SetCookie orig new) => orig -> new
     clearSessionCookie = addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings sessionCookieKey)
 
 -- | Decodes an Access Token into a session and verifies the following:

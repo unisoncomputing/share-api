@@ -186,12 +186,12 @@ instance (PG.DecodeRow ref) => PG.DecodeRow (NamedRef ref) where
     ref <- PG.decodeRow
     pure $ NamedRef {..}
 
-pgNamedReferenceFields :: NamedRef PGReference -> (ReversedName, Maybe Text, Maybe ComponentHashId, Maybe Int64)
+pgNamedReferenceFields :: NamedRef PGReference -> (ReversedName, Maybe Text, Maybe ComponentHashId, Maybe Int32)
 pgNamedReferenceFields NamedRef {ref, reversedSegments} =
   let (builtin, componentHash, componentIndex) = referenceFields ref
    in (reversedSegments, builtin, componentHash, componentIndex)
 
-pgNamedReferentFields :: NamedRef (PGReferent, Maybe ConstructorType) -> (ReversedName, Maybe Text, Maybe ComponentHashId, Maybe Int64, Maybe Int64, Maybe ConstructorType)
+pgNamedReferentFields :: NamedRef (PGReferent, Maybe ConstructorType) -> (ReversedName, Maybe Text, Maybe ComponentHashId, Maybe Int32, Maybe Int32, Maybe ConstructorType)
 pgNamedReferentFields NamedRef {ref = (referent, constructorType), reversedSegments} =
   let (builtin, componentHash, componentIndex, constructorIndex) = referentFields referent
    in (reversedSegments, builtin, componentHash, componentIndex, constructorIndex, constructorType)

@@ -16,9 +16,11 @@ module Share.Utils.Servant
     withTimeoutSeconds,
     parseParam,
     OptionalCapture,
+    module ServantUtils,
   )
 where
 
+import Share.Utils.ServantUtils qualified as ServantUtils
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import GHC.TypeLits (KnownSymbol, Nat, Symbol)

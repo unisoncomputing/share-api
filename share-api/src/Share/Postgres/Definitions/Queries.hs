@@ -54,7 +54,6 @@ import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set qualified as Set
-import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Hasql.Decoders qualified as Decoders
 import Hasql.Interpolate qualified as Hasql
@@ -627,7 +626,7 @@ constructorReferentsByPrefix ::
 constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
   let mayComponentIndex' = pgComponentIndex <$> mayComponentIndex
   let mayConstructorIndex' = pgConstructorIndex <$> mayConstructorIndex
-  queryListRows @(Hash, PgComponentIndex, Text, PgConstructorIndex)
+  queryListRows @(Hash, PgComponentIndex, DeclKindEnum, PgConstructorIndex)
     [sql| SELECT component_hashes.base32, typ.component_index, typ.kind, constr.constructor_index
         FROM component_hashes
           JOIN types typ ON component_hashes.id = typ.component_hash_id
@@ -640,9 +639,8 @@ constructorReferentsByPrefix prefix mayComponentIndex mayConstructorIndex = do
     <&> fmap
       ( \(hash, componentIndex, declKind, constructorIndex) ->
           let dt = case declKind of
-                "data" -> CT.Data
-                "ability" -> CT.Effect
-                kind -> error $ "declReferentsByPrefix: Unknown decl kind: " <> Text.unpack kind
+                Data -> CT.Data
+                Ability -> CT.Effect
               conRef = V1Referent.ConstructorReference (V1Reference.Derived hash (unPgComponentIndex componentIndex)) (unPgConstructorIndex constructorIndex)
            in V1Referent.Con conRef dt
       )

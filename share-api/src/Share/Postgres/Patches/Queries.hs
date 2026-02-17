@@ -76,16 +76,16 @@ loadPatch patchId = runMaybeT do
             ON to_builtin.id = mapping.to_term_builtin_id
         WHERE patch_id = #{patchId}
       |]
-        <&> ( fmap \(mayFromComponentHash, mayFromComponentIndex :: Maybe Int64, mayFromBuiltin, mayToComponentHash, mayToComponentIndex :: Maybe Int64, mayToBuiltin, mayTyping, deprecated) ->
+        <&> ( fmap \(mayFromComponentHash, mayFromComponentIndex :: Maybe Int32, mayFromBuiltin, mayToComponentHash, mayToComponentIndex :: Maybe Int32, mayToBuiltin, mayTyping, deprecated) ->
                 let fromRef = case (mayFromComponentHash, mayFromComponentIndex, mayFromBuiltin) of
-                      (Just fromComponentHash, Just fromComponentIndex, Nothing) -> Referent.Ref (Reference.Derived fromComponentHash (fromIntegral @Int64 @Reference.Pos fromComponentIndex))
+                      (Just fromComponentHash, Just fromComponentIndex, Nothing) -> Referent.Ref (Reference.Derived fromComponentHash (fromIntegral @Int32 @Reference.Pos fromComponentIndex))
                       (Nothing, Nothing, Just fromBuiltin) -> Referent.Ref (Reference.Builtin fromBuiltin)
                       _ -> error "Invalid term mapping"
                  in case deprecated of
                       True -> Map.singleton fromRef . Set.singleton $ TermEdit.Deprecate
                       False -> case (mayToComponentHash, mayToComponentIndex, mayToBuiltin, mayTyping) of
                         (Just toCompHash, Just toCompIndex, Nothing, Just typing) ->
-                          Map.singleton fromRef $ Set.singleton $ TermEdit.Replace (Referent.Ref (Reference.Derived toCompHash (fromIntegral @Int64 @Reference.Pos toCompIndex))) typing
+                          Map.singleton fromRef $ Set.singleton $ TermEdit.Replace (Referent.Ref (Reference.Derived toCompHash (fromIntegral @Int32 @Reference.Pos toCompIndex))) typing
                         (Nothing, Nothing, Just toBuiltin, Just typing) ->
                           Map.singleton fromRef $ Set.singleton $ TermEdit.Replace (Referent.Ref (Reference.Builtin toBuiltin)) typing
                         _ -> error "Invalid term mapping"
@@ -107,11 +107,11 @@ loadPatch patchId = runMaybeT do
             ON to_constructor_type_hash.id = to_constructor_type.component_hash_id
         WHERE patch_id = #{patchId}
         |]
-        <&> ( fmap \(fromComponentHash, fromComponentIndex :: Int64, fromConstructorIndex :: Int64, mayToComponentHash, mayToComponentIndex :: Maybe Int64, mayToConstructorIndex :: Maybe Int64, mayTyping, deprecated) ->
-                let fromRef = Referent.Con (Reference.Derived fromComponentHash (fromIntegral @Int64 @Reference.Pos fromComponentIndex)) (fromIntegral @Int64 @Reference.Pos fromConstructorIndex)
+        <&> ( fmap \(fromComponentHash, fromComponentIndex :: Int32, fromConstructorIndex :: Int32, mayToComponentHash, mayToComponentIndex :: Maybe Int32, mayToConstructorIndex :: Maybe Int32, mayTyping, deprecated) ->
+                let fromRef = Referent.Con (Reference.Derived fromComponentHash (fromIntegral @Int32 @Reference.Pos fromComponentIndex)) (fromIntegral @Int32 @Reference.Pos fromConstructorIndex)
                  in case (mayToComponentHash, mayToComponentIndex, mayToConstructorIndex, mayTyping, deprecated) of
                       (Just toCompHash, Just toCompIndex, Just toConstructorIndex, Just typing, False) ->
-                        Map.singleton fromRef $ Set.singleton $ TermEdit.Replace (Referent.Con (Reference.Derived toCompHash (fromIntegral @Int64 @Reference.Pos toCompIndex)) (fromIntegral @Int64 @Reference.Pos toConstructorIndex)) typing
+                        Map.singleton fromRef $ Set.singleton $ TermEdit.Replace (Referent.Con (Reference.Derived toCompHash (fromIntegral @Int32 @Reference.Pos toCompIndex)) (fromIntegral @Int32 @Reference.Pos toConstructorIndex)) typing
                       (Nothing, Nothing, Nothing, Nothing, True) ->
                         Map.singleton fromRef $ Set.singleton $ TermEdit.Deprecate
                       _ -> error "Invalid constructor mapping"
@@ -234,30 +234,30 @@ savePatch (CodebaseEnv {codebaseOwner}) maySerialized patchHash PatchFull.Patch 
           |]
       execute_ [sql| SELECT update_patch_depth(#{patchId}) |]
       pure patchId
-    termsTable :: [(Maybe ComponentHashId, Maybe Int64 {- from comp index -}, Maybe TextId, Maybe ComponentHashId, Maybe Int64 {- to comp index -}, Maybe TextId, Maybe PatchFullTermEdit.Typing, Bool)]
-    constructorsTable :: [(ComponentHashId, Int64 {- from comp index -}, Int64 {- from constr index -}, Maybe ComponentHashId, Maybe Int64 {- to comp index-}, Maybe Int64 {- to constr index -}, Maybe PatchFullTermEdit.Typing, Bool)]
+    termsTable :: [(Maybe ComponentHashId, Maybe Int32 {- from comp index -}, Maybe TextId, Maybe ComponentHashId, Maybe Int32 {- to comp index -}, Maybe TextId, Maybe PatchFullTermEdit.Typing, Bool)]
+    constructorsTable :: [(ComponentHashId, Int32 {- from comp index -}, Int32 {- from constr index -}, Maybe ComponentHashId, Maybe Int32 {- to comp index-}, Maybe Int32 {- to constr index -}, Maybe PatchFullTermEdit.Typing, Bool)]
     (termsTable, constructorsTable) =
       termEdits
         & Map.toList
         & foldMap \(referent, termEdits) ->
           let fromRef = case referent of
                 (Referent.Ref termRef) -> case termRef of
-                  (Reference.Derived compHash compIndex) -> Left (Just compHash, Just $ fromIntegral @Reference.Pos @Int64 compIndex, Nothing)
+                  (Reference.Derived compHash compIndex) -> Left (Just compHash, Just $ fromIntegral @Reference.Pos @Int32 compIndex, Nothing)
                   (Reference.Builtin builtin) -> Left (Nothing, Nothing, Just builtin)
                 (Referent.Con typeRef conId) ->
                   case typeRef of
-                    (Reference.Derived compHash compIndex) -> Right (compHash, fromIntegral @Reference.Pos @Int64 compIndex, fromIntegral @Reference.Pos @Int64 conId)
+                    (Reference.Derived compHash compIndex) -> Right (compHash, fromIntegral @Reference.Pos @Int32 compIndex, fromIntegral @Reference.Pos @Int32 conId)
                     _ -> error "Invalid constructor reference"
            in termEdits & foldMap \te ->
                 let (toCompHash, toCompIndex, toCompBuiltin, toConstrIndex, typing, deprecated) = case te of
                       PatchFullTermEdit.Deprecate -> (Nothing, Nothing, Nothing, Nothing, Nothing, True)
                       PatchFullTermEdit.Replace (Referent.Con typeRef toConId) typing ->
                         case typeRef of
-                          (Reference.Derived compHash compIndex) -> (Just compHash, Just $ fromIntegral @Reference.Pos @Int64 compIndex, Nothing, Just $ fromIntegral @Reference.Pos @Int64 toConId, Just typing, False)
+                          (Reference.Derived compHash compIndex) -> (Just compHash, Just $ fromIntegral @Reference.Pos @Int32 compIndex, Nothing, Just $ fromIntegral @Reference.Pos @Int32 toConId, Just typing, False)
                           _ -> error "Invalid constructor reference"
                       PatchFullTermEdit.Replace (Referent.Ref termRef) typing ->
                         case termRef of
-                          (Reference.Derived compHash compIndex) -> (Just compHash, Just $ fromIntegral @Reference.Pos @Int64 compIndex, Nothing, Nothing, Just typing, False)
+                          (Reference.Derived compHash compIndex) -> (Just compHash, Just $ fromIntegral @Reference.Pos @Int32 compIndex, Nothing, Nothing, Just typing, False)
                           (Reference.Builtin builtin) -> (Nothing, Nothing, Just builtin, Nothing, Just typing, False)
                  in case fromRef of
                       -- term mappings, no constructors

@@ -3,14 +3,14 @@
 
 module Share.Web.Share.Releases.API where
 
-import Data.Int (Int64)
+import Data.Int (Int32)
+import Servant
 import Share.IDs
 import Share.Utils.API
 import Share.Utils.Caching
 import Share.Web.Share.CodeBrowsing.API (CodeBrowseAPI)
 import Share.Web.Share.Releases.Types
 import Share.Web.Share.Types
-import Servant
 
 type ProjectReleasesAPI =
   ListReleasesByProjectEndpoint
@@ -31,7 +31,7 @@ type ProjectReleaseReadmeEndpoint = Get '[JSON] (Cached JSON ReadmeResponse)
 type ProjectReleaseNotesEndpoint = Get '[JSON] (Cached JSON DocResponse)
 
 -- | (major version, minor version, patch version, release id)
-type ListReleasesCursor = (Int64, Int64, Int64, ReleaseId)
+type ListReleasesCursor = (Int32, Int32, Int32, ReleaseId)
 
 type ListReleasesByProjectEndpoint =
   QueryParam "cursor" (Cursor ListReleasesCursor)

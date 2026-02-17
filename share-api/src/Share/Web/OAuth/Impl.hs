@@ -51,6 +51,7 @@ import Share.Utils.Logging qualified as Logging
 import Share.Utils.Servant
 import Share.Utils.Servant.Cookies (CookieVal, cookieVal)
 import Share.Utils.Servant.Cookies qualified as Cookies
+import Share.Utils.ServantUtils (AddHeader')
 import Share.Utils.URI (URIParam (URIParam), unpackURI)
 import Share.Utils.URI qualified as URI
 import Share.Web.App
@@ -280,9 +281,9 @@ redirectReceiverEndpoint mayGithubCode mayStatePSID _errorType@Nothing _mayError
     addParamsToRedirectURI :: URI -> URI -> Text -> Code -> URI
     addParamsToRedirectURI uri landingPageURI state code =
       uri
-        & URI.addQueryParam "state" state
-        & URI.addQueryParam "code" code
-        & URI.addQueryParam "next" (URIParam landingPageURI)
+        & URI.addURIQueryParam "state" state
+        & URI.addURIQueryParam "code" code
+        & URI.addURIQueryParam "next" (URIParam landingPageURI)
 
 serviceProviderServer :: ServerT OAuth.ServiceProviderAPI WebApp
 serviceProviderServer =
@@ -333,14 +334,14 @@ logoutEndpoint = do
   uri <- Links.homePage (Just Links.LogOut)
   pure $ clearPendingSessionCookie cookieSettings . clearSessionCookie cookieSettings sessionCookieKey $ redirectTo uri
 
-setPendingSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> PendingSessionId -> orig -> new
+setPendingSessionCookie :: (AddHeader' "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> PendingSessionId -> orig -> new
 setPendingSessionCookie cookieSettings pSessionId =
   let cookieKey = OAuth.pendingSessionCookieKey
       cookieVal = fromId pSessionId
       cookie = (Cookies.newSetCookie cookieSettings cookieKey cookieVal) {setCookieMaxAge = Just (60 * 5 {- 5 minute expiry -})}
    in addHeader @"Set-Cookie" cookie
 
-setSessionCookie :: (AddHeader "Set-Cookie" SetCookie resp resp') => Session -> WebApp (Maybe (resp -> resp'))
+setSessionCookie :: (AddHeader' "Set-Cookie" SetCookie resp resp') => Session -> WebApp (Maybe (resp -> resp'))
 setSessionCookie sess = do
   Env.Env {cookieSettings, jwtSettings, sessionCookieKey} <- ask
   liftIO (JWT.createSignedCookie jwtSettings cookieSettings sessionCookieKey sess) >>= \case
@@ -349,10 +350,10 @@ setSessionCookie sess = do
       pure Nothing
     Right cookie -> pure . Just $ addHeader @"Set-Cookie" cookie
 
-clearSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> Text -> orig -> new
+clearSessionCookie :: (AddHeader' "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> Text -> orig -> new
 clearSessionCookie cookieSettings sessionCookieKey = addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings sessionCookieKey)
 
 -- | Clear the pending session
-clearPendingSessionCookie :: (AddHeader "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> orig -> new
+clearPendingSessionCookie :: (AddHeader' "Set-Cookie" SetCookie orig new) => Cookies.CookieSettings -> orig -> new
 clearPendingSessionCookie cookieSettings =
   addHeader @"Set-Cookie" (Cookies.clearCookie cookieSettings OAuth.pendingSessionCookieKey)

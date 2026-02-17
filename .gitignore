@@ -23,3 +23,6 @@ prelude.output.md
 
 # Developers can customize their own local development setup
 /transcripts/fixtures/custom_projects.txt
+
+# Debugging output
+share.out
