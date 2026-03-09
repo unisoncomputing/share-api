@@ -127,12 +127,12 @@ mkShareServer env = do
           & hoistServerWithContext appAPI ctxType (toServantHandler env)
           & serveWithContext appAPI ctx
           & openTelemetryMiddleware
-          & requestIDMiddleware
           & requestMetricsMiddleware Web.api
           & metricsMiddleware
           & skipOnLocal corsMiddleware
           & Gzip.gzip gzipSettings
           & reqLoggerMiddleware
+          & requestIDMiddleware
   pure waiApp
   where
     gzipSettings =
