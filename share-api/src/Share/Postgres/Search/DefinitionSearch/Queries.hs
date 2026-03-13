@@ -397,6 +397,7 @@ globalDefNameCompletionSearch mayCaller mayUserFilter (Query query) limit = do
   let filters = case mayUserFilter of
         Just userId -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
+  Logging.logInfoText ("globalDefNameCompletionSearch: " <> tShow ("caller" :: Text, mayCaller, "limit" :: Text, limit))
   queryListRows @(Name, TermOrTypeTag)
     [sql|
     WITH results(name, tag) AS (
@@ -454,6 +455,7 @@ scopedDefinitionTokenSearch mayCaller projectId rootBranchHashId limit searchTok
           then Nothing
           else Just $ searchTokensToTsQuery returnTokens
   let orderClause = tokenSearchOrderClause False names mayReturnTokensText
+  Logging.logInfoText ("scopedDefinitionTokenSearch: Performing scoped definition token search:" <> tShow ("caller" :: Text, mayCaller, "projectId" :: Text, projectId, "limit" :: Text, limit, "searchTokens" :: Text, searchTokens, "preferredArity" :: Text, preferredArity))
   rows <-
     queryListRows @(Name, Hasql.Jsonb)
       [sql|
@@ -497,7 +499,7 @@ globalDefinitionTokenSearch mayCaller mayUserFilter limit searchTokens preferred
           then Nothing
           else Just $ searchTokensToTsQuery returnTokens
   let orderClause = tokenSearchOrderClause True names mayReturnTokensText
-  Logging.logInfoText ("NEEDLE: Performing global definition token search:" <> tShow ("caller" :: Text, mayCaller, "limit" :: Text, limit, "searchTokens" :: Text, searchTokens, "preferredArity" :: Text, preferredArity))
+  Logging.logInfoText ("globalDefinitionTokenSearch: Performing global definition token search:" <> tShow ("caller" :: Text, mayCaller, "limit" :: Text, limit, "searchTokens" :: Text, searchTokens, "preferredArity" :: Text, preferredArity))
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
@@ -578,6 +580,7 @@ definitionNameSearch mayCaller mayFilter limit (Query query) = do
 -- | Perform a fuzzy trigram search on definition names
 scopedDefinitionNameSearch :: Maybe UserId -> ProjectId -> BranchHashId -> Limit -> Query -> Transaction e [(Name, TermOrTypeSummary)]
 scopedDefinitionNameSearch mayCaller projectId rootBranchHashId limit (Query query) = do
+  Logging.logInfoText ("scopedDefinitionNameSearch: Performing scoped definition name search:" <> tShow ("caller" :: Text, mayCaller, "projectId" :: Text, projectId, "limit" :: Text, limit, "query" :: Text, query))
   rows <-
     queryListRows @(Name, Hasql.Jsonb)
       [sql|
@@ -617,7 +620,7 @@ globalDefinitionNameSearch mayCaller mayUserFilter limit (Query query) = do
         Just userId -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
 
-  Logging.logInfoText ("NEEDLE: Performing global definition token search:" <> tShow ("caller" :: Text, mayCaller, "limit" :: Text, limit))
+  Logging.logInfoText ("globalDefinitionNameSearch: Performing global definition token search:" <> tShow ("caller" :: Text, mayCaller, "limit" :: Text, limit))
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
