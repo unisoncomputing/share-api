@@ -497,6 +497,7 @@ globalDefinitionTokenSearch mayCaller mayUserFilter limit searchTokens preferred
           then Nothing
           else Just $ searchTokensToTsQuery returnTokens
   let orderClause = tokenSearchOrderClause True names mayReturnTokensText
+  Logging.logInfoText ("NEEDLE: Performing global definition token search:" <> tShow ("caller" :: Text, mayCaller, "limit" :: Text, limit, "searchTokens" :: Text, searchTokens, "preferredArity" :: Text, preferredArity))
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
@@ -615,6 +616,8 @@ globalDefinitionNameSearch mayCaller mayUserFilter limit (Query query) = do
   let filters = case mayUserFilter of
         Just userId -> [sql| AND p.owner_user_id = #{userId} |]
         Nothing -> mempty
+
+  Logging.logInfoText ("NEEDLE: Performing global definition token search:" <> tShow ("caller" :: Text, mayCaller, "limit" :: Text, limit))
   rows <-
     queryListRows @(ProjectId, ReleaseId, Name, Hasql.Jsonb)
       [sql|
