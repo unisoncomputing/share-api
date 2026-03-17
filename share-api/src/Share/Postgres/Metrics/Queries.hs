@@ -166,4 +166,4 @@ WITH namespaces(handle, slug, name, namespace_hash_id, private) AS (
 numCausalDiffQueueEntries :: PG.Transaction e Int64
 numCausalDiffQueueEntries =
   PG.queryExpect1Col
-    [PG.sql| SELECT COUNT(*) FROM causal_diff_queue |]
+    [PG.sql| SELECT COUNT(*) FROM causal_diff_queue WHERE error is NULL |]
