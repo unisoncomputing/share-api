@@ -3995,7 +3995,9 @@
                               "defnTermTag": "Plain",
                               "signature": [
                                 {
-                                  "annotation": null,
+                                  "annotation": {
+                                    "tag": "Parenthesis"
+                                  },
                                   "segment": "("
                                 },
                                 {
@@ -4047,7 +4049,9 @@
                                   "segment": "Text"
                                 },
                                 {
-                                  "annotation": null,
+                                  "annotation": {
+                                    "tag": "Parenthesis"
+                                  },
                                   "segment": ")"
                                 },
                                 {
@@ -4137,7 +4141,9 @@
                                     "segment": "  "
                                   },
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": "("
                                   },
                                   {
@@ -4189,7 +4195,9 @@
                                     "segment": "Text"
                                   },
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": ")"
                                   },
                                   {
@@ -4887,7 +4895,9 @@
                                                 "segment": " "
                                               },
                                               {
-                                                "annotation": null,
+                                                "annotation": {
+                                                  "tag": "Parenthesis"
+                                                },
                                                 "segment": "("
                                               },
                                               {
@@ -4939,7 +4949,9 @@
                                                 "segment": "Nat"
                                               },
                                               {
-                                                "annotation": null,
+                                                "annotation": {
+                                                  "tag": "Parenthesis"
+                                                },
                                                 "segment": ")"
                                               },
                                               {
@@ -5236,7 +5248,9 @@
                                                 "segment": " "
                                               },
                                               {
-                                                "annotation": null,
+                                                "annotation": {
+                                                  "tag": "Parenthesis"
+                                                },
                                                 "segment": "("
                                               },
                                               {
@@ -5288,7 +5302,9 @@
                                                 "segment": "Nat"
                                               },
                                               {
-                                                "annotation": null,
+                                                "annotation": {
+                                                  "tag": "Parenthesis"
+                                                },
                                                 "segment": ")"
                                               },
                                               {
@@ -5691,7 +5707,9 @@
                                 "defnTermTag": "Plain",
                                 "signature": [
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": "("
                                   },
                                   {
@@ -5743,7 +5761,9 @@
                                     "segment": "Nat"
                                   },
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": ")"
                                   },
                                   {
@@ -5829,7 +5849,9 @@
                                       "segment": " "
                                     },
                                     {
-                                      "annotation": null,
+                                      "annotation": {
+                                        "tag": "Parenthesis"
+                                      },
                                       "segment": "("
                                     },
                                     {
@@ -5881,7 +5903,9 @@
                                       "segment": "Nat"
                                     },
                                     {
-                                      "annotation": null,
+                                      "annotation": {
+                                        "tag": "Parenthesis"
+                                      },
                                       "segment": ")"
                                     },
                                     {
@@ -6072,7 +6096,9 @@
                                 "defnTermTag": "Plain",
                                 "signature": [
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": "("
                                   },
                                   {
@@ -6124,7 +6150,9 @@
                                     "segment": "Nat"
                                   },
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": ")"
                                   },
                                   {
@@ -6210,7 +6238,9 @@
                                       "segment": " "
                                     },
                                     {
-                                      "annotation": null,
+                                      "annotation": {
+                                        "tag": "Parenthesis"
+                                      },
                                       "segment": "("
                                     },
                                     {
@@ -6262,7 +6292,9 @@
                                       "segment": "Nat"
                                     },
                                     {
-                                      "annotation": null,
+                                      "annotation": {
+                                        "tag": "Parenthesis"
+                                      },
                                       "segment": ")"
                                     },
                                     {
@@ -7823,7 +7855,9 @@
                               "defnTermTag": "Plain",
                               "signature": [
                                 {
-                                  "annotation": null,
+                                  "annotation": {
+                                    "tag": "Parenthesis"
+                                  },
                                   "segment": "("
                                 },
                                 {
@@ -7875,7 +7909,9 @@
                                   "segment": "Boolean"
                                 },
                                 {
-                                  "annotation": null,
+                                  "annotation": {
+                                    "tag": "Parenthesis"
+                                  },
                                   "segment": ")"
                                 },
                                 {
@@ -7961,7 +7997,9 @@
                                     "segment": " "
                                   },
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": "("
                                   },
                                   {
@@ -8013,7 +8051,9 @@
                                     "segment": "Boolean"
                                   },
                                   {
-                                    "annotation": null,
+                                    "annotation": {
+                                      "tag": "Parenthesis"
+                                    },
                                     "segment": ")"
                                   },
                                   {
@@ -8964,9 +9004,9 @@
       "tag": "ok"
     },
     "newRef": "diff-end",
-    "newRefHash": "#5ucg3o359nbve8vg0j54blrs2d64mc9bok85iq090n2162ug3pmuqssvgq1apu08q16amgisbirrunr825pti0g2u10ld0qmo21st2o",
+    "newRefHash": "#69dgakg240ekpo7nv3fk8eps1ndqa5c9fjqnjh8kn2nadnbhdq3t7a9a4iemeqadide1n6219gqbh35cp9pv3n2rcq7vf1e2ospi908",
     "oldRef": "diff-start",
-    "oldRefHash": "#sh7q4i4cm6j4ve533n8cbbhfavu06v7v8e0p2u8m979ea6ou3ml2o1den4gm7jjr3ipafiu1lubnvsq6tji8do2bup4o72ifmmr3n1o",
+    "oldRefHash": "#poc5uqdurlk3efrch0ueae31kl0uf66tgnmc5qctt0g4cm3e770347kul73598tme29sak4lut2asbtgtfmk60dprdt0nqhdvsr646g",
     "project": "@transcripts/contribution-diff",
     "tag": "done"
   },

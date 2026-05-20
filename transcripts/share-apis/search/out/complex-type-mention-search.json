@@ -9,7 +9,9 @@
           "summary": {
             "contents": [
               {
-                "annotation": null,
+                "annotation": {
+                  "tag": "Parenthesis"
+                },
                 "segment": "("
               },
               {
@@ -57,7 +59,9 @@
                 "segment": "b"
               },
               {
-                "annotation": null,
+                "annotation": {
+                  "tag": "Parenthesis"
+                },
                 "segment": ")"
               },
               {
