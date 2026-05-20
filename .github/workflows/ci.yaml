@@ -332,7 +332,7 @@ jobs:
           mkdir ucm
 
           # Use a pinned release
-          curl -L https://github.com/unisonweb/unison/releases/download/release%2F1.1.0/ucm-linux-x64.tar.gz | tar -xz -C ucm
+          curl -L https://github.com/unisonweb/unison/releases/download/release%2F1.3.0/ucm-linux-x64.tar.gz | tar -xz -C ucm
           # use latest trunk build
           # curl -L https://github.com/unisonweb/unison/releases/download/trunk-build/ucm-linux-x64.tar.gz | tar -xz -C ucm
           export PATH=$PWD/ucm:$PATH
