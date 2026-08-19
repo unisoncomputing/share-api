@@ -119,7 +119,7 @@ fetch "$transcripts_user" GET commercial-org-projects '/users/acme/projects'
 # Non-commercial projects must be public by default
 fetch "$transcripts_user" GET non-commercial-org-projects '/users/noncom/projects'
 
-# Updating a non-commercial org's project to private should fail
+# Updating a non-commercial org's project to private should succeed, it's now allowed for all projects.
 fetch "$transcripts_user" PATCH non-com-project-privatization '/users/noncom/projects/proj' '{
     "visibility": "private"
 }'

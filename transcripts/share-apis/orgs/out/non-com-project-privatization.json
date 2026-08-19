@@ -1,8 +1,8 @@
 {
-  "body": "Please upgrade to a commercial org to enable private projects.",
+  "body": [],
   "status": [
     {
-      "status_code": 403
+      "status_code": 200
     }
   ]
 }
