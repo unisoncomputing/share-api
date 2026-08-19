@@ -110,7 +110,7 @@ jobs:
     if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/task-')) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'task-')) }}
     env:
       container_registry: ghcr.io
-      docker_image_name: unisoncomputing/share-task-runner
+      docker_image_name: unisonweb/share-task-runner
     needs: [build-exes]
     runs-on: ubuntu-24.04
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
@@ -192,7 +192,7 @@ jobs:
   share-api-docker-build:
     env:
       container_registry: ghcr.io
-      docker_image_name: unisoncomputing/share-api
+      docker_image_name: unisonweb/share-api
     needs: [build-exes]
     runs-on: ubuntu-24.04
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
@@ -317,7 +317,7 @@ jobs:
           set -e
           docker load --input /tmp/share-docker-image.tar
           # retag the latest image so it can be used in the transcript tests
-          docker tag ghcr.io/unisoncomputing/share-api:sha-${{ github.sha }} share-api
+          docker tag ghcr.io/unisonweb/share-api:sha-${{ github.sha }} share-api
           docker image ls -a
 
       - name: Run transcript tests

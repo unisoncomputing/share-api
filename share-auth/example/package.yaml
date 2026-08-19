@@ -1,6 +1,6 @@
 name:                test-auth-app
 version:             0.1.0.0
-github:              "unisoncomputing/share-api"
+github:              "unisonweb/share-api"
 author:              "unison.cloud"
 maintainer:          "unison.cloud"
 copyright:           "2024 Unison Computing"
