@@ -48,11 +48,17 @@ type SearchDefinitionsEndpoint =
 type AccountAPI =
   AuthenticatedSession
     :> ( AccountEndpoint
+           :<|> AccountDeleteEndpoint
            :<|> ("tours" :> CompleteToursEndpoint)
        )
 
 -- | GET /account
 type AccountEndpoint = Get '[JSON] UserAccountInfo
+
+-- | DELETE /account
+type AccountDeleteEndpoint =
+  ReqBody '[JSON] DeleteAccountRequest
+    :> Delete '[JSON] ()
 
 -- | POST /account/tours
 type CompleteToursEndpoint =

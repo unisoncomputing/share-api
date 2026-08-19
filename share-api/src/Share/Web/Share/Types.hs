@@ -550,3 +550,12 @@ instance ToHttpApiData ProjectSearchKind where
     ProjectSearchKindWebSearch -> "web-search"
     ProjectSearchKindSlugPrefix -> "slug-prefix"
     ProjectSearchKindSlugInfix -> "slug-infix"
+
+data DeleteAccountRequest = DeleteAccountRequest
+  { userHandle :: UserHandle
+  }
+
+instance FromJSON DeleteAccountRequest where
+  parseJSON = Aeson.withObject "DeleteAccountRequest" $ \o -> do
+    userHandle <- o .: "userHandle"
+    pure DeleteAccountRequest {userHandle}

@@ -11,9 +11,9 @@ import Data.Time qualified as Time
 import Servant
 import Share.IDs
 import Share.Postgres qualified as PG
-import Share.Postgres.Admin qualified as Admin
 import Share.Postgres.Ops qualified as PGO
 import Share.Postgres.Queries qualified as Q
+import Share.Postgres.Users.Queries qualified as UsersQ
 import Share.Prelude
 import Share.User (User (..))
 import Share.Web.Admin.API qualified as Admin
@@ -25,7 +25,6 @@ import Share.Web.Share.Orgs.Operations qualified as OrgOps
 import Share.Web.Share.Orgs.Queries qualified as OrgQ
 import Unison.Util.Monoid qualified as Monoid
 
--- | Ensure we have name lookups for views for this user.
 deleteUserEndpoint :: AuthZ.AuthZReceipt -> UserHandle -> DeleteUserRequest -> WebApp ()
 deleteUserEndpoint !_authzReceipt userHandle DeleteUserRequest {currentDate} = do
   today <- Time.utctDay <$> liftIO Time.getCurrentTime
@@ -33,7 +32,7 @@ deleteUserEndpoint !_authzReceipt userHandle DeleteUserRequest {currentDate} = d
     then respondError (BadRequest "You must provide the current date in the format YYYY-MM-DD to confirm you want to delete this user.")
     else do
       User {user_id} <- PGO.expectUserByHandle userHandle
-      PG.runTransaction $ Admin.hardDeleteUser user_id
+      PG.runTransaction $ UsersQ.hardDeleteUser user_id
 
 addToCatalogCategoryEndpoint :: AuthZ.AuthZReceipt -> [ProjectCategory] -> WebApp NoContent
 addToCatalogCategoryEndpoint !_authzReceipt additions = do
@@ -83,8 +82,7 @@ server authedSession =
   let catalogServer authzReceipt = addToCatalogCategoryEndpoint authzReceipt :<|> removeFromCatalogCategoryEndpoint authzReceipt
    in hoistServer (Proxy @Admin.UnauthenticatedAPI) requireAdmin $
         catalogServer authzReceipt
-          :<|> ( \userHandle -> deleteUserEndpoint authzReceipt userHandle
-               )
+          :<|> (\userHandle -> deleteUserEndpoint authzReceipt userHandle)
           :<|> createOrgEndpoint authzReceipt
   where
     -- Require that the user has re-authenticated within the last 2 hours in order to

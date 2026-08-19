@@ -122,6 +122,7 @@ userServer session handle =
 accountServer :: ServerT Share.AccountAPI WebApp
 accountServer session =
   ( accountInfoEndpoint session
+      :<|> deleteAccountEndpoint session
       :<|> completeToursEndpoint session
   )
 
@@ -600,6 +601,15 @@ accountInfoEndpoint Session {sessionUserId} = do
           planTier,
           hasUnreadNotifications
         }
+
+deleteAccountEndpoint :: Session -> DeleteAccountRequest -> WebApp ()
+deleteAccountEndpoint Session {sessionUserId} DeleteAccountRequest {userHandle} = do
+  User {handle, user_id} <-
+    PGO.expectUserById
+      sessionUserId
+  when (handle /= userHandle) $ respondError (InvalidParam "userHandle" (IDs.toText userHandle) "User handle does not match the authenticated user's handle")
+  PG.runTransaction $
+    UsersQ.hardDeleteUser user_id
 
 completeToursEndpoint :: Session -> NonEmpty TourId -> WebApp NoContent
 completeToursEndpoint Session {sessionUserId} flows = do

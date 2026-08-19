@@ -25,6 +25,7 @@ module Share.Postgres.Users.Queries
     allUsers,
     createUser,
     userSubscriptionTier,
+    hardDeleteUser,
   )
 where
 
@@ -350,4 +351,12 @@ userSubscriptionTier userId =
       SELECT cs.tier_name FROM public.cloud_subscribers cs
           WHERE cs.user_id = #{userId}
             AND cs.is_active
+  |]
+
+-- | Delete a user COMPLETELY. This is unreversable.
+hardDeleteUser :: UserId -> PG.Transaction e ()
+hardDeleteUser userId =
+  PG.execute_
+    [PG.sql|
+    DELETE FROM users WHERE id = #{userId}
   |]
