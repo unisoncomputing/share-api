@@ -23,6 +23,7 @@ module Share.Notifications.Queries
     isUserSubscribedToWatchProject,
     listProjectWebhooks,
     webhooksForSubscription,
+    isWebhookOwnedBy,
     expectProjectWebhook,
   )
 where
@@ -50,6 +51,17 @@ import Share.Ticket
 import Share.Utils.API (Cursor (..), CursorDirection (..), Paged (..), guardPaged, pagedOn)
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
+
+-- | A filter which restricts a 'notification_subscriptions' row (aliased as @ns@) to those owned
+-- by the given subscriber.
+--
+-- Every query which reads or writes a subscription (or anything hanging off of one, like a
+-- webhook and its config) on a caller's behalf must be scoped by this, otherwise knowing a
+-- subscription id would be enough to read or edit somebody else's subscription.
+subscriptionOwnerFilter :: SubscriptionOwner -> Sql
+subscriptionOwnerFilter = \case
+  UserSubscriptionOwner subscriberUserId -> [sql| ns.subscriber_user_id = #{subscriberUserId} |]
+  ProjectSubscriptionOwner subscriberProjectId -> [sql| ns.subscriber_project_id = #{subscriberProjectId} |]
 
 recordEvent :: (QueryA m) => NewNotificationEvent -> m ()
 recordEvent (NotificationEvent {eventScope, eventData, eventResourceId, eventProjectId, eventActor}) = do
@@ -152,7 +164,8 @@ listWebhooks userId maySubscriptionId = do
     [sql|
       SELECT nw.id
         FROM notification_webhooks nw
-      WHERE nw.subscriber_user_id = #{userId}
+        JOIN notification_subscriptions ns ON ns.id = nw.subscription_id
+      WHERE ns.subscriber_user_id = #{userId}
         AND (#{maySubscriptionId} IS NULL
               OR nw.subscription_id = #{maySubscriptionId}
             )
@@ -207,18 +220,18 @@ createWebhookDeliveryMethod name subscriptionId = do
           RETURNING id
         |]
 
+-- | Delete a webhook delivery method, but only if it's owned by the given subscriber.
+--
+-- The webhook's stored config is removed along with it by the FK cascade.
 deleteWebhookDeliveryMethod :: SubscriptionOwner -> NotificationWebhookId -> Transaction e ()
 deleteWebhookDeliveryMethod owner webhookDeliveryMethodId = do
-  let ownerFilter = case owner of
-        UserSubscriptionOwner userId -> [sql| nw.subscriber_user_id = #{userId} |]
-        ProjectSubscriptionOwner projectId -> [sql| nw.subscriber_project_id = #{projectId} |]
   execute_
     [sql|
-      DELETE FROM notification_webhooks
+      DELETE FROM notification_webhooks nw
         USING notification_subscriptions ns
-      WHERE id = #{webhookDeliveryMethodId}
+      WHERE nw.id = #{webhookDeliveryMethodId}
         AND ns.id = nw.subscription_id
-        AND ^{ownerFilter}
+        AND ^{subscriptionOwnerFilter owner}
     |]
 
 listNotificationSubscriptions :: UserId -> Transaction e [NotificationSubscription NotificationSubscriptionId]
@@ -255,37 +268,28 @@ createNotificationSubscription owner subscriptionScope subscriptionProjectId sub
 
 deleteNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Transaction e ()
 deleteNotificationSubscription owner subscriptionId = do
-  let ownerFilter = case owner of
-        UserSubscriptionOwner subscriberUserId -> [sql| subscriber_user_id = #{subscriberUserId}|]
-        ProjectSubscriptionOwner projectOwnerUserId -> [sql| subscriber_project_id = #{projectOwnerUserId} |]
   execute_
     [sql|
-      DELETE FROM notification_subscriptions
-      WHERE id = #{subscriptionId}
-        AND ^{ownerFilter}
+      DELETE FROM notification_subscriptions ns
+      WHERE ns.id = #{subscriptionId}
+        AND ^{subscriptionOwnerFilter owner}
     |]
 
 updateNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe (Set NotificationTopic) -> Maybe (Set NotificationTopicGroup) -> Maybe SubscriptionFilter -> Transaction e ()
 updateNotificationSubscription _owner _subscriptionId Nothing Nothing Nothing = pure ()
 updateNotificationSubscription owner subscriptionId subscriptionTopics subscriptionTopicGroups subscriptionFilter = do
-  let ownerFilter = case owner of
-        UserSubscriptionOwner subscriberUserId -> [sql| subscriber_user_id = #{subscriberUserId}|]
-        ProjectSubscriptionOwner projectOwnerUserId -> [sql| subscriber_project_id = #{projectOwnerUserId} |]
   execute_
     [sql|
-      UPDATE notification_subscriptions
-      SET topics = COALESCE(#{Foldable.toList <$> subscriptionTopics}::notification_topic[], topics),
-          topic_groups = COALESCE(#{Foldable.toList <$> subscriptionTopicGroups}::notification_topic_group[], topic_groups),
-          filter = COALESCE(#{subscriptionFilter}, filter)
-      WHERE id = #{subscriptionId}
-        AND ^{ownerFilter}
+      UPDATE notification_subscriptions AS ns
+      SET topics = COALESCE(#{Foldable.toList <$> subscriptionTopics}::notification_topic[], ns.topics),
+          topic_groups = COALESCE(#{Foldable.toList <$> subscriptionTopicGroups}::notification_topic_group[], ns.topic_groups),
+          filter = COALESCE(#{subscriptionFilter}, ns.filter)
+      WHERE ns.id = #{subscriptionId}
+        AND ^{subscriptionOwnerFilter owner}
     |]
 
 expectNotificationSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Transaction e (NotificationSubscription NotificationSubscriptionId)
 expectNotificationSubscription subscriptionOwner subscriptionId = do
-  let ownerFilter = case subscriptionOwner of
-        UserSubscriptionOwner subscriberUserId -> [sql| ns.subscriber_user_id = #{subscriberUserId}|]
-        ProjectSubscriptionOwner projectOwnerUserId -> [sql| ns.subscriber_project_id = #{projectOwnerUserId} |]
   queryExpect1Row
     [sql|
       SELECT
@@ -301,7 +305,7 @@ expectNotificationSubscription subscriptionOwner subscriptionId = do
         ns.updated_at
         FROM notification_subscriptions ns
       WHERE ns.id = #{subscriptionId}
-        AND ^{ownerFilter}
+        AND ^{subscriptionOwnerFilter subscriptionOwner}
     |]
 
 -- | Events are complex, so for now we hydrate them one at a time using a simple traverse
@@ -562,11 +566,32 @@ expectProjectWebhook projectId subscriptionId = do
       LIMIT 1
     |]
 
-webhooksForSubscription :: NotificationSubscriptionId -> Transaction e [NotificationWebhookId]
-webhooksForSubscription subscriptionId = do
+-- | The webhooks belonging to the given subscription, provided that subscription is owned by
+-- the given subscriber.
+--
+-- Callers use the returned ids to read and write webhook configs, so this must stay scoped by
+-- owner; a caller who's allowed to manage their own subscriptions is not thereby allowed to
+-- touch a webhook hanging off of someone else's subscription id.
+webhooksForSubscription :: SubscriptionOwner -> NotificationSubscriptionId -> Transaction e [NotificationWebhookId]
+webhooksForSubscription owner subscriptionId = do
   PG.queryListCol
     [PG.sql|
       SELECT nw.id
         FROM notification_webhooks nw
+        JOIN notification_subscriptions ns ON ns.id = nw.subscription_id
       WHERE nw.subscription_id = #{subscriptionId}
+        AND ^{subscriptionOwnerFilter owner}
+    |]
+
+-- | Whether the given webhook hangs off of a subscription owned by the given subscriber.
+isWebhookOwnedBy :: (QueryM m) => SubscriptionOwner -> NotificationWebhookId -> m Bool
+isWebhookOwnedBy owner webhookId = do
+  queryExpect1Col
+    [sql|
+      SELECT EXISTS (
+        SELECT FROM notification_webhooks nw
+          JOIN notification_subscriptions ns ON ns.id = nw.subscription_id
+        WHERE nw.id = #{webhookId}
+          AND ^{subscriptionOwnerFilter owner}
+      )
     |]

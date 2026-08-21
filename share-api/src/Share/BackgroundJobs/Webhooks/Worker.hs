@@ -73,7 +73,7 @@ processWebhook :: AuthZ.AuthZReceipt -> Background Bool
 processWebhook authZReceipt = withSpan "background:webhooks:process-webhook" mempty $ do
   toIO <- UnliftIO.askRunInIO
   -- Need to unlift so we can use this in transactions
-  let tryWebhookIO eventData webhookId = toIO $ tryWebhook eventData webhookId
+  let tryWebhookIO eventData webhookId uri = toIO $ tryWebhook eventData webhookId uri
   mayResult <- Metrics.recordWebhookSendingDuration $ PG.runTransactionMode PG.ReadCommitted PG.ReadWrite $ runMaybeT $ do
     webhookInfo@(eventId, webhookId) <- MaybeT WQ.getUnsentWebhook
     mayErr <- lift $ attemptWebhookSend authZReceipt tryWebhookIO eventId webhookId
@@ -105,14 +105,11 @@ webhookTimeout = HTTPClient.responseTimeoutMicro (20 * 1000000 {- 20 seconds -})
 tryWebhook ::
   NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent ->
   NotificationWebhookId ->
+  URI ->
   Background (Maybe WebhookSendFailure)
-tryWebhook event webhookId = UnliftIO.handleAny (\someException -> pure $ Just $ InvalidRequest event.eventId webhookId someException) do
+tryWebhook event webhookId uri = UnliftIO.handleAny (\someException -> pure $ Just $ InvalidRequest event.eventId webhookId someException) do
   fmap (either Just (const Nothing)) $ runExceptT do
     proxiedHTTPManager <- asks Env.proxiedHttpClient
-    WebhookConfig {uri = URIParam uri} <-
-      lift (Webhooks.fetchWebhookConfig webhookId) >>= \case
-        Left err -> throwError $ WebhookSecretFetchError event.eventId webhookId err
-        Right config -> pure config
     jwtSettings <- asks Env.jwtSettings
     let payload =
           WebhookEventPayload
@@ -313,7 +310,7 @@ buildWebhookRequest webhookId uri event defaultPayload = do
 
 attemptWebhookSend ::
   AuthZ.AuthZReceipt ->
-  (NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> NotificationWebhookId -> IO (Maybe WebhookSendFailure)) ->
+  (NotificationEvent NotificationEventId UnifiedDisplayInfo UTCTime HydratedEvent -> NotificationWebhookId -> URI -> IO (Maybe WebhookSendFailure)) ->
   NotificationEventId ->
   NotificationWebhookId ->
   PG.Transaction e (Maybe WebhookSendFailure)
@@ -322,7 +319,14 @@ attemptWebhookSend _authZReceipt tryWebhookIO eventId webhookId = do
   hydratedEventPayload <- forOf eventData_ event NQ.hydrateEventPayload
   hydratedEvent <- for hydratedEventPayload NotOps.hydrateEvent
   populatedEvent <- hydratedEvent & DisplayInfoQ.unifiedDisplayInfoForUserOf eventUserInfo_
-  PG.transactionUnsafeIO (tryWebhookIO populatedEvent webhookId) >>= \case
+  -- The webhook's config lives in Postgres, so we can read it in the same transaction which
+  -- claimed this queue entry rather than reaching out to a separate store mid-transaction.
+  mayFailure <-
+    Webhooks.fetchWebhookConfig webhookId >>= \case
+      Left err -> pure . Just $ WebhookSecretFetchError eventId webhookId err
+      Right (WebhookConfig {uri = URIParam uri}) ->
+        PG.transactionUnsafeIO (tryWebhookIO populatedEvent webhookId uri)
+  case mayFailure of
     Just err -> do
       WQ.recordFailedDeliveryAttempt eventId webhookId
       pure $ Just err

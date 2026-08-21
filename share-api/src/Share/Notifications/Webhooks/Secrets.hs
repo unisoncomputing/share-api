@@ -1,3 +1,11 @@
+-- | Storage for the sensitive parts of a webhook's configuration.
+--
+-- This used to live in Vault, but is now kept in the 'notification_webhook_uris' table.
+--
+-- None of the queries in this module perform any authorization; a webhook is owned by the
+-- subscriber of the subscription it belongs to, so callers must scope the webhook ids they pass
+-- in by owner (see 'Share.Notifications.Queries.webhooksForSubscription' and friends) before
+-- reading or writing a config on a user's behalf.
 module Share.Notifications.Webhooks.Secrets
   ( putWebhookConfig,
     fetchWebhookConfig,
@@ -7,97 +15,76 @@ module Share.Notifications.Webhooks.Secrets
   )
 where
 
-import Control.Monad.Except
-import Data.Aeson ((.:), (.=))
-import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as BL
-import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Servant (ServerError (..))
-import Servant.Client (ClientError, ClientM)
-import Servant.Client qualified as ServantClient
 import Servant.Server (err500)
-import Share.App (AppM)
-import Share.Env.Types qualified as Env
-import Share.IDs 
+import Share.IDs
 import Share.IDs qualified as IDs
+import Share.Postgres qualified as PG
 import Share.Prelude
 import Share.Utils.Logging qualified as Logging
 import Share.Utils.URI (URIParam)
-import Share.Web.Errors (ToServerError (..))
-import Vault (SecretPath (..), SecretRequest (..))
-import Vault qualified
+import Share.Web.Errors (ErrorID (..), ToServerError (..))
 
 data WebhookSecretError
-  = InvalidSecretJSON NotificationWebhookId Text
-  | VaultError ClientError
+  = -- | The webhook exists, but has no URI stored for it.
+    MissingWebhookURI NotificationWebhookId
   deriving stock (Eq, Show)
 
 instance Logging.Loggable WebhookSecretError where
   toLog = \case
-    InvalidSecretJSON webhookId err ->
-      (Logging.textLog $ "Invalid JSON in webhook config for " <> IDs.toText webhookId <> ": " <> err)
-        & Logging.withSeverity Logging.Error
-    VaultError err ->
-      (Logging.textLog $ "Vault request failed: " <> Text.pack (show err))
+    MissingWebhookURI webhookId ->
+      (Logging.textLog $ "No URI stored for webhook " <> IDs.toText webhookId)
+        & Logging.withTag ("webhook_id", IDs.toText webhookId)
         & Logging.withSeverity Logging.Error
 
 instance ToServerError WebhookSecretError where
   toServerError = \case
-    InvalidSecretJSON webhookId err ->
-      ("webhook:vault:invalid-webhook-config", err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Invalid JSON in webhook config for " <> IDs.toText webhookId <> ": " <> err})
-    VaultError err ->
-      ("webhook:vault:request-failed", err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "Vault request failed: " <> Text.pack (show err)})
+    MissingWebhookURI webhookId ->
+      ( ErrorID "webhook:missing-webhook-uri",
+        err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "No URI stored for webhook " <> IDs.toText webhookId}
+      )
 
-runVaultClientM :: ClientM a -> AppM r (Either ClientError a)
-runVaultClientM m = do
-  clientEnv <- asks Env.vaultClientEnv
-  liftIO $ ServantClient.runClientM m clientEnv
-
--- | Configuration for webhooks, which will be stashed in encrypted storage.
+-- | The parts of a webhook's configuration which we keep out of the main webhooks table.
 data WebhookConfig
   = WebhookConfig
   { uri :: URIParam
   }
+  deriving stock (Eq, Show)
 
-instance Aeson.ToJSON WebhookConfig where
-  toJSON (WebhookConfig uri) =
-    Aeson.object
-      [ "uri" .= uri
-      ]
+-- | Set the config for the given webhook, replacing any existing config.
+putWebhookConfig :: (PG.QueryA m) => NotificationWebhookId -> WebhookConfig -> m ()
+putWebhookConfig webhookId (WebhookConfig {uri}) = do
+  PG.execute_
+    [PG.sql|
+      INSERT INTO notification_webhook_uris (webhook_id, uri)
+        VALUES (#{webhookId}, #{uri})
+      ON CONFLICT (webhook_id)
+        DO UPDATE SET uri = excluded.uri
+    |]
 
-instance Aeson.FromJSON WebhookConfig where
-  parseJSON = Aeson.withObject "WebhookConfig" $ \o -> do
-    uri <- o .: "uri"
-    return $ WebhookConfig uri
+-- | Fetch the config for the given webhook.
+fetchWebhookConfig :: (PG.QueryM m) => NotificationWebhookId -> m (Either WebhookSecretError WebhookConfig)
+fetchWebhookConfig webhookId = do
+  PG.query1Col
+    [PG.sql|
+      SELECT nwu.uri
+        FROM notification_webhook_uris nwu
+      WHERE nwu.webhook_id = #{webhookId}
+    |]
+    <&> \case
+      Nothing -> Left $ MissingWebhookURI webhookId
+      Just uri -> Right $ WebhookConfig {uri}
 
-makeWebhookSecretPath :: NotificationWebhookId -> SecretPath
-makeWebhookSecretPath webhookId =
-  SecretPath $ Text.intercalate "/" ["webhooks", IDs.toText webhookId]
-
-putWebhookConfig :: NotificationWebhookId -> WebhookConfig -> AppM r (Either WebhookSecretError ())
-putWebhookConfig webhookId config = runExceptT do
-  let secretPath = makeWebhookSecretPath webhookId
-  userSecretsVaultMount <- asks Env.userSecretsVaultMount
-  shareVaultToken <- asks Env.shareVaultToken
-  let secretRequest = SecretRequest {options = Nothing, data_ = Aeson.toJSON config}
-  withExceptT VaultError . ExceptT . runVaultClientM $ Vault.putSecret shareVaultToken userSecretsVaultMount secretPath secretRequest
-  pure ()
-
-fetchWebhookConfig :: NotificationWebhookId -> AppM r (Either WebhookSecretError WebhookConfig)
-fetchWebhookConfig webhookId = runExceptT do
-  let secretPath = makeWebhookSecretPath webhookId
-  userSecretsVaultMount <- asks Env.userSecretsVaultMount
-  shareVaultToken <- asks Env.shareVaultToken
-  Vault.SecretResponse {Vault.data_ = Vault.SecretData v} <- withExceptT VaultError . ExceptT . runVaultClientM $ Vault.fetchSecret shareVaultToken userSecretsVaultMount secretPath
-  case Aeson.fromJSON v of
-    Aeson.Error err -> throwError $ InvalidSecretJSON webhookId (Text.pack err)
-    Aeson.Success config -> pure config
-
-deleteWebhookConfig :: NotificationWebhookId -> AppM r (Either WebhookSecretError ())
-deleteWebhookConfig webhookId = runExceptT do
-  let secretPath = makeWebhookSecretPath webhookId
-  userSecretsVaultMount <- asks Env.userSecretsVaultMount
-  shareVaultToken <- asks Env.shareVaultToken
-  withExceptT VaultError . ExceptT . runVaultClientM $ Vault.deleteSecret shareVaultToken userSecretsVaultMount secretPath
-  pure ()
+-- | Delete the config for the given webhook.
+--
+-- Note that deleting the webhook itself (or its subscription) already cascades to its config,
+-- this is only needed if you want to drop the config while keeping the webhook around.
+deleteWebhookConfig :: (PG.QueryA m) => NotificationWebhookId -> m ()
+deleteWebhookConfig webhookId = do
+  PG.execute_
+    [PG.sql|
+      DELETE FROM notification_webhook_uris
+      WHERE webhook_id = #{webhookId}
+    |]
