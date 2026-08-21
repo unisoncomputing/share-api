@@ -11,7 +11,7 @@ fi
 benchmark_prefix="${2:-""}"
 
 # set UCM_PATH to ucm if it's not already set
-UCM_PATH="${UCM_PATH:-unison-1-3-0}"
+UCM_PATH="${UCM_PATH:-ucm}"
 
 
 case "$1" in
