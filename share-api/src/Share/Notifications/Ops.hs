@@ -52,7 +52,22 @@ addWebhookDeliveryMethod uriParam webhookName notificationSubscriptionId = do
 -- | Delete a webhook delivery method, if it's owned by the given subscriber.
 deleteWebhookDeliveryMethod :: SubscriptionOwner -> NotificationWebhookId -> WebApp ()
 deleteWebhookDeliveryMethod owner webhookDeliveryMethodId = do
-  PG.runTransaction $ NotifQ.deleteWebhookDeliveryMethod owner webhookDeliveryMethodId
+  let ownerFilter = case owner of
+        UserSubscriptionOwner userId -> [PG.sql| ns.subscriber_user_id = #{userId} |]
+        ProjectSubscriptionOwner projectId -> [PG.sql| ns.subscriber_project_id = #{projectId} |]
+  isValid <- PG.runTransaction $ do
+    PG.queryExpect1Col
+      [PG.sql|
+        SELECT EXISTS(
+          SELECT FROM notification_webhooks nw
+            JOIN notification_subscriptions ns
+              ON nw.subscription_id = ns.id
+            WHERE nw.id = #{webhookDeliveryMethodId}
+              AND ^{ownerFilter}
+        )
+      |]
+  when isValid $ do
+    PG.runTransaction $ NotifQ.deleteWebhookDeliveryMethod owner webhookDeliveryMethodId
 
 hydrateEvent :: HydratedEventPayload -> PG.Transaction e HydratedEvent
 hydrateEvent hydratedEventPayload = do
@@ -148,6 +163,14 @@ updateProjectWebhook subscriptionOwner subscriptionId mayURIUpdate webhookTopics
 updateWebhookDeliveryMethod :: UserId -> NotificationWebhookId -> URIParam -> WebApp ()
 updateWebhookDeliveryMethod notificationUser webhookDeliveryMethodId url = do
   PG.runTransaction do
-    isOwnedByUser <- NotifQ.isWebhookOwnedBy (UserSubscriptionOwner notificationUser) webhookDeliveryMethodId
-    when isOwnedByUser do
+    isValid <-
+      PG.queryExpect1Col
+        [PG.sql|
+          SELECT EXISTS(
+            SELECT FROM notification_webhooks nw
+              WHERE nw.id = #{webhookDeliveryMethodId}
+                AND nw.subscriber_user_id = #{notificationUser}
+          )
+        |]
+    when isValid $ do
       WebhookSecrets.putWebhookConfig webhookDeliveryMethodId (WebhookConfig url)

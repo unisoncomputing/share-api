@@ -46,7 +46,6 @@ instance ToServerError WebhookSecretError where
         err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "No URI stored for webhook " <> IDs.toText webhookId}
       )
 
--- | The parts of a webhook's configuration which we don't hand out freely.
 data WebhookConfig
   = WebhookConfig
   { uri :: URIParam

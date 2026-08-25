@@ -23,7 +23,6 @@ module Share.Notifications.Queries
     isUserSubscribedToWatchProject,
     listProjectWebhooks,
     webhooksForSubscription,
-    isWebhookOwnedBy,
     expectProjectWebhook,
   )
 where
@@ -582,17 +581,4 @@ webhooksForSubscription owner subscriptionId = do
         JOIN notification_subscriptions ns ON ns.id = nw.subscription_id
       WHERE nw.subscription_id = #{subscriptionId}
         AND ^{subscriptionOwnerFilter owner}
-    |]
-
--- | Whether the given webhook hangs off of a subscription owned by the given subscriber.
-isWebhookOwnedBy :: (QueryM m) => SubscriptionOwner -> NotificationWebhookId -> m Bool
-isWebhookOwnedBy owner webhookId = do
-  queryExpect1Col
-    [sql|
-      SELECT EXISTS (
-        SELECT FROM notification_webhooks nw
-          JOIN notification_subscriptions ns ON ns.id = nw.subscription_id
-        WHERE nw.id = #{webhookId}
-          AND ^{subscriptionOwnerFilter owner}
-      )
     |]
