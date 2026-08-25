@@ -19,7 +19,7 @@ createTicketEndpoint :: Session -> SupportTicketRequest -> WebApp NoContent
 createTicketEndpoint (Session {sessionUserId}) (SupportTicketRequest {subject, body}) = do
   author <- authorFromUserId sessionUserId
   now <- liftIO $ Time.getCurrentTime
-  let message :: ChatApps.MessageContent 'ChatApps.Slack
+  let message :: ChatApps.MessageContent 'ChatApps.Discord
       message =
         MessageContent
           { preText = "New Support Ticket",
