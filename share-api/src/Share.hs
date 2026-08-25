@@ -18,6 +18,7 @@ import Data.Map qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
+import Data.Time qualified as Time
 import Data.Typeable qualified as Typeable
 import Data.UUID (UUID)
 import Data.Vault.Lazy as Vault
@@ -37,6 +38,7 @@ import Servant
 import Share.App
 import Share.BackgroundJobs qualified as BackgroundJobs
 import Share.BackgroundJobs.Monad (runBackground)
+import Share.ChatApps qualified as ChatApps
 import Share.Env.Types qualified as Env
 import Share.IDs (RequestId, UserId)
 import Share.IDs qualified as IDs
@@ -93,6 +95,8 @@ toServantHandler env appM =
             let (_errId, servantErr) = toServerError serverErr
             pure $ Left servantErr
           Left (UnliftIO.SomeException err) -> do
+            logErrorText ("Uncaught exception: " <> tShow err)
+            reportErrorToDiscord (tShow err)
             let addSentryData sr =
                   sr
                     { Sentry.srEnvironment = Just (show Deployment.deployment),
@@ -101,13 +105,32 @@ toServantHandler env appM =
                     }
             sentryService <- asks Env.sentryService
             liftIO $ Sentry.register sentryService "errors" Sentry.Error (show err) addSentryData
-            logErrorText ("Uncaught exception: " <> tShow err)
             pure $ Left err500
           Right a -> pure (Right a)
    in Handler . ExceptT $ do
         -- fresh request ctx for each request.
         reqCtx <- WebApp.freshRequestCtx
         runAppM (env {Env.ctx = reqCtx}) $ catchErrors appM
+  where
+    reportErrorToDiscord errBody = do
+      now <- liftIO $ Time.getCurrentTime
+      let message :: ChatApps.MessageContent 'ChatApps.Discord
+          message =
+            ChatApps.MessageContent
+              { preText = "Uncaught Exception in Share Prod",
+                title = "Uncaught Exception in Share Prod",
+                content = errBody,
+                author = ChatApps.Author (Just "Share Prod") Nothing Nothing,
+                mainLink = Nothing,
+                thumbnailUrl = Nothing,
+                timestamp = now
+              }
+      webhookURI <- asks Env.supportTicketWebhookURI
+      case webhookURI of
+        Nothing -> pure ()
+        Just uri -> do
+          _ <- ChatApps.sendMessage uri message
+          pure ()
 
 -- | Uses context from the request to set up an appropriate RequestCtx
 type WrapperAPI = (RawRequest :> Header "X-NO-CACHE" Text :> Cookies.Cookie "NO-CACHE" Text :> Header "X-RequestID" RequestId :> MaybeAuthenticatedUserId :> Web.API)
