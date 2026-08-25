@@ -1,6 +1,6 @@
--- | Storage for the sensitive parts of a webhook's configuration.
+-- | Access to the sensitive parts of a webhook's configuration.
 --
--- This used to live in Vault, but is now kept in the 'notification_webhook_uris' table.
+-- This used to live in Vault, but is now just the 'uri' column on 'notification_webhooks'.
 --
 -- None of the queries in this module perform any authorization; a webhook is owned by the
 -- subscriber of the subscription it belongs to, so callers must scope the webhook ids they pass
@@ -9,7 +9,6 @@
 module Share.Notifications.Webhooks.Secrets
   ( putWebhookConfig,
     fetchWebhookConfig,
-    deleteWebhookConfig,
     WebhookConfig (..),
     WebhookSecretError (..),
   )
@@ -28,7 +27,8 @@ import Share.Utils.URI (URIParam)
 import Share.Web.Errors (ErrorID (..), ToServerError (..))
 
 data WebhookSecretError
-  = -- | The webhook exists, but has no URI stored for it.
+  = -- | Either there's no such webhook, or it has no URI set; a webhook whose URI hasn't been
+    -- copied over from Vault yet will look like the latter.
     MissingWebhookURI NotificationWebhookId
   deriving stock (Eq, Show)
 
@@ -46,45 +46,37 @@ instance ToServerError WebhookSecretError where
         err500 {errBody = BL.fromStrict $ Text.encodeUtf8 $ "No URI stored for webhook " <> IDs.toText webhookId}
       )
 
--- | The parts of a webhook's configuration which we keep out of the main webhooks table.
+-- | The parts of a webhook's configuration which we don't hand out freely.
 data WebhookConfig
   = WebhookConfig
   { uri :: URIParam
   }
   deriving stock (Eq, Show)
 
--- | Set the config for the given webhook, replacing any existing config.
+-- | Set the config for an existing webhook, replacing whatever was there.
+--
+-- Webhooks are created with their URI already set (see
+-- 'Share.Notifications.Queries.createWebhookDeliveryMethod'), so this is only for updates.
 putWebhookConfig :: (PG.QueryA m) => NotificationWebhookId -> WebhookConfig -> m ()
 putWebhookConfig webhookId (WebhookConfig {uri}) = do
   PG.execute_
     [PG.sql|
-      INSERT INTO notification_webhook_uris (webhook_id, uri)
-        VALUES (#{webhookId}, #{uri})
-      ON CONFLICT (webhook_id)
-        DO UPDATE SET uri = excluded.uri
+      UPDATE notification_webhooks
+        SET uri = #{uri}
+      WHERE id = #{webhookId}
     |]
 
 -- | Fetch the config for the given webhook.
 fetchWebhookConfig :: (PG.QueryM m) => NotificationWebhookId -> m (Either WebhookSecretError WebhookConfig)
 fetchWebhookConfig webhookId = do
-  PG.query1Col
+  PG.query1Col @(Maybe URIParam)
     [PG.sql|
-      SELECT nwu.uri
-        FROM notification_webhook_uris nwu
-      WHERE nwu.webhook_id = #{webhookId}
+      SELECT nw.uri
+        FROM notification_webhooks nw
+      WHERE nw.id = #{webhookId}
     |]
+    -- The outer Maybe is "no such webhook", the inner one is "no URI on it".
+    <&> join
     <&> \case
       Nothing -> Left $ MissingWebhookURI webhookId
       Just uri -> Right $ WebhookConfig {uri}
-
--- | Delete the config for the given webhook.
---
--- Note that deleting the webhook itself (or its subscription) already cascades to its config,
--- this is only needed if you want to drop the config while keeping the webhook around.
-deleteWebhookConfig :: (PG.QueryA m) => NotificationWebhookId -> m ()
-deleteWebhookConfig webhookId = do
-  PG.execute_
-    [PG.sql|
-      DELETE FROM notification_webhook_uris
-      WHERE webhook_id = #{webhookId}
-    |]

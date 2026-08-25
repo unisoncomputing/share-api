@@ -49,6 +49,7 @@ import Share.Prelude
 import Share.Release (Release (..))
 import Share.Ticket
 import Share.Utils.API (Cursor (..), CursorDirection (..), Paged (..), guardPaged, pagedOn)
+import Share.Utils.URI (URIParam)
 import Share.Web.Share.DisplayInfo.Queries qualified as DisplayInfoQ
 import Share.Web.Share.DisplayInfo.Types (UnifiedDisplayInfo)
 
@@ -211,18 +212,18 @@ deleteEmailDeliveryMethod notificationUserId emailDeliveryMethodId = do
         AND subscriber_user_id = #{notificationUserId}
     |]
 
-createWebhookDeliveryMethod :: Text -> NotificationSubscriptionId -> Transaction e NotificationWebhookId
-createWebhookDeliveryMethod name subscriptionId = do
+-- | The URI is set here rather than by a follow-up update so that a webhook never exists
+-- without one.
+createWebhookDeliveryMethod :: Text -> URIParam -> NotificationSubscriptionId -> Transaction e NotificationWebhookId
+createWebhookDeliveryMethod name uri subscriptionId = do
   queryExpect1Col
     [sql|
-          INSERT INTO notification_webhooks (name, subscription_id)
-          VALUES (#{name}, #{subscriptionId})
+          INSERT INTO notification_webhooks (name, uri, subscription_id)
+          VALUES (#{name}, #{uri}, #{subscriptionId})
           RETURNING id
         |]
 
 -- | Delete a webhook delivery method, but only if it's owned by the given subscriber.
---
--- The webhook's stored config is removed along with it by the FK cascade.
 deleteWebhookDeliveryMethod :: SubscriptionOwner -> NotificationWebhookId -> Transaction e ()
 deleteWebhookDeliveryMethod owner webhookDeliveryMethodId = do
   execute_

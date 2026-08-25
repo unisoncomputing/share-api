@@ -47,13 +47,9 @@ listNotificationDeliveryMethods userId maySubscriptionId = do
 -- which proves that.
 addWebhookDeliveryMethod :: URIParam -> Text -> NotificationSubscriptionId -> PG.Transaction e NotificationWebhookId
 addWebhookDeliveryMethod uriParam webhookName notificationSubscriptionId = do
-  webhookId <- NotifQ.createWebhookDeliveryMethod webhookName notificationSubscriptionId
-  WebhookSecrets.putWebhookConfig webhookId WebhookConfig {uri = uriParam}
-  pure webhookId
+  NotifQ.createWebhookDeliveryMethod webhookName uriParam notificationSubscriptionId
 
 -- | Delete a webhook delivery method, if it's owned by the given subscriber.
---
--- The webhook's stored config is deleted along with it by the FK cascade.
 deleteWebhookDeliveryMethod :: SubscriptionOwner -> NotificationWebhookId -> WebApp ()
 deleteWebhookDeliveryMethod owner webhookDeliveryMethodId = do
   PG.runTransaction $ NotifQ.deleteWebhookDeliveryMethod owner webhookDeliveryMethodId
@@ -129,8 +125,8 @@ expectProjectWebhook projectId subscriptionId = do
 deleteProjectWebhook :: ProjectId -> NotificationSubscriptionId -> WebApp ()
 deleteProjectWebhook projectId subscriptionId = do
   let owner = ProjectSubscriptionOwner projectId
-  -- Deleting the subscription cascades to its webhooks, which in turn cascades to their
-  -- stored configs. The delete is a no-op unless the subscription is owned by this project.
+  -- Deleting the subscription cascades to its webhooks, URIs and all.
+  -- The delete is a no-op unless the subscription is owned by this project.
   PG.runTransaction $ do NotifQ.deleteNotificationSubscription owner subscriptionId
 
 updateProjectWebhook :: SubscriptionOwner -> NotificationSubscriptionId -> Maybe URIParam -> (Maybe ProjectWebhookTopics) -> WebApp ()
