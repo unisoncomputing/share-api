@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Share.Monitoring where
 
 import Control.Monad.Reader
@@ -7,6 +9,7 @@ import Data.Map qualified as Map
 import Data.Text qualified as Text
 import GHC.Stack qualified as Stack
 import Network.URI (URI)
+import Share.ChatApps.Impl qualified as ChatApps
 import Share.Env.Types
 import Share.Env.Types qualified as Env
 import Share.Prelude
@@ -18,9 +21,10 @@ import System.Log.Raven.Types qualified as Sentry
 
 -- | Logs the error with a call stack, but doesn't abort the request or render an error to the client.
 reportError :: (MonadIO m, HasCallStack, Loggable e, MonadLogger m) => Env ctx -> (HM.HashMap String String) -> HM.HashMap String Aeson.Value -> Text -> e -> m ()
-reportError (Env.Env {Env.apiOrigin = host, Env.sentryService = sentryService, commitHash}) tags extraTags errID e = do
+reportError env@(Env.Env {Env.apiOrigin = host, Env.sentryService = sentryService, commitHash}) tags extraTags errID e = do
   let errLog = withTag ("error-id", errID) $ toLog e
   logMsg (withSeverity Error $ errLog)
+  ChatApps.reportError env (Logging.msg errLog <> "\n" <> tShow (Logging.tags errLog))
   let addSentryData sr =
         sr
           { Sentry.srEnvironment = Just (show Deployment.deployment),

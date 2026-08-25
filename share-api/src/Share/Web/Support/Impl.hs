@@ -35,7 +35,8 @@ createTicketEndpoint (Session {sessionUserId}) (SupportTicketRequest {subject, b
     Nothing -> do
       respondError Unimplemented
     Just uri -> do
-      ChatApps.sendMessage uri message
+      env <- ask
+      ChatApps.sendMessage env uri message
       pure NoContent
 
 server :: ServerT Support.API WebApp

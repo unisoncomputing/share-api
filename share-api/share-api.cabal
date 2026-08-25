@@ -43,6 +43,9 @@ library
       Share.BackgroundJobs.Workers
       Share.Branch
       Share.ChatApps
+      Share.ChatApps.Impl
+      Share.ChatApps.Types
+      Share.ChatApps.Utils
       Share.Codebase
       Share.Codebase.CodebaseRuntime
       Share.Codebase.CodeCache

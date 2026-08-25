@@ -1,20 +1,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
 
-module Share.ChatApps
-  ( ChatProvider (..),
-    MessageContent (..),
-    ChatAppFailure (..),
-    Author (..),
-    sendMessage,
-    shareAuthor,
+module Share.ChatApps.Utils
+  ( shareAuthor,
     authorFromUserId,
   )
 where
 
 import Network.URI qualified as URI
 import Share.App (AppM)
-import Share.ChatApps.Impl
 import Share.ChatApps.Types
 import Share.IDs
 import Share.Postgres qualified as PG
