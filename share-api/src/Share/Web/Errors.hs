@@ -199,6 +199,9 @@ reportError e = do
           reqTags <> maybe mempty (\uri -> Map.singleton "url" (tShow @URI uri)) rawURI
   case (errHTTPCode serverErr) of
     status
+      -- Don't need an error report for every timeout
+      | errID == "timeout" -> do
+          logMsg (withSeverity Error $ errLog)
       | status >= 500 -> do
           Monitoring.reportError env coreTags extraTags errID e
           logMsg (withSeverity Error $ errLog)
