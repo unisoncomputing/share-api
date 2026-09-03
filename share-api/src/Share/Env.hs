@@ -24,7 +24,6 @@ import Hasql.Pool.Config qualified as Pool
 import Network.HTTP.Client qualified as HTTPClient
 import Network.HTTP.Client.TLS qualified as TLS
 import Network.URI (parseURI)
-import Servant.Client qualified as ServantClient
 import Share.Env.Types
 import Share.JWT qualified as JWT
 import Share.Prelude
@@ -40,7 +39,6 @@ import System.Log.Raven qualified as Sentry
 import System.Log.Raven.Transport.HttpConduit qualified as Sentry
 import System.Log.Raven.Types qualified as Sentry
 import Unison.Runtime.Interface as RT
-import Vault qualified
 
 withEnv :: (Env () -> IO a) -> IO a
 withEnv action = do
@@ -131,13 +129,6 @@ withEnv action = do
   timeCache <- FL.newTimeCache FL.simpleTimeFormat -- E.g. 05/Sep/2023:13:23:56 -0700
   sandboxedRuntime <- RT.startRuntime True RT.Persistent "share"
 
-  -- Vault setup
-  unproxiedHttpClient <- TLS.newTlsManager
-  vaultHost <- fromEnv "VAULT_HOST" parseBaseUrl
-  userSecretsVaultMount <- fromEnv "USER_SECRETS_VAULT_MOUNT" ((fmap . fmap) Vault.SecretMount . nonEmptyTextParser "USER_SECRETS_VAULT_MOUNT")
-  shareVaultToken <- fromEnv "VAULT_TOKEN" ((fmap . fmap) Vault.VaultToken . nonEmptyTextParser "VAULT_TOKEN")
-  let vaultClientEnv = ServantClient.mkClientEnv unproxiedHttpClient vaultHost
-
   proxiedHttpClient <- do
     if Deployment.onLocal
       then TLS.newTlsManager
@@ -166,11 +157,6 @@ withEnv action = do
     nonEmptyTextParser varName = \case
       "" -> pure . Left . Text.unpack $ "Expected a value for env var " <> varName <> ", but got an empty string"
       str -> pure . Right $ Text.pack str
-
-    parseBaseUrl :: String -> IO (Either String ServantClient.BaseUrl)
-    parseBaseUrl str = do
-      u <- ServantClient.parseBaseUrl str
-      pure $ Right u
 
 -- | Parse an environment variable, but only if it exists.
 maybeEnv :: String -> (String -> IO (Either String a)) -> IO (Maybe a)

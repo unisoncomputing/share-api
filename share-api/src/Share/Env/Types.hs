@@ -11,7 +11,6 @@ import Hasql.Pool qualified as Hasql
 import Network.HTTP.Client qualified as HTTPClient
 import Network.URI (URI)
 import OpenTelemetry.Trace qualified as Trace
-import Servant.Client qualified as S
 import Share.JWT qualified as JWT
 import Share.Prelude
 import Share.Utils.Logging.Types qualified as Logging
@@ -21,7 +20,6 @@ import System.Log.FastLogger (FormattedTime, LogStr)
 import System.Log.Raven.Types (SentryService)
 import Unison.Runtime (Runtime)
 import Unison.Symbol (Symbol)
-import Vault qualified
 
 data Env ctx = Env
   { redisConnection :: R.Connection,
@@ -36,9 +34,6 @@ data Env ctx = Env
     cloudUiOrigin :: URI, -- E.g. "https://app.unison.cloud"
     cloudWebsiteOrigin :: URI, -- E.g. "https://www.unison.cloud"
     supportTicketWebhookURI :: Maybe URI,
-    vaultClientEnv :: S.ClientEnv,
-    userSecretsVaultMount :: Vault.SecretMount,
-    shareVaultToken :: Vault.VaultToken,
     -- An HTTP client for making requests which are configured by end users, and thus
     -- shouldn't
     proxiedHttpClient :: HTTPClient.Manager,
